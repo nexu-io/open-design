@@ -232,8 +232,15 @@ describe('htmlNeedsFocusGuard', () => {
     expect(htmlNeedsFocusGuard('<script>WINDOW.FOCUS()</script>')).toBe(true);
   });
 
-  it('detects document.focus() calls', () => {
-    expect(htmlNeedsFocusGuard('<script>document.focus();</script>')).toBe(true);
+  it('detects document.body.focus() calls', () => {
+    expect(htmlNeedsFocusGuard('<script>document.body.focus();</script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script>document.body .focus()</script>')).toBe(true);
+  });
+
+  it('detects querySelector(...).focus() and chained focus calls', () => {
+    expect(htmlNeedsFocusGuard('<script>document.querySelector("input").focus()</script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script>document.getElementById("x").focus()</script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script>myInput.focus()</script>')).toBe(true);
   });
 
   it('detects autofocus attributes', () => {
@@ -245,6 +252,7 @@ describe('htmlNeedsFocusGuard', () => {
   it('does not match unrelated focus mentions', () => {
     expect(htmlNeedsFocusGuard('<div class="focus-ring">')).toBe(false);
     expect(htmlNeedsFocusGuard('// focus the element')).toBe(false);
-    expect(htmlNeedsFocusGuard('element.focus()')).toBe(false);
+    expect(htmlNeedsFocusGuard(':focus')).toBe(false);
+    expect(htmlNeedsFocusGuard('focus-visible')).toBe(false);
   });
 });

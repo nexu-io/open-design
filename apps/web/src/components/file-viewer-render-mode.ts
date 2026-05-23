@@ -153,17 +153,19 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * negatives are the same blank-preview the user already hits.
  */
 /**
- * Return true when the HTML source contains patterns that call `focus()` at
+ * Return true when the HTML source contains patterns that call `.focus()` at
  * load time, which would steal focus from the host page in a URL-loaded
  * iframe. The srcDoc path injects `injectPreviewFocusGuard` to suppress this;
  * URL-load has no such guard, so we force the srcDoc path instead.
  *
- * Covers the most common patterns: `window.focus()`, `element.focus()`,
- * and `autofocus` attributes. False negatives are acceptable — the worst
- * case is a focus steal that the user can fix by toggling a bridge mode.
+ * Matches any `.focus(` call — this covers `window.focus()`,
+ * `document.body.focus()`, `element.focus()`, chained calls like
+ * `querySelector("input").focus()`, and `autofocus` attributes.
+ * False positives (e.g. a comment mentioning `.focus(`) just route the
+ * artifact through the slightly slower srcDoc path, which is safe.
  */
 export function htmlNeedsFocusGuard(source: string): boolean {
-  if (/(?:window|document)\s*\.\s*focus\s*\(/i.test(source)) return true;
+  if (/\.\s*focus\s*\(/i.test(source)) return true;
   if (/\bautofocus\b/i.test(source)) return true;
   return false;
 }
