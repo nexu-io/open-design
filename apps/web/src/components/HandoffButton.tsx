@@ -138,7 +138,22 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
         type="button"
         className="handoff-trigger handoff-trigger--solo"
         title={t('handoff.fallbackTitle', { target: fallbackLabel })}
-        onClick={() => onRequestRevealInFinder?.()}
+        disabled={busy === fallbackId}
+        onClick={() => {
+          // The fallback opens the project folder in the OS file manager.
+          // finder / explorer / file-manager are real entries in the daemon's
+          // open-in catalogue (open / explorer / xdg-open), so this performs a
+          // genuine reveal rather than a no-op; the renderer reveal bridge is a
+          // secondary fallback if the daemon spawn fails.
+          setError(null);
+          setBusy(fallbackId);
+          void openProjectInEditor(projectId, fallbackId)
+            .catch((err) => {
+              setError(err instanceof Error ? err.message : String(err));
+              onRequestRevealInFinder?.();
+            })
+            .finally(() => setBusy(null));
+        }}
       >
         <EditorIcon editorId={fallbackId} size={20} />
         <span className="handoff-trigger-label">{fallbackLabel}</span>
