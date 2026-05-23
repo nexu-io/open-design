@@ -7,7 +7,7 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 
 import { isHistoryEnabled } from './feature-flag.js';
-import { projectRepoPath, recordRevisionForRun } from './repo.js';
+import { projectRepoPath, readHeadSha, recordRevisionForRun } from './repo.js';
 import { isSafeId } from '../projects.js';
 import type { Identity } from '../identity/types.js';
 
@@ -25,12 +25,31 @@ export interface RunFinishedRun {
   identity: Identity | null;
   message: string | null;
   touchedFiles: boolean;
+  /**
+   * HEAD SHA observed by `installHistoryRunCreatedHook` right after
+   * runs.create(). Null when the substrate isn't initialized yet, the
+   * read failed, or the run was created before the created-hook was
+   * installed. Passed through to recordRevisionForRun as the preferred
+   * baseline for the sibling-absorbed marker check.
+   */
+  headAtCreate: string | null;
+}
+
+/**
+ * The created-hook receives a mutable run reference and may set
+ * `headAtCreate` directly on it.
+ */
+export interface RunCreatedRun {
+  id: string;
+  projectId: string | null;
+  headAtCreate: string | null;
 }
 
 type RunFinishedStatus = 'succeeded' | 'failed' | 'canceled';
 
 export interface RunServiceForHook {
   setRunFinishedHook(hook: ((run: RunFinishedRun, status: RunFinishedStatus) => unknown) | null): void;
+  setRunCreatedHook(hook: ((run: RunCreatedRun) => unknown) | null): void;
 }
 
 export interface InstallHistoryRunFinishedHookArgs {
@@ -44,6 +63,8 @@ export interface InstallHistoryRunFinishedHookArgs {
   /** Env override (mainly for tests). Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
 }
+
+export type InstallHistoryRunCreatedHookArgs = InstallHistoryRunFinishedHookArgs;
 
 /**
  * First non-empty line of the prompt, clamped to a single-line subject
@@ -88,6 +109,7 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
         message,
         db,
         runTouchedFiles: run.touchedFiles,
+        runHeadAtCreate: run.headAtCreate,
       });
 
       if (result.kind === 'recorded') {
@@ -114,6 +136,30 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
       // 'clean' is the common no-op case — don't log
     } catch (err) {
       console.warn(`[history] auto-commit failed for run ${run.id}:`, err);
+    }
+  });
+}
+
+/**
+ * Install the post-create hook. Reads HEAD asynchronously and stamps
+ * `run.headAtCreate` so the finish-hook's marker check has a baseline
+ * that pre-dates any sibling's commit-and-release cycle. Best-effort:
+ * any failure (unsafe id, missing substrate, git error) leaves
+ * `headAtCreate` null, and the marker check falls back to the
+ * lock-entry baseline that's been there since round 6.
+ */
+export function installHistoryRunCreatedHook(args: InstallHistoryRunCreatedHookArgs): void {
+  const { projectsRoot, runs, env = process.env } = args;
+
+  runs.setRunCreatedHook(async (run) => {
+    if (!isHistoryEnabled(env)) return;
+    if (!run.projectId) return;
+    if (!isSafeId(run.projectId)) return;
+    const projectDir = path.join(projectsRoot, run.projectId);
+    try {
+      run.headAtCreate = await readHeadSha(projectDir);
+    } catch {
+      run.headAtCreate = null;
     }
   });
 }

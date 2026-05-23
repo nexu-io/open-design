@@ -392,7 +392,7 @@ import { createIdentityMiddleware } from './identity/middleware.js';
 import { resolveIdentity } from './identity/types.js';
 import { attributionFromIdentity } from './identity/attribution.js';
 import { installHistoryEnsureHook } from './history/ensure-hook.js';
-import { installHistoryRunFinishedHook } from './history/run-hook.js';
+import { installHistoryRunCreatedHook, installHistoryRunFinishedHook } from './history/run-hook.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -4546,6 +4546,15 @@ export async function startServer({
   // History feature's chat-run-finished hook. No-op when
   // OD_GIT_INTEGRATION_ENABLED is unset; otherwise commits dirty
   // working-tree state at run end with the run's identity as author.
+  // The created-hook stamps each run with HEAD-at-create so the
+  // finish-hook's marker check has a baseline that pre-dates any
+  // sibling's commit-and-release cycle (sequential-completion case).
+  installHistoryRunCreatedHook({
+    db,
+    projectsRoot: PROJECTS_DIR,
+    reposRoot: REPOS_DIR,
+    runs: design.runs,
+  });
   installHistoryRunFinishedHook({
     db,
     projectsRoot: PROJECTS_DIR,

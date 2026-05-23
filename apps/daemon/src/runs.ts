@@ -82,6 +82,19 @@ export function createChatRunService({
     runFinishedHook = hook;
   };
 
+  // Symmetric hook fired right after create(). Lets the history feature
+  // stamp `run.headAtCreate` from a synchronous HEAD read so the marker
+  // check has a baseline that pre-dates any sibling's finish-hook
+  // commit. Tracked in `pendingCreateHooks` so shutdownActive() can
+  // await any in-flight baseline reads.
+  let runCreatedHook = null;
+  const pendingCreateHooks = new Set();
+
+  /** Register a callback to run after every runs.create(). Single-slot. */
+  const setRunCreatedHook = (hook) => {
+    runCreatedHook = hook;
+  };
+
   const create = (meta = {}) => {
     const now = Date.now();
     const run = {
@@ -126,8 +139,16 @@ export function createChatRunService({
       errorCode: null,
       cancelRequested: false,
       touchedFiles: false,
+      headAtCreate: null,
     };
     runs.set(run.id, run);
+    if (runCreatedHook) {
+      const hookPromise = Promise.resolve(runCreatedHook(run)).catch((err) => {
+        console.warn(`[runs] created hook failed for run ${run.id}:`, err);
+      });
+      pendingCreateHooks.add(hookPromise);
+      hookPromise.finally(() => pendingCreateHooks.delete(hookPromise));
+    }
     return run;
   };
 
@@ -321,20 +342,26 @@ export function createChatRunService({
     }));
 
     // Wait for in-flight finish-hooks (history auto-commit does git +
-    // sqlite writes) so the daemon doesn't process.exit() mid-write.
-    // Cap at 2× graceMs so a stuck hook doesn't hang shutdown.
-    if (pendingFinishHooks.size > 0) {
-      const inflight = Array.from(pendingFinishHooks);
+    // sqlite writes) and any still-pending create-hooks (HEAD baseline
+    // reads) so the daemon doesn't process.exit() mid-write. Cap at 2×
+    // graceMs so a stuck hook doesn't hang shutdown.
+    const inflightHooks = [
+      ...Array.from(pendingFinishHooks),
+      ...Array.from(pendingCreateHooks),
+    ];
+    if (inflightHooks.length > 0) {
       const hookGraceMs = Math.max(graceMs * 2, 1000);
       let timeoutHandle;
       const timeoutPromise = new Promise((resolve) => {
         timeoutHandle = setTimeout(resolve, hookGraceMs);
       });
-      await Promise.race([Promise.allSettled(inflight), timeoutPromise]);
+      await Promise.race([Promise.allSettled(inflightHooks), timeoutPromise]);
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      if (pendingFinishHooks.size > 0) {
+      const stillFinish = pendingFinishHooks.size;
+      const stillCreate = pendingCreateHooks.size;
+      if (stillFinish > 0 || stillCreate > 0) {
         console.warn(
-          `[runs] shutdownActive returning with ${pendingFinishHooks.size} finish-hook(s) still in flight after ${hookGraceMs}ms grace; their writes may be lost.`,
+          `[runs] shutdownActive returning with ${stillFinish} finish-hook(s) and ${stillCreate} create-hook(s) still in flight after ${hookGraceMs}ms grace; their writes may be lost.`,
         );
       }
     }
@@ -359,6 +386,7 @@ export function createChatRunService({
     fail,
     statusBody,
     setRunFinishedHook,
+    setRunCreatedHook,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
     },

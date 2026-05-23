@@ -136,7 +136,7 @@ async function applyAuthorConfig(
  * Read HEAD's SHA, returning null when HEAD is unborn. Always passes
  * softFail128 because callers handle the "no HEAD" case explicitly.
  */
-async function readHeadSha(
+export async function readHeadSha(
   projectDir: string,
   signal?: AbortSignal,
 ): Promise<string | null> {
@@ -507,6 +507,14 @@ export interface RecordRevisionForRunArgs {
    * marker that pollutes durable history data.
    */
   runTouchedFiles?: boolean;
+  /**
+   * HEAD SHA observed at run-create time. Preferred baseline for the
+   * sibling-absorbed marker check: catches the sequential-completion
+   * case where a sibling commits and releases before this run's
+   * finish hook even enters `recordRevisionForRun`. When null the
+   * marker falls back to the lock-entry baseline only.
+   */
+  runHeadAtCreate?: string | null;
 }
 
 export type RecordRevisionForRunResult =
@@ -694,9 +702,13 @@ async function recordRevisionForRunLocked(
   if (status.trim().length === 0) {
     if (!args.runTouchedFiles) return { kind: 'clean' };
     const headNow = await readHeadSha(projectDir, signal);
-    const advancedDuringWait =
-      headBeforeLock !== null && headNow !== null && headNow !== headBeforeLock;
-    if (!advancedDuringWait || !headNow) return { kind: 'clean' };
+    // Prefer the earliest baseline available: HEAD at run-create catches
+    // the sequential-completion case (sibling committed and released
+    // before this hook entered), HEAD at lock-entry catches the
+    // overlapping-lock case. Either advancing → marker.
+    const baseline = args.runHeadAtCreate ?? headBeforeLock;
+    const advanced = baseline !== null && headNow !== null && headNow !== baseline;
+    if (!advanced || !headNow) return { kind: 'clean' };
     return recordSiblingAbsorbedMarker(args, headNow);
   }
 

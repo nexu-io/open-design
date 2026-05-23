@@ -980,6 +980,79 @@ describe('recordRevisionForRun', () => {
     expect(cleanProbe.kind).toBe('clean');
   });
 
+  it('records a marker for run B when run A commits entirely before B enters the hook (sequential completion)', async () => {
+    // Sequential variant of the absorption case: A's full hook completes
+    // before B's even starts. Without runHeadAtCreate, B sees A's HEAD
+    // both at recordRevisionForRun entry and inside the lock, so
+    // headBeforeLock === headNow → no advance observed → marker silently
+    // lost. With runHeadAtCreate captured at runs.create() time (before
+    // A committed), the baseline pre-dates A's commit and the marker
+    // fires.
+    const headAtCreate = (sandbox.db
+      .prepare(`SELECT git_sha FROM project_revisions WHERE project_id = ? AND source = 'migration'`)
+      .get(sandbox.projectId) as { git_sha: string }).git_sha;
+
+    writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'from-a\n');
+    const resA = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-a', identity: TEST_IDENTITY },
+      message: 'A finishes first',
+      db: sandbox.db,
+      runTouchedFiles: true,
+    });
+    expect(resA.kind).toBe('recorded');
+
+    const resB = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-b', identity: TEST_IDENTITY },
+      message: 'B absorbed sequentially',
+      db: sandbox.db,
+      runTouchedFiles: true,
+      runHeadAtCreate: headAtCreate,
+    });
+    expect(resB.kind).toBe('marker');
+
+    const markerRow = sandbox.db
+      .prepare(
+        `SELECT run_id, source, git_sha, parent_id, actor_identity_id
+           FROM project_revisions
+          WHERE project_id = ? AND run_id = 'run-b'`,
+      )
+      .get(sandbox.projectId) as {
+        run_id: string;
+        source: string;
+        git_sha: string | null;
+        parent_id: string | null;
+        actor_identity_id: string;
+      };
+    expect(markerRow.source).toBe('agent-run');
+    expect(markerRow.git_sha).toBeNull();
+    expect(markerRow.actor_identity_id).toBe(TEST_IDENTITY.id);
+
+    const aRow = sandbox.db
+      .prepare(`SELECT id FROM project_revisions WHERE project_id = ? AND run_id = 'run-a'`)
+      .get(sandbox.projectId) as { id: string };
+    expect(markerRow.parent_id).toBe(aRow.id);
+
+    // Without runHeadAtCreate, the same finishing-clean-tree call must
+    // NOT produce a marker — proves runHeadAtCreate is what flips the
+    // outcome, not some other side effect.
+    const resC = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-c', identity: TEST_IDENTITY },
+      message: 'C without runHeadAtCreate',
+      db: sandbox.db,
+      runTouchedFiles: true,
+    });
+    expect(resC.kind).toBe('clean');
+  });
+
   it('does not create a marker for a purely conversational run when a sibling commits in parallel', async () => {
     writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'a\n');
 

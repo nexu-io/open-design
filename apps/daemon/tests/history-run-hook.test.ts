@@ -23,12 +23,20 @@ const TEST_IDENTITY: Identity = {
  * one callback — directly invoking the registered hook is the unit
  * test the wiring deserves.
  */
-function fakeRunService(): RunServiceForHook & { fire: (run: RunFinishedRun, status: 'succeeded' | 'failed' | 'canceled') => Promise<void> } {
+function fakeRunService(): RunServiceForHook & {
+  fire: (run: RunFinishedRun, status: 'succeeded' | 'failed' | 'canceled') => Promise<void>;
+  fireCreate: (run: { id: string; projectId: string | null; headAtCreate: string | null }) => Promise<void>;
+} {
   let hook: ((r: RunFinishedRun, s: 'succeeded' | 'failed' | 'canceled') => unknown) | null = null;
+  let createHook: ((r: { id: string; projectId: string | null; headAtCreate: string | null }) => unknown) | null = null;
   return {
     setRunFinishedHook(h) { hook = h; },
+    setRunCreatedHook(h) { createHook = h; },
     async fire(run, status) {
       if (hook) await hook(run, status);
+    },
+    async fireCreate(run) {
+      if (createHook) await createHook(run);
     },
   };
 }
@@ -96,7 +104,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hello</h1>\n');
 
     await runs.fire(
-      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section', touchedFiles: true },
+      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section', touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
@@ -124,7 +132,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hello</h1>\n');
 
     await runs.fire(
-      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section', touchedFiles: true },
+      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section', touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
@@ -143,7 +151,7 @@ describe('installHistoryRunFinishedHook', () => {
     });
 
     await runs.fire(
-      { id: 'run-2', projectId: null, conversationId: null, identity: TEST_IDENTITY, message: 'doesnt matter', touchedFiles: true },
+      { id: 'run-2', projectId: null, conversationId: null, identity: TEST_IDENTITY, message: 'doesnt matter', touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
@@ -165,7 +173,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hello</h1>\n');
 
     await runs.fire(
-      { id: 'run-3', projectId: 'p1', conversationId: 'c1', identity: null, message: 'no identity', touchedFiles: true },
+      { id: 'run-3', projectId: 'p1', conversationId: 'c1', identity: null, message: 'no identity', touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
@@ -187,7 +195,7 @@ describe('installHistoryRunFinishedHook', () => {
 
     // No file changes — run ends with clean tree
     await runs.fire(
-      { id: 'run-clean', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'no changes', touchedFiles: true },
+      { id: 'run-clean', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'no changes', touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
@@ -209,7 +217,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'partial.html'), '<h1>WIP</h1>\n');
 
     await runs.fire(
-      { id: 'run-failed', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Try something', touchedFiles: true },
+      { id: 'run-failed', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Try something', touchedFiles: true, headAtCreate: null },
       'failed',
     );
 
@@ -235,7 +243,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'content\n');
 
     await runs.fire(
-      { id: 'run-multi', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Refactor the hero\n\nMake it darker and more minimal\nMatch the brand palette', touchedFiles: true },
+      { id: 'run-multi', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Refactor the hero\n\nMake it darker and more minimal\nMatch the brand palette', touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
@@ -259,7 +267,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'content\n');
 
     await runs.fire(
-      { id: 'run-noprompt', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: null, touchedFiles: true },
+      { id: 'run-noprompt', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: null, touchedFiles: true, headAtCreate: null },
       'succeeded',
     );
 
