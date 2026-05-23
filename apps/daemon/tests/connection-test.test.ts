@@ -1111,6 +1111,49 @@ describe('POST /api/test/connection provider mode', () => {
     }
   });
 
+  it('reports Azure failed-retry latency from the final provider response', async () => {
+    let now = 20_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.fn((_input: FetchInput, init?: FetchInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        now += 25;
+        return Promise.resolve(jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 }));
+      }
+      now += 75;
+      return Promise.resolve(jsonResponse({
+        error: {
+          message: 'retry failed',
+        },
+      }, { status: 500 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      })).resolves.toMatchObject({
+        ok: false,
+        kind: 'upstream_unavailable',
+        status: 500,
+        latencyMs: 100,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('keeps max_tokens for legacy OpenAI connection tests', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
