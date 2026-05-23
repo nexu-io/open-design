@@ -35,19 +35,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { validateProjectDesignSystemId } = ctx.validation;
   const { listAllSkillLikeEntries } = ctx.resources;
 
-  // Shared skillId guard for POST/PATCH /api/projects. We must validate
-  // against the same source-of-truth the daemon uses at run-startup
-  // (`listAllSkillLikeEntries`), which spans `skills/`,
-  // `design-templates/`, and user-imported roots — narrower validation
-  // (e.g. `listSkills(SKILLS_DIR)`) would falsely reject legitimate
-  // template ids and user skill ids. Returns a structured failure when
-  // the value is non-string or unknown; null / undefined / '' keep the
-  // existing "no skill pinned" semantics and pass through.
+  // Shared skillId guard for POST/PATCH /api/projects. Two jobs in one:
+  //
+  //   1. Validate the incoming value against the same source-of-truth
+  //      the daemon uses at run-startup (`listAllSkillLikeEntries`),
+  //      which spans `skills/`, `design-templates/`, and user-imported
+  //      roots — narrower validation would falsely reject legitimate
+  //      template ids.
+  //   2. Return the canonical value the route should actually persist.
+  //      `undefined` / `null` / `''` all mean "no skill pinned"; we
+  //      collapse them to `null` here so the route never writes an
+  //      empty-string sentinel to the project row. Without that
+  //      normalization a POST or PATCH with `skillId: ''` would store
+  //      `''`, leaving the row in the inconsistent state this guard
+  //      exists to prevent (issue #2404 review on PR #2404, round 4).
   type SkillIdGuardResult =
-    | { ok: true }
+    | { ok: true; value: string | null }
     | { ok: false; status: number; code: string; message: string };
   async function validateSkillIdForProject(value: unknown): Promise<SkillIdGuardResult> {
-    if (value === undefined || value === null || value === '') return { ok: true };
+    if (value === undefined || value === null || value === '') return { ok: true, value: null };
     if (typeof value !== 'string') {
       return { ok: false, status: 400, code: 'BAD_REQUEST', message: 'skillId must be a string or null' };
     }
@@ -55,7 +61,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!findSkillById(skills, value)) {
       return { ok: false, status: 400, code: 'SKILL_NOT_FOUND', message: 'skill not found' };
     }
-    return { ok: true };
+    return { ok: true, value };
   }
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
@@ -216,6 +222,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!skillIdValidation.ok) {
         return sendApiError(res, skillIdValidation.status, skillIdValidation.code, skillIdValidation.message);
       }
+      const normalizedSkillId = skillIdValidation.value;
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -235,7 +242,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const project = insertProject(db, {
         id,
         name: name.trim(),
-        skillId: skillId ?? null,
+        skillId: normalizedSkillId,
         designSystemId: normalizedDesignSystemId,
         pendingPrompt: pendingPrompt || null,
         metadata: projectMetadata,
@@ -443,12 +450,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // create a project successfully and then patch in
       // `skillId: missing-skill` — re-opening the same silent-drop
       // path at run-startup time that this commit closes for POST.
-      // Share the helper so the two routes can never diverge.
+      // Share the helper so the two routes can never diverge, and
+      // overwrite the patch value with the canonical (`'' → null`)
+      // form so we never persist an empty-string sentinel via PATCH
+      // either.
       if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
         const skillIdValidation = await validateSkillIdForProject(patch.skillId);
         if (!skillIdValidation.ok) {
           return sendApiError(res, skillIdValidation.status, skillIdValidation.code, skillIdValidation.message);
         }
+        patch.skillId = skillIdValidation.value;
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)

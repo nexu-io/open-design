@@ -71,6 +71,13 @@ describe('skillId validation on POST/PATCH /api/projects (#2404)', () => {
     });
   }
 
+  async function getProjectSkillId(id: string): Promise<unknown> {
+    const resp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project?: { skillId?: unknown } };
+    return body.project?.skillId;
+  }
+
   it('POST rejects an unknown skillId with SKILL_NOT_FOUND so callers fail fast at create time', async () => {
     const id = uniqueId('project-bad-skill');
     const resp = await createProject({ id, name: 'Bad skill', skillId: 'missing-skill' });
@@ -103,25 +110,42 @@ describe('skillId validation on POST/PATCH /api/projects (#2404)', () => {
     projectsToClean.push(id);
   });
 
-  it('POST accepts null skillId — keeps the existing "no skill pinned" semantics', async () => {
+  it('POST stores `null` when skillId is explicitly null', async () => {
     const id = uniqueId('project-null-skill');
     const resp = await createProject({ id, name: 'Null skill', skillId: null });
     expect(resp.status).toBe(200);
     projectsToClean.push(id);
+    expect(await getProjectSkillId(id)).toBeNull();
   });
 
-  it('POST accepts an omitted skillId — keeps the existing "no skill pinned" semantics', async () => {
+  it('POST stores `null` when skillId is omitted', async () => {
     const id = uniqueId('project-no-skill');
     const resp = await createProject({ id, name: 'No skill' });
     expect(resp.status).toBe(200);
     projectsToClean.push(id);
+    expect(await getProjectSkillId(id)).toBeNull();
   });
 
-  it('POST accepts an empty-string skillId — treated the same as null/omitted', async () => {
+  it('POST normalizes an empty-string skillId to `null` so the project row never carries an empty-string sentinel (#2404 round-4 review)', async () => {
+    // The route used to write `skillId: skillId ?? null`, so a request
+    // with `skillId: ''` returned 200 and silently persisted the
+    // empty string. The shared validator now collapses '' to null
+    // and the route persists that canonical value instead.
     const id = uniqueId('project-empty-skill');
     const resp = await createProject({ id, name: 'Empty skill', skillId: '' });
     expect(resp.status).toBe(200);
     projectsToClean.push(id);
+    expect(await getProjectSkillId(id)).toBeNull();
+  });
+
+  it('POST stores a valid skill id verbatim', async () => {
+    // Sanity: normalization only kicks in for the empty-string sentinel;
+    // a real skill id reaches the row unchanged.
+    const id = uniqueId('project-template-skill-stored');
+    const resp = await createProject({ id, name: 'Template skill stored', skillId: 'dashboard' });
+    expect(resp.status).toBe(200);
+    projectsToClean.push(id);
+    expect(await getProjectSkillId(id)).toBe('dashboard');
   });
 
   it('PATCH rejects an unknown skillId with SKILL_NOT_FOUND — closes the bypass that lets callers create then patch in a bad id', async () => {
@@ -173,6 +197,25 @@ describe('skillId validation on POST/PATCH /api/projects (#2404)', () => {
 
     const resp = await patchProject(id, { skillId: null });
     expect(resp.status).toBe(200);
+    expect(await getProjectSkillId(id)).toBeNull();
+  });
+
+  it('PATCH normalizes an empty-string skillId to `null` (#2404 round-4 review)', async () => {
+    // PATCH previously forwarded patch.skillId straight into
+    // updateProject() with no normalization, so a `skillId: ''`
+    // patch returned 200 and stored '' over a real skill id —
+    // re-opening the inconsistent-row case from the POST side.
+    // The validator's canonical value now flows back into patch.skillId
+    // before persistence.
+    const id = uniqueId('project-patch-empty-skill');
+    const create = await createProject({ id, name: 'Patch empty skill', skillId: 'dashboard' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+    expect(await getProjectSkillId(id)).toBe('dashboard');
+
+    const resp = await patchProject(id, { skillId: '' });
+    expect(resp.status).toBe(200);
+    expect(await getProjectSkillId(id)).toBeNull();
   });
 
   it('PATCH leaves skillId untouched when the patch body omits the field — only validated when explicitly included', async () => {
