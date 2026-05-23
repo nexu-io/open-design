@@ -21,7 +21,7 @@
     "src"
   ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "build:sidecar": "tsc -p tsconfig.sidecar.json",
     "typecheck": "tsc -b --noEmit",
