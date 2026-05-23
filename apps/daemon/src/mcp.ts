@@ -534,6 +534,20 @@ function requireString(v: unknown, name: string): asserts v is string {
   }
 }
 
+// Assert an optional MCP tool argument is either omitted (undefined /
+// null) or a string. Wrong-type inputs (objects, numbers, booleans)
+// must fail loudly at the tool boundary instead of being silently
+// dropped — the previous `typeof === 'string'` filter let an MCP
+// caller send e.g. `skillId: 42` and still get a successfully created
+// project that was missing the requested pinned skill, design system,
+// or instructions (#2404 round-5 review on PR #2404).
+function assertOptionalString(v: unknown, name: string): asserts v is string | undefined | null {
+  if (v === undefined || v === null) return;
+  if (typeof v !== 'string') {
+    throw new Error(`${name} must be a string when provided.`);
+  }
+}
+
 async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) {
   try {
     switch (name) {
@@ -641,6 +655,18 @@ async function createProject(baseUrl: string, args: McpArgs) {
   // having to invent project ids.
   const id = randomUUID();
   const payload: JsonObject = { id, name: trimmedName };
+  // Type-check each optional argument before forwarding. The previous
+  // `typeof === 'string'` filter silently dropped wrong-type inputs
+  // (e.g. `skillId: 42`) and still POSTed a successful project
+  // create, bypassing the daemon's own validation and leaving the
+  // caller with a project missing the requested pinned skill / design
+  // system / instructions (#2404 round-5 review on PR #2404). Reject
+  // wrong types at the MCP boundary instead. Empty strings remain a
+  // no-op so the existing "no field supplied" shape is preserved.
+  assertOptionalString(args.skillId, 'skillId');
+  assertOptionalString(args.designSystemId, 'designSystemId');
+  assertOptionalString(args.pendingPrompt, 'pendingPrompt');
+  assertOptionalString(args.customInstructions, 'customInstructions');
   if (typeof args.skillId === 'string' && args.skillId.length > 0) {
     payload.skillId = args.skillId;
   }

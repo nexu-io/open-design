@@ -101,6 +101,64 @@ describe('public MCP create_project (#2356)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { field: 'skillId', value: 42 },
+    { field: 'designSystemId', value: {} },
+    { field: 'pendingPrompt', value: ['nope'] },
+    { field: 'customInstructions', value: true },
+  ])(
+    'rejects wrong-type optional argument `$field` at the MCP boundary instead of silently dropping it (#2404 round-5 review)',
+    async ({ field, value }) => {
+      // The previous `typeof === 'string'` filter let an MCP caller
+      // send e.g. `skillId: 42` and still get a 200 from POST
+      // /api/projects with the field missing — a project that looked
+      // successfully created but was missing the requested pinned
+      // skill / design system / instructions. Fast-fail at the tool
+      // boundary so the caller sees the type mismatch and can fix it.
+      const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response('{}', { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_project', {
+        name: 'Typed',
+        [field]: value,
+      });
+
+      expect(result).toMatchObject({ isError: true });
+      expect(firstText(result)).toMatch(new RegExp(`${field} must be a string`));
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still accepts null / undefined for optional arguments (treated as "no value")', async () => {
+    // Regression guard for the new fast-fail: null and undefined are
+    // legitimate "field omitted" shapes and must keep their no-op
+    // semantics so callers that explicitly null-out a field still
+    // create a project.
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({ project: { id: 'pid', name: 'Sparse' }, conversationId: 'conv-n' }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_project', {
+      name: 'Sparse',
+      skillId: null,
+      designSystemId: undefined,
+      pendingPrompt: null,
+      customInstructions: undefined,
+    });
+
+    expect(result).not.toMatchObject({ isError: true });
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(sent.skillId).toBeUndefined();
+    expect(sent.designSystemId).toBeUndefined();
+    expect(sent.pendingPrompt).toBeUndefined();
+    expect(sent.customInstructions).toBeUndefined();
+  });
+
   it('does not forward client-controlled metadata or privileged plugin fields', async () => {
     const fetchMock = vi.fn(
       async (_url: string, _init?: RequestInit) =>
