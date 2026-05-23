@@ -47,6 +47,7 @@ import type { PluginFolderAgentAction } from './design-files/pluginFolderActions
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
@@ -1534,17 +1535,7 @@ function DesignSystemProjectPanel({
         ) : null}
 
         {fontFiles.length === 0 ? (
-          <div className="ds-project-warning-card">
-            <Icon name="help-circle" size={16} />
-            <span>
-              <strong>Missing brand fonts</strong>
-              <small>Open Design is rendering typography with substitute web fonts.</small>
-            </span>
-            <button type="button" className="ghost compact" onClick={onUploadAssets}>
-              <Icon name="upload" size={13} />
-              Upload fonts
-            </button>
-          </div>
+          <MissingBrandFontsBanner projectId={projectId} onUploadAssets={onUploadAssets} />
         ) : null}
 
         <div className="ds-project-sections">
