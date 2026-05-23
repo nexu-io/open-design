@@ -5201,6 +5201,13 @@ export async function startServer({
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
     validation: validationDeps,
+    resources: {
+      listAllSkills,
+      listAllDesignTemplates,
+      listAllSkillLikeEntries,
+      listAllDesignSystems,
+      mimeFor,
+    },
   });
   registerImportRoutes(app, {
     db,

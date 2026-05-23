@@ -19,7 +19,7 @@ import type { RouteDeps } from './server-context.js';
 import { findSkillById, listSkills } from './skills.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation' | 'resources'> {}
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
@@ -33,6 +33,30 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId } = ctx.validation;
+  const { listAllSkillLikeEntries } = ctx.resources;
+
+  // Shared skillId guard for POST/PATCH /api/projects. We must validate
+  // against the same source-of-truth the daemon uses at run-startup
+  // (`listAllSkillLikeEntries`), which spans `skills/`,
+  // `design-templates/`, and user-imported roots — narrower validation
+  // (e.g. `listSkills(SKILLS_DIR)`) would falsely reject legitimate
+  // template ids and user skill ids. Returns a structured failure when
+  // the value is non-string or unknown; null / undefined / '' keep the
+  // existing "no skill pinned" semantics and pass through.
+  type SkillIdGuardResult =
+    | { ok: true }
+    | { ok: false; status: number; code: string; message: string };
+  async function validateSkillIdForProject(value: unknown): Promise<SkillIdGuardResult> {
+    if (value === undefined || value === null || value === '') return { ok: true };
+    if (typeof value !== 'string') {
+      return { ok: false, status: 400, code: 'BAD_REQUEST', message: 'skillId must be a string or null' };
+    }
+    const skills = await listAllSkillLikeEntries();
+    if (!findSkillById(skills, value)) {
+      return { ok: false, status: 400, code: 'SKILL_NOT_FOUND', message: 'skill not found' };
+    }
+    return { ok: true };
+  }
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -188,14 +212,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // project with no pinned skill at all and no error to the caller.
       // Unknown skill ids are rejected; `null` / `undefined` / empty
       // string keep the existing "no skill pinned" semantics.
-      if (skillId !== undefined && skillId !== null && skillId !== '') {
-        if (typeof skillId !== 'string') {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'skillId must be a string or null');
-        }
-        const skills = await listSkills(SKILLS_DIR);
-        if (!findSkillById(skills, skillId)) {
-          return sendApiError(res, 400, 'SKILL_NOT_FOUND', 'skill not found');
-        }
+      const skillIdValidation = await validateSkillIdForProject(skillId);
+      if (!skillIdValidation.ok) {
+        return sendApiError(res, skillIdValidation.status, skillIdValidation.code, skillIdValidation.message);
       }
       const projectMetadata =
         metadata && typeof metadata === 'object'
@@ -418,6 +437,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
         patch.designSystemId = designSystemValidation.id;
+      }
+      // Same guard as POST: PATCH used to send `patch` straight into
+      // updateProject() without checking skillId, so a caller could
+      // create a project successfully and then patch in
+      // `skillId: missing-skill` — re-opening the same silent-drop
+      // path at run-startup time that this commit closes for POST.
+      // Share the helper so the two routes can never diverge.
+      if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
+        const skillIdValidation = await validateSkillIdForProject(patch.skillId);
+        if (!skillIdValidation.ok) {
+          return sendApiError(res, skillIdValidation.status, skillIdValidation.code, skillIdValidation.message);
+        }
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
