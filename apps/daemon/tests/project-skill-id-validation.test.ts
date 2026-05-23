@@ -266,4 +266,93 @@ describe('skillId validation on POST/PATCH /api/projects (#2404)', () => {
     const resp = await patchProject(id, { customInstructions: 'something' });
     expect(resp.status).toBe(200);
   });
+
+  // ---- pendingPrompt type guards (#2404 round-6 review) ------------------
+
+  it('POST rejects a non-string non-null pendingPrompt so contract types stay honored', async () => {
+    // pendingPrompt is contract-typed `string | null` and the web
+    // calls `project?.pendingPrompt?.trim()`. Wrong-type values must
+    // fail at the route boundary, not at next render.
+    const id = uniqueId('project-bad-pending-prompt');
+    const resp = await createProject({ id, name: 'Bad pending prompt', pendingPrompt: 42 });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/pendingPrompt/);
+  });
+
+  it('PATCH rejects a non-string non-null pendingPrompt', async () => {
+    const id = uniqueId('project-patch-bad-pending-prompt');
+    const create = await createProject({ id, name: 'Patch bad pending prompt' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { pendingPrompt: { not: 'a string' } });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/pendingPrompt/);
+  });
+
+  it('PATCH accepts a null pendingPrompt — caller can clear the pending prompt', async () => {
+    const id = uniqueId('project-patch-null-pending-prompt');
+    const create = await createProject({ id, name: 'Patch null pp', pendingPrompt: 'something' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { pendingPrompt: null });
+    expect(resp.status).toBe(200);
+  });
+
+  // ---- name guard on PATCH (#2404 round-6 review) ------------------------
+
+  it('PATCH rejects a non-string name so `project.name.trim()` consumers never see a number/object', async () => {
+    const id = uniqueId('project-patch-bad-name-type');
+    const create = await createProject({ id, name: 'Original' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { name: 42 });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/name/);
+  });
+
+  it('PATCH rejects a whitespace-only name to keep the POST invariant', async () => {
+    const id = uniqueId('project-patch-blank-name');
+    const create = await createProject({ id, name: 'Original' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { name: '   ' });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/name/);
+  });
+
+  it('PATCH accepts and trims a valid name so the stored value matches the POST shape', async () => {
+    const id = uniqueId('project-patch-good-name');
+    const create = await createProject({ id, name: 'Old name' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { name: '  Renamed  ' });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project?: { name?: string } };
+    expect(body.project?.name).toBe('Renamed');
+  });
+
+  it('PATCH leaves the project name untouched when the body omits the field — only validated when explicitly included', async () => {
+    const id = uniqueId('project-patch-no-name-field');
+    const create = await createProject({ id, name: 'Untouched' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { customInstructions: 'edit' });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project?: { name?: string } };
+    expect(body.project?.name).toBe('Untouched');
+  });
 });

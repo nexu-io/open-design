@@ -207,6 +207,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof customInstructions === 'string' && customInstructions.length > 5000) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
       }
+      // pendingPrompt is contract-typed `string | null`
+      // (packages/contracts/src/api/projects.ts) and consumed by the
+      // web with `project?.pendingPrompt?.trim()`. A direct HTTP
+      // caller used to be able to persist `pendingPrompt: 42` (or an
+      // object) and turn later WorkspaceTabsBar rendering into a
+      // runtime fault. Mirror the customInstructions guard
+      // (#2404 round-6 review).
+      if (pendingPrompt !== undefined
+          && typeof pendingPrompt !== 'string'
+          && pendingPrompt !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'pendingPrompt must be a string or null');
+      }
       if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
       }
@@ -441,6 +453,30 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       if (typeof patch.customInstructions === 'string' && patch.customInstructions.length > 5000) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
+      }
+      // PATCH used to forward `patch.pendingPrompt` straight into
+      // updateProject() with no type check, so a direct HTTP caller
+      // could persist `pendingPrompt: 42` and break the web's
+      // `project?.pendingPrompt?.trim()` consumer at next render.
+      // Mirror the customInstructions guard so POST and PATCH agree
+      // on the contract type (#2404 round-6 review).
+      if (Object.prototype.hasOwnProperty.call(patch, 'pendingPrompt')
+          && typeof patch.pendingPrompt !== 'string'
+          && patch.pendingPrompt !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'pendingPrompt must be a string or null');
+      }
+      // Same shape for `name`: POST already enforces
+      // `typeof name === 'string' && name.trim()`, but PATCH would
+      // happily persist `name: 42` or `"   "`, breaking the contract
+      // invariant `project.name` consumers like RecentProjectsStrip's
+      // `project.name.trim()` rely on. Only validate when the body
+      // explicitly includes the field so existing partial-patch
+      // shapes (e.g. metadata-only edits) keep working.
+      if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
+        if (typeof patch.name !== 'string' || !patch.name.trim()) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'name must be a non-empty string');
+        }
+        patch.name = patch.name.trim();
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')) {
         const designSystemValidation = await validateProjectDesignSystemId(patch.designSystemId);
