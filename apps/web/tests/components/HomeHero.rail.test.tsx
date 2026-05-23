@@ -279,6 +279,20 @@ describe('HomeHero intent rail', () => {
   expect(hyperframes.getAttribute('title')).toBe(
     '创作基于 HTML 的动态内容：字幕、音频响应视觉和场景转场。'
   );
+
+  // Open shortcuts menu to expose migrate chips
+  fireEvent.click(screen.getByTestId('home-hero-shortcuts-trigger'));
+
+  // Migrate chip labels should be zh-CN
+  expect(screen.getByTestId('home-hero-rail-create-plugin').textContent).toContain('创建插件');
+  expect(screen.getByTestId('home-hero-rail-figma').textContent).toContain('来自 Figma');
+  expect(screen.getByTestId('home-hero-rail-template').textContent).toContain('来自模板');
+
+  // Migrate chip tooltips should be zh-CN
+  expect(screen.getByTestId('home-hero-rail-create-plugin').getAttribute('title')).toBe('创作可复用的 Open Design 插件，并添加到我的插件。');
+  expect(screen.getByTestId('home-hero-rail-figma').getAttribute('title')).toBe('将 Figma 画框迁移到当前设计体系。');
+  expect(screen.getByTestId('home-hero-rail-template').getAttribute('title')).toBe('从内置模板开始。');
+  
 });
   
 });
