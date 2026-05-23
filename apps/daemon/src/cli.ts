@@ -206,6 +206,11 @@ const RECOVERABLE_EXIT_CODES = {
   'genui-surface-awaiting':   73,
   'desktop-auth-pending':     74,
   'desktop-import-token-rejected': 75,
+  // `od templates delete <id>` returns 404 from the daemon when the
+  // template id is unknown. Share the same exit-code lane as the
+  // other "thing-not-found" classes so agents can branch on the
+  // exit number alone without parsing the error envelope.
+  'template-not-found':       76,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -5010,6 +5015,29 @@ Common options:
     process.exit(2);
   }
   const base = (await cliDaemonBaseUrl(flags));
+  // Extract positional arguments while stepping past `--flag value`
+  // pairs for any string-valued template flag. Without this the id has
+  // to be the very first token after the sub-verb, so a headless caller
+  // that prefixes shared options (`od templates save --daemon-url ...
+  // proj-1 --name Cards`) would hit the missing-id usage path before
+  // ever reaching the daemon. Mirrors the `positionalArgs` helper in
+  // `runAutomation`.
+  const positionalArgs = (values) => {
+    const out = [];
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i];
+      if (!value) continue;
+      if (value.startsWith('--')) {
+        const eq = value.indexOf('=');
+        const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
+        if (eq < 0 && TEMPLATES_STRING_FLAGS.has(key)) i++;
+        continue;
+      }
+      if (value.startsWith('-')) continue;
+      out.push(value);
+    }
+    return out;
+  };
   switch (sub) {
     case 'list': {
       // Wrap every fetch in try/catch so the user sees a clean
@@ -5037,12 +5065,10 @@ Common options:
       return;
     }
     case 'save': {
-      // Require <projectId> as the first positional. Scanning the
-      // whole `rest` would happily pick up the value of `--name`
-      // ("Cards") and silently use it as the project id, so we
-      // anchor on the head and bail out the moment it looks like a
-      // flag.
-      const projectId = rest.length > 0 && !rest[0].startsWith('-') ? rest[0] : '';
+      // Pull <projectId> from anywhere among the positional args
+      // (`positionalArgs` already skipped past `--flag value` pairs)
+      // so callers can put shared options before or after the id.
+      const projectId = positionalArgs(rest)[0] ?? '';
       if (!projectId) {
         console.error('Usage: od templates save <projectId> --name <name> [--description <text>]');
         process.exit(2);
@@ -5067,7 +5093,19 @@ Common options:
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      if (!resp.ok) return structuredHttpFailure(resp);
+      // Templates POST returns 404 when sourceProjectId is unknown,
+      // and 400 for body validation failures (missing name, too-long
+      // fields). Both are reachable user errors with the daemon
+      // already running, so default-classifying them as
+      // `daemon-not-running` would send agents down the wrong recovery
+      // branch. Map 404 → project-not-found and 400 → missing-input,
+      // keep the default for 5xx so genuine daemon trouble still
+      // surfaces as `daemon-not-running`.
+      if (!resp.ok) {
+        if (resp.status === 404) return structuredHttpFailure(resp, 'project-not-found');
+        if (resp.status === 400) return structuredHttpFailure(resp, 'missing-input');
+        return structuredHttpFailure(resp);
+      }
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       const id = data?.template?.id ?? '';
@@ -5076,7 +5114,7 @@ Common options:
       return;
     }
     case 'delete': {
-      const id = rest.length > 0 && !rest[0].startsWith('-') ? rest[0] : '';
+      const id = positionalArgs(rest)[0] ?? '';
       if (!id) {
         console.error('Usage: od templates delete <id>');
         process.exit(2);
@@ -5088,7 +5126,15 @@ Common options:
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      if (!resp.ok) return structuredHttpFailure(resp);
+      // DELETE /api/templates/:id returns 404 when the template id is
+      // unknown — that's a stable user-error class agents can act on
+      // (don't retry, surface to the user) so route it to
+      // `template-not-found` rather than the default
+      // `daemon-not-running`.
+      if (!resp.ok) {
+        if (resp.status === 404) return structuredHttpFailure(resp, 'template-not-found');
+        return structuredHttpFailure(resp);
+      }
       if (flags.json) {
         const data = await resp.json().catch(() => ({ ok: true }));
         return process.stdout.write(JSON.stringify(data, null, 2) + '\n');

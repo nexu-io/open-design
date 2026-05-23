@@ -377,4 +377,106 @@ describe('od templates CLI', () => {
     expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
     expect(result.stderr).not.toMatch(/TypeError: fetch failed/);
   });
+
+  // Reviewer-correctness fixes from #2428 round 3.
+  // (1) positional id must work even when shared flags come first.
+  // (2) `templates save` 404 / 400 must map to project-not-found /
+  //     missing-input — not the default `daemon-not-running`, which
+  //     would send agents down the wrong recovery branch.
+  it('accepts positional projectId after --daemon-url for `templates save` (flag-before-id)', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: { template: { id: 't-after-flag', name: 'Cards' } },
+    }));
+    const result = await runCli([
+      'templates',
+      'save',
+      '--daemon-url',
+      stub.baseUrl,
+      'proj-1',
+      '--name',
+      'Cards',
+    ]);
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]?.method).toBe('POST');
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toMatchObject({
+      sourceProjectId: 'proj-1',
+      name: 'Cards',
+    });
+  });
+
+  it('accepts positional id after --daemon-url for `templates delete` (flag-before-id)', async () => {
+    stub.setResponder(() => ({ status: 200, body: { ok: true } }));
+    const result = await runCli([
+      'templates',
+      'delete',
+      '--daemon-url',
+      stub.baseUrl,
+      't-after-flag',
+    ]);
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]?.method).toBe('DELETE');
+    expect(stub.requests[0]?.url).toBe('/api/templates/t-after-flag');
+  });
+
+  it('reports project-not-found (not daemon-not-running) when `templates save` gets 404', async () => {
+    // structuredHttpFailure → exitWithStructuredError writes a
+    // { error: { code, message, data } } envelope to STDERR and exits
+    // with the per-code exit number (68 for project-not-found, see
+    // RECOVERABLE_EXIT_CODES).
+    stub.setResponder(() => ({
+      status: 404,
+      body: { error: { code: 'TEMPLATE_SOURCE_NOT_FOUND', message: 'project not found' } },
+    }));
+    const result = await runCli([
+      'templates',
+      'save',
+      'missing-project',
+      '--name',
+      'Cards',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+    expect(result.code).toBe(68);
+    const envelope = JSON.parse(result.stderr.trim());
+    expect(envelope.error.code).toBe('project-not-found');
+  });
+
+  it('reports missing-input (not daemon-not-running) when `templates save` gets 400', async () => {
+    stub.setResponder(() => ({
+      status: 400,
+      body: { error: { code: 'BAD_REQUEST', message: 'name required' } },
+    }));
+    const result = await runCli([
+      'templates',
+      'save',
+      'proj-1',
+      '--name',
+      'Cards',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+    expect(result.code).toBe(67);
+    const envelope = JSON.parse(result.stderr.trim());
+    expect(envelope.error.code).toBe('missing-input');
+  });
+
+  it('reports template-not-found (not daemon-not-running) when `templates delete` gets 404', async () => {
+    stub.setResponder(() => ({
+      status: 404,
+      body: { error: { code: 'TEMPLATE_NOT_FOUND', message: 'template not found' } },
+    }));
+    const result = await runCli([
+      'templates',
+      'delete',
+      'gone',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+    expect(result.code).toBe(76);
+    const envelope = JSON.parse(result.stderr.trim());
+    expect(envelope.error.code).toBe('template-not-found');
+  });
 });
