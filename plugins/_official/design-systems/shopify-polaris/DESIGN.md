@@ -513,6 +513,140 @@ A standard Polaris admin page follows this structure:
 6. **Cards** — white surfaces with 12px radius, shadow-100, 16px padding
 7. **Content** — forms, tables, lists, banners inside cards
 
+### Web Components (`<s-*>`)
+
+Polaris ships as native web components with the `s-` prefix, loaded via CDN:
+
+```html
+<script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+```
+
+TypeScript types: `@shopify/polaris-types`
+
+#### Component Reference
+
+| Tag | Category | Purpose |
+|-----|----------|---------|
+| `<s-page>` | Layout | Page shell — `heading`, `inlineSize` (small/base/large) |
+| `<s-section>` | Layout | Content section — `heading`, `padding` (base/none) |
+| `<s-box>` | Layout | Generic container — `background`, `padding`, `border`, `borderRadius`, sizing |
+| `<s-stack>` | Layout | Flex layout — `direction` (block/inline), `gap`, `justifyContent`, `alignItems` |
+| `<s-grid>` | Layout | CSS grid — `gridTemplateColumns`, `gridTemplateRows`, `gap` |
+| `<s-grid-item>` | Layout | Grid cell — `gridColumn` (span N), `gridRow` (span N) |
+| `<s-divider>` | Layout | Separator — `direction` (inline/block), `color` (base/strong) |
+| `<s-query-container>` | Layout | Container query wrapper for responsive values |
+| `<s-button>` | Action | Button — `variant` (primary/secondary/tertiary), `tone` (critical/neutral), `icon` |
+| `<s-link>` | Action | Hyperlink — `href`, `target`, `tone` |
+| `<s-menu>` | Action | Menu trigger — action list container |
+| `<s-button-group>` | Action | Button group wrapper |
+| `<s-clickable>` | Action | Generic clickable surface |
+| `<s-clickable-chip>` | Action | Clickable chip/tag |
+| `<s-text>` | Typography | Inline text — `type` (strong/generic/address), `tone`, `color` (base/subdued) |
+| `<s-heading>` | Typography | Section heading — `accessibilityRole`, `lineClamp` |
+| `<s-paragraph>` | Typography | Block text — `tone`, `color`, `lineClamp`, `fontVariantNumeric` |
+| `<s-chip>` | Typography | Status chip |
+| `<s-tooltip>` | Typography | Tooltip overlay |
+| `<s-text-field>` | Form | Text input — `label`, `value`, `icon`, `prefix`, `suffix`, `error` |
+| `<s-select>` | Form | Dropdown — contains `<s-option>` and `<s-option-group>` |
+| `<s-checkbox>` | Form | Checkbox — `label`, `checked`, `indeterminate`, `error` |
+| `<s-switch>` | Form | Toggle switch |
+| `<s-choice-list>` | Form | Radio/checkbox group |
+| `<s-text-area>` | Form | Multi-line text input |
+| `<s-number-field>` | Form | Numeric input |
+| `<s-email-field>` | Form | Email input |
+| `<s-url-field>` | Form | URL input |
+| `<s-password-field>` | Form | Password input |
+| `<s-search-field>` | Form | Search input |
+| `<s-date-field>` | Form | Date input |
+| `<s-date-picker>` | Form | Calendar date picker |
+| `<s-money-field>` | Form | Currency input |
+| `<s-color-field>` | Form | Color input |
+| `<s-color-picker>` | Form | Color picker |
+| `<s-drop-zone>` | Form | File upload area |
+| `<s-badge>` | Feedback | Status badge — `tone`, `icon`, `size` (base/large) |
+| `<s-banner>` | Feedback | Banner — `heading`, `tone`, `dismissible` |
+| `<s-spinner>` | Feedback | Loading spinner |
+| `<s-modal>` | Overlay | Modal dialog — `heading`, `size`, slots for actions |
+| `<s-popover>` | Overlay | Popover — triggered via `commandFor` on buttons |
+| `<s-table>` | Data | Data table — `variant` (auto/list/table), `paginate`, `loading` |
+| `<s-table-header-row>` | Data | Table header container |
+| `<s-table-header>` | Data | Column header — `listSlot`, `format` |
+| `<s-table-body>` | Data | Table body container |
+| `<s-table-row>` | Data | Data row — `clickDelegate` |
+| `<s-table-cell>` | Data | Data cell |
+| `<s-icon>` | Media | Icon — `type` (500+ names), `tone`, `color`, `size` |
+| `<s-avatar>` | Media | User avatar |
+| `<s-image>` | Media | Image element |
+| `<s-thumbnail>` | Media | Thumbnail image |
+
+#### Semantic Size Keywords
+
+Components use keyword-based sizing instead of pixel values:
+
+| Keyword | Approximate Value | Use |
+|---------|-------------------|-----|
+| `small-500` | ~1px | Hairline |
+| `small-400` | ~2px | Tight |
+| `small-300` | ~4px | Micro |
+| `small-200` | ~6px | Compact |
+| `small-100` | ~8px | Small |
+| `small` | ~12px | Default small |
+| `base` | ~16px | Standard |
+| `large` | ~20px | Comfortable |
+| `large-100` | ~24px | Spacious |
+| `large-200` | ~32px | Wide |
+| `large-300` | ~40px | Section |
+| `large-400` | ~48px | Layout |
+| `large-500` | ~64px | Page |
+
+#### Responsive Container Queries
+
+All spacing/layout attributes accept responsive values via container query syntax:
+
+```html
+<s-query-container>
+  <s-stack direction="@container (inline-size > 500px) inline, block"
+           gap="@container (inline-size > 500px) base, small-300">
+    <s-box padding="base">Content</s-box>
+  </s-stack>
+</s-query-container>
+```
+
+#### Admin Page Skeleton
+
+```html
+<s-page heading="Products" inlineSize="base">
+  <s-button slot="primary-action" variant="primary">Add product</s-button>
+  <s-link slot="breadcrumb-actions" href="/admin">Settings</s-link>
+
+  <s-section heading="Active products">
+    <s-stack gap="base">
+      <s-banner heading="3 products need attention" tone="warning" dismissible>
+        Some products are missing weights.
+        <s-button slot="secondary-actions" variant="secondary">Review</s-button>
+      </s-banner>
+
+      <s-box background="base" padding="base" borderRadius="large">
+        <s-table>
+          <s-table-header-row>
+            <s-table-header>Product</s-table-header>
+            <s-table-header format="numeric">Inventory</s-table-header>
+            <s-table-header>Status</s-table-header>
+          </s-table-header-row>
+          <s-table-body>
+            <s-table-row>
+              <s-table-cell><s-text>Widget Pro</s-text></s-table-cell>
+              <s-table-cell><s-text fontVariantNumeric="tabular-nums">142</s-text></s-table-cell>
+              <s-table-cell><s-badge tone="success" icon="check">Active</s-badge></s-table-cell>
+            </s-table-row>
+          </s-table-body>
+        </s-table>
+      </s-box>
+    </s-stack>
+  </s-section>
+</s-page>
+```
+
 ### Iteration Guide
 
 1. Focus on ONE component at a time
@@ -523,3 +657,4 @@ A standard Polaris admin page follows this structure:
 6. The gray canvas (`#F1F1F1`) vs white cards (`#FFFFFF`) contrast is the primary depth mechanism
 7. Color is always semantic — if you're using green for decoration, stop
 8. `#303030` is not black — it's Polaris's brand shade, softer and warmer than `#000000`
+9. When generating HTML, prefer `<s-*>` web components over raw `<div>` markup — they enforce Polaris patterns automatically
