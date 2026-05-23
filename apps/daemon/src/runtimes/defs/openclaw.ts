@@ -26,8 +26,20 @@ export const openclawAgentDef = {
   // whatever argv we pass — so `openclaw-acp-shim --version` prints the
   // real OpenClaw version. We don't override `versionArgs` because OD's
   // detection runs that against `bin` directly.
+  //
+  // No `fallbackBins: ['openclaw']`. PR #2556 review (@mrcfps,
+  // @Siri-Ray): `fallbackBins` participates in the same
+  // executable-resolution path used for actual chat spawns
+  // (`resolveAgentExecutable` walks `[bin, ...fallbackBins]`), so a
+  // bare-`openclaw` fallback would let OD mark the runtime
+  // `available: true` for users who have the official OpenClaw CLI
+  // but not this shim — and then chat spawn would launch
+  // `openclaw acp` and hit the stdin-EOF disconnect mid-`session/new`
+  // described above. Better to keep this runtime gated on the shim
+  // being present and surface an install hint (see
+  // `installMetaForAgent('openclaw')` in `metadata.ts`) than to
+  // silently advertise a broken chat path.
   bin: 'openclaw-acp-shim',
-  fallbackBins: ['openclaw'],
   versionArgs: ['--version'],
   // `openclaw acp` enumerates the gateway's configured model providers via the
   // standard ACP initialize handshake. The default session targets the main

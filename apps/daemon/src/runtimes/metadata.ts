@@ -75,6 +75,18 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/Hmbown/CodeWhale',
     docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
   },
+  // PR #2556 review (@mrcfps, @Siri-Ray): OpenClaw's adapter binds to
+  // `openclaw-acp-shim` only — the bare `openclaw` CLI hits the
+  // stdin-EOF disconnect mid-`session/new` described in
+  // `defs/openclaw.ts`. When the shim isn't on PATH the runtime falls
+  // out of the picker as `available: false`; surfacing
+  // `installUrl` here is what tells users where to get the shim
+  // instead of falling back to a bare `openclaw` spawn that is
+  // known-broken for the main chat flow.
+  openclaw: {
+    installUrl: 'https://github.com/openclaw/openclaw#acp-shim',
+    docsUrl: 'https://docs.openclaw.ai/cli/acp',
+  },
 };
 
 function sanitizeHttpsUrl(value: string | undefined): string | undefined {
