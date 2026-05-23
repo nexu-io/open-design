@@ -1,0 +1,1378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DoJoy AI Skill 工作台</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --surface-3: #eef4ff;
+      --fg: #172033;
+      --fg-2: #39465a;
+      --muted: #6c778a;
+      --border: #d9e1ec;
+      --border-soft: #ebf0f6;
+      --accent: #2563eb;
+      --accent-2: #0f766e;
+      --accent-on: #ffffff;
+      --success: #16a34a;
+      --warn: #f59e0b;
+      --danger: #dc2626;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-pill: 999px;
+      --shadow-panel: 0 1px 0 rgba(23, 32, 51, 0.04), 0 18px 44px rgba(23, 32, 51, 0.08);
+      --focus-ring: 0 0 0 4px rgba(37, 99, 235, 0.2);
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.5 var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, textarea:focus-visible, summary:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    .workspace {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 278px minmax(420px, 1fr) 392px;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .rail, .dialogue, .preview {
+      min-width: 0;
+      min-height: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-panel);
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 16px;
+      overflow: auto;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: var(--accent-on);
+      font-weight: 900;
+      box-shadow: 0 12px 26px rgba(37, 99, 235, 0.22);
+    }
+    .brand strong { display: block; font-size: 16px; line-height: 1.2; }
+    .brand span:last-child { color: var(--muted); font-size: 12px; }
+
+    .skill-group { display: grid; gap: 8px; }
+    .group-title {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .skill-list { display: grid; gap: 8px; }
+    .skill-button {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      background: transparent;
+      color: var(--fg-2);
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      text-align: left;
+    }
+    .skill-button:hover { background: var(--surface-2); }
+    .skill-button.active {
+      background: var(--surface-3);
+      border-color: rgba(37, 99, 235, 0.28);
+      color: var(--accent);
+    }
+    .skill-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      color: var(--fg-2);
+      font-weight: 800;
+    }
+    .skill-button.active .skill-icon {
+      background: var(--accent);
+      color: var(--accent-on);
+      border-color: var(--accent);
+    }
+    .skill-name { display: block; font-weight: 800; line-height: 1.2; }
+    .skill-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+    details.more-skills {
+      border-top: 1px solid var(--border-soft);
+      padding-top: 12px;
+    }
+    details.more-skills summary {
+      min-height: 36px;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-weight: 800;
+      cursor: pointer;
+    }
+    details.more-skills summary::-webkit-details-marker { display: none; }
+    details.more-skills summary::after { content: "展开"; font-size: 12px; }
+    details.more-skills[open] summary::after { content: "收起"; }
+
+    .rail-note {
+      margin-top: auto;
+      padding: 12px;
+      border-radius: var(--radius-md);
+      background: var(--surface-2);
+      border: 1px solid var(--border-soft);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dialogue {
+      display: grid;
+      grid-template-rows: auto auto auto;
+      align-content: start;
+      overflow: hidden;
+    }
+    .dialogue-header {
+      padding: 14px 20px 12px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .eyebrow {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 4px; font-size: 22px; line-height: 1.16; }
+    .skill-purpose { margin: 0; color: var(--fg-2); }
+    .header-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+
+    .icon-btn, .text-btn, .primary-btn {
+      min-height: 38px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg-2);
+      font-weight: 800;
+    }
+    .icon-btn:disabled, .text-btn:disabled {
+      cursor: not-allowed;
+      opacity: .58;
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+    .icon-btn {
+      width: 40px;
+      display: grid;
+      place-items: center;
+    }
+    .feedback-btn {
+      padding: 0 12px;
+      min-width: 94px;
+    }
+    .text-btn { padding: 0 14px; }
+    .primary-btn {
+      padding: 0 18px;
+      background: var(--accent);
+      color: var(--accent-on);
+      border-color: var(--accent);
+    }
+    .primary-btn:disabled { opacity: .62; cursor: wait; }
+
+    .messages {
+      min-height: 148px;
+      max-height: 230px;
+      overflow: auto;
+      padding: 12px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px solid var(--border-soft);
+      background: linear-gradient(180deg, #fbfdff, #f8fbff);
+    }
+    .process-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .message {
+      max-width: 92%;
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      padding: 9px 12px;
+      background: var(--surface);
+      color: var(--fg-2);
+    }
+    .message.assistant { align-self: flex-start; }
+    .message.user {
+      align-self: flex-end;
+      background: var(--accent);
+      color: var(--accent-on);
+      border-color: var(--accent);
+    }
+    .message strong { display: block; margin-bottom: 4px; color: inherit; }
+    .message ul { margin: 8px 0 0 18px; padding: 0; }
+    .message li + li { margin-top: 4px; }
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 5px rgba(22, 163, 74, .12);
+    }
+
+    .composer {
+      padding: 12px 20px 12px;
+      border-top: 0;
+      background: var(--surface);
+      display: grid;
+      gap: 10px;
+    }
+    .schema-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .schema-card {
+      min-height: 58px;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      padding: 9px 10px;
+      background: var(--surface-2);
+    }
+    .schema-card span {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .schema-card strong { font-size: 13px; line-height: 1.35; }
+    .input-box {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px;
+      background: var(--surface);
+      display: grid;
+      gap: 10px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 84px;
+      resize: vertical;
+      border: 0;
+      outline: 0;
+      color: var(--fg);
+      background: transparent;
+      line-height: 1.6;
+    }
+    .composer-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .tool-left, .tool-right { display: flex; flex-wrap: wrap; gap: 8px; }
+    .attachment-list {
+      display: none;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .attachment-list.show { display: flex; }
+    .voice-status {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .voice-status.show { display: inline-flex; }
+    .file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      max-width: 260px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      padding: 0 10px;
+      color: var(--fg-2);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-input { display: none; }
+
+    .preview {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      overflow: hidden;
+    }
+    .preview-header {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .preview-title { margin: 0 0 4px; font-size: 18px; line-height: 1.25; }
+    .preview-link {
+      display: inline-flex;
+      align-items: center;
+      max-width: 260px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preview-link:hover { text-decoration: underline; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border-radius: var(--radius-pill);
+      padding: 0 10px;
+      background: var(--surface-3);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .output-spec {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-soft);
+      display: grid;
+      gap: 8px;
+    }
+    .spec-item {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 10px;
+      color: var(--fg-2);
+      font-size: 12px;
+    }
+    .spec-item span:first-child { color: var(--muted); font-weight: 800; }
+    .document {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+      background: #f9fbff;
+    }
+    .doc-paper {
+      min-height: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 20px;
+      box-shadow: 0 10px 28px rgba(23, 32, 51, .06);
+    }
+    .doc-paper h2 { margin-bottom: 12px; font-size: 20px; }
+    .doc-paper h3 { margin: 18px 0 8px; font-size: 14px; }
+    .doc-paper p { color: var(--fg-2); }
+    .doc-paper ul, .doc-paper ol { margin: 8px 0 0 20px; padding: 0; color: var(--fg-2); }
+    .doc-paper li + li { margin-top: 6px; }
+    .table-preview {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 12px;
+    }
+    .table-preview th, .table-preview td {
+      padding: 9px 8px;
+      border: 1px solid var(--border-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+    .table-preview th {
+      background: var(--surface-2);
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .prompt-block {
+      border-radius: var(--radius-md);
+      background: #111827;
+      color: #e5edf7;
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .preview-footer {
+      padding: 14px 18px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      gap: 10px;
+    }
+    .preview-footer .primary-btn, .preview-footer .text-btn { flex: 1; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translate(-50%, 18px);
+      opacity: 0;
+      pointer-events: none;
+      max-width: min(520px, calc(100vw - 32px));
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--fg-2);
+      box-shadow: var(--shadow-panel);
+      transition: transform 180ms ease, opacity 180ms ease;
+      z-index: 10;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .feedback-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, .28);
+      backdrop-filter: blur(10px);
+    }
+    .feedback-overlay.show { display: grid; }
+    .feedback-panel {
+      width: min(560px, 100%);
+      max-height: min(720px, calc(100vh - 48px));
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow-panel);
+    }
+    .feedback-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .feedback-head h2 {
+      margin: 0 0 4px;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+    .feedback-head p { margin: 0; color: var(--muted); }
+    .feedback-body {
+      padding: 18px 20px;
+      display: grid;
+      gap: 12px;
+    }
+    .feedback-field {
+      display: grid;
+      gap: 7px;
+      color: var(--fg-2);
+      font-weight: 800;
+      font-size: 13px;
+    }
+    .feedback-field input,
+    .feedback-field select,
+    .feedback-field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--fg);
+      padding: 10px 12px;
+      outline: 0;
+      font-weight: 500;
+    }
+    .feedback-field textarea { min-height: 104px; resize: vertical; }
+    .feedback-actions {
+      padding: 14px 20px 18px;
+      border-top: 1px solid var(--border-soft);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    @media (max-width: 1180px) {
+      body { overflow: auto; }
+      .workspace {
+        height: auto;
+        min-height: 100vh;
+        grid-template-columns: 250px minmax(0, 1fr);
+      }
+      .preview { grid-column: 1 / -1; min-height: 640px; }
+    }
+
+    @media (max-width: 820px) {
+      .workspace {
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+      }
+      .rail { max-height: none; }
+      .schema-row { grid-template-columns: 1fr; }
+      .message { max-width: 100%; }
+      .preview { min-height: 560px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="workspace">
+    <aside class="rail" aria-label="Skill 列表">
+      <div class="brand">
+        <span class="brand-mark">D</span>
+        <span>
+          <strong>DoJoy AI</strong>
+          <span>Skill 工作台</span>
+        </span>
+      </div>
+
+      <section class="skill-group" aria-label="常用 Skill">
+        <p class="group-title">常用 Skill</p>
+        <div class="skill-list" id="commonSkills"></div>
+      </section>
+
+      <details class="more-skills" open>
+        <summary>更多 Skill</summary>
+        <div class="skill-list" id="moreSkills"></div>
+      </details>
+
+      <div class="rail-note">
+        左侧只负责选 Skill。中间说需求、传附件、语音输入。右侧始终显示当前 Skill 会生成的文档预览。
+      </div>
+    </aside>
+
+    <main class="dialogue" aria-label="对话区">
+      <header class="dialogue-header">
+        <div>
+          <p class="eyebrow" id="skillCategory">内容生成</p>
+          <h1 id="skillTitle">AI 热点日报</h1>
+          <p class="skill-purpose" id="skillPurpose">生成热点摘要、观点和可确认的企微发送草稿。</p>
+        </div>
+        <div class="header-actions">
+          <button class="text-btn feedback-btn" type="button" id="openFeedback">问题反馈</button>
+          <button class="icon-btn" type="button" id="globalVoice" title="语音输入" aria-label="语音输入">🎙</button>
+          <button class="icon-btn" type="button" id="globalAttach" title="上传附件" aria-label="上传附件">＋</button>
+        </div>
+      </header>
+
+      <section class="composer" aria-label="输入区">
+        <div class="schema-row">
+          <div class="schema-card">
+            <span>输入</span>
+            <strong id="inputSpec">主题、目标群、想要的语气</strong>
+          </div>
+          <div class="schema-card">
+            <span>附件</span>
+            <strong id="attachmentSpec">可选：链接、截图、原文</strong>
+          </div>
+          <div class="schema-card">
+            <span>输出</span>
+            <strong id="outputSpec">日报文档 + 待确认草稿</strong>
+          </div>
+        </div>
+
+        <div class="input-box">
+          <textarea id="taskInput" aria-label="任务输入"></textarea>
+          <div class="attachment-list" id="attachmentList" aria-label="已上传附件"></div>
+          <div class="composer-tools">
+            <div class="tool-left">
+              <button class="text-btn" type="button" id="voiceInput">语音输入</button>
+              <button class="text-btn" type="button" id="attachFile">上传附件</button>
+              <button class="text-btn" type="button" id="clearAttachments">清空附件</button>
+            </div>
+            <span class="voice-status" id="voiceStatus">当前浏览器麦克风语音不可用，请使用文字输入。</span>
+            <div class="tool-right">
+              <button class="primary-btn" type="button" id="runTask">生成结果</button>
+            </div>
+          </div>
+        </div>
+        <input class="file-input" id="fileInput" type="file" multiple />
+      </section>
+
+      <section class="messages" id="messages" aria-label="运行进程" aria-live="polite">
+        <div class="process-head"><span>运行进程</span><span>流式输出</span></div>
+        <div class="message assistant" id="assistantIntro"></div>
+        <div class="status-line"><span class="pulse"></span><span id="flowStatus">等待你输入目标</span></div>
+      </section>
+    </main>
+
+    <aside class="preview" aria-label="文件预览">
+      <header class="preview-header">
+        <div>
+          <p class="eyebrow">文件预览</p>
+          <h2 class="preview-title" id="previewTitle">AI 热点日报.md</h2>
+          <a class="preview-link" id="previewLink" href="#" target="_blank" rel="noopener">打开预览链接</a>
+        </div>
+        <span class="badge" id="previewType">Markdown</span>
+      </header>
+
+      <section class="output-spec" aria-label="输出要求">
+        <div class="spec-item"><span>适合用途</span><strong id="previewUse">企微发送、知识库归档</strong></div>
+        <div class="spec-item"><span>确认动作</span><strong id="confirmRule">外发前必须确认</strong></div>
+        <div class="spec-item"><span>附件状态</span><strong id="previewFiles">尚未上传附件</strong></div>
+      </section>
+
+      <section class="document">
+        <article class="doc-paper" id="documentPreview"></article>
+      </section>
+
+      <footer class="preview-footer">
+        <button class="primary-btn" type="button" id="downloadResult">下载文档</button>
+        <button class="text-btn" type="button" id="confirmSend">确认发送这条草稿</button>
+      </footer>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <section class="feedback-overlay" id="feedbackOverlay" aria-hidden="true">
+    <div class="feedback-panel" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <div class="feedback-head">
+        <div>
+          <h2 id="feedbackTitle">使用中问题反馈</h2>
+          <p>记录当前 Skill、问题现象和期望结果，提交后会进入运行进程并生成反馈记录。</p>
+        </div>
+        <button class="icon-btn" type="button" id="closeFeedback" aria-label="关闭反馈">×</button>
+      </div>
+      <div class="feedback-body">
+        <label class="feedback-field">
+          问题类型
+          <select id="feedbackType">
+            <option>界面看不懂</option>
+            <option>结果不符合预期</option>
+            <option>附件上传问题</option>
+            <option>下载或链接问题</option>
+            <option>外发确认问题</option>
+          </select>
+        </label>
+        <label class="feedback-field">
+          当前 Skill
+          <input id="feedbackSkill" type="text" readonly />
+        </label>
+        <label class="feedback-field">
+          问题描述
+          <textarea id="feedbackDetail" placeholder="例如：我不知道生成后的文件在哪里，或者右侧预览和下载内容不一致。"></textarea>
+        </label>
+        <label class="feedback-field">
+          期望结果
+          <input id="feedbackExpected" type="text" placeholder="例如：右侧直接显示文件链接，并且下载内容一致" />
+        </label>
+      </div>
+      <div class="feedback-actions">
+        <button class="text-btn" type="button" id="cancelFeedback">取消</button>
+        <button class="primary-btn" type="button" id="submitFeedback">提交反馈</button>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const skillProfiles = {
+      aihot: {
+        name: "AI 热点日报",
+        icon: "日",
+        group: "common",
+        category: "内容生成",
+        purpose: "生成热点摘要、观点和可确认的企微发送草稿。",
+        inputSpec: "主题范围、目标群、口吻",
+        attachmentSpec: "可选：链接、截图、原文",
+        outputSpec: "日报文档 + 待确认草稿",
+        previewTitle: "AI 热点日报.md",
+        previewType: "Markdown",
+        previewUse: "企微发送、知识库归档",
+        confirmRule: "外发前必须确认",
+        prompt: "生成今天 AI 热点日报，并准备一条企微发送草稿，发送前先让我确认。",
+        intro: "这个 Skill 适合做日报、摘要和转发草稿。你只要说明主题或目标群，右侧会先给出可读文档。",
+        doc: {
+          kind: "article",
+          title: "AI 热点日报",
+          sections: [
+            { heading: "今日重点", items: ["模型与 Agent 工具继续向工作流整合", "内容生成从单点工具转向可复用流程", "企业侧更关注权限、审计和外发确认"] },
+            { heading: "可转发观点", items: ["不要把 AI 工作台做成工具堆叠，用户只需要输入目标并确认结果。", "所有外发动作都应该先生成草稿，再由人确认。"] },
+            { heading: "企微草稿", body: "今日 AI 热点已整理为 3 条重点和 2 条观点，建议发送给内部学习群；请确认标题、目标群和正文后再发送。" }
+          ]
+        }
+      },
+      heavy: {
+        name: "附件识别与重任务",
+        icon: "识",
+        group: "common",
+        category: "附件处理",
+        purpose: "识别图片、PDF、音频或视频，并把结果整理成可复制文件。",
+        inputSpec: "附件 + 期望格式",
+        attachmentSpec: "必需：图片、PDF、音频、视频",
+        outputSpec: "识别清单 + 缺失字段",
+        previewTitle: "附件识别清单.xlsx",
+        previewType: "Table",
+        previewUse: "表格整理、批量校对",
+        confirmRule: "下载前可继续补充附件",
+        prompt: "把上传的图片、PDF、音频或视频整理成可复制结果；如果任务较大，先给我当前状态。",
+        intro: "这个 Skill 的核心输入是附件。上传后，中间显示处理过程，右侧预览识别出的字段和缺失项。",
+        doc: {
+          kind: "table",
+          title: "附件识别清单",
+          columns: ["文件", "识别结果", "状态"],
+          rows: [
+            ["图片_01.png", "提取到标题、时间、地点", "可用"],
+            ["会议录音.m4a", "转写摘要和待办事项", "待复核"],
+            ["资料.pdf", "识别 12 条表格记录", "可下载"]
+          ]
+        }
+      },
+      wechat: {
+        name: "微信 Obsidian 入库",
+        icon: "微",
+        group: "common",
+        category: "知识入库",
+        purpose: "把微信文章、聊天片段或链接整理成知识库卡片。",
+        inputSpec: "原文、链接、截图、标签",
+        attachmentSpec: "可选：截图、HTML、PDF",
+        outputSpec: "Obsidian 卡片",
+        previewTitle: "微信文章知识卡片.md",
+        previewType: "Markdown",
+        previewUse: "Obsidian 归档、后续检索",
+        confirmRule: "确认标签后入库",
+        prompt: "把这篇微信文章整理成知识库卡片，保留来源、要点、行动项和后续提醒。",
+        intro: "这个 Skill 会把零散内容变成可检索卡片，重点是来源、摘要、标签和行动项。",
+        doc: {
+          kind: "article",
+          title: "微信文章知识卡片",
+          sections: [
+            { heading: "来源", body: "微信文章 / 聊天记录 / 截图附件" },
+            { heading: "核心摘要", items: ["提炼主题、结论和适用场景", "保留可追溯来源", "拆出后续行动项"] },
+            { heading: "建议标签", body: "#AI工作台 #运营方法 #可复用流程" }
+          ]
+        }
+      },
+      wecom: {
+        name: "企微社群运营",
+        icon: "群",
+        group: "common",
+        category: "社群运营",
+        purpose: "把群内问题、活动、反馈整理成运营摘要和待确认通知。",
+        inputSpec: "群消息、活动目标、发送对象",
+        attachmentSpec: "可选：聊天截图、CSV",
+        outputSpec: "运营日报 + 通知草稿",
+        previewTitle: "企微社群运营摘要.md",
+        previewType: "Markdown",
+        previewUse: "群运营、跟进提醒",
+        confirmRule: "确认后才发送",
+        prompt: "根据今天群里的问题、活动和用户反馈，生成一条企微社群运营摘要，发送前先给我确认。",
+        intro: "这个 Skill 适合把群消息变成可执行运营动作。右侧会突出待发送草稿和跟进清单。",
+        doc: {
+          kind: "article",
+          title: "企微社群运营摘要",
+          sections: [
+            { heading: "群内高频问题", items: ["如何使用工作台提交任务", "附件识别结果在哪里下载", "外发内容是否会自动发送"] },
+            { heading: "今日跟进", items: ["补充新手使用说明", "提醒待确认草稿", "整理 3 条客户反馈"] },
+            { heading: "待发送草稿", body: "今天的 AI 工作台使用问题已整理，附件识别和日报功能可直接在工作台提交。发送前请确认群组和正文。" }
+          ]
+        }
+      },
+      vibe: {
+        name: "长跑 Vibe Coding",
+        icon: "码",
+        group: "common",
+        category: "代码任务",
+        purpose: "把长期开发目标拆成任务、范围、验证方式和完成标准。",
+        inputSpec: "目标、仓库、验收标准",
+        attachmentSpec: "可选：截图、日志、需求文档",
+        outputSpec: "开发任务说明",
+        previewTitle: "开发任务说明.md",
+        previewType: "Markdown",
+        previewUse: "交给 Coding Agent 执行",
+        confirmRule: "确认范围后执行",
+        prompt: "根据这个目标创建一个代码任务，给我目标、范围、验证方式和完成标准。",
+        intro: "这个 Skill 不只写提示词，而是把需求变成可以交给 Agent 长时间执行的任务书。",
+        doc: {
+          kind: "article",
+          title: "长跑开发任务",
+          sections: [
+            { heading: "目标", body: "重构工作台为左 Skill、中对话、右预览的三栏布局。" },
+            { heading: "范围", items: ["保留 13 个 Skill", "支持语音、附件、下载", "每个 Skill 有自己的输入输出设计"] },
+            { heading: "验证", items: ["页面可打开", "Skill 切换更新输入和预览", "下载文件内容与预览一致"] }
+          ]
+        }
+      },
+      image2: {
+        name: "Image2 提示词库",
+        icon: "图",
+        group: "more",
+        category: "图像提示词",
+        purpose: "把图片目标整理成可复用的个人品牌提示词。",
+        inputSpec: "人物定位、风格、用途",
+        attachmentSpec: "可选：参考图",
+        outputSpec: "生图提示词",
+        previewTitle: "个人品牌提示词.txt",
+        previewType: "Prompt",
+        previewUse: "头像、公众号配图、生图工具",
+        confirmRule: "下载后可复制到生图工具",
+        prompt: "为一张专业个人品牌头像生成图片提示词，要求自然、真实、适合公众号。",
+        intro: "这个 Skill 的输出不是长文，而是一段可以直接复制到生图工具的提示词。",
+        doc: {
+          kind: "prompt",
+          title: "Image2 Prompt",
+          text: "A realistic professional portrait of an AI operations consultant, natural window light, clean workspace background, confident but approachable expression, editorial photography, sharp details, 4:5 aspect ratio, no exaggerated retouching, no cartoon style."
+        }
+      },
+      marketing: {
+        name: "营销团队工作流",
+        icon: "营",
+        group: "more",
+        category: "营销流程",
+        purpose: "为小团队拆出渠道、素材、角色分工和复盘指标。",
+        inputSpec: "产品、客群、渠道、周期",
+        attachmentSpec: "可选：产品资料、竞品链接",
+        outputSpec: "营销执行清单",
+        previewTitle: "营销工作流清单.xlsx",
+        previewType: "Table",
+        previewUse: "团队分工、投放复盘",
+        confirmRule: "确认周期后执行",
+        prompt: "为一个 AI 服务产品设计一套小团队营销工作流，包含渠道、素材、角色分工和复盘方式。",
+        intro: "这个 Skill 输出的是执行清单，适合团队直接照着分工。",
+        doc: {
+          kind: "table",
+          title: "营销团队工作流",
+          columns: ["阶段", "动作", "负责人"],
+          rows: [["定位", "明确目标客户与核心痛点", "负责人"], ["素材", "生成短文、海报、案例", "内容"], ["发布", "小红书/企微/公众号分发", "运营"], ["复盘", "统计线索与转化", "负责人"]]
+        }
+      },
+      stable: {
+        name: "稳定 Agent 架构",
+        icon: "稳",
+        group: "more",
+        category: "系统架构",
+        purpose: "检查工具、记忆、评估、失败恢复和权限边界。",
+        inputSpec: "系统目标、失败样例、约束",
+        attachmentSpec: "可选：日志、架构图",
+        outputSpec: "架构审查报告",
+        previewTitle: "Agent 架构审查.md",
+        previewType: "Markdown",
+        previewUse: "系统优化、故障复盘",
+        confirmRule: "确认风险后落地",
+        prompt: "检查 Hermes 当前能力，给出稳定 Agent 系统优化建议，重点关注工具、记忆、评估和失败恢复。",
+        intro: "这个 Skill 右侧会像审查报告一样呈现风险、建议和下一步。",
+        doc: {
+          kind: "article",
+          title: "稳定 Agent 架构审查",
+          sections: [
+            { heading: "关键风险", items: ["任务状态不可追踪", "外发动作缺少确认", "附件与产物缺少统一索引"] },
+            { heading: "建议", items: ["按 Skill 定义输入/输出 schema", "产物统一进入预览与下载区", "外发动作必须进入确认队列"] }
+          ]
+        }
+      },
+      companyos: {
+        name: "AI 原生公司 OS",
+        icon: "司",
+        group: "more",
+        category: "公司系统",
+        purpose: "把 Hermes 工作台抽象成公司级输入、执行、沉淀和复盘系统。",
+        inputSpec: "业务模块、角色、节奏",
+        attachmentSpec: "可选：组织结构、流程文档",
+        outputSpec: "公司 OS 蓝图",
+        previewTitle: "AI 原生公司 OS 蓝图.md",
+        previewType: "Markdown",
+        previewUse: "管理系统设计、组织复盘",
+        confirmRule: "确认模块后拆任务",
+        prompt: "把我的 Hermes 工作台抽象成一个 AI 原生公司 OS，说明模块、节奏、输入输出和自进化机制。",
+        intro: "这个 Skill 生成的是系统蓝图，右侧会按模块、节奏、输入输出展示。",
+        doc: {
+          kind: "article",
+          title: "AI 原生公司 OS 蓝图",
+          sections: [
+            { heading: "模块", items: ["客户与社群", "内容与发布", "知识库", "自动化任务", "复盘与指标"] },
+            { heading: "运行节奏", body: "每日输入、每周复盘、每月升级 Skill 和工作流。" }
+          ]
+        }
+      },
+      xhs: {
+        name: "小红书内容工厂",
+        icon: "红",
+        group: "more",
+        category: "内容工厂",
+        purpose: "生成选题、标题、素材需求和后续笔记草稿。",
+        inputSpec: "主题、受众、产品卖点",
+        attachmentSpec: "可选：素材图、案例链接",
+        outputSpec: "选题表 + 笔记草稿",
+        previewTitle: "小红书选题表.xlsx",
+        previewType: "Table",
+        previewUse: "选题规划、批量内容生产",
+        confirmRule: "确认选题后生成笔记",
+        prompt: "围绕 AI 工作台主题，生成 3 个小红书笔记选题，并说明每个选题的角度和素材需求。",
+        intro: "这个 Skill 输出表格化选题，方便你判断哪个值得继续写。",
+        doc: {
+          kind: "table",
+          title: "小红书内容选题",
+          columns: ["选题", "角度", "素材需求"],
+          rows: [["AI 工作台别做复杂", "从小白体验切入", "前后 UI 对比截图"], ["一句话生成日报", "结果优先", "日报预览图"], ["附件识别工作流", "上传到下载闭环", "文件预览截图"]]
+        }
+      },
+      efficiency: {
+        name: "Agent 提效工作流",
+        icon: "效",
+        group: "more",
+        category: "流程沉淀",
+        purpose: "把重复任务沉淀成触发条件、步骤、工具和验收标准。",
+        inputSpec: "重复任务、频率、验收标准",
+        attachmentSpec: "可选：旧流程、示例结果",
+        outputSpec: "工作流 SOP",
+        previewTitle: "Agent 提效工作流.md",
+        previewType: "Markdown",
+        previewUse: "沉淀 SOP、交给 Agent 复用",
+        confirmRule: "确认触发条件后固化",
+        prompt: "把下面这个反复出现的任务改造成可复用 Agent 工作流，包含触发条件、步骤、工具和验收标准。",
+        intro: "这个 Skill 把经验变成 SOP。输出会更像流程文档，不是聊天摘要。",
+        doc: {
+          kind: "article",
+          title: "Agent 提效工作流",
+          sections: [
+            { heading: "触发条件", body: "用户提出重复性任务，且结果格式稳定。" },
+            { heading: "执行步骤", items: ["收集输入", "生成结果", "验证输出", "记录可复用字段"] },
+            { heading: "验收标准", items: ["结果可复制", "失败可追踪", "下次可复用"] }
+          ]
+        }
+      },
+      roles: {
+        name: "专家角色编排",
+        icon: "角",
+        group: "more",
+        category: "角色编排",
+        purpose: "为复杂任务选择主执行角色、辅助角色和 reviewer。",
+        inputSpec: "任务目标、风险点、交付物",
+        attachmentSpec: "可选：背景材料",
+        outputSpec: "角色分工表",
+        previewTitle: "专家角色编排表.xlsx",
+        previewType: "Table",
+        previewUse: "复杂任务分工、质量检查",
+        confirmRule: "确认角色后执行",
+        prompt: "为这个复杂任务选择最合适的专家角色组合，并安排 reviewer 角色检查结果。",
+        intro: "这个 Skill 输出角色表，让复杂任务有人执行、有人检查。",
+        doc: {
+          kind: "table",
+          title: "专家角色编排",
+          columns: ["角色", "职责", "检查点"],
+          rows: [["主执行", "完成核心产物", "符合目标"], ["产品 reviewer", "检查用户体验", "是否过于复杂"], ["技术 reviewer", "检查可执行性", "是否可验证"]]
+        }
+      },
+      crm: {
+        name: "AI CRM 业务逻辑",
+        icon: "客",
+        group: "more",
+        category: "客户运营",
+        purpose: "把社群和客户跟进转成客户池、机会阶段和提醒规则。",
+        inputSpec: "客户来源、阶段、跟进动作",
+        attachmentSpec: "可选：客户表、聊天记录",
+        outputSpec: "CRM 规则表",
+        previewTitle: "AI CRM 规则表.xlsx",
+        previewType: "Table",
+        previewUse: "客户跟进、风险提醒",
+        confirmRule: "确认字段后导入",
+        prompt: "把我的企微社群运营转成轻量 AI CRM 业务逻辑，包含客户池、跟进动作、机会阶段、提醒和风险。",
+        intro: "这个 Skill 输出业务逻辑表，右侧会展示客户阶段、动作和提醒规则。",
+        doc: {
+          kind: "table",
+          title: "AI CRM 业务逻辑",
+          columns: ["阶段", "触发信号", "下一步动作"],
+          rows: [["新线索", "首次咨询/入群", "打标签并发送欢迎信息"], ["有意向", "询问价格或案例", "安排演示或发案例"], ["风险", "长时间未回复", "提醒人工跟进"]]
+        }
+      }
+    };
+
+    const commonIds = ["aihot", "heavy", "wechat", "wecom", "vibe"];
+    const moreIds = ["image2", "marketing", "stable", "companyos", "xhs", "efficiency", "roles", "crm"];
+    const state = { active: "aihot", attachments: [], previewUrl: null };
+
+    const commonSkills = document.querySelector("#commonSkills");
+    const moreSkills = document.querySelector("#moreSkills");
+    const skillCategory = document.querySelector("#skillCategory");
+    const skillTitle = document.querySelector("#skillTitle");
+    const skillPurpose = document.querySelector("#skillPurpose");
+    const assistantIntro = document.querySelector("#assistantIntro");
+    const inputSpec = document.querySelector("#inputSpec");
+    const attachmentSpec = document.querySelector("#attachmentSpec");
+    const outputSpec = document.querySelector("#outputSpec");
+    const taskInput = document.querySelector("#taskInput");
+    const messages = document.querySelector("#messages");
+    const flowStatus = document.querySelector("#flowStatus");
+    const fileInput = document.querySelector("#fileInput");
+    const attachmentList = document.querySelector("#attachmentList");
+    const previewTitle = document.querySelector("#previewTitle");
+    const previewLink = document.querySelector("#previewLink");
+    const previewType = document.querySelector("#previewType");
+    const previewUse = document.querySelector("#previewUse");
+    const confirmRule = document.querySelector("#confirmRule");
+    const previewFiles = document.querySelector("#previewFiles");
+    const documentPreview = document.querySelector("#documentPreview");
+    const toast = document.querySelector("#toast");
+    const runTask = document.querySelector("#runTask");
+    const confirmSend = document.querySelector("#confirmSend");
+    const voiceButtons = [document.querySelector("#globalVoice"), document.querySelector("#voiceInput")];
+    const voiceStatus = document.querySelector("#voiceStatus");
+    const feedbackOverlay = document.querySelector("#feedbackOverlay");
+    const feedbackSkill = document.querySelector("#feedbackSkill");
+    const feedbackType = document.querySelector("#feedbackType");
+    const feedbackDetail = document.querySelector("#feedbackDetail");
+    const feedbackExpected = document.querySelector("#feedbackExpected");
+    const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2300);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function skillButton(id) {
+      const skill = skillProfiles[id];
+      const button = document.createElement("button");
+      button.className = "skill-button";
+      button.type = "button";
+      button.dataset.skill = id;
+      button.innerHTML = `<span class="skill-icon">${skill.icon}</span><span><span class="skill-name">${skill.name}</span><span class="skill-meta">${skill.category}</span></span>`;
+      button.addEventListener("click", () => setSkill(id));
+      return button;
+    }
+
+    function renderSkillLists() {
+      commonIds.forEach((id) => commonSkills.append(skillButton(id)));
+      moreIds.forEach((id) => moreSkills.append(skillButton(id)));
+    }
+
+    function renderDoc(skill) {
+      const doc = skill.doc;
+      if (doc.kind === "table") {
+        const head = doc.columns.map((item) => `<th>${item}</th>`).join("");
+        const rows = doc.rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("");
+        documentPreview.innerHTML = `<h2>${doc.title}</h2><table class="table-preview"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+        return;
+      }
+      if (doc.kind === "prompt") {
+        documentPreview.innerHTML = `<h2>${doc.title}</h2><div class="prompt-block">${doc.text}</div>`;
+        return;
+      }
+      const sections = doc.sections.map((section) => {
+        const items = section.items ? `<ul>${section.items.map((item) => `<li>${item}</li>`).join("")}</ul>` : "";
+        const body = section.body ? `<p>${section.body}</p>` : "";
+        return `<h3>${section.heading}</h3>${body}${items}`;
+      }).join("");
+      documentPreview.innerHTML = `<h2>${doc.title}</h2>${sections}`;
+    }
+
+    function renderAttachments() {
+      if (!state.attachments.length) {
+        attachmentList.classList.remove("show");
+        attachmentList.innerHTML = "";
+        previewFiles.textContent = "尚未上传附件";
+        return;
+      }
+      attachmentList.classList.add("show");
+      attachmentList.innerHTML = state.attachments.map((file) => `<span class="file-chip">📎 ${file.name}</span>`).join("");
+      previewFiles.textContent = `${state.attachments.length} 个附件：${state.attachments.map((file) => file.name).join("、")}`;
+    }
+
+    function setSkill(id) {
+      state.active = id;
+      const skill = skillProfiles[id];
+      document.querySelectorAll(".skill-button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.skill === id);
+      });
+      skillCategory.textContent = skill.category;
+      skillTitle.textContent = skill.name;
+      skillPurpose.textContent = skill.purpose;
+      assistantIntro.innerHTML = `<strong>${skill.name}</strong>${skill.intro}`;
+      inputSpec.textContent = skill.inputSpec;
+      attachmentSpec.textContent = skill.attachmentSpec;
+      outputSpec.textContent = skill.outputSpec;
+      taskInput.value = skill.prompt;
+      previewTitle.textContent = skill.previewTitle;
+      previewType.textContent = skill.previewType;
+      previewUse.textContent = skill.previewUse;
+      confirmRule.textContent = skill.confirmRule;
+      confirmSend.style.display = skill.confirmRule.includes("发送") || skill.name.includes("企微") || skill.name.includes("日报") ? "block" : "none";
+      document.querySelectorAll(".runtime-message").forEach((item) => item.remove());
+      flowStatus.textContent = "等待你输入目标";
+      renderDoc(skill);
+      renderAttachments();
+      updatePreviewLink();
+    }
+
+    function appendMessage(kind, html, extraClass = "") {
+      const message = document.createElement("div");
+      message.className = `message ${kind} ${extraClass}`.trim();
+      message.innerHTML = html;
+      messages.insertBefore(message, messages.querySelector(".status-line"));
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function startVoiceInput() {
+      if (!SpeechRecognitionApi) {
+        markVoiceUnavailable("当前浏览器麦克风语音不可用，请使用文字输入。");
+        return;
+      }
+      const recognition = new SpeechRecognitionApi();
+      recognition.lang = "zh-CN";
+      recognition.interimResults = false;
+      recognition.onstart = () => showToast("正在听你说话");
+      recognition.onerror = (event) => {
+        const hardErrors = ["not-allowed", "service-not-allowed", "audio-capture", "network"];
+        if (hardErrors.includes(event.error)) {
+          markVoiceUnavailable("当前浏览器麦克风不可用，请使用文字输入。");
+          return;
+        }
+        showToast("没有识别到语音，可以再试一次或直接输入文字。");
+      };
+      recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        taskInput.value = taskInput.value.trim() ? `${taskInput.value.trim()}\n${text}` : text;
+        showToast("已填入语音内容");
+      };
+      try {
+        recognition.start();
+      } catch {
+        markVoiceUnavailable("当前浏览器麦克风不可用，请使用文字输入。");
+      }
+    }
+
+    function markVoiceUnavailable(message) {
+      voiceStatus.textContent = message;
+      voiceStatus.classList.add("show");
+      voiceButtons.forEach((button) => {
+        button.disabled = true;
+        button.title = message;
+        button.setAttribute("aria-label", "麦克风不可用");
+      });
+      showToast(message);
+    }
+
+    function setupVoiceAvailability() {
+      if (location.protocol === "file:") {
+        markVoiceUnavailable("本地文件预览不能使用麦克风，请用文字输入或通过本地服务/HTTPS 打开。");
+        return;
+      }
+      if (SpeechRecognitionApi) {
+        voiceStatus.classList.remove("show");
+        voiceButtons.forEach((button) => {
+          button.disabled = false;
+          button.title = "语音输入";
+          button.setAttribute("aria-label", "语音输入");
+        });
+        return;
+      }
+      markVoiceUnavailable("当前浏览器麦克风语音不可用，请使用文字输入。");
+    }
+
+    function openFilePicker() {
+      fileInput.click();
+    }
+
+    function makeDownloadText() {
+      const skill = skillProfiles[state.active];
+      const text = documentPreview.innerText.trim();
+      return `# ${skill.name}\n\n任务输入：\n${taskInput.value.trim()}\n\n附件：\n${state.attachments.map((file) => `- ${file.name}`).join("\n") || "- 无"}\n\n预览内容：\n${text}\n`;
+    }
+
+    function makeFeedbackRecord() {
+      const skill = skillProfiles[state.active];
+      return `# 使用中问题反馈\n\n- Skill：${skill.name}\n- 问题类型：${feedbackType.value}\n- 页面文件：${skill.previewTitle}\n- 附件数量：${state.attachments.length}\n\n## 问题描述\n${feedbackDetail.value.trim() || "未填写"}\n\n## 期望结果\n${feedbackExpected.value.trim() || "未填写"}\n\n## 当前输入\n${taskInput.value.trim() || "未填写"}\n`;
+    }
+
+    function updatePreviewLink() {
+      const skill = skillProfiles[state.active];
+      if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+      const blob = new Blob([makeDownloadText()], { type: "text/markdown;charset=utf-8" });
+      state.previewUrl = URL.createObjectURL(blob);
+      previewLink.href = state.previewUrl;
+      previewLink.textContent = `打开预览链接 · ${skill.previewTitle}`;
+      previewLink.title = `打开 ${skill.previewTitle}`;
+    }
+
+    function openFeedback() {
+      const skill = skillProfiles[state.active];
+      feedbackSkill.value = skill.name;
+      feedbackDetail.value = "";
+      feedbackExpected.value = "";
+      feedbackOverlay.classList.add("show");
+      feedbackOverlay.setAttribute("aria-hidden", "false");
+      feedbackDetail.focus();
+    }
+
+    function closeFeedback() {
+      feedbackOverlay.classList.remove("show");
+      feedbackOverlay.setAttribute("aria-hidden", "true");
+    }
+
+    function submitFeedbackRecord() {
+      const detail = feedbackDetail.value.trim();
+      if (!detail) {
+        showToast("请先填写问题描述。");
+        feedbackDetail.focus();
+        return;
+      }
+      const record = makeFeedbackRecord();
+      closeFeedback();
+      appendMessage("user", `<strong>使用中问题反馈</strong>${escapeHtml(detail).replace(/\n/g, "<br />")}`, "runtime-message");
+      appendMessage("assistant", `<strong>反馈已记录</strong>当前 Skill、问题类型和期望结果已生成反馈记录，可在右侧链接或下载文档中查看。`, "runtime-message");
+      flowStatus.textContent = "反馈已记录，等待后续处理";
+      const blob = new Blob([record], { type: "text/markdown;charset=utf-8" });
+      if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+      state.previewUrl = URL.createObjectURL(blob);
+      previewLink.href = state.previewUrl;
+      previewLink.textContent = "打开预览链接 · 使用中问题反馈.md";
+      previewLink.title = "打开 使用中问题反馈.md";
+      showToast("反馈已提交到当前运行记录");
+    }
+
+    document.querySelector("#globalVoice").addEventListener("click", startVoiceInput);
+    document.querySelector("#voiceInput").addEventListener("click", startVoiceInput);
+    document.querySelector("#globalAttach").addEventListener("click", openFilePicker);
+    document.querySelector("#attachFile").addEventListener("click", openFilePicker);
+    document.querySelector("#openFeedback").addEventListener("click", openFeedback);
+    document.querySelector("#closeFeedback").addEventListener("click", closeFeedback);
+    document.querySelector("#cancelFeedback").addEventListener("click", closeFeedback);
+    document.querySelector("#submitFeedback").addEventListener("click", submitFeedbackRecord);
+    feedbackOverlay.addEventListener("click", (event) => {
+      if (event.target === feedbackOverlay) closeFeedback();
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && feedbackOverlay.classList.contains("show")) closeFeedback();
+    });
+    document.querySelector("#clearAttachments").addEventListener("click", () => {
+      state.attachments = [];
+      fileInput.value = "";
+      renderAttachments();
+      updatePreviewLink();
+      showToast("已清空附件");
+    });
+
+    fileInput.addEventListener("change", () => {
+      state.attachments = Array.from(fileInput.files || []);
+      renderAttachments();
+      updatePreviewLink();
+      showToast(`已上传 ${state.attachments.length} 个附件`);
+    });
+
+    runTask.addEventListener("click", async () => {
+      const skill = skillProfiles[state.active];
+      const input = taskInput.value.trim();
+      if (!input) {
+        showToast("先输入你想要的结果。");
+        taskInput.focus();
+        return;
+      }
+      runTask.disabled = true;
+      document.querySelectorAll(".runtime-message").forEach((item) => item.remove());
+      appendMessage("user", `<strong>已接收任务</strong>${escapeHtml(input).replace(/\n/g, "<br />")}`, "runtime-message");
+      flowStatus.textContent = "正在读取输入";
+      await new Promise((resolve) => window.setTimeout(resolve, 360));
+      appendMessage("assistant", `<strong>读取输入</strong>已识别当前 Skill：${skill.name}。`, "runtime-message");
+      flowStatus.textContent = "正在匹配输入与附件要求";
+      await new Promise((resolve) => window.setTimeout(resolve, 420));
+      appendMessage("assistant", `<strong>检查附件</strong>${state.attachments.length ? `已挂载 ${state.attachments.length} 个附件。` : "没有附件，按文字输入继续生成。"}`, "runtime-message");
+      flowStatus.textContent = "正在生成右侧文件预览";
+      await new Promise((resolve) => window.setTimeout(resolve, 480));
+      appendMessage("assistant", `<strong>生成预览</strong>正在按“${skill.outputSpec}”更新右侧文件。`, "runtime-message");
+      await new Promise((resolve) => window.setTimeout(resolve, 360));
+      renderDoc(skill);
+      updatePreviewLink();
+      appendMessage("assistant", `<strong>${skill.outputSpec} 已生成</strong>右侧文件预览已更新，可以下载；如涉及外发，会先等待你确认。`, "runtime-message");
+      flowStatus.textContent = "结果已生成，等待确认或下载";
+      runTask.disabled = false;
+    });
+
+    document.querySelector("#downloadResult").addEventListener("click", () => {
+      const skill = skillProfiles[state.active];
+      const blob = new Blob([makeDownloadText()], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = skill.previewTitle.replace(/\.(xlsx|txt)$/i, ".md");
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast("文档已下载");
+    });
+
+    confirmSend.addEventListener("click", () => {
+      appendMessage("assistant", "<strong>已收到确认</strong>这条草稿会按当前预览内容进入发送准备。");
+      flowStatus.textContent = "已确认，等待发送准备";
+      showToast("已确认发送这条草稿");
+    });
+
+    renderSkillLists();
+    setSkill("aihot");
+    setupVoiceAvailability();
+  </script>
+</body>
+</html>
