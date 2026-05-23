@@ -115,10 +115,7 @@ export function migratePlugins(db: SqliteDb): void {
     -- §10.3 GenUI surface persisted state. The lookup rules in §10.3.3
     -- read this table at run / conversation / project tier; F8 enforces
     -- the cross-conversation cache hit on a second oauth-prompt.
-    -- conversation_id / run_id are stored as plain TEXT (no FK) because
-    -- runs are in-memory; conversation FK is set up by the daemon's
-    -- existing migrations and we don't want to fail on legacy DBs that
-    -- predate it. plugin_snapshot_id is a FK to applied_plugin_snapshots.
+    -- run_id is stored as plain TEXT (no FK) because runs are in-memory.
     CREATE TABLE IF NOT EXISTS genui_surfaces (
       id                    TEXT PRIMARY KEY,
       project_id            TEXT NOT NULL,
@@ -136,7 +133,8 @@ export function migratePlugins(db: SqliteDb): void {
       responded_at          INTEGER,
       expires_at            INTEGER,
       FOREIGN KEY (project_id)         REFERENCES projects(id)                  ON DELETE CASCADE,
-      FOREIGN KEY (plugin_snapshot_id) REFERENCES applied_plugin_snapshots(id)  ON DELETE SET NULL
+      FOREIGN KEY (plugin_snapshot_id) REFERENCES applied_plugin_snapshots(id)  ON DELETE SET NULL,
+      FOREIGN KEY (conversation_id)    REFERENCES conversations(id)             ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_genui_proj_surface ON genui_surfaces(project_id, surface_id);
@@ -190,5 +188,38 @@ export function migratePlugins(db: SqliteDb): void {
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c) => c['name'] === 'applied_plugin_snapshot_id')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN applied_plugin_snapshot_id TEXT`);
+  }
+
+  // Migrate existing genui_surfaces to add the conversation_id foreign key.
+  const genuiFks = db.prepare(`PRAGMA foreign_key_list(genui_surfaces)`).all() as Array<{ from: string }>;
+  if (!genuiFks.some((fk) => fk.from === 'conversation_id')) {
+    db.exec(`
+      CREATE TABLE genui_surfaces_new (
+        id                    TEXT PRIMARY KEY,
+        project_id            TEXT NOT NULL,
+        conversation_id       TEXT,
+        run_id                TEXT,
+        plugin_snapshot_id    TEXT NOT NULL,
+        surface_id            TEXT NOT NULL,
+        kind                  TEXT NOT NULL,
+        persist               TEXT NOT NULL,
+        schema_digest         TEXT,
+        value_json            TEXT,
+        status                TEXT NOT NULL,
+        responded_by          TEXT,
+        requested_at          INTEGER NOT NULL,
+        responded_at          INTEGER,
+        expires_at            INTEGER,
+        FOREIGN KEY (project_id)         REFERENCES projects(id)                  ON DELETE CASCADE,
+        FOREIGN KEY (plugin_snapshot_id) REFERENCES applied_plugin_snapshots(id)  ON DELETE SET NULL,
+        FOREIGN KEY (conversation_id)    REFERENCES conversations(id)             ON DELETE SET NULL
+      );
+      INSERT INTO genui_surfaces_new SELECT * FROM genui_surfaces;
+      DROP TABLE genui_surfaces;
+      ALTER TABLE genui_surfaces_new RENAME TO genui_surfaces;
+      CREATE INDEX IF NOT EXISTS idx_genui_proj_surface ON genui_surfaces(project_id, surface_id);
+      CREATE INDEX IF NOT EXISTS idx_genui_conv_surface ON genui_surfaces(conversation_id, surface_id);
+      CREATE INDEX IF NOT EXISTS idx_genui_run          ON genui_surfaces(run_id);
+    `);
   }
 }
