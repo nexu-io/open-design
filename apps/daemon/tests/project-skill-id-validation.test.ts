@@ -148,6 +148,28 @@ describe('skillId validation on POST/PATCH /api/projects (#2404)', () => {
     expect(await getProjectSkillId(id)).toBe('dashboard');
   });
 
+  it('POST canonicalizes a deprecated skill alias before persistence (#2404 round-5 review)', async () => {
+    // `SKILL_ID_ALIASES` in apps/daemon/src/skills.ts forwards
+    // `editorial-collage-deck → open-design-landing-deck` (and
+    // `editorial-collage → open-design-landing`) for runtime
+    // composition, but the web does direct `project.skillId === s.id`
+    // comparisons in ProjectView.tsx for the skill chip + deck-mode
+    // detection. Persisting the raw alias used to leave the UI
+    // showing "no skill pinned" / no deck mode even though runtime
+    // composition still resolved the alias. The validator now
+    // returns the canonical id and the route persists that, so
+    // on-disk state matches what the runtime composes against.
+    const id = uniqueId('project-aliased-skill');
+    const resp = await createProject({
+      id,
+      name: 'Aliased skill',
+      skillId: 'editorial-collage-deck',
+    });
+    expect(resp.status).toBe(200);
+    projectsToClean.push(id);
+    expect(await getProjectSkillId(id)).toBe('open-design-landing-deck');
+  });
+
   it('PATCH rejects an unknown skillId with SKILL_NOT_FOUND — closes the bypass that lets callers create then patch in a bad id', async () => {
     // Create cleanly, then try to patch in a bad skillId. Without
     // the shared guard the patch would 200 and persist the typo,
@@ -198,6 +220,19 @@ describe('skillId validation on POST/PATCH /api/projects (#2404)', () => {
     const resp = await patchProject(id, { skillId: null });
     expect(resp.status).toBe(200);
     expect(await getProjectSkillId(id)).toBeNull();
+  });
+
+  it('PATCH canonicalizes a deprecated skill alias before persistence (#2404 round-5 review)', async () => {
+    const id = uniqueId('project-patch-aliased-skill');
+    const create = await createProject({ id, name: 'Patch aliased skill' });
+    expect(create.status).toBe(200);
+    projectsToClean.push(id);
+
+    const resp = await patchProject(id, { skillId: 'editorial-collage' });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project?: { skillId?: string } };
+    expect(body.project?.skillId).toBe('open-design-landing');
+    expect(await getProjectSkillId(id)).toBe('open-design-landing');
   });
 
   it('PATCH normalizes an empty-string skillId to `null` (#2404 round-4 review)', async () => {

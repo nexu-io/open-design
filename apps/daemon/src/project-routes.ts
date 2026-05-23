@@ -35,20 +35,28 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { validateProjectDesignSystemId } = ctx.validation;
   const { listAllSkillLikeEntries } = ctx.resources;
 
-  // Shared skillId guard for POST/PATCH /api/projects. Two jobs in one:
+  // Shared skillId guard for POST/PATCH /api/projects. Three jobs in one:
   //
   //   1. Validate the incoming value against the same source-of-truth
   //      the daemon uses at run-startup (`listAllSkillLikeEntries`),
   //      which spans `skills/`, `design-templates/`, and user-imported
   //      roots — narrower validation would falsely reject legitimate
   //      template ids.
-  //   2. Return the canonical value the route should actually persist.
-  //      `undefined` / `null` / `''` all mean "no skill pinned"; we
-  //      collapse them to `null` here so the route never writes an
-  //      empty-string sentinel to the project row. Without that
-  //      normalization a POST or PATCH with `skillId: ''` would store
-  //      `''`, leaving the row in the inconsistent state this guard
-  //      exists to prevent (issue #2404 review on PR #2404, round 4).
+  //   2. Collapse `undefined` / `null` / `''` to `null` so the route
+  //      never writes an empty-string sentinel to the project row
+  //      (issue #2404 review on PR #2404, round 4).
+  //   3. Canonicalize aliased ids before persistence. `findSkillById`
+  //      forwards deprecated aliases (`SKILL_ID_ALIASES` in
+  //      `apps/daemon/src/skills.ts`) such as
+  //      `editorial-collage → open-design-landing` for lookup, but
+  //      the web does direct `project.skillId === s.id` comparisons
+  //      in `apps/web/src/components/ProjectView.tsx` (skill chip +
+  //      deck-mode detection). Persisting the raw alias would leave
+  //      the UI showing "no skill pinned" / no deck mode even though
+  //      runtime composition still resolves the alias. Return the
+  //      resolved skill's canonical `.id` so on-disk state always
+  //      matches the file the runtime composes against (round 5
+  //      reviewer follow-up).
   type SkillIdGuardResult =
     | { ok: true; value: string | null }
     | { ok: false; status: number; code: string; message: string };
@@ -58,10 +66,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       return { ok: false, status: 400, code: 'BAD_REQUEST', message: 'skillId must be a string or null' };
     }
     const skills = await listAllSkillLikeEntries();
-    if (!findSkillById(skills, value)) {
+    const found = findSkillById(skills, value);
+    if (!found) {
       return { ok: false, status: 400, code: 'SKILL_NOT_FOUND', message: 'skill not found' };
     }
-    return { ok: true, value };
+    return { ok: true, value: found.id };
   }
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
