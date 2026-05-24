@@ -1,13 +1,68 @@
+import type { CreateProjectRequest } from '@open-design/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPlugin,
   contributeGeneratedPluginToOpenDesign,
+  createProject,
   createPluginShareProject,
   importFolderProject,
   installGeneratedPluginFolder,
   listPlugins,
   publishGeneratedPluginToGitHub,
 } from '../../src/state/projects';
+
+describe('createProject', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('accepts and forwards the shared CreateProjectRequest shape', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({
+        project: {
+          id: 'project-1',
+          name: 'Agent project',
+          skillId: null,
+          designSystemId: null,
+          createdAt: 1,
+          updatedAt: 1,
+          pendingPrompt: null,
+          metadata: { skipDiscoveryBrief: true },
+          customInstructions: null,
+        },
+        conversationId: 'conversation-1',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const input: CreateProjectRequest = {
+      name: 'Agent project',
+      pendingPrompt: null,
+      customInstructions: null,
+      skipDiscoveryBrief: true,
+    };
+
+    const result = await createProject(input);
+
+    expect(result).toMatchObject({
+      project: { id: 'project-1' },
+      conversationId: 'conversation-1',
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init?.method).toBe('POST');
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      name: 'Agent project',
+      pendingPrompt: null,
+      customInstructions: null,
+      skipDiscoveryBrief: true,
+    });
+    expect(body).toHaveProperty('id');
+    expect(body).not.toHaveProperty('skillId');
+    expect(body).not.toHaveProperty('designSystemId');
+  });
+});
 
 describe('applyPlugin', () => {
   afterEach(() => {
