@@ -11,7 +11,9 @@ import type {
 } from '../types';
 import {
   DEFAULT_ACCENT_COLOR,
+  DEFAULT_UI_SCALE,
   normalizeAccentColor,
+  normalizeUiScale,
 } from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
@@ -75,6 +77,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   onboardingCompleted: false,
   theme: 'system',
   accentColor: DEFAULT_ACCENT_COLOR,
+  uiScale: DEFAULT_UI_SCALE,
   mediaProviders: {},
   composio: {},
   agentModels: {},
@@ -372,6 +375,7 @@ export function loadConfig(): AppConfig {
       agentModels: { ...(parsed.agentModels ?? {}) },
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
+      uiScale: parsed.uiScale == null ? DEFAULT_UI_SCALE : normalizeUiScale(parsed.uiScale),
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),

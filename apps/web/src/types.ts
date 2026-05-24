@@ -316,6 +316,10 @@ export interface AppConfig {
   designSystemId: string | null;
   theme?: AppTheme;
   accentColor?: string;
+  // App-UI zoom factor (web build only); 1 = 100%. Scales the app chrome via
+  // a CSS `zoom` on <html>, leaving the generated artifact preview at its own
+  // size. The desktop build uses Electron's native zoom instead.
+  uiScale?: number;
   // True once the user has been through the welcome onboarding modal at
   // least once (saved or skipped). Bootstrap skips the auto-popup when
   // this is set so refreshing the page doesn't re-prompt.
