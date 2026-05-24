@@ -45,8 +45,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with bra",
-        "zh-CN": "使用这个插件完成以下任务：Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with bra"
+        "en": "Build me an 11-slide pitch deck for \"Lumen Field\", a focus-soundscape studio. Cover with hero plate, two section dividers, two product content slides with bullets, a stats slide showing 12 soundscapes / 4 presets / 1 daily ritual, a customer quote, a closing CTA, and an end card. Reuse the open-design-landing image library.",
+        "zh-CN": "使用这个插件完成以下任务：Build me an 11-slide pitch deck for \"Lumen Field\", a focus-soundscape studio. Cover with hero plate, two section dividers, two product content slides with bullets, a stats slide showing 12 soundscapes / 4 presets / 1 daily ritual, a customer quote, a closing CTA, and an end card. Reuse the open-design-landing image library."
       },
       "exampleOutputs": [
         {
