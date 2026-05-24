@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsSection } from '../../src/components/DesignSystemsSection';
-import { updateDesignSystemDraft } from '../../src/providers/registry';
+import { fetchDesignSystems, updateDesignSystemDraft } from '../../src/providers/registry';
 import type { AppConfig } from '../../src/types';
 
 const editable: DesignSystemSummary = {
@@ -85,6 +85,38 @@ describe('DesignSystemsSection rename (issue #2811)', () => {
     // A failed update must not close the modal; the typed title stays for retry.
     await screen.findByText(/Rename failed/i);
     expect(screen.getByDisplayValue('Acme v2')).toBeTruthy();
+  });
+
+  it('ignores a stale rename completion when a newer rename session is open', async () => {
+    const editableB: DesignSystemSummary = { ...editable, id: 'user:beta', title: 'Beta System' };
+    vi.mocked(fetchDesignSystems).mockResolvedValueOnce([editable, editableB, builtIn]);
+    let resolveFirst!: (value: null) => void;
+    vi.mocked(updateDesignSystemDraft).mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+
+    render(<DesignSystemsSection cfg={cfg} setCfg={() => {}} />);
+
+    // Session 1: rename Acme and submit; the PATCH stays pending.
+    fireEvent.click(await screen.findByRole('button', { name: /Rename Acme Design System/i }));
+    fireEvent.change(screen.getByDisplayValue('Acme Design System'), { target: { value: 'Acme v2' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    // Cancel Acme and open a rename for Beta before the first PATCH resolves.
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Rename Beta System/i }));
+    expect(screen.getByDisplayValue('Beta System')).toBeTruthy();
+
+    // The stale Acme request now fails; it must not touch Beta's modal.
+    resolveFirst(null);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(screen.getByDisplayValue('Beta System')).toBeTruthy();
+    expect(screen.queryByText(/Rename failed/i)).toBeNull();
   });
 
   it('offers no Rename for built-in (read-only) design systems', async () => {

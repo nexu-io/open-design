@@ -39,6 +39,10 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [renameInput, setRenameInput] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
+  // Monotonic token for the active rename modal session. Bumped whenever the
+  // modal opens or closes so a slow PATCH that resolves after the user has
+  // moved on cannot clobber a newer session's modal state.
+  const renameSessionRef = useRef(0);
   const [importPath, setImportPath] = useState('');
   const [importSource, setImportSource] = useState<'local' | 'github'>('local');
   const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
@@ -127,12 +131,14 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   }
 
   function startRename(ds: DesignSystemSummary) {
+    renameSessionRef.current += 1;
     setRenameTarget({ id: ds.id, original: ds.title });
     setRenameInput(ds.title);
     setRenameError(null);
   }
 
   function cancelRename() {
+    renameSessionRef.current += 1;
     setRenameTarget(null);
     setRenameError(null);
     setRenaming(false);
@@ -145,13 +151,27 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     if (!renameTarget || renaming) return;
     const trimmed = renameInput.trim();
     if (!trimmed || trimmed === renameTarget.original) {
-      setRenameTarget(null);
-      setRenameError(null);
+      cancelRename();
       return;
     }
+    const session = renameSessionRef.current;
+    const targetId = renameTarget.id;
     setRenaming(true);
     setRenameError(null);
-    const updated = await updateDesignSystemDraft(renameTarget.id, { title: trimmed });
+    const updated = await updateDesignSystemDraft(targetId, { title: trimmed });
+    if (updated) {
+      // The rename happened server-side, so reflect it in the list even if the
+      // user has since moved to another rename session.
+      setDesignSystems((current) =>
+        current
+          .map((d) => (d.id === targetId ? { ...d, title: updated.title } : d))
+          .sort((a, b) => a.title.localeCompare(b.title)),
+      );
+    }
+    // Ignore a stale completion: the user cancelled or opened another rename
+    // while this PATCH was in flight, so the modal state now belongs to a
+    // different session and must not be touched.
+    if (renameSessionRef.current !== session) return;
     setRenaming(false);
     // updateDesignSystemDraft returns null on any non-OK response or fetch
     // failure. Keep the modal open with the typed title intact so a transient
@@ -160,11 +180,6 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
       setRenameError('Rename failed. Check that the daemon is running and try again.');
       return;
     }
-    setDesignSystems((current) =>
-      current
-        .map((d) => (d.id === renameTarget.id ? { ...d, title: updated.title } : d))
-        .sort((a, b) => a.title.localeCompare(b.title)),
-    );
     setRenameTarget(null);
     setRenameError(null);
   }
