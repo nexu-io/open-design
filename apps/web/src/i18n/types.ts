@@ -284,6 +284,9 @@ export interface Dict {
   'settings.themeSystem': string;
   'settings.themeLight': string;
   'settings.themeDark': string;
+  'settings.uiScale': string;
+  'settings.uiScaleHint': string;
+  'settings.uiScaleReset': string;
   'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.modelSourceLive': string;
