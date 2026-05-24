@@ -30,6 +30,7 @@ import {
   SvgViewer,
   applyInspectOverridesToSource,
   effectivePreviewScale,
+  htmlPreviewUrlForLocation,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
   serializeInspectOverrides,
@@ -138,6 +139,23 @@ describe('FileViewer preview scale', () => {
     expect(tablet.scale).toBeCloseTo(752 / 1180, 5);
     expect(tablet.offsetX).toBeCloseTo(24 + (1152 - 820 * (752 / 1180)) / 2, 5);
     expect(tablet.offsetY).toBe(24);
+  });
+});
+
+describe('FileViewer HTML preview location URLs', () => {
+  it('targets the tracked sub-page and hash when refreshing a navigated url-load preview', () => {
+    expect(htmlPreviewUrlForLocation('project-1', 'index-v1.html', 1710000000.4, 2, {
+      urlLoadSubPath: 'screens/parent/parent-app.html',
+      urlLoadHash: '#report',
+      filesRefreshKey: 7,
+    })).toBe('/api/projects/project-1/raw/screens/parent/parent-app.html?v=1710000000&r=2&fr=7#report');
+  });
+
+  it('preserves same-file hash routes without treating them as a sub-page', () => {
+    expect(htmlPreviewUrlForLocation('project-1', 'screens/admin/admin-console.html', 1710000000, 0, {
+      urlLoadSubPath: null,
+      urlLoadHash: '#AD11',
+    })).toBe('/api/projects/project-1/raw/screens/admin/admin-console.html?v=1710000000&r=0#AD11');
   });
 });
 
