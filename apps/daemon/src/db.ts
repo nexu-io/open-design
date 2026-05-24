@@ -68,7 +68,8 @@ function migrate(db: SqliteDb): void {
       description TEXT,
       source_project_id TEXT,
       files_json TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(source_project_id) REFERENCES projects(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS conversations (
@@ -176,7 +177,8 @@ function migrate(db: SqliteDb): void {
       context_json TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS routine_runs (
@@ -192,7 +194,9 @@ function migrate(db: SqliteDb): void {
       summary TEXT,
       error TEXT,
       error_code TEXT,
-      FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE
+      FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_routine_runs_routine
@@ -272,6 +276,83 @@ function migrate(db: SqliteDb): void {
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
   }
+
+  // Migrate existing tables to add missing foreign key constraints.
+  // SQLite cannot ALTER TABLE ADD FOREIGN KEY, so we recreate the table.
+  // DROP TABLE does not enforce FK checks in SQLite, so this is safe
+  // even when the table is referenced by others.
+  const templatesFks = db.prepare(`PRAGMA foreign_key_list(templates)`).all() as Array<{ from: string }>;
+  if (!templatesFks.some((fk) => fk.from === 'source_project_id')) {
+    db.exec(`
+      CREATE TABLE templates_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        source_project_id TEXT,
+        files_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(source_project_id) REFERENCES projects(id) ON DELETE SET NULL
+      );
+      INSERT INTO templates_new SELECT * FROM templates;
+      DROP TABLE templates;
+      ALTER TABLE templates_new RENAME TO templates;
+    `);
+  }
+
+  const routinesFks = db.prepare(`PRAGMA foreign_key_list(routines)`).all() as Array<{ from: string }>;
+  if (!routinesFks.some((fk) => fk.from === 'project_id')) {
+    db.exec(`
+      CREATE TABLE routines_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        schedule_kind TEXT NOT NULL,
+        schedule_value TEXT NOT NULL,
+        schedule_json TEXT,
+        project_mode TEXT NOT NULL,
+        project_id TEXT,
+        skill_id TEXT,
+        agent_id TEXT,
+        context_json TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+      INSERT INTO routines_new SELECT * FROM routines;
+      DROP TABLE routines;
+      ALTER TABLE routines_new RENAME TO routines;
+    `);
+  }
+
+  const routineRunsFks = db.prepare(`PRAGMA foreign_key_list(routine_runs)`).all() as Array<{ from: string }>;
+  if (!routineRunsFks.some((fk) => fk.from === 'project_id') || !routineRunsFks.some((fk) => fk.from === 'conversation_id')) {
+    db.exec(`
+      CREATE TABLE routine_runs_new (
+        id TEXT PRIMARY KEY,
+        routine_id TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        status TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        agent_run_id TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        summary TEXT,
+        error TEXT,
+        error_code TEXT,
+        FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
+      INSERT INTO routine_runs_new SELECT * FROM routine_runs;
+      DROP TABLE routine_runs;
+      ALTER TABLE routine_runs_new RENAME TO routine_runs;
+      CREATE INDEX IF NOT EXISTS idx_routine_runs_routine
+        ON routine_runs(routine_id, started_at DESC);
+    `);
+  }
+
   migrateCritique(db);
   migrateMediaTasks(db);
   migratePlugins(db);
