@@ -364,7 +364,7 @@ describe('ChatComposer /search command', () => {
     expect(css).toContain('flex: 1 1 auto;');
     expect(css).toContain('.staged-preview-trigger .staged-name');
     expect(css).toContain('.staged-preview-card');
-    expect(css).toContain('max-height: calc(100vh - 48px);');
+    expect(css).toContain('max-height: calc(var(--vp-h, 100vh) - 48px);');
     expect(css).toContain('.staged-preview-head');
     expect(css).toContain('.staged-preview-card > img');
     expect(css).toContain('object-fit: contain;');
