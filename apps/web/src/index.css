@@ -2319,19 +2319,34 @@ a.avatar-item:visited {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
   background: transparent;
-  border: none;
-  color: var(--text-faint);
+  border: 1px solid var(--border);
+  color: var(--text);
   cursor: pointer;
   transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-              color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+              color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+              border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* The X glyph must read on the panel's near-white surface. Pin the
+   stroke + size directly because the button is display:flex, and
+   without an explicit width:auto + flex:0 0 auto the SVG flex-shrinks
+   to width:0 and disappears even though the height stays valid
+   (Chrome SVG sizing quirk inside flex containers). */
+.chat-send-queue-remove svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  stroke: #4b5563;
+}
+.chat-send-queue-remove:hover svg {
+  stroke: #111827;
 }
 .chat-send-queue-remove:hover {
   background: var(--surface-muted);
-  color: var(--text);
+  border-color: var(--text-faint);
 }
 .composer-hint {
   font-size: 11px;

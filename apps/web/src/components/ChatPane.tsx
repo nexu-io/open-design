@@ -1111,7 +1111,20 @@ export function ChatPane({
                         setSendQueue((q) => q.filter((_, idx) => idx !== i));
                       }}
                     >
-                      <Icon name="close" size={11} />
+                      <svg
+                        width={14}
+                        height={14}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#374151"
+                        strokeWidth={2.4}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M20 4 4 20" />
+                        <path d="m4 4 16 16" />
+                      </svg>
                     </button>
                   </li>
                 ))}

@@ -804,7 +804,7 @@ export const ko: Dict = {
   'chat.send': '전송',
   'chat.stop': '중지',
   'chat.queue': '대기 추가',
-  'chat.queueTooltip': '현재 실행이 끝나면 자동으로 이 프롬프트를 전송합니다',
+  'chat.queueTooltip': '현재 실행이 끝나면 자동으로 이 프롬프트를 전송합니다 (⌘⇧⏎ / Ctrl+Shift+Enter)',
   'chat.queueRemove': '대기열에서 제거',
   'chat.queued': '대기 중',
   'chat.removeAria': '{name} 제거',

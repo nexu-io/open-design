@@ -820,7 +820,7 @@ export const fr: Dict = {
   'chat.send': 'Envoyer',
   'chat.stop': 'Arrêter',
   'chat.queue': 'Queue',
-  'chat.queueTooltip': 'Queue this prompt to run after the current one finishes',
+  'chat.queueTooltip': 'Queue this prompt to run after the current one finishes (⌘⇧⏎ / Ctrl+Shift+Enter)',
   'chat.queueRemove': 'Remove from queue',
   'chat.queued': 'Queued',
   'chat.removeAria': 'Retirer {name}',

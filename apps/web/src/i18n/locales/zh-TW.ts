@@ -995,7 +995,7 @@ export const zhTW: Dict = {
   'chat.send': '傳送',
   'chat.stop': '停止',
   'chat.queue': 'Queue',
-  'chat.queueTooltip': 'Queue this prompt to run after the current one finishes',
+  'chat.queueTooltip': 'Queue this prompt to run after the current one finishes (⌘⇧⏎ / Ctrl+Shift+Enter)',
   'chat.queueRemove': 'Remove from queue',
   'chat.queued': 'Queued',
   'chat.removeAria': '移除 {name}',

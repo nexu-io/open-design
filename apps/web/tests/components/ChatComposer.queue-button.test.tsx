@@ -12,6 +12,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import type { ProjectFile } from '../../src/types';
 
 afterEach(() => {
   cleanup();
@@ -20,11 +21,11 @@ afterEach(() => {
 function baseProps() {
   return {
     projectId: 'project-1',
-    projectFiles: [],
+    projectFiles: [] as ProjectFile[],
     onEnsureProject: vi.fn(async () => 'project-1'),
     onSend: vi.fn(),
     onStop: vi.fn(),
-  } as const;
+  };
 }
 
 function getTextarea(): HTMLTextAreaElement {
