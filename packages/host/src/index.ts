@@ -202,11 +202,21 @@ export type OpenDesignHostUpdaterResult =
 
 export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdaterStatusSnapshot) => void;
 
+// App-UI zoom for the desktop shell. The renderer drives Electron's native
+// webContents zoom factor (1 = 100%) through this bridge; the host process
+// persists it across restarts. Optional so a renderer built against this
+// contract still works against an older host that predates zoom support.
+export type OpenDesignHostZoomController = {
+  get(): Promise<number>;
+  set(factor: number): Promise<number>;
+};
+
 export type OpenDesignHostBridge = {
   client: OpenDesignHostClient;
   pdf: {
     print(html: string, nonce?: string, options?: OpenDesignHostPdfPrintOptions): Promise<OpenDesignHostActionResult>;
   };
+  zoom?: OpenDesignHostZoomController;
   pet: {
     setVisible(visible: boolean): void;
   };
@@ -525,5 +535,27 @@ export function subscribeHostUpdater(
     return host.updater.subscribe(listener);
   } catch {
     return () => undefined;
+  }
+}
+
+// Returns null when the host bridge or its zoom controller is unavailable
+// (browser build, or a host that predates zoom support).
+export async function getHostZoomFactor(scope: OpenDesignHostGlobalScope = globalThis): Promise<number | null> {
+  const host = getOpenDesignHost(scope);
+  if (host?.zoom == null) return null;
+  try {
+    return await host.zoom.get();
+  } catch {
+    return null;
+  }
+}
+
+export async function setHostZoomFactor(factor: number, scope: OpenDesignHostGlobalScope = globalThis): Promise<number | null> {
+  const host = getOpenDesignHost(scope);
+  if (host?.zoom == null) return null;
+  try {
+    return await host.zoom.set(factor);
+  } catch {
+    return null;
   }
 }

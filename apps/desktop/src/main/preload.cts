@@ -244,6 +244,11 @@ const hostBridge = {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
   },
+  zoom: {
+    get: (): Promise<number> => ipcRenderer.invoke('od:zoom:get') as Promise<number>,
+    set: (factor: number): Promise<number> =>
+      ipcRenderer.invoke('od:zoom:set', factor) as Promise<number>,
+  },
   updater,
 } satisfies OpenDesignHostBridge;
 

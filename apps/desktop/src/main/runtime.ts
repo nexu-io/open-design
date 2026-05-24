@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -225,6 +225,8 @@ const UPDATER_IPC_CHANNELS = [
   "od:update:download",
   "od:update:install",
   "od:update:quit",
+  "od:zoom:get",
+  "od:zoom:set",
 ] as const;
 
 export type DesktopEvalInput = {
@@ -799,6 +801,56 @@ function osLocaleAdditionalArguments(osLocale: string | undefined): string[] | u
   return osLocale ? [`--od-os-locale=${encodeURIComponent(osLocale)}`] : undefined;
 }
 
+// Native zoom factor (1 = 100%) persisted across restarts. Electron does not
+// remember the View-menu / Ctrl+wheel zoom, so we mirror it to a small JSON
+// file under the app-level userData directory (shared across namespaces —
+// zoom is a per-install display preference, not per-project state).
+const ZOOM_SETTINGS_FILE = "zoom.json";
+const MIN_ZOOM_FACTOR = 0.5;
+const MAX_ZOOM_FACTOR = 3;
+
+function clampZoomFactor(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.min(MAX_ZOOM_FACTOR, Math.max(MIN_ZOOM_FACTOR, n));
+}
+
+function readPersistedZoomFactor(): number {
+  try {
+    const raw = readFileSync(join(app.getPath("userData"), ZOOM_SETTINGS_FILE), "utf8");
+    const parsed = JSON.parse(raw) as { factor?: unknown };
+    return clampZoomFactor(parsed.factor);
+  } catch {
+    return 1;
+  }
+}
+
+async function writePersistedZoomFactor(factor: number): Promise<void> {
+  try {
+    await writeFile(
+      join(app.getPath("userData"), ZOOM_SETTINGS_FILE),
+      JSON.stringify({ factor }),
+      "utf8",
+    );
+  } catch {
+    // Best-effort: a persistence failure must not break the window.
+  }
+}
+
+// Synchronous variant for the window-close / quit path, where an async write
+// may not flush before the process exits.
+function writePersistedZoomFactorSync(factor: number): void {
+  try {
+    writeFileSync(
+      join(app.getPath("userData"), ZOOM_SETTINGS_FILE),
+      JSON.stringify({ factor }),
+      "utf8",
+    );
+  } catch {
+    // Best-effort.
+  }
+}
+
 function createDesktopPetWindow(preloadPath: string, osLocale: string | undefined): BrowserWindow {
   const { workArea } = screen.getPrimaryDisplay();
   const petWindow = new BrowserWindow({
@@ -1245,6 +1297,27 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     });
   });
 
+  // Restore and persist the native zoom factor. `did-finish-load` re-applies
+  // it after every navigation/reload (Electron resets per load). `zoom-changed`
+  // only fires for Ctrl+wheel, so we also capture menu/keyboard zoom on close.
+  let currentZoomFactor = readPersistedZoomFactor();
+  const persistZoomFactor = (factor: number) => {
+    currentZoomFactor = clampZoomFactor(factor);
+    void writePersistedZoomFactor(currentZoomFactor);
+  };
+  window.webContents.on("did-finish-load", () => {
+    if (!window.isDestroyed()) window.webContents.setZoomFactor(currentZoomFactor);
+  });
+  window.webContents.on("zoom-changed", () => {
+    if (!window.isDestroyed()) persistZoomFactor(window.webContents.getZoomFactor());
+  });
+  window.on("close", () => {
+    if (!window.isDestroyed()) {
+      currentZoomFactor = clampZoomFactor(window.webContents.getZoomFactor());
+      writePersistedZoomFactorSync(currentZoomFactor);
+    }
+  });
+
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
     if (window.isDestroyed()) return;
     window.webContents.send(UPDATER_STATUS_EVENT, status);
@@ -1255,6 +1328,17 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       throw new Error("updater IPC is only available to the main Open Design window");
     }
   };
+  ipcMain.handle("od:zoom:get", (event) => {
+    requireMainWindowSender(event);
+    return window.webContents.getZoomFactor();
+  });
+  ipcMain.handle("od:zoom:set", (event, factor: unknown) => {
+    requireMainWindowSender(event);
+    const clamped = clampZoomFactor(factor);
+    window.webContents.setZoomFactor(clamped);
+    persistZoomFactor(clamped);
+    return clamped;
+  });
   ipcMain.handle("od:update:status", async (event) => {
     requireMainWindowSender(event);
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
