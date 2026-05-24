@@ -2903,7 +2903,7 @@ function sendMulterError(res, err) {
 
 const mediaTasks = new Map();
 const pluginShareTasks = new Map();
-const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
+const TASK_TTL_AFTER_DONE_MS = Number(process.env.OD_MEDIA_TASK_GC_TTL_MS) || 10 * 60 * 1000;
 const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
 const PLUGIN_SHARE_TERMINAL_STATUSES = new Set(['done', 'failed']);
 
@@ -2996,12 +2996,17 @@ function notifyTaskWaiters(db, task) {
   ) {
     task._gcScheduled = true;
     setTimeout(() => {
-      if (task.waiters.size === 0) {
-        mediaTasks.delete(task.id);
-        deleteMediaTask(db, task.id);
-      }
+      task.waiters.clear();
+      mediaTasks.delete(task.id);
+      deleteMediaTask(db, task.id);
     }, TASK_TTL_AFTER_DONE_MS).unref?.();
   }
+}
+
+export const __forTestMediaTasks = mediaTasks;
+
+export function __forTestNotifyTaskWaiters(db, task) {
+  return notifyTaskWaiters(db, task);
 }
 
 function mediaTaskSnapshot(task, since = 0) {
