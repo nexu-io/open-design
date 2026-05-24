@@ -307,7 +307,6 @@ import {
   readProjectFile,
   renameProjectFile,
   removeProjectDir,
-  resolveProjectDir,
   sanitizeName,
   searchProjectFiles,
   resolveProjectDir,
