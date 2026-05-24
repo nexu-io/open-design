@@ -3347,6 +3347,13 @@ function resolveAcpStageTimeoutMs(): number | undefined {
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
+// The three paths that bypass the OD_API_TOKEN bearer check when the daemon
+// is behind a reverse proxy. Exported so tests can assert against the
+// production set without reimplementing the logic.
+export function isOpenApiProbePath(reqPath: string): boolean {
+  return reqPath === '/health' || reqPath === '/version' || reqPath === '/daemon/status';
+}
+
 export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
@@ -3390,9 +3397,8 @@ export async function startServer({
   // value matching `OD_API_TOKEN`. Health / version / status remain
   // open so monitoring probes don't need the token.
   if (apiToken.length > 0) {
-    const openProbePaths = new Set(['/api/health', '/api/version', '/api/daemon/status']);
     app.use('/api', (req, res, next) => {
-      if (openProbePaths.has(req.path)) return next();
+      if (isOpenApiProbePath(req.path)) return next();
       // Loopback short-circuit. We ignore the proxied X-Forwarded-For
       // header here because a reverse proxy MUST always forward the
       // bearer; the loopback bypass exists for the localhost desktop
@@ -5976,12 +5982,13 @@ export async function startServer({
   app.post('/api/plugins/upload-zip', (req, res) => {
     pluginUpload.single('file')(req, res, async (err) => {
       if (err) return sendMulterError(res, err);
+      let stagedFolder: string | undefined;
       try {
         const file = req.file;
         if (!file || !file.buffer) {
           return res.status(400).json({ error: 'file is required' });
         }
-        const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
+        stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
         await extractPluginZipToFolder(file.buffer, stagedFolder);
         const result = await finishUploadedPluginInstall(
           stagedFolder,
@@ -5989,6 +5996,9 @@ export async function startServer({
         );
         res.status(result.ok ? 200 : 400).json(result);
       } catch (uploadErr) {
+        if (stagedFolder) {
+          await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
+        }
         res.status(400).json({
           ok: false,
           warnings: [],
