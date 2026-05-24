@@ -521,6 +521,7 @@ async function runAuth(args) {
     process.exit(2);
   }
   const keySub = args.find((a, i) => i > 0 && !a.startsWith('-')) || '';
+  const path = await import('node:path');
   const PROJECT_ROOT = resolveProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
   const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
 

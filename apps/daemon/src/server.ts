@@ -4763,10 +4763,19 @@ export async function startServer({
   // "Reset all keys". This deletes every API key and MCP key so the
   // daemon returns to an unauthenticated state.
   app.post('/api/auth/reset-keys', express.urlencoded({ extended: false }), async (req, res) => {
-    const clientIp = req.socket?.remoteAddress;
-    if (!isLoopbackAddress(clientIp)) {
+    if (!isLocalManagementRequest(req)) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(403).send(renderLoginPage('Key reset is only available from localhost.', undefined, true));
+      return;
+    }
+    // CSRF: reject cross-origin POSTs.
+    const origin = req.headers.origin;
+    const host = req.headers.host ?? `localhost:${resolvedPortRef.current}`;
+    const proto = isProxyTrusted() ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
+    const expectedOrigin = `${proto}://${host}`;
+    if (origin && origin !== expectedOrigin) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(403).send(renderLoginPage('Cross-origin request rejected.', undefined, true));
       return;
     }
     const confirmed = req.body?.confirm === 'reset';
