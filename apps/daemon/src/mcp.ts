@@ -84,7 +84,7 @@ const PROJECT_ARG = {
   description: 'Project id (UUID) or name substring. Optional; defaults to the active project (expires after ~5 minutes of no Open Design activity).',
 } as const;
 
-const TOOL_DEFS = [
+export const TOOL_DEFS = [
   {
     name: 'list_projects',
     description: 'List every Open Design project on this daemon.',
@@ -250,24 +250,24 @@ const TOOL_DEFS = [
           description: 'Human-readable project name. Shown in the Open Design sidebar.',
         },
         skillId: {
-          type: 'string',
+          type: ['string', 'null'],
           description:
-            'Optional skill id to pin to the new project (matches an entry under od://skills/).',
+            'Optional skill or template id to pin to the new project. Accepts any entry the daemon would resolve at run-startup time — bundled skills under od://skills/, bundled design-templates under od://design-templates/ (e.g. "dashboard"), and user-imported entries — plus deprecated aliases listed in SKILL_ID_ALIASES (which get canonicalized before persistence). Pass null or omit to leave the project unpinned.',
         },
         designSystemId: {
-          type: 'string',
+          type: ['string', 'null'],
           description:
-            'Optional design-system id to pin to the new project (matches an entry under od://design-systems/).',
+            'Optional design-system id to pin to the new project (matches an entry under od://design-systems/). Pass null or omit to leave the project without a pinned design system.',
         },
         pendingPrompt: {
-          type: 'string',
+          type: ['string', 'null'],
           description:
-            'Optional initial prompt the user will see queued in the project on first open.',
+            'Optional initial prompt the user will see queued in the project on first open. Pass null or omit to leave the queue empty.',
         },
         customInstructions: {
-          type: 'string',
+          type: ['string', 'null'],
           description:
-            'Optional project-scoped instructions appended to the agent system prompt (max 5000 chars).',
+            'Optional project-scoped instructions appended to the agent system prompt (max 5000 chars). Pass null or omit to leave the project without custom instructions.',
         },
       },
       required: ['name'],

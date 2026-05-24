@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { handleMcpToolCall } from '../src/mcp.js';
+import { handleMcpToolCall, TOOL_DEFS } from '../src/mcp.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -277,5 +277,36 @@ describe('public MCP create_project (#2356)', () => {
     expect(after).not.toMatchObject({ isError: true });
     const body = JSON.parse(firstText(after as { content: Array<{ text: string }> }));
     expect(body).toMatchObject({ id: createdId, name: 'Beta' });
+  });
+
+  // ---- Schema mirrors implementation (#2404 round-7 review) -------------
+
+  it('advertises each optional argument as `["string", "null"]` so the schema matches what the handler actually accepts', () => {
+    // Round-5 added assertOptionalString in createProject() so a
+    // caller could pass `null` to mean "field omitted", and the
+    // daemon route accepts any skill-like id (bundled
+    // design-templates included). The MCP tool schema needs to
+    // mirror that — a plain `type: 'string'` says null is invalid
+    // and conflicts with the call-time behaviour. Pin the union
+    // shape so a future tweak that narrows it has to update both
+    // sides in lockstep.
+    const def = TOOL_DEFS.find((d) => d.name === 'create_project');
+    if (!def) throw new Error('create_project tool is missing from TOOL_DEFS');
+    const props = (def.inputSchema.properties ?? {}) as Record<string, { type: unknown; description: unknown }>;
+    for (const field of ['skillId', 'designSystemId', 'pendingPrompt', 'customInstructions']) {
+      expect(props[field]?.type).toEqual(['string', 'null']);
+    }
+  });
+
+  it('the skillId description names design-templates so the contract reflects the actual resolver source-of-truth', () => {
+    // The daemon route validates skillId against listAllSkillLikeEntries(),
+    // which spans skills/ + design-templates/ + user-imported roots.
+    // Round-4 hardened the route to accept a bundled `dashboard`
+    // template id; the schema description here must not still tell
+    // agents skillId only matches od://skills/.
+    const def = TOOL_DEFS.find((d) => d.name === 'create_project');
+    if (!def) throw new Error('create_project tool is missing from TOOL_DEFS');
+    const props = (def.inputSchema.properties ?? {}) as Record<string, { type: unknown; description: unknown }>;
+    expect(String(props.skillId?.description ?? '')).toMatch(/design-templates/);
   });
 });
