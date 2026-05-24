@@ -433,6 +433,7 @@ describe('FileViewer SVG artifacts', () => {
       const activations = srcDocActivationMessages(postMessageSpy.mock.calls);
       expect(activations.at(-1)?.html).toContain('__odArtifactBootCount');
       expect(activations.at(-1)?.html).toContain('data-od-selection-bridge');
+      expect(activations.at(-1)?.html).toContain('data-od-preview-focus-guard');
     });
   });
 

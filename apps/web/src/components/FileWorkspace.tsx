@@ -44,9 +44,11 @@ import {
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
+import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
@@ -102,6 +104,8 @@ interface Props {
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => void;
+  onConnectRepo?: () => void;
+  githubConnected?: boolean;
 }
 
 interface SketchState {
@@ -216,6 +220,8 @@ export function FileWorkspace({
   designSystemReview,
   onDesignSystemReviewDecision,
   onUseDesignSystem,
+  onConnectRepo,
+  githubConnected,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -959,6 +965,8 @@ export function FileWorkspace({
             designSystemReview={designSystemReview}
             onReviewDecision={onDesignSystemReviewDecision}
             onUseDesignSystem={onUseDesignSystem}
+            onConnectRepo={onConnectRepo}
+            githubConnected={githubConnected}
           />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
@@ -1126,6 +1134,8 @@ function DesignSystemProjectPanel({
   designSystemReview,
   onReviewDecision,
   onUseDesignSystem,
+  onConnectRepo,
+  githubConnected,
 }: {
   projectId: string;
   system: DesignSystemSummary;
@@ -1149,6 +1159,8 @@ function DesignSystemProjectPanel({
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => void;
+  onConnectRepo?: () => void;
+  githubConnected?: boolean;
 }) {
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -1515,16 +1527,22 @@ function DesignSystemProjectPanel({
 
         {!githubEvidence.ready ? (
           <div className="ds-project-warning-card">
-            <Icon name="help-circle" size={16} />
+            <Icon name="github" size={16} />
             <span>
-              <strong>Waiting for GitHub connector evidence</strong>
-              <small>
-                {githubEvidence.noteCount === 0
-                  ? 'Run connector intake before publishing. Drafts cannot be used by other projects until repository evidence is captured.'
-                  : 'Connector evidence notes exist; waiting for repository file snapshots before publishing.'}
-              </small>
+              <strong>{repoConnectCopy(githubConnected).bannerTitle}</strong>
+              <small>{repoConnectCopy(githubConnected).bannerBody}</small>
             </span>
-            {githubEvidence.hasSourceManifest ? (
+            {onConnectRepo ? (
+              <button
+                type="button"
+                className="ghost compact"
+                disabled={githubConnected === undefined}
+                onClick={onConnectRepo}
+              >
+                <Icon name="github" size={13} />
+                {repoConnectCopy(githubConnected).buttonLabel}
+              </button>
+            ) : githubEvidence.hasSourceManifest ? (
               <button type="button" className="ghost compact" onClick={() => onOpenFile('context/source-context.md')}>
                 <Icon name="file" size={13} />
                 Open source context
@@ -1534,17 +1552,7 @@ function DesignSystemProjectPanel({
         ) : null}
 
         {fontFiles.length === 0 ? (
-          <div className="ds-project-warning-card">
-            <Icon name="help-circle" size={16} />
-            <span>
-              <strong>Missing brand fonts</strong>
-              <small>Open Design is rendering typography with substitute web fonts.</small>
-            </span>
-            <button type="button" className="ghost compact" onClick={onUploadAssets}>
-              <Icon name="upload" size={13} />
-              Upload fonts
-            </button>
-          </div>
+          <MissingBrandFontsBanner projectId={projectId} onUploadAssets={onUploadAssets} />
         ) : null}
 
         <div className="ds-project-sections">
@@ -1589,39 +1597,6 @@ function designSystemHasSourceContext(system: DesignSystemSummary): boolean {
     provenance.notes?.trim() ||
     provenance.sourceNotes?.trim(),
   );
-}
-
-function designSystemGithubEvidenceState(
-  system: DesignSystemSummary,
-  names: string[],
-): {
-  required: boolean;
-  ready: boolean;
-  noteCount: number;
-  snapshotCount: number;
-  hasSourceManifest: boolean;
-} {
-  const expectedRepos = system.provenance?.githubUrls?.length ?? 0;
-  const required = expectedRepos > 0;
-  if (!required) {
-    return {
-      required: false,
-      ready: true,
-      noteCount: 0,
-      snapshotCount: 0,
-      hasSourceManifest: names.some((name) => normalizeDesignSystemPath(name) === 'context/source-context.md'),
-    };
-  }
-  const normalized = names.map(normalizeDesignSystemPath);
-  const noteCount = normalized.filter((name) => /^context\/github\/[^/]+\.md$/u.test(name)).length;
-  const snapshotCount = normalized.filter((name) => /^context\/github\/[^/]+\/files\//u.test(name)).length;
-  return {
-    required: true,
-    ready: noteCount >= expectedRepos && snapshotCount > 0,
-    noteCount,
-    snapshotCount,
-    hasSourceManifest: normalized.includes('context/source-context.md'),
-  };
 }
 
 function slugForTestId(value: string): string {

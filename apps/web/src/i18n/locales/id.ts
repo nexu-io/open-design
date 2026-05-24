@@ -1093,9 +1093,11 @@ export const id: Dict = {
 
   'manualEdit.layers': 'Lapisan',
   'manualEdit.editableCount': '{count} dapat diedit',
+  'manualEdit.hiddenBadge': 'Tersembunyi',
   'manualEdit.title': 'Editor manual',
   'manualEdit.selectLayer': 'Pilih lapisan',
   'manualEdit.empty': 'Klik elemen di pratinjau atau pilih lapisan.',
+  'manualEdit.noEditableLayers': 'Tidak ada lapisan yang dapat diedit.',
   'manualEdit.noClass': 'tanpa class',
   'manualEdit.tabsAria': 'Tab edit manual',
   'manualEdit.tabContent': 'Konten',

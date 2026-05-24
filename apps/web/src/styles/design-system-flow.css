@@ -1936,7 +1936,7 @@
   font-size: 13px;
 }
 .ds-project-warning-card {
-  margin: 14px 0 0;
+  margin: 14px 0 18px;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -1969,6 +1969,13 @@
   align-items: center;
   gap: 7px;
   white-space: nowrap;
+}
+/* Holds the Upload fonts + Use system fonts actions in the card's last cell.
+   Issue #2814. */
+.ds-warning-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ds-context-strip {
   margin: 22px 0 30px;

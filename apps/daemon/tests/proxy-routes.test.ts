@@ -691,6 +691,32 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('normalizes Gemini model ids and base URLs in the streaming proxy', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/google/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'google-key',
+        model: 'models/gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
+    );
+    expect(upstreamInit?.redirect).toBe('error');
+  });
+
   // Regression for PR #1176: the Ollama proxy fetch must also set
   // `redirect: 'error'`. Without it, a validated public host could
   // 3xx the daemon to a private/internal URL and slip past the

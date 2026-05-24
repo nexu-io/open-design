@@ -26,6 +26,8 @@ import {
 } from './ChatComposer';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon } from './Icon';
+import { repoConnectCopy } from './design-system-github-evidence';
+import type { SettingsSection } from './SettingsDialog';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -270,10 +272,24 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
-  onOpenSettings?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
   onOpenMcpSettings?: () => void;
+  // True when this project is a GitHub-backed design system whose repository
+  // evidence has not fully landed. Surfaces a "Connect your repo" CTA in the
+  // empty chat state alongside the starter examples.
+  connectRepoNeeded?: boolean;
+  // Live GitHub connector status, used only to pick the connect-repo CTA copy
+  // (connect vs re-import). Undefined until the status fetch resolves.
+  githubConnected?: boolean;
+  // Fires when the connect-repo CTA button is clicked. The parent decides what
+  // it does based on connector status (open Connectors, or prefill the composer
+  // with the import instruction).
+  onConnectRepo?: () => void;
+  // Bumped by the parent to push a draft into the composer (used by the
+  // "Import repo" CTA). The nonce lets the same text fire more than once.
+  composerDraftSignal?: { text: string; nonce: number };
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -341,6 +357,10 @@ export function ChatPane({
   onRenameConversation,
   onOpenSettings,
   onOpenMcpSettings,
+  connectRepoNeeded,
+  githubConnected,
+  onConnectRepo,
+  composerDraftSignal,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -429,6 +449,17 @@ export function ChatPane({
       composerRef.current?.setDraft('');
     }
   }, [initialDraft]);
+
+  // Parent-driven composer prefill (the "Import repo" CTA). Reuse the same
+  // imperative setDraft the starter cards use; the nonce guards against
+  // re-applying the same signal on unrelated re-renders.
+  const lastDraftSignalNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!composerDraftSignal) return;
+    if (lastDraftSignalNonceRef.current === composerDraftSignal.nonce) return;
+    lastDraftSignalNonceRef.current = composerDraftSignal.nonce;
+    composerRef.current?.setDraft(composerDraftSignal.text);
+  }, [composerDraftSignal]);
 
   useEffect(() => {
     const el = logRef.current;
@@ -963,6 +994,30 @@ export function ChatPane({
                       </button>
                     ))}
                   </div>
+                  {connectRepoNeeded ? (
+                    <div className="chat-connect-repo" role="note">
+                      <span className="chat-connect-repo-icon" aria-hidden>
+                        <Icon name="github" size={18} />
+                      </span>
+                      <span className="chat-connect-repo-body">
+                        <span className="chat-connect-repo-title">
+                          {repoConnectCopy(githubConnected).cardTitle}
+                        </span>
+                        <span className="chat-connect-repo-text">
+                          {repoConnectCopy(githubConnected).cardBody}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="primary-ghost"
+                        disabled={githubConnected === undefined}
+                        onClick={() => onConnectRepo?.()}
+                      >
+                        <Icon name="github" size={13} />
+                        {repoConnectCopy(githubConnected).buttonLabel}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {messages.map((m, i) => {

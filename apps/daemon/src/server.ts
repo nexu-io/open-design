@@ -89,6 +89,7 @@ import { createDesignSystemGenerationJobStore } from './design-system-generation
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
+  buildConnectorProbe,
   defaultBundledRoot,
   doctorPlugin,
   FIRST_PARTY_ATOMS,
@@ -394,7 +395,7 @@ import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
-import { configureConnectorCredentialStore, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
+import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
@@ -6308,7 +6309,8 @@ export async function startServer({
       const locale = typeof body.locale === 'string' ? body.locale : undefined;
 
       const registry = await loadPluginRegistryView();
-      const computed = applyPlugin({ plugin, inputs, registry, locale });
+      const connectorProbe = buildConnectorProbe(connectorService);
+      const computed = applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
       // Plan §3.B2 — apply-time grants are merged into the snapshot's
       // capabilitiesGranted so the §9 capability gate sees them, but
       // they are NOT written back to installed_plugins.capabilities_granted.
@@ -6392,6 +6394,7 @@ export async function startServer({
       });
 
       const registry = await loadPluginRegistryView();
+      const connectorProbe = buildConnectorProbe(connectorService);
       const resolved = resolvePluginSnapshot({
         db,
         body: {
@@ -6408,6 +6411,7 @@ export async function startServer({
         projectId: id,
         conversationId: cid,
         registry,
+        connectorProbe,
       });
       if (resolved && !resolved.ok) {
         res.status(resolved.status).json(resolved.body);
@@ -6440,7 +6444,8 @@ export async function startServer({
       const plugin = getInstalledPlugin(db, req.params.id);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
       const registry = await loadPluginRegistryView();
-      const report = doctorPlugin(plugin, registry);
+      const connectorProbe = buildConnectorProbe(connectorService);
+      const report = doctorPlugin(plugin, registry, { connectorProbe });
       res.json(report);
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -10276,13 +10281,22 @@ export async function startServer({
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
+    // Some models (notably claude-opus-4-7 with --include-partial-messages)
+    // start their reply by echoing the top of the user message verbatim,
+    // so the rendered chat shows a "# Instructions ..." block ahead of the
+    // real answer. Closing every Instructions block with an explicit
+    // "do not echo" line cuts the regression in practice without changing
+    // the turn-shape every agent CLI expects (user message carrying both
+    // instructions and request) — see server.ts:9920 composer notes.
+    const ECHO_GUARD =
+      '\n\n(Do not quote, restate, or echo the # Instructions block above in your reply. Begin your response with the answer to the # User request below.)';
     const composed = [
       instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
         : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          ? `# Instructions${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
           : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            ? `# Instructions${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
             : '',
       `# User request\n\n${userRequestPrompt}${attachmentHint}${commentHint}`,
       safeImages.length
@@ -11601,6 +11615,7 @@ export async function startServer({
           ? req.body.conversationId
           : null,
         registry: registryView,
+        connectorProbe: buildConnectorProbe(connectorService),
       });
       if (resolved && !resolved.ok) {
         if (!explicitPlugin) {

@@ -1882,9 +1882,11 @@ export interface Dict {
   'fileViewer.draw': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
+  'manualEdit.hiddenBadge': string;
   'manualEdit.title': string;
   'manualEdit.selectLayer': string;
   'manualEdit.empty': string;
+  'manualEdit.noEditableLayers': string;
   'manualEdit.noClass': string;
   'manualEdit.tabsAria': string;
   'manualEdit.tabContent': string;

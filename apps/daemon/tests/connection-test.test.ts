@@ -271,6 +271,39 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('does not double-append v1beta when listing Gemini models', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      expect(url).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=goog-key',
+      );
+      return jsonResponse({
+        models: [
+          {
+            name: 'models/gemini-2.0-flash',
+            displayName: 'Gemini 2.0 Flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'goog-key',
+      }),
+    });
+
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      models: [{ id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }],
+    });
+  });
+
   it('lets unsupported contract protocols return a classified provider-models result', async () => {
     const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
@@ -1387,6 +1420,38 @@ describe('POST /api/test/connection provider mode', () => {
         baseUrl: 'https://generativelanguage.googleapis.com',
         apiKey: 'goog-key',
         model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.sample).toBe('ok');
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(String(upstream![0])).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    );
+  });
+
+  it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        candidates: [
+          { content: { parts: [{ text: 'ok' }] } },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'goog-key',
+        model: 'models/gemini-2.0-flash',
       }),
     });
     const body = (await res.json()) as Record<string, unknown>;

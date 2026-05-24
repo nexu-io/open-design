@@ -60,6 +60,7 @@ import {
   type ParsedBaseUrl,
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
+import { googleGenerateContentUrl } from './google-models.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -621,9 +622,8 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       };
     }
     case 'google': {
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
       return {
-        url: `${trimmedBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        url: googleGenerateContentUrl(baseUrl, model),
         headers: {
           'content-type': 'application/json',
           'x-goog-api-key': apiKey,
