@@ -491,7 +491,6 @@ function AppInner() {
             ? t('settings.mediaProviderLoadError')
             : null,
         );
-<<<<<<< HEAD
         // Compute the next config outside the setConfig updater so we can
         // both (a) call navigate() after setConfig returns — calling it
         // inside the updater would trigger a Router setState during React's
