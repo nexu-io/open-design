@@ -2982,7 +2982,7 @@ a.avatar-item:visited {
   position: relative;
 }
 @media (max-height: 600px) {
-  .modal-settings { height: 90vh; }
+  .modal-settings { height: calc(var(--vp-h, 100vh) * 0.9); }
 }
 .modal-settings .modal-body {
   overflow: hidden;
@@ -8621,8 +8621,8 @@ button.connector-action.is-loading {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(456px, 92vw);
-  height: clamp(480px, 68vh, 640px);
+  width: min(456px, calc(var(--vp-w, 100vw) * 0.92));
+  height: clamp(480px, calc(var(--vp-h, 100vh) * 0.68), 640px);
   max-height: calc(var(--vp-h, 100vh) - 36px);
   background: var(--bg-panel);
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
@@ -17497,8 +17497,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-panel);
   border-radius: 14px;
   width: min(820px, 100%);
-  max-height: calc(var(--vp-h, 100vh) - 48px);
-  max-height: min(90vh, calc(100dvh - 48px));
+  max-height: min(calc(var(--vp-h, 100vh) * 0.9), calc(var(--vp-h, 100vh) - 48px));
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -19690,7 +19689,7 @@ body.desktop-pet-shell .pet-task-item {
   padding-top: 12vh;
 }
 .qs-palette {
-  width: min(560px, 92vw);
+  width: min(560px, calc(var(--vp-w, 100vw) * 0.92));
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
