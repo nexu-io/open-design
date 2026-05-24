@@ -61,7 +61,7 @@ import {
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
-import { applyAppearanceToDocument } from './state/appearance';
+import { applyAppearanceToDocument, DEFAULT_UI_SCALE, stepUiScale } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import {
   createProject,
@@ -325,8 +325,12 @@ export function App() {
     applyAppearanceToDocument({
       theme: config.theme ?? 'system',
       accentColor: config.accentColor,
+      // Desktop uses Electron's native zoom; force CSS zoom to identity there
+      // so a pre-hydration write (if the host bridge wasn't ready) can't
+      // compound with the native factor.
+      uiScale: clientType === 'desktop' ? DEFAULT_UI_SCALE : (config.uiScale ?? DEFAULT_UI_SCALE),
     });
-  }, [config.theme, config.accentColor]);
+  }, [config.theme, config.accentColor, config.uiScale, clientType]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
@@ -1199,6 +1203,30 @@ export function App() {
     window.addEventListener('keydown', onKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [openSettings]);
+
+  // Cmd/Ctrl + (=/+) / - / 0 zoom the app UI in / out / reset (web only).
+  // Capture phase so we beat the browser's native page zoom. Desktop relies on
+  // Electron's native View-menu zoom accelerators instead, so we skip it there.
+  useEffect(() => {
+    if (clientType === 'desktop') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!primary || e.altKey || e.isComposing) return;
+      const current = configRef.current.uiScale ?? DEFAULT_UI_SCALE;
+      let next: number | null = null;
+      if (e.key === '=' || e.key === '+') next = stepUiScale(current, 1);
+      else if (e.key === '-' || e.key === '_') next = stepUiScale(current, -1);
+      else if (e.key === '0') next = DEFAULT_UI_SCALE;
+      if (next == null) return;
+      e.preventDefault();
+      if (next === current) return;
+      const updated: AppConfig = { ...configRef.current, uiScale: next };
+      saveConfig(updated);
+      setConfig(updated);
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [clientType]);
 
   // Explicit enabled toggle — true = wake, false = tuck. Persists to
   // localStorage so the overlay state survives across reloads. We keep

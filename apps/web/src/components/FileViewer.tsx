@@ -558,7 +558,11 @@ function usePreviewCanvasSize<T extends HTMLElement>() {
     if (!el) return;
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      setSize({ width: rect.width, height: rect.height });
+      // The app-UI zoom (`--ui-scale`) inflates getBoundingClientRect on the
+      // canvas, which sits above the counter-zoomed preview layer. Divide it
+      // back out so the fit-to-viewport math compares natural CSS pixels.
+      const scale = Number(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+      setSize({ width: rect.width / scale, height: rect.height / scale });
     };
     measure();
     if (typeof ResizeObserver !== 'undefined') {
