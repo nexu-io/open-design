@@ -55,4 +55,20 @@ describe('orderDesignSystemGroups (issue #2813)', () => {
     ];
     expect(orderDesignSystemGroups(entries).map(([cat]) => cat)).toEqual(['A', 'B']);
   });
+
+  it('floats an editable system above built-ins inside a shared category', () => {
+    const entries: Entry[] = [
+      ['Productivity', [ds('apple'), ds('airbnb'), ds('user:acme', { source: 'user', isEditable: true })]],
+    ];
+    const items = orderDesignSystemGroups(entries)[0]![1];
+    expect(items.map((system) => system.id)).toEqual(['user:acme', 'apple', 'airbnb']);
+  });
+
+  it('keeps built-ins in their incoming order within a group (stable item sort)', () => {
+    const entries: Entry[] = [
+      ['Productivity', [ds('b'), ds('user:x', { isEditable: true }), ds('a')]],
+    ];
+    const items = orderDesignSystemGroups(entries)[0]![1];
+    expect(items.map((system) => system.id)).toEqual(['user:x', 'b', 'a']);
+  });
 });
