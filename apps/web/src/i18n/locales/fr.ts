@@ -611,6 +611,7 @@ export const fr: Dict = {
   'designs.status.running': 'En cours',
   'designs.status.awaitingInput': 'Entrée requise',
   'designs.status.succeeded': 'Terminé',
+  'designs.status.published': 'Publié',
   'designs.status.failed': 'Échoué',
   'designs.status.canceled': 'Annulé',
   'designs.viewToggleAria': 'Mode d\'affichage',

@@ -1179,6 +1179,7 @@ export const en: Dict = {
   'designs.status.running': 'Running',
   'designs.status.awaitingInput': 'Needs input',
   'designs.status.succeeded': 'Completed',
+  'designs.status.published': 'Published',
   'designs.status.failed': 'Failed',
   'designs.status.canceled': 'Canceled',
   'designs.viewToggleAria': 'View mode',

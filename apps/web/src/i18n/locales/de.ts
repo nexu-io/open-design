@@ -483,6 +483,7 @@ export const de: Dict = {
   'designs.status.running': 'Läuft',
   'designs.status.awaitingInput': 'Eingabe nötig',
   'designs.status.succeeded': 'Abgeschlossen',
+  'designs.status.published': 'Veröffentlicht',
   'designs.status.failed': 'Fehlgeschlagen',
   'designs.status.canceled': 'Abgebrochen',
   'designs.viewToggleAria': 'Ansichtsmodus',

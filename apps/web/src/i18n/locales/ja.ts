@@ -482,6 +482,7 @@ export const ja: Dict = {
   'designs.status.running': '実行中',
   'designs.status.awaitingInput': '入力待ち',
   'designs.status.succeeded': '完了',
+  'designs.status.published': '公開済み',
   'designs.status.failed': '失敗',
   'designs.status.canceled': 'キャンセル済み',
   'designs.viewToggleAria': '表示モード',

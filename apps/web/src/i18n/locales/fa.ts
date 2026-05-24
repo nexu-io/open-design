@@ -617,6 +617,7 @@ export const fa: Dict = {
   'designs.status.running': 'در حال اجرا',
   'designs.status.awaitingInput': 'نیازمند ورودی',
   'designs.status.succeeded': 'تکمیل شد',
+  'designs.status.published': 'منتشر شد',
   'designs.status.failed': 'ناموفق',
   'designs.status.canceled': 'لغو شد',
   'designs.viewToggleAria': 'حالت نمایش',

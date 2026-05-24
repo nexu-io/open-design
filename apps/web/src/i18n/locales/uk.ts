@@ -608,6 +608,7 @@ export const uk: Dict = {
   'designs.status.running': 'Виконується',
   'designs.status.awaitingInput': 'Чекає підтвердження',
   'designs.status.succeeded': 'Завершено',
+  'designs.status.published': 'Опубліковано',
   'designs.status.failed': 'Помилка',
   'designs.status.canceled': 'Скасовано',
   'designs.viewToggleAria': 'Режим перегляду',

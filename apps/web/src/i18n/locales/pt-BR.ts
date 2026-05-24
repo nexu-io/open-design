@@ -616,6 +616,7 @@ export const ptBR: Dict = {
   'designs.status.running': 'Em execução',
   'designs.status.awaitingInput': 'Aguardando resposta',
   'designs.status.succeeded': 'Concluído',
+  'designs.status.published': 'Publicado',
   'designs.status.failed': 'Falhou',
   'designs.status.canceled': 'Cancelado',
   'designs.viewToggleAria': 'Modo de visualização',

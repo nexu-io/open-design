@@ -595,6 +595,7 @@ export const ko: Dict = {
   'designs.status.running': '실행 중',
   'designs.status.awaitingInput': '입력 대기 중',
   'designs.status.succeeded': '완료됨',
+  'designs.status.published': '게시됨',
   'designs.status.failed': '실패',
   'designs.status.canceled': '취소됨',
   'designs.viewToggleAria': '보기 모드',

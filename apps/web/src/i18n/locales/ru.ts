@@ -616,6 +616,7 @@ export const ru: Dict = {
   'designs.status.running': 'Выполняется',
   'designs.status.awaitingInput': 'Нужен ввод',
   'designs.status.succeeded': 'Завершено',
+  'designs.status.published': 'Опубликовано',
   'designs.status.failed': 'Ошибка',
   'designs.status.canceled': 'Отменено',
   'designs.viewToggleAria': 'Режим просмотра',

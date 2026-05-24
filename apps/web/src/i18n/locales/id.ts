@@ -708,6 +708,7 @@ export const id: Dict = {
   'designs.status.running': 'Berjalan',
   'designs.status.awaitingInput': 'Menunggu input',
   'designs.status.succeeded': 'Selesai',
+  'designs.status.published': 'Diterbitkan',
   'designs.status.failed': 'Gagal',
   'designs.status.canceled': 'Dibatalkan',
   'designs.viewToggleAria': 'Mode tampilan',

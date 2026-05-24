@@ -595,6 +595,7 @@ export const hu: Dict = {
   'designs.status.running': 'Fut',
   'designs.status.awaitingInput': 'Bevitelre vár',
   'designs.status.succeeded': 'Befejezve',
+  'designs.status.published': 'Közzétéve',
   'designs.status.failed': 'Sikertelen',
   'designs.status.canceled': 'Megszakítva',
   'designs.viewToggleAria': 'Nézet módja',

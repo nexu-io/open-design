@@ -787,6 +787,7 @@ export const zhTW: Dict = {
   'designs.status.running': '執行中',
   'designs.status.awaitingInput': '等待回覆',
   'designs.status.succeeded': '已完成',
+  'designs.status.published': '已發佈',
   'designs.status.failed': '失敗',
   'designs.status.canceled': '已取消',
   'designs.viewToggleAria': '檢視模式',

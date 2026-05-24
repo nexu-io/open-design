@@ -595,6 +595,7 @@ export const ar: Dict = {
   'designs.status.running': 'جاري التشغيل',
   'designs.status.awaitingInput': 'يحتاج مدخلات',
   'designs.status.succeeded': 'اكتمل',
+  'designs.status.published': 'تم النشر',
   'designs.status.failed': 'فشل',
   'designs.status.canceled': 'ملغى',
   'designs.viewToggleAria': 'وضع العرض',

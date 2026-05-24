@@ -199,6 +199,9 @@
 .recent-projects__card-status-failed {
   color: var(--red);
 }
+.recent-projects__card-status-published {
+  color: var(--green);
+}
 .recent-projects__card-status-dot {
   width: 6px;
   height: 6px;

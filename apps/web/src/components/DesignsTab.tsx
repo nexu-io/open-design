@@ -19,6 +19,7 @@ import type {
 	SkillSummary,
 } from "../types";
 import { Icon } from "./Icon";
+import { isDesignSystemProject, isPublishedDesignSystemProject } from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
 
@@ -633,6 +634,7 @@ export function DesignsTab({
 						const cover = projectCover(p, coverByProject[p.id] ?? null);
 						const isSelected = selected.has(p.id);
 						const designSystemProject = isDesignSystemProject(p);
+						const publishedDesignSystem = isPublishedDesignSystemProject(p, designSystems);
 						return (
 							<div
 								key={p.id}
@@ -798,9 +800,9 @@ export function DesignsTab({
 											{skill ? ` · ${skill}` : ""}
 											{" · "}
 											<span
-												className={`design-card-status design-card-status-${status}`}
+												className={`design-card-status design-card-status-${publishedDesignSystem ? "published" : status}`}
 											>
-												{statusLabel(status, t)}
+												{publishedDesignSystem ? t("designs.status.published") : statusLabel(status, t)}
 											</span>
 										</span>
 										{sub === "recent" || sub === "yours" ? (
@@ -1044,9 +1046,6 @@ function isOrbitProject(project: Project): boolean {
   return metadata?.kind === 'orbit';
 }
 
-function isDesignSystemProject(project: Project): boolean {
-	return project.metadata?.importedFrom === "design-system";
-}
 
 function projectCover(
 	project: Project,

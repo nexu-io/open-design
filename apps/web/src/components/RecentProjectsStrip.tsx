@@ -10,12 +10,16 @@ import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
-import type { Project, ProjectDisplayStatus, ProjectFile } from '../types';
+import type { DesignSystemSummary, Project, ProjectDisplayStatus, ProjectFile } from '../types';
 import { Icon } from './Icon';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
+import { isDesignSystemProject, isPublishedDesignSystemProject } from './design-system-project';
 
 interface Props {
   projects: Project[];
+  /** Used only to show a "Published" status for design-system projects whose
+   *  backing system is published (independent of the project's run status). */
+  designSystems?: DesignSystemSummary[];
   /** Retained for call-site compatibility; the strip skips rendering
    *  while the list is loading so we never need a loading state. */
   loading?: boolean;
@@ -24,6 +28,8 @@ interface Props {
   limit?: number;
 }
 
+const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
+
 const DECK_PREVIEW_WIDTH = 1280;
 const DECK_PREVIEW_HEIGHT = 720;
 const deckCoverCache = new Map<string, string>();
@@ -31,6 +37,7 @@ const deckCoverInflight = new Map<string, Promise<string>>();
 
 export function RecentProjectsStrip({
   projects,
+  designSystems = EMPTY_DESIGN_SYSTEMS,
   onOpen,
   onViewAll,
   limit = 6,
@@ -142,8 +149,10 @@ export function RecentProjectsStrip({
           const cover = projectCover(project, coverByProject[project.id] ?? null);
           const designSystemProject = isDesignSystemProject(project);
           const status: ProjectDisplayStatus = project.status?.value ?? 'not_started';
+          const publishedDesignSystem = isPublishedDesignSystemProject(project, designSystems);
           const isActive =
-            status === 'running' || status === 'queued' || status === 'awaiting_input';
+            !publishedDesignSystem &&
+            (status === 'running' || status === 'queued' || status === 'awaiting_input');
           return (
             <button
               key={project.id}
@@ -194,12 +203,12 @@ export function RecentProjectsStrip({
                 <div className="recent-projects__card-name">{project.name}</div>
                 <div className="recent-projects__card-time">
                   <span
-                    className={`recent-projects__card-status recent-projects__card-status-${status}`}
+                    className={`recent-projects__card-status recent-projects__card-status-${publishedDesignSystem ? 'published' : status}`}
                   >
                     {isActive ? (
                       <span className="recent-projects__card-status-dot" aria-hidden />
                     ) : null}
-                    {statusLabel(status, t)}
+                    {publishedDesignSystem ? t('designs.status.published') : statusLabel(status, t)}
                   </span>
                   <span className="recent-projects__card-sep" aria-hidden>·</span>
                   {relativeTime(project.updatedAt, t)}
@@ -463,10 +472,6 @@ function ProjectTag({ category }: { category: ProjectCategory }) {
           ? t('designs.tagMedia')
           : t('designs.tagPrototype');
   return <span className={`design-card-tag tag-${category}`}>{label}</span>;
-}
-
-function isDesignSystemProject(project: Project): boolean {
-  return project.metadata?.importedFrom === 'design-system';
 }
 
 function DesignSystemProjectTag() {

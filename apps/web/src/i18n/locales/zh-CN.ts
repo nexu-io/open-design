@@ -1171,6 +1171,7 @@ export const zhCN: Dict = {
   'designs.status.running': '运行中',
   'designs.status.awaitingInput': '等待回复',
   'designs.status.succeeded': '已完成',
+  'designs.status.published': '已发布',
   'designs.status.failed': '失败',
   'designs.status.canceled': '已取消',
   'designs.viewToggleAria': '视图模式',

@@ -484,6 +484,7 @@ export const esES: Dict = {
   'designs.status.running': 'En ejecución',
   'designs.status.awaitingInput': 'Necesita respuesta',
   'designs.status.succeeded': 'Completado',
+  'designs.status.published': 'Publicado',
   'designs.status.failed': 'Fallido',
   'designs.status.canceled': 'Cancelado',
   'designs.viewToggleAria': 'Modo de vista',
