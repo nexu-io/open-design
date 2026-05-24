@@ -994,15 +994,21 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
-      // Issue #2143 — inject bridges into ALL HTML responses on /raw/* by default.
-      // The preview iframe may navigate to linked pages within the artifact (e.g.
-      // <a href="page2.html">), and those intra-iframe loads don't carry query params.
-      // Header-based gate: browsers performing iframe navigations can't set custom
-      // headers, so they always receive bridges. Only fetchProjectFileText() in the
-      // web app sends X-OD-Source-View, which skips injection to keep source-view and
-      // manual-edit reads byte-for-byte raw. This prevents bridge scripts from leaking
-      // into artifacts when users save from the source editor.
-      if (file.mime.startsWith('text/html') && req.headers['x-od-source-view'] !== '1') {
+      // Issue #2143 — inject bridges into HTML iframe loads on /raw/*.
+      // The preview iframe may navigate to linked pages within the artifact
+      // (e.g. <a href="page2.html">), and those intra-iframe loads must also
+      // receive bridges so comment/inspect keep working.
+      //
+      // Gate: Sec-Fetch-Dest — a browser-controlled header that JS cannot
+      // spoof. Browsers set it to 'iframe' for nested-browsing-context loads
+      // (preview iframe + in-artifact link navigation). Top-level navigations
+      // (download, open in new tab) get 'document'. fetch() calls get 'empty'.
+      //
+      // Result: iframe loads always receive bridges; downloads and source-view
+      // fetches always stay byte-for-byte raw. Old browsers that don't send
+      // Sec-Fetch-Dest fall back to srcDoc (which already injects bridges via
+      // buildSrcdoc), so nothing breaks — just a different transport.
+      if (file.mime.startsWith('text/html') && req.headers['sec-fetch-dest'] === 'iframe') {
         const html = file.buffer.toString('utf8');
         const patched = injectPreviewBridgesIntoHtml(html);
         res.type(file.mime).send(patched);

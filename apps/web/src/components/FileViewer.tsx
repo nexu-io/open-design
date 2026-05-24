@@ -4001,10 +4001,11 @@ function HtmlViewer({
   const drawClickSelectionMode = drawOverlayOpen && drawOverlayMode === 'click' && !manualEditMode;
   // Dual-path bridge detection (Issue #2143):
   // 1. Source scan: checks for daemon-injected markers in the fetched HTML
-  //    (present when the daemon serves HTML without X-OD-Source-View header).
-  // 2. Transport-level fallback: any HTML file served through the daemon's
-  //    /raw/* route receives bridge injection unconditionally. When the daemon
-  //    is running the patched project-routes.ts, this is always true.
+  //    (present when the daemon serves HTML to an iframe — see
+  //    project-routes.ts Sec-Fetch-Dest gate).
+  // 2. Transport-level fallback: any HTML file loaded in the preview iframe
+  //    reaches the daemon with Sec-Fetch-Dest: iframe, which triggers bridge
+  //    injection. So HTML → iframe → bridges, always.
   const isRawHtmlFile = file.kind === 'html' || /\\.html?$/i.test(file.name);
   const urlModeBridge = hasUrlModeBridge(source) || isRawHtmlFile;
   // When we URL-load the iframe directly, skip every in-host inlining /
