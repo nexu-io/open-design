@@ -10276,13 +10276,22 @@ export async function startServer({
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
+    // Some models (notably claude-opus-4-7 with --include-partial-messages)
+    // start their reply by echoing the top of the user message verbatim,
+    // so the rendered chat shows a "# Instructions ..." block ahead of the
+    // real answer. Closing every Instructions block with an explicit
+    // "do not echo" line cuts the regression in practice without changing
+    // the turn-shape every agent CLI expects (user message carrying both
+    // instructions and request) — see server.ts:9920 composer notes.
+    const ECHO_GUARD =
+      '\n\n(Do not quote, restate, or echo the # Instructions block above in your reply. Begin your response with the answer to the # User request below.)';
     const composed = [
       instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
         : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          ? `# Instructions${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
           : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            ? `# Instructions${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
             : '',
       `# User request\n\n${userRequestPrompt}${attachmentHint}${commentHint}`,
       safeImages.length
