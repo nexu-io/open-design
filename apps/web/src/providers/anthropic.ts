@@ -62,6 +62,9 @@ export async function streamMessage(
   if (cfg.apiProtocol === 'senseaudio') {
     return streamMessageSenseAudio(cfg, system, history, signal, handlers, context);
   }
+  if (cfg.apiProtocol === 'kimi') {
+    return streamMessageOpenAI(cfg, system, history, signal, handlers);
+  }
   if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
     return streamMessageOpenAI(cfg, system, history, signal, handlers);
   }

@@ -392,6 +392,10 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
     host: 'docs.senseaudio.cn',
     url: 'https://docs.senseaudio.cn',
   },
+  kimi: {
+    host: 'kimi.com',
+    url: 'https://kimi.com/code/console',
+  },
 };
 
 const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {

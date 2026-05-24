@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createAgentRuntimeEnv, createAgentRuntimeToolPrompt } from '../src/server.js';
 import { applyAgentLaunchEnv } from '../src/runtimes/launch.js';
+import { kimiAgentDef } from '../src/runtimes/defs/kimi.js';
 
 describe('agent runtime tool environment', () => {
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {
@@ -147,5 +148,34 @@ describe('applyAgentLaunchEnv', () => {
     const base = { Path: existing };
     const result = applyAgentLaunchEnv(base, { childPathPrepend: ['/opt/bin'] }, '');
     expect(result.Path).toBe(existing);
+  });
+});
+
+describe('kimi CLI runtime', () => {
+  it('includes kimi-k2.6 in fallback models', () => {
+    const ids = kimiAgentDef.fallbackModels.map((m) => m.id);
+    expect(ids).toContain('kimi-k2.6');
+  });
+
+  it('forwards KIMI_API_KEY through spawn env when present in daemon env', () => {
+    const base = { PATH: '/bin', KIMI_API_KEY: 'sk-kimi-live' };
+    const env = createAgentRuntimeEnv(
+      base,
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+    );
+    expect(env.KIMI_API_KEY).toBe('sk-kimi-live');
+  });
+
+  it('forwards MOONSHOT_API_KEY through spawn env when present in daemon env', () => {
+    const base = { PATH: '/bin', MOONSHOT_API_KEY: 'sk-ms-live' };
+    const env = createAgentRuntimeEnv(
+      base,
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+    );
+    expect(env.MOONSHOT_API_KEY).toBe('sk-ms-live');
   });
 });

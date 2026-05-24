@@ -151,6 +151,14 @@ const PROVIDER_DEFAULTS = {
     model: 'senseaudio-s2-flash',
     baseUrl: 'https://api.senseaudio.cn',
   },
+  // Kimi (Moonshot) speaks the same OpenAI shape, so callOpenAI handles
+  // it with just the moonshot base URL. moonshot-v1-8k is the small/fast
+  // default; users can pick kimi-k2.6 or the larger context variants
+  // through the picker.
+  kimi: {
+    model: 'moonshot-v1-8k',
+    baseUrl: 'https://api.moonshot.ai',
+  },
 };
 
 // Map an explicit override provider to the env var the daemon should
@@ -182,6 +190,14 @@ function envKeyFor(provider) {
     return (
       process.env.OD_SENSEAUDIO_API_KEY?.trim()
       || process.env.SENSEAUDIO_API_KEY?.trim()
+      || ''
+    );
+  }
+  if (provider === 'kimi') {
+    return (
+      process.env.OD_KIMI_API_KEY?.trim()
+      || process.env.KIMI_API_KEY?.trim()
+      || process.env.MOONSHOT_API_KEY?.trim()
       || ''
     );
   }
@@ -289,7 +305,7 @@ function localCliProviderFor(agentId, provider, model) {
 // through from the web app on a per-call basis (the daemon never
 // persists BYOK creds, so this is the only signal we have for that
 // mode).
-async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, chatModel) {
+export async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, chatModel) {
   const chatProtocol = chatProtocolFromAgentId(chatAgentId);
   const normalizedChatAgentId =
     typeof chatAgentId === 'string' ? chatAgentId.trim().toLowerCase() : '';
