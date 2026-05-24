@@ -395,6 +395,7 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
 };
 
 const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
+  antigravity: 'Google Antigravity CLI (Gemini successor)',
   claude: 'Anthropic official CLI',
   codex: 'OpenAI official CLI',
   'cursor-agent': 'Cursor command line',
