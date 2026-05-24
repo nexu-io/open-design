@@ -415,6 +415,9 @@ export function ChatPane({
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
   const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
+  const composerDraftStorageKey = projectId && activeConversationId
+    ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
+    : undefined;
   // Only the first user message gets the active-plugin chip — the
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
@@ -1165,6 +1168,7 @@ export function ChatPane({
             streaming={streaming}
             sendDisabled={sendDisabled}
             initialDraft={initialDraft}
+            draftStorageKey={composerDraftStorageKey}
             onEnsureProject={onEnsureProject}
             commentAttachments={commentsToAttachments(attachedComments)}
             onRemoveCommentAttachment={onDetachComment}
