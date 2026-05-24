@@ -634,11 +634,11 @@ async function writeLiveArtifactFiles(
 
   await mkdir(paths.snapshotsDir, { recursive: true });
   await Promise.all([
-    writeFile(paths.artifactJsonPath, stableJson(artifactForWrite), 'utf8'),
-    writeFile(paths.templateHtmlPath, templateHtml, 'utf8'),
-    writeFile(paths.generatedPreviewHtmlPath, previewHtml, 'utf8'),
-    writeFile(paths.dataJsonPath, stableJson(dataJson), 'utf8'),
-    writeFile(paths.provenanceJsonPath, stableJson(provenanceJson), 'utf8'),
+    writeFileAtomic(paths.artifactJsonPath, stableJson(artifactForWrite)),
+    writeFileAtomic(paths.templateHtmlPath, templateHtml),
+    writeFileAtomic(paths.generatedPreviewHtmlPath, previewHtml),
+    writeFileAtomic(paths.dataJsonPath, stableJson(dataJson)),
+    writeFileAtomic(paths.provenanceJsonPath, stableJson(provenanceJson)),
     writeFile(paths.refreshesJsonlPath, '', { flag: 'a' }),
   ]);
   return artifactForWrite;
