@@ -627,16 +627,6 @@ export async function writeProjectFile(
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
-  if (!overwrite) {
-    try {
-      await stat(target);
-      const err = new Error('file already exists');
-      err.code = 'EEXIST';
-      throw err;
-    } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
-    }
-  }
   await mkdir(path.dirname(target), { recursive: true });
   let stubGuardWarning = null;
   let validatedManifest = null;
@@ -692,7 +682,7 @@ export async function writeProjectFile(
       }
     }
   }
-  await writeFile(target, body);
+  await writeFile(target, body, { flag: overwrite ? 'w' : 'wx' });
   if (validatedManifest) {
     const manifestFileName = artifactManifestNameFor(safeName);
     const manifestTarget = await resolveSafeReal(dir, manifestFileName);
