@@ -55,8 +55,12 @@ export async function createProject(input: {
   name: string;
   skillId: string | null;
   designSystemId: string | null;
-  pendingPrompt?: string;
+  // Mirrors `CreateProjectRequest` in `@open-design/contracts`: both
+  // fields accept `null` as the canonical "no value" shape that the
+  // daemon route and the MCP create_project tool already use.
+  pendingPrompt?: string | null;
   metadata?: ProjectMetadata;
+  customInstructions?: string | null;
   // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
   // (or pre-applied snapshot id) to resolve and pin a plugin to the new
   // project. Used by the PluginLoopHome flow on Home.

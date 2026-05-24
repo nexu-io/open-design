@@ -207,12 +207,18 @@ export interface CreateProjectRequest {
   name: string;
   skillId?: string | null;
   designSystemId?: string | null;
-  pendingPrompt?: string;
+  // The daemon route accepts `null` as "no value" for both fields
+  // and the MCP create_project tool advertises the same shape
+  // (apps/daemon/src/mcp.ts). Keep create and update aligned —
+  // UpdateProjectRequest below has always carried the union — so
+  // typed callers can express the same request MCP clients do
+  // (#2404 round-7 reviewer follow-up).
+  pendingPrompt?: string | null;
   metadata?: ProjectMetadata;
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
-  customInstructions?: string;
+  customInstructions?: string | null;
   /** Persisted to metadata.skipDiscoveryBrief for automated project runs. */
   skipDiscoveryBrief?: boolean;
 }
