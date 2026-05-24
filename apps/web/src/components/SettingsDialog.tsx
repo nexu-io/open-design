@@ -107,7 +107,7 @@ import {
   resolveAccentColor,
 } from '../state/appearance';
 import { detectClientType } from '../analytics/identity';
-import { getHostZoomFactor, setHostZoomFactor } from '@open-design/host';
+import { getHostZoomFactor, setHostZoomFactor, subscribeHostZoomChange } from '@open-design/host';
 import { isAutosaveDraftOnlyChange } from '../App';
 import {
   FAILURE_SOUNDS,
@@ -5895,15 +5895,23 @@ function InterfaceScaleField({
 
 function DesktopInterfaceScaleField() {
   const [factor, setFactor] = useState<number>(DEFAULT_UI_SCALE);
+
   useEffect(() => {
     let alive = true;
     void getHostZoomFactor().then((value) => {
       if (alive && typeof value === 'number') setFactor(value);
     });
+    // Stay in sync with zoom changes driven by View-menu, Ctrl+wheel, or any
+    // other path outside this component (main process pushes od:zoom:changed).
+    const unsub = subscribeHostZoomChange((value) => {
+      if (alive) setFactor(value);
+    });
     return () => {
       alive = false;
+      unsub();
     };
   }, []);
+
   const apply = (value: number) => {
     setFactor(value);
     void setHostZoomFactor(value);

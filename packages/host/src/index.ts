@@ -209,6 +209,7 @@ export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdater
 export type OpenDesignHostZoomController = {
   get(): Promise<number>;
   set(factor: number): Promise<number>;
+  onZoomChange?(cb: (factor: number) => void): () => void;
 };
 
 export type OpenDesignHostBridge = {
@@ -557,5 +558,18 @@ export async function setHostZoomFactor(factor: number, scope: OpenDesignHostGlo
     return await host.zoom.set(factor);
   } catch {
     return null;
+  }
+}
+
+export function subscribeHostZoomChange(
+  cb: (factor: number) => void,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  const host = getOpenDesignHost(scope);
+  if (host?.zoom?.onZoomChange == null) return () => undefined;
+  try {
+    return host.zoom.onZoomChange(cb);
+  } catch {
+    return () => undefined;
   }
 }

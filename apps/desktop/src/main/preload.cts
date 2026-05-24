@@ -248,6 +248,11 @@ const hostBridge = {
     get: (): Promise<number> => ipcRenderer.invoke('od:zoom:get') as Promise<number>,
     set: (factor: number): Promise<number> =>
       ipcRenderer.invoke('od:zoom:set', factor) as Promise<number>,
+    onZoomChange: (cb: (factor: number) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, factor: number) => cb(factor);
+      ipcRenderer.on('od:zoom:changed', listener);
+      return () => ipcRenderer.off('od:zoom:changed', listener);
+    },
   },
   updater,
 } satisfies OpenDesignHostBridge;

@@ -1309,16 +1309,26 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     currentZoomFactor = clampZoomFactor(factor);
     void writePersistedZoomFactor(currentZoomFactor);
   };
+  const notifyZoomChanged = (factor: number) => {
+    if (!window.isDestroyed()) window.webContents.send("od:zoom:changed", factor);
+  };
   const snapshotLiveZoom = () => {
     if (!window.isDestroyed()) currentZoomFactor = clampZoomFactor(window.webContents.getZoomFactor());
   };
   window.webContents.on("did-start-loading", snapshotLiveZoom);
   window.webContents.on("will-navigate", snapshotLiveZoom);
   window.webContents.on("did-finish-load", () => {
-    if (!window.isDestroyed()) window.webContents.setZoomFactor(currentZoomFactor);
+    if (!window.isDestroyed()) {
+      window.webContents.setZoomFactor(currentZoomFactor);
+      notifyZoomChanged(currentZoomFactor);
+    }
   });
   window.webContents.on("zoom-changed", () => {
-    if (!window.isDestroyed()) persistZoomFactor(window.webContents.getZoomFactor());
+    if (!window.isDestroyed()) {
+      const factor = window.webContents.getZoomFactor();
+      persistZoomFactor(factor);
+      notifyZoomChanged(factor);
+    }
   });
   window.on("close", () => {
     if (!window.isDestroyed()) {
@@ -1346,6 +1356,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const clamped = clampZoomFactor(factor);
     window.webContents.setZoomFactor(clamped);
     persistZoomFactor(clamped);
+    notifyZoomChanged(clamped);
     return clamped;
   });
   ipcMain.handle("od:update:status", async (event) => {
