@@ -65,3 +65,28 @@ export function effectivePeerFromReq(req: { socket?: { remoteAddress?: string | 
     req.headers['x-forwarded-for'] as string | undefined,
   );
 }
+
+/**
+ * Determines whether a request originates from a truly local client,
+ * safe for granting access to management-only endpoints.
+ *
+ * 1. TCP peer must be loopback (direct local or same-host proxy).
+ * 2. If proxy trust is enabled AND the TCP peer is loopback (indicating
+ *    a same-host reverse proxy), the X-Forwarded-For header is checked:
+ *    the real client behind the proxy must also be loopback.
+ *    Otherwise a remote browser reaching the daemon through Caddy/nginx
+ *    on the same host would appear as "local" and bypass management guards.
+ */
+export function isLocalManagementRequest(req: {
+  socket?: { remoteAddress?: string | undefined };
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  const tcpPeer = req.socket?.remoteAddress;
+  if (!isLoopbackAddress(tcpPeer)) return false;
+  if (!isProxyTrusted()) return true;
+  const xff = req.headers['x-forwarded-for'];
+  if (!xff) return true;
+  const first = String(xff).split(',')[0]?.trim();
+  if (!first) return true;
+  return isLoopbackAddress(first);
+}
