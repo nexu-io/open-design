@@ -223,7 +223,9 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('accept-ranges')).toBeNull();
     const text = await res.text();
-    expect(text).toBe('<html/>');
+    expect(text).toContain('<html');
+    expect(text).toContain('data-od-prototype-location-relay');
+    expect(text).toContain('od:url-load-loc');
   });
 
   it('returns 404 for a missing file', async () => {

@@ -67,7 +67,12 @@ import {
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
-import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
+import {
+  buildLazySrcdocTransport,
+  buildSrcdoc,
+  buildUrlLoadRefreshSrc,
+  canActivateSrcDocTransport,
+} from '../runtime/srcdoc';
 import {
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
@@ -4062,6 +4067,8 @@ function HtmlViewer({
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const [urlLoadSubPath, setUrlLoadSubPath] = useState<string | null>(null);
+  const [urlLoadHash, setUrlLoadHash] = useState('');
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -4538,7 +4545,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
 
   useEffect(() => {
     if (filesRefreshKey === 0) return;
-    const nextSrc = `${basePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    const nextSrc = buildUrlLoadRefreshSrc({
+      entrySrcUrl: basePreviewSrcUrl,
+      filesRefreshKey,
+      urlLoadSubPath,
+      fileName: file.name,
+      urlLoadHash,
+      rawFileUrl: (filePath) =>
+        `${projectRawUrl(projectId, filePath)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    });
     const timeout = window.setTimeout(() => {
       if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
         urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
@@ -4547,7 +4562,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }
     }, 180);
     return () => window.clearTimeout(timeout);
-  }, [basePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview]);
+  }, [
+    basePreviewSrcUrl,
+    file.mtime,
+    file.name,
+    filesRefreshKey,
+    projectId,
+    reloadKey,
+    urlLoadHash,
+    urlLoadSubPath,
+    useUrlLoadPreview,
+  ]);
 
   useEffect(() => {
     setInlinedSource(null);
@@ -4774,15 +4799,44 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         }, '*');
       }
     }
+    function onUrlLoadLoc(ev: MessageEvent) {
+      if (!ev.source || ev.source !== urlPreviewIframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string; pathname?: string; hash?: string } | null;
+      if (!data || data.type !== 'od:url-load-loc') return;
+      setUrlLoadHash(typeof data.hash === 'string' ? data.hash : '');
+      const rawPrefix = projectRawUrl(projectId, '');
+      const pathname = typeof data.pathname === 'string' ? data.pathname : '';
+      const idx = pathname.indexOf(rawPrefix);
+      const relative = idx >= 0
+        ? pathname
+            .slice(idx + rawPrefix.length)
+            .split('/')
+            .map((segment) => {
+              try {
+                return decodeURIComponent(segment);
+              } catch {
+                return segment;
+              }
+            })
+            .join('/')
+        : '';
+      if (!relative || relative === file.name || !/\.html?$/i.test(relative)) {
+        setUrlLoadSubPath(null);
+        return;
+      }
+      setUrlLoadSubPath(relative);
+    }
     window.addEventListener('message', onMessage);
     window.addEventListener('message', onRestoreRequest);
     window.addEventListener('message', onDcViewportMessage);
+    window.addEventListener('message', onUrlLoadLoc);
     return () => {
       window.removeEventListener('message', onMessage);
       window.removeEventListener('message', onRestoreRequest);
       window.removeEventListener('message', onDcViewportMessage);
+      window.removeEventListener('message', onUrlLoadLoc);
     };
-  }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+  }, [isActivePreviewIframeSource, isOurPreviewIframeSource, projectId, file.name]);
 
   useEffect(() => {
     if (!effectiveDeck) {

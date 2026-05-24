@@ -34,6 +34,28 @@ export type SrcdocOptions = {
   previewFocusGuard?: boolean;
 };
 
+export interface UrlLoadRefreshSrcInputs {
+  entrySrcUrl: string;
+  filesRefreshKey: number;
+  urlLoadSubPath: string | null;
+  fileName: string;
+  urlLoadHash: string;
+  rawFileUrl: (filePath: string) => string;
+}
+
+export function buildUrlLoadRefreshSrc(inputs: UrlLoadRefreshSrcInputs): string {
+  const refreshQuery = `fr=${encodeURIComponent(String(inputs.filesRefreshKey))}`;
+  const hash = normalizeLocationHash(inputs.urlLoadHash);
+  const onSubPage =
+    !!inputs.urlLoadSubPath &&
+    inputs.urlLoadSubPath !== inputs.fileName &&
+    /\.html?$/i.test(inputs.urlLoadSubPath);
+  const base = onSubPage
+    ? inputs.rawFileUrl(inputs.urlLoadSubPath!)
+    : inputs.entrySrcUrl;
+  return `${appendQueryParam(base, refreshQuery)}${hash}`;
+}
+
 export function buildSrcdoc(
   html: string,
   options: SrcdocOptions = {}
@@ -80,6 +102,19 @@ export function buildSrcdoc(
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
   return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+}
+
+function appendQueryParam(url: string, query: string): string {
+  const hashIndex = url.indexOf('#');
+  const beforeHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : '';
+  const joiner = beforeHash.includes('?') ? '&' : '?';
+  return `${beforeHash}${joiner}${query}${hash}`;
+}
+
+function normalizeLocationHash(hash: string): string {
+  if (!hash) return '';
+  return hash.startsWith('#') ? hash : `#${hash}`;
 }
 
 /**

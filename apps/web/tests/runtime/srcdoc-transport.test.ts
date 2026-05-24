@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildLazySrcdocTransport,
+  buildUrlLoadRefreshSrc,
   canActivateSrcDocTransport,
   type SrcDocActivationInputs,
 } from '../../src/runtime/srcdoc';
@@ -195,5 +196,47 @@ describe('canActivateSrcDocTransport (#2253)', () => {
         activatedHtml: '<html>previous</html>',
       }),
     ).toBe(true);
+  });
+});
+describe('buildUrlLoadRefreshSrc (file-change preview reload)', () => {
+  const rawFileUrl = (filePath: string) => `/api/projects/p/raw/${filePath}?v=10&r=0`;
+
+  it('preserves the current hash when reloading the entry file', () => {
+    expect(
+      buildUrlLoadRefreshSrc({
+        entrySrcUrl: '/api/projects/p/raw/index.html?v=10&r=0',
+        filesRefreshKey: 7,
+        urlLoadSubPath: null,
+        fileName: 'index.html',
+        urlLoadHash: '#detail-3',
+        rawFileUrl,
+      }),
+    ).toBe('/api/projects/p/raw/index.html?v=10&r=0&fr=7#detail-3');
+  });
+
+  it('reloads the current sub-page instead of snapping back to the entry file', () => {
+    expect(
+      buildUrlLoadRefreshSrc({
+        entrySrcUrl: '/api/projects/p/raw/index.html?v=10&r=0',
+        filesRefreshKey: 8,
+        urlLoadSubPath: 'screens/parent/detail.html',
+        fileName: 'index.html',
+        urlLoadHash: '#child-a',
+        rawFileUrl,
+      }),
+    ).toBe('/api/projects/p/raw/screens/parent/detail.html?v=10&r=0&fr=8#child-a');
+  });
+
+  it('does not treat the entry file as a sub-page', () => {
+    expect(
+      buildUrlLoadRefreshSrc({
+        entrySrcUrl: '/api/projects/p/raw/index.html?v=10&r=0',
+        filesRefreshKey: 9,
+        urlLoadSubPath: 'index.html',
+        fileName: 'index.html',
+        urlLoadHash: '',
+        rawFileUrl,
+      }),
+    ).toBe('/api/projects/p/raw/index.html?v=10&r=0&fr=9');
   });
 });
