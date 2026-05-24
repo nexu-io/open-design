@@ -2258,7 +2258,12 @@ a.avatar-item:visited {
   background: transparent;
   border-color: var(--border);
   color: var(--text);
+  /* Icon-only — the label collapses to save footer real estate next to
+     Stop. Tooltip carries the meaning. */
+  padding: 4px 8px;
+  gap: 0;
 }
+.composer-send.queue span { display: none; }
 .composer-send.queue:hover:not(:disabled) {
   background: var(--surface-muted);
   border-color: var(--text-faint);
