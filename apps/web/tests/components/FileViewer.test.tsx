@@ -148,14 +148,14 @@ describe('FileViewer HTML preview location URLs', () => {
       urlLoadSubPath: 'screens/parent/parent-app.html',
       urlLoadHash: '#report',
       filesRefreshKey: 7,
-    })).toBe('/api/projects/project-1/raw/screens/parent/parent-app.html?v=1710000000&r=2&fr=7#report');
+    })).toBe('/api/projects/project-1/raw/screens/parent/parent-app.html?preview=1&v=1710000000&r=2&fr=7#report');
   });
 
   it('preserves same-file hash routes without treating them as a sub-page', () => {
     expect(htmlPreviewUrlForLocation('project-1', 'screens/admin/admin-console.html', 1710000000, 0, {
       urlLoadSubPath: null,
       urlLoadHash: '#AD11',
-    })).toBe('/api/projects/project-1/raw/screens/admin/admin-console.html?v=1710000000&r=0#AD11');
+    })).toBe('/api/projects/project-1/raw/screens/admin/admin-console.html?preview=1&v=1710000000&r=0#AD11');
   });
 });
 
@@ -614,7 +614,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?preview=1&amp;v=1710000000&amp;r=0"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
@@ -792,7 +792,8 @@ describe('FileViewer SVG artifacts', () => {
 
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
-    expect(getFrame()?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
+    const initialFrame = getFrame();
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?preview=1&v=1710000000&r=0');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -800,9 +801,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0',
+      '/api/projects/project-1/raw/second.html?preview=1&v=1710000000&r=0',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?preview=1&v=1710000000&r=0');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {

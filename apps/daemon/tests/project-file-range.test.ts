@@ -223,6 +223,15 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('accept-ranges')).toBeNull();
     const text = await res.text();
+    expect(text).toBe('<html/>');
+    expect(text).not.toContain('data-od-prototype-location-relay');
+  });
+
+  it('injects the prototype location relay only for preview HTML requests', async () => {
+    const res = await fetch(`${rawUrl('page.html')}?preview=1`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('accept-ranges')).toBeNull();
+    const text = await res.text();
     expect(text).toContain('<html');
     expect(text).toContain('data-od-prototype-location-relay');
     expect(text).toContain('od:url-load-loc');

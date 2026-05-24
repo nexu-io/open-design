@@ -948,7 +948,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
-      if (file.mime.startsWith('text/html')) {
+      if (req.query.preview === '1' && file.mime.startsWith('text/html')) {
         res.type(file.mime).send(injectPrototypeLocationRelay(file.buffer.toString('utf8')));
         return;
       }

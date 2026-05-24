@@ -38,6 +38,7 @@ import {
   uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
+  projectPreviewUrl,
   projectRawUrl,
   LiveArtifactRefreshError,
   refreshLiveArtifact,
@@ -561,7 +562,7 @@ export function htmlPreviewUrlForLocation(
   });
   if (options.filesRefreshKey !== undefined) query.set('fr', String(options.filesRefreshKey));
   const hash = options.urlLoadHash?.startsWith('#') ? options.urlLoadHash : '';
-  return `${projectRawUrl(projectId, path)}?${query.toString()}${hash}`;
+  return `${projectPreviewUrl(projectId, path)}&${query.toString()}${hash}`;
 }
 
 function previewScaleShellStyle(
@@ -4585,7 +4586,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       fileName: file.name,
       urlLoadHash,
       rawFileUrl: (filePath) =>
-        `${projectRawUrl(projectId, filePath)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+        `${projectPreviewUrl(projectId, filePath)}&v=${Math.round(file.mtime)}&r=${reloadKey}`,
     });
     const timeout = window.setTimeout(() => {
       if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
