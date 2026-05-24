@@ -414,7 +414,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   app.delete('/api/projects/:id', async (req, res) => {
     try {
       dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      await removeProjectDir(PROJECTS_DIR, req.params.id).catch((err) => console.warn('[project-routes] remove project dir failed:', err));
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -450,12 +450,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt: any) => {
         sse.send('file-changed', evt);
       }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
+      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch((err) => console.warn('[project-routes] sse send ready failed:', err));
       const cleanup = () => {
         if (sub) {
           const { unsubscribe } = sub;
           sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
+          Promise.resolve(unsubscribe()).catch((err) => console.warn('[project-routes] unsubscribe failed:', err));
         }
         const currentSinks = activeProjectEventSinks.get(req.params.id);
         currentSinks?.delete(projectEventSink);
@@ -464,7 +464,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       res.on('close', cleanup);
       res.on('finish', cleanup);
     } catch (err: any) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
+      if (sub) Promise.resolve(sub.unsubscribe()).catch((err) => console.warn('[project-routes] unsubscribe failed:', err));
       if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
@@ -1048,7 +1048,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             {},
             uploadProject?.metadata,
           );
-          fs.promises.unlink(req.file.path).catch(() => {});
+          fs.promises.unlink(req.file.path).catch((err) => console.warn('[project-routes] cleanup upload failed:', err));
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
           const body = { file: meta };
           return res.json(body);

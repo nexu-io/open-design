@@ -3858,7 +3858,7 @@ export async function startServer({
       orbitService.configure(config.orbit);
       return detectAgents(config.agentCliEnv ?? {});
     })
-    .catch(() => detectAgents().catch(() => {}));
+    .catch((err) => { console.warn('[server] background detectAgents failed:', err); detectAgents().catch((e2) => console.warn('[server] fallback detectAgents failed:', e2)); });
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -5273,7 +5273,7 @@ export async function startServer({
   app.delete('/api/projects/:id', async (req, res) => {
     try {
       dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      await removeProjectDir(PROJECTS_DIR, req.params.id).catch((err) => console.warn('[server] remove project dir failed:', err));
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -5309,12 +5309,12 @@ export async function startServer({
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
       }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
+      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch((err) => console.warn('[server] sse send ready failed:', err));
       const cleanup = () => {
         if (sub) {
           const { unsubscribe } = sub;
           sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
+          Promise.resolve(unsubscribe()).catch((err) => console.warn('[server] unsubscribe failed:', err));
         }
         const currentSinks = activeProjectEventSinks.get(req.params.id);
         currentSinks?.delete(projectEventSink);
@@ -5323,7 +5323,7 @@ export async function startServer({
       res.on('close', cleanup);
       res.on('finish', cleanup);
     } catch (err) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
+      if (sub) Promise.resolve(sub.unsubscribe()).catch((err) => console.warn('[server] unsubscribe failed:', err));
       if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
@@ -8927,7 +8927,7 @@ export async function startServer({
             {},
             uploadProject?.metadata,
           );
-          fs.promises.unlink(req.file.path).catch(() => {});
+          fs.promises.unlink(req.file.path).catch((err) => console.warn('[server] cleanup upload failed:', err));
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
           const body = { file: meta };
           return res.json(body);

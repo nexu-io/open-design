@@ -413,7 +413,7 @@ export async function writeAppConfig(
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
   const prev = writeLocks.get(dataDir) ?? Promise.resolve();
-  const task = prev.catch(() => {}).then(() => doWrite(dataDir, partial));
+  const task = prev.catch((err) => console.warn('[app-config] previous write failed:', err)).then(() => doWrite(dataDir, partial));
   writeLocks.set(dataDir, task);
   try {
     return await task;

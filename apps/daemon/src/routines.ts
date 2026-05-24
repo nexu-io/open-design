@@ -550,7 +550,7 @@ export class RoutineService {
       .finally(() => {
         this.inflight.delete(routineId);
       })
-      .catch(() => {});
+      .catch((err) => console.warn('[routines] fetch failed:', err));
     return promise;
   }
 }

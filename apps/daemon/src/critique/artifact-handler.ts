@@ -205,7 +205,7 @@ export function handleCritiqueArtifact(
     } catch (err) {
       // Anything thrown after the open succeeded but before the stream is
       // wired up: close the fd so it does not leak, then surface 404.
-      await fileHandle.close().catch(() => {});
+      await fileHandle.close().catch((err) => console.warn('[critique] close file handle failed:', err));
       if (!res.headersSent) {
         res
           .status(HTTP_NOT_FOUND)

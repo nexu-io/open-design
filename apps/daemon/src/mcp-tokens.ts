@@ -164,7 +164,7 @@ const writeLocks = new Map<string, Promise<unknown>>();
 
 async function withLock<T>(dataDir: string, fn: () => Promise<T>): Promise<T> {
   const prev = writeLocks.get(dataDir) ?? Promise.resolve();
-  const task = prev.catch(() => {}).then(fn);
+  const task = prev.catch((err) => console.warn('[mcp-tokens] previous task failed:', err)).then(fn);
   writeLocks.set(dataDir, task);
   try {
     return await task;
