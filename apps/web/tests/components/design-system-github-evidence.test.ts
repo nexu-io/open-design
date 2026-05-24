@@ -118,6 +118,16 @@ describe('repoConnectCopy', () => {
     expect(copy.bannerBody).toContain('Re-import');
     expect(copy.cardBody).toContain('Re-import');
   });
+
+  it('shows a neutral pending label while the status is still loading', () => {
+    const copy = repoConnectCopy(undefined);
+    expect(copy.buttonLabel).toBe('Checking GitHub...');
+    expect(copy.bannerBody).toContain('Checking');
+    expect(copy.cardBody).toContain('Checking');
+    // Never advertise connect or import before the status is known.
+    expect(copy.buttonLabel).not.toBe('Connect GitHub');
+    expect(copy.buttonLabel).not.toBe('Import repo');
+  });
 });
 
 describe('buildRepoImportPrompt', () => {

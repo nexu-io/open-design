@@ -1001,19 +1001,20 @@ export function ChatPane({
                       </span>
                       <span className="chat-connect-repo-body">
                         <span className="chat-connect-repo-title">
-                          {repoConnectCopy(Boolean(githubConnected)).cardTitle}
+                          {repoConnectCopy(githubConnected).cardTitle}
                         </span>
                         <span className="chat-connect-repo-text">
-                          {repoConnectCopy(Boolean(githubConnected)).cardBody}
+                          {repoConnectCopy(githubConnected).cardBody}
                         </span>
                       </span>
                       <button
                         type="button"
                         className="primary-ghost"
+                        disabled={githubConnected === undefined}
                         onClick={() => onConnectRepo?.()}
                       >
                         <Icon name="github" size={13} />
-                        {repoConnectCopy(Boolean(githubConnected)).buttonLabel}
+                        {repoConnectCopy(githubConnected).buttonLabel}
                       </button>
                     </div>
                   ) : null}

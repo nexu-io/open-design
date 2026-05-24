@@ -1528,13 +1528,18 @@ function DesignSystemProjectPanel({
           <div className="ds-project-warning-card">
             <Icon name="github" size={16} />
             <span>
-              <strong>{repoConnectCopy(Boolean(githubConnected)).bannerTitle}</strong>
-              <small>{repoConnectCopy(Boolean(githubConnected)).bannerBody}</small>
+              <strong>{repoConnectCopy(githubConnected).bannerTitle}</strong>
+              <small>{repoConnectCopy(githubConnected).bannerBody}</small>
             </span>
             {onConnectRepo ? (
-              <button type="button" className="ghost compact" onClick={onConnectRepo}>
+              <button
+                type="button"
+                className="ghost compact"
+                disabled={githubConnected === undefined}
+                onClick={onConnectRepo}
+              >
                 <Icon name="github" size={13} />
-                {repoConnectCopy(Boolean(githubConnected)).buttonLabel}
+                {repoConnectCopy(githubConnected).buttonLabel}
               </button>
             ) : githubEvidence.hasSourceManifest ? (
               <button type="button" className="ghost compact" onClick={() => onOpenFile('context/source-context.md')}>

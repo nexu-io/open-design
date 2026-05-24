@@ -3470,11 +3470,13 @@ export function ProjectView({
     [designSystemProject, projectFiles],
   );
   // Only the connect-repo CTA copy depends on this (connect vs re-import), so
-  // resolve it lazily and only while the CTA is actually showing.
-  const [githubConnected, setGithubConnected] = useState(false);
+  // resolve it lazily and only while the CTA is actually showing. Tri-state:
+  // `undefined` means the status fetch has not resolved yet, which keeps the
+  // CTA neutral and disabled so a fast click can't fire the wrong action.
+  const [githubConnected, setGithubConnected] = useState<boolean | undefined>(undefined);
   useEffect(() => {
     if (!connectRepoNeeded) {
-      setGithubConnected(false);
+      setGithubConnected(undefined);
       return;
     }
     let aborted = false;
@@ -3505,6 +3507,9 @@ export function ProjectView({
   // not connected it opens Connectors; once connected it prefills the composer
   // with the import instruction so the user can review and send it.
   const handleConnectRepo = useCallback(() => {
+    // Status not resolved yet; the CTA is disabled in this window, but guard
+    // anyway so a stray call can't route a connected account to Connectors.
+    if (githubConnected === undefined) return;
     if (githubConnected) {
       setComposerDraftSignal({
         text: buildRepoImportPrompt(designSystemProject, projectFiles.map((file) => file.name)),

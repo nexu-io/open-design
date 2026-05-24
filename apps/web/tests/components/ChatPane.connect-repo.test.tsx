@@ -57,13 +57,26 @@ function renderPane(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
 describe('ChatPane connect-repo CTA', () => {
   it('fires onConnectRepo with the Connect GitHub label when the repo evidence is incomplete', () => {
     const onConnectRepo = vi.fn();
-    const { container } = renderPane({ connectRepoNeeded: true, onConnectRepo });
+    const { container } = renderPane({ connectRepoNeeded: true, githubConnected: false, onConnectRepo });
 
     expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
     const connectButton = screen.getByRole('button', { name: /Connect GitHub/ });
     fireEvent.click(connectButton);
 
     expect(onConnectRepo).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a disabled pending button until the connector status resolves', () => {
+    const onConnectRepo = vi.fn();
+    // githubConnected omitted -> undefined -> status still loading.
+    renderPane({ connectRepoNeeded: true, onConnectRepo });
+
+    const pendingButton = screen.getByRole('button', { name: /Checking GitHub/ });
+    expect((pendingButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(pendingButton);
+    expect(onConnectRepo).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Connect GitHub/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Import repo/ })).toBeNull();
   });
 
   it('switches to an Import repo action when GitHub is already connected', () => {

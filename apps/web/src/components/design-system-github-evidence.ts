@@ -105,12 +105,23 @@ export interface RepoConnectCopy {
 
 /**
  * Copy for the "Connect your repo" CTA, split by live GitHub connector status.
- * When GitHub is already connected the copy stops asking the user to connect
- * and instead points at the re-import step that actually pulls repo files.
- * Both the review banner and the chat empty-state card share this so the two
- * surfaces never drift.
+ * `undefined` means the status fetch has not resolved yet: show a neutral,
+ * pending label so a fast click can't fire the wrong action (connect vs import)
+ * before we know whether GitHub is connected. Once known, connected copy points
+ * at the re-import step and not-connected copy asks the user to connect. Both
+ * the review banner and the chat empty-state card share this so they never
+ * drift.
  */
-export function repoConnectCopy(githubConnected: boolean): RepoConnectCopy {
+export function repoConnectCopy(githubConnected: boolean | undefined): RepoConnectCopy {
+  if (githubConnected === undefined) {
+    return {
+      bannerTitle: 'Connect your repo to pull aspects of your design system',
+      cardTitle: 'Connect your repo',
+      bannerBody: 'Checking your GitHub connection...',
+      cardBody: 'Checking your GitHub connection...',
+      buttonLabel: 'Checking GitHub...',
+    };
+  }
   if (githubConnected) {
     return {
       bannerTitle: 'GitHub is connected',
