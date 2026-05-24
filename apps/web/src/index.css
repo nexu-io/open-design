@@ -181,7 +181,7 @@ body {
 }
 
 .od-loading-shell {
-  min-height: 100vh;
+  min-height: var(--vp-h, 100vh);
   display: grid;
   place-items: center;
   color: var(--text-muted);
@@ -398,7 +398,7 @@ textarea { resize: vertical; font-family: inherit; }
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  max-width: calc(100vw - 24px);
+  max-width: calc(var(--vp-w, 100vw) - 24px);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -735,8 +735,8 @@ code {
   position: fixed;
   top: calc(var(--workspace-tabs-chrome-height, 38px) + 7px);
   right: max(10px, env(safe-area-inset-right));
-  width: min(380px, calc(100vw - 24px));
-  max-height: min(620px, calc(100vh - var(--workspace-tabs-chrome-height, 38px) - 24px));
+  width: min(380px, calc(var(--vp-w, 100vw) - 24px));
+  max-height: min(620px, calc(var(--vp-h, 100vh) - var(--workspace-tabs-chrome-height, 38px) - 24px));
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2337,8 +2337,8 @@ a.avatar-item:visited {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: min(720px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
+  width: min(720px, calc(var(--vp-w, 100vw) - 48px));
+  max-height: calc(var(--vp-h, 100vh) - 48px);
   padding: 12px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -2700,7 +2700,7 @@ a.avatar-item:visited {
   border-radius: var(--radius-lg);
   padding: 22px;
   width: 520px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(var(--vp-w, 100vw) - 32px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2728,7 +2728,7 @@ a.avatar-item:visited {
   top: 0;
   left: calc(100% + 12px);
   z-index: 80;
-  width: min(360px, calc(100vw - var(--entry-rail-width, 56px) - 24px));
+  width: min(360px, calc(var(--vp-w, 100vw) - var(--entry-rail-width, 56px) - 24px));
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   gap: 14px;
@@ -2827,7 +2827,7 @@ a.avatar-item:visited {
 
 @media (max-width: 560px) {
   .updater-popup {
-    width: calc(100vw - var(--entry-rail-width, 56px) - 18px);
+    width: calc(var(--vp-w, 100vw) - var(--entry-rail-width, 56px) - 18px);
   }
 }
 
@@ -2968,12 +2968,12 @@ a.avatar-item:visited {
 
 .modal-settings {
   --modal-padding: 24px;
-  width: min(920px, calc(100vw - 48px));
+  width: min(920px, calc(var(--vp-w, 100vw) - 48px));
   /* Fixed height regardless of which section is active — short sections
      pad out with empty space inside `.settings-content`, long sections
      scroll internally. Keeps the dialog from jumping in size as the user
      switches sidebar items. */
-  height: min(720px, calc(100vh - 64px));
+  height: min(720px, calc(var(--vp-h, 100vh) - 64px));
   padding: 0;
   gap: 0;
   /* Anchor for the absolutely-positioned `.settings-chrome` strip
@@ -3021,7 +3021,7 @@ a.avatar-item:visited {
   line-height: 1.55;
   /* 72ch lets typical one-sentence English subtitles fit on a single
    * line inside the 920px settings modal while still wrapping cleanly
-   * on narrow viewports (the modal width clamps to 100vw - 48px) and
+   * on narrow viewports (the modal width clamps to var(--vp-w, 100vw) - 48px) and
    * for the longest locales (German, French). 50ch was forcing even
    * the English subtitle onto two lines. See nexu-io/open-design#743. */
   max-width: 72ch;
@@ -3523,7 +3523,7 @@ a.avatar-item:visited {
 }
 @media (max-width: 760px) {
   .modal-settings {
-    width: min(560px, calc(100vw - 24px));
+    width: min(560px, calc(var(--vp-w, 100vw) - 24px));
   }
   .modal-settings .modal-body {
     grid-template-columns: 1fr;
@@ -5898,7 +5898,7 @@ a.avatar-item:visited {
 .entry-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  height: 100vh;
+  height: var(--vp-h, 100vh);
   min-height: 0;
   background: var(--bg);
 }
@@ -7238,7 +7238,7 @@ a.avatar-item:visited {
   z-index: 50;
   min-width: 180px;
   width: max-content;
-  max-width: min(280px, calc(100vw - 48px));
+  max-width: min(280px, calc(var(--vp-w, 100vw) - 48px));
   display: flex;
   flex-direction: column;
   padding: 4px;
@@ -8623,7 +8623,7 @@ button.connector-action.is-loading {
   flex-direction: column;
   width: min(456px, 92vw);
   height: clamp(480px, 68vh, 640px);
-  max-height: calc(100vh - 36px);
+  max-height: calc(var(--vp-h, 100vh) - 36px);
   background: var(--bg-panel);
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: 12px;
@@ -9453,7 +9453,7 @@ button.connector-action.is-loading {
 /* Kanban View */
 .tab-panel.design-kanban-view {
   /* Fill the scrollable parent (.entry-tab-content) so columns can size to
-     the available viewport without a fragile 100vh calc. */
+     the available viewport without a fragile var(--vp-h, 100vh) calc. */
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
@@ -10297,7 +10297,7 @@ button.connector-action.is-loading {
   top: calc(100% + 6px);
   left: 0;
   width: max(220px, 100%);
-  max-height: min(360px, calc(100vh - 96px));
+  max-height: min(360px, calc(var(--vp-h, 100vh) - 96px));
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -14385,8 +14385,8 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   cursor: not-allowed;
 }
 .deploy-modal {
-  width: min(760px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  width: min(760px, calc(var(--vp-w, 100vw) - 32px));
+  max-height: calc(var(--vp-h, 100vh) - 32px);
   overflow: auto;
 }
 /* Add a few extra pixels above the deploy dialog's primary action so
@@ -15762,7 +15762,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 .ds-modal-fullscreen .ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler,
 .ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler {
-  height: 100vh;
+  height: var(--vp-h, 100vh);
 }
 
 /* Custom (non-iframe) stage container — used by the plugin media
@@ -16427,7 +16427,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   left: 12px;
   right: 12px;
   width: auto;
-  max-height: min(360px, calc(100vh - 160px));
+  max-height: min(360px, calc(var(--vp-h, 100vh) - 160px));
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
@@ -17497,7 +17497,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-panel);
   border-radius: 14px;
   width: min(820px, 100%);
-  max-height: calc(100vh - 48px);
+  max-height: calc(var(--vp-h, 100vh) - 48px);
   max-height: min(90vh, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
@@ -18086,8 +18086,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 
 body.desktop-pet-shell {
-  width: 100vw;
-  height: 100vh;
+  width: var(--vp-w, 100vw);
+  height: var(--vp-h, 100vh);
   margin: 0;
   overflow: hidden;
   background: transparent;
@@ -18744,7 +18744,7 @@ body.desktop-pet-shell .pet-task-item {
   bottom: calc(100% + 6px);
   left: 0;
   width: 320px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(var(--vp-w, 100vw) - 32px);
   z-index: 30;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -22124,8 +22124,8 @@ body.desktop-pet-shell .pet-task-item {
   background: var(--bg-panel); border: 1px solid var(--border);
   border-radius: 6px; padding: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
   display: flex; flex-direction: column; gap: 8px;
-  width: min(168px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px);
+  width: min(168px, calc(var(--vp-w, 100vw) - 32px));
+  max-width: calc(var(--vp-w, 100vw) - 32px);
 }
 .cc-color-compact .cc-color-popover {
   left: auto;
@@ -22577,7 +22577,7 @@ body.desktop-pet-shell .pet-task-item {
      children, so it never intercepts clicks meant for the layer below. */
   z-index: 110;
   width: 380px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(var(--vp-w, 100vw) - 32px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -23715,7 +23715,7 @@ body.desktop-pet-shell .pet-task-item {
 .plugin-details-modal {
   width: 100%;
   max-width: 920px;
-  max-height: calc(100vh - 64px);
+  max-height: calc(var(--vp-h, 100vh) - 64px);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -24941,7 +24941,7 @@ body.desktop-pet-shell .pet-task-item {
   }
   .plugin-details-modal {
     max-width: none;
-    max-height: 100vh;
+    max-height: var(--vp-h, 100vh);
     border-radius: 0;
     border: none;
   }
@@ -27609,8 +27609,8 @@ body.desktop-pet-shell .pet-task-item {
   animation: project-ds-picker-fullscreen-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .project-ds-picker-fullscreen-frame {
-  width: min(1280px, calc(100vw - 56px));
-  height: min(820px, calc(100vh - 56px));
+  width: min(1280px, calc(var(--vp-w, 100vw) - 56px));
+  height: min(820px, calc(var(--vp-h, 100vh) - 56px));
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -27683,8 +27683,8 @@ body.desktop-pet-shell .pet-task-item {
     padding: 12px;
   }
   .project-ds-picker-fullscreen-frame {
-    width: calc(100vw - 24px);
-    height: calc(100vh - 24px);
+    width: calc(var(--vp-w, 100vw) - 24px);
+    height: calc(var(--vp-h, 100vh) - 24px);
     border-radius: 10px;
   }
 }

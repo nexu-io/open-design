@@ -111,10 +111,18 @@ export function applyAppearanceToDocument({
       root.style.setProperty('width', `${pct}vw`);
       root.style.setProperty('height', `${pct}vh`);
       root.style.setProperty('overflow', 'hidden');
+      // Dialogs and overlays use 100vh/100vw for their size caps. These units
+      // bypass CSS zoom and reference the physical viewport, so at scale>1 a
+      // dialog with max-height:620px overflows (620px*scale > viewport). Expose
+      // zoom-adjusted equivalents that all size-capped elements can consume.
+      root.style.setProperty('--vp-h', `${pct}vh`);
+      root.style.setProperty('--vp-w', `${pct}vw`);
     } else {
       root.style.removeProperty('width');
       root.style.removeProperty('height');
       root.style.removeProperty('overflow');
+      root.style.removeProperty('--vp-h');
+      root.style.removeProperty('--vp-w');
     }
   }
 }
