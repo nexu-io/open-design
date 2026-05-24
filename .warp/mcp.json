@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "notebooklm"
+      ],
+      "command": "bash"
+    },
+    "playwright": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "playwright"
+      ],
+      "command": "bash"
+    },
+    "stitch": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "stitch"
+      ],
+      "command": "bash"
+    },
+    "voicemode": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "voicemode"
+      ],
+      "command": "bash"
+    }
+  }
+}

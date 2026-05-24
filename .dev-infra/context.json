@@ -1,0 +1,15 @@
+{
+  "overrides": {},
+  "project_types": [
+    "any",
+    "node",
+    "git",
+    "cicd",
+    "code-review",
+    "documented",
+    "1password",
+    "api"
+  ],
+  "token_budget": 50000,
+  "version": "1.0.0"
+}

@@ -1,0 +1,261 @@
+{
+  "catalog_version": "1.0.0",
+  "files": {
+    ".claude/skills/bug-report": {
+      "checksum": "f7bf4349b5b80217d4acfc4c2c61cdb6250e430a44e9799e5572bc0964378ccb",
+      "item_id": "bug-report",
+      "managed": true
+    },
+    ".claude/skills/claude-md-audit": {
+      "checksum": "19d266f79fd50f669490bded7fe8bed04ef418b006e54f9b31847c4514c5d03c",
+      "item_id": "claude-md-audit",
+      "managed": true
+    },
+    ".claude/skills/context7": {
+      "checksum": "",
+      "item_id": "context7",
+      "managed": true
+    },
+    ".claude/skills/dev-infra-onboard": {
+      "checksum": "e4d6af87ec40a0406ab981c0e4524d94036f31d8f7aefe1f9c297002d7483845",
+      "item_id": "dev-infra-onboard",
+      "managed": true
+    },
+    ".claude/skills/dev-infra-scaffold": {
+      "checksum": "a80770847e1f34a8471688bd0ed126f90e53641491a4c57396bb24384637adcb",
+      "item_id": "dev-infra-scaffold",
+      "managed": true
+    },
+    ".claude/skills/dev-infra-update": {
+      "checksum": "c80b960053637a3da0e8c2ae71c9183dc4f92edb5bb5041c3b71e49896937b41",
+      "item_id": "dev-infra-update",
+      "managed": true
+    },
+    ".claude/skills/done": {
+      "checksum": "e63b922309e8df4e338ee806e254f52747d2ddb395feb72deefc23f835afdeb5",
+      "item_id": "done",
+      "managed": true
+    },
+    ".claude/skills/mcp-recommend": {
+      "checksum": "e8205138ac4139c0c142aa13130949195b63eabf01ae2b7315c2e0e074d60131",
+      "item_id": "mcp-recommend",
+      "managed": true
+    },
+    ".claude/skills/op-audit": {
+      "checksum": "ca4164026b86c213495de300165aa635c69f1c47b8b887c441428a4259f68f24",
+      "item_id": "op-audit",
+      "managed": true
+    },
+    ".claude/skills/optimizer": {
+      "checksum": "95f12810ae743be4b77ceefda97c506c8d0279cdbcee03629d7649513cde13ba",
+      "item_id": "optimizer",
+      "managed": true
+    },
+    ".claude/skills/pipeline": {
+      "checksum": "",
+      "item_id": "pipeline",
+      "managed": true
+    },
+    ".claude/skills/planner": {
+      "checksum": "67d0a0a941806bd80d9c3999115824a1734539c60ae147cc5c0315a584030181",
+      "item_id": "planner",
+      "managed": true
+    },
+    ".claude/skills/rca": {
+      "checksum": "8552a022a67144cce9d6347d63e9fbb451fe9ffeb7b6ab24396d515b0f33f219",
+      "item_id": "rca",
+      "managed": true
+    },
+    ".claude/skills/session-complete": {
+      "checksum": "c07bee6e1048cbf10baa3e051cb82e88df7b671974ff3689671c46074887d753",
+      "item_id": "session-complete",
+      "managed": true
+    },
+    ".claude/skills/ship": {
+      "checksum": "725732107bc8a2207078cf2cb4eb1b6686c6c7268b5a7d5bc7406df6ea135ad8",
+      "item_id": "ship",
+      "managed": true
+    },
+    ".claude/skills/skill-builder": {
+      "checksum": "04f92517e1e9f3a6572f682b0c3d9966f72009bd1c18c2da29b69931cb5965b6",
+      "item_id": "skill-builder",
+      "managed": true
+    },
+    ".claude/skills/sprint": {
+      "checksum": "4b6c36be00b5a95eafd9eb1f5ced21178a55575ba3c23a15c07b8ee2578a9c95",
+      "item_id": "sprint",
+      "managed": true
+    },
+    ".claude/skills/test": {
+      "checksum": "5793fa55e382779a8be10dfd6318a905a0ef17f9b21a7e2deccc42843644cec8",
+      "item_id": "test",
+      "managed": true
+    },
+    ".claude/skills/token-audit": {
+      "checksum": "fb7dca7ea771af063940082dde298bac75e0671e1bcde5ff9892c460c74548d1",
+      "item_id": "token-audit",
+      "managed": true
+    },
+    ".claude/skills/worktree-fix": {
+      "checksum": "75fd1f5133d316a4628b243f9c1a97ec79bad7bbf2eb003ca30f3674d2d82fe8",
+      "item_id": "worktree-fix",
+      "managed": true
+    },
+    ".claude/skills/yslow": {
+      "checksum": "9eda3bd490cc03d32907a9abc6bc5b6be7671d4260cf35ae23e112aa17c6ce42",
+      "item_id": "yslow",
+      "managed": true
+    },
+    ".codex/skills/bug-report": {
+      "checksum": "f7bf4349b5b80217d4acfc4c2c61cdb6250e430a44e9799e5572bc0964378ccb",
+      "item_id": "bug-report",
+      "managed": true
+    },
+    ".codex/skills/context7": {
+      "checksum": "",
+      "item_id": "context7",
+      "managed": true
+    },
+    ".codex/skills/dev-infra-check": {
+      "checksum": "7d3d3be530902c7932bd94627ecd8e3a27aa2e94688ec95718a20533f19135ce",
+      "item_id": "dev-infra-check",
+      "managed": true
+    },
+    ".codex/skills/dev-infra-onboard": {
+      "checksum": "e4d6af87ec40a0406ab981c0e4524d94036f31d8f7aefe1f9c297002d7483845",
+      "item_id": "dev-infra-onboard",
+      "managed": true
+    },
+    ".codex/skills/dev-infra-scaffold": {
+      "checksum": "a80770847e1f34a8471688bd0ed126f90e53641491a4c57396bb24384637adcb",
+      "item_id": "dev-infra-scaffold",
+      "managed": true
+    },
+    ".codex/skills/dev-infra-update": {
+      "checksum": "c80b960053637a3da0e8c2ae71c9183dc4f92edb5bb5041c3b71e49896937b41",
+      "item_id": "dev-infra-update",
+      "managed": true
+    },
+    ".codex/skills/done": {
+      "checksum": "256fbc0965f2867491bc0876f895c3bfb1a1b2666625ef32919b2352fd1e4f06",
+      "item_id": "done",
+      "managed": true
+    },
+    ".codex/skills/mcp-recommend": {
+      "checksum": "e8205138ac4139c0c142aa13130949195b63eabf01ae2b7315c2e0e074d60131",
+      "item_id": "mcp-recommend",
+      "managed": true
+    },
+    ".codex/skills/parallel-task": {
+      "checksum": "a9abe2e2911131b1a0385d83ade875695736c8f45e2706374b2cb6efd2f23f00",
+      "item_id": "parallel-task",
+      "managed": true
+    },
+    ".codex/skills/pipeline": {
+      "checksum": "",
+      "item_id": "pipeline",
+      "managed": true
+    },
+    ".codex/skills/planner": {
+      "checksum": "67d0a0a941806bd80d9c3999115824a1734539c60ae147cc5c0315a584030181",
+      "item_id": "planner",
+      "managed": true
+    },
+    ".codex/skills/rca": {
+      "checksum": "8552a022a67144cce9d6347d63e9fbb451fe9ffeb7b6ab24396d515b0f33f219",
+      "item_id": "rca",
+      "managed": true
+    },
+    ".codex/skills/session-complete": {
+      "checksum": "bcdefdff097f877a86a9944e4740fcb38a0cf304eeb8860234048a9b4c4eb400",
+      "item_id": "session-complete",
+      "managed": true
+    },
+    ".codex/skills/ship": {
+      "checksum": "ebac2b94ca510fdf0a47808cdaf84f4ddb3e7a614be09794f24702ec686fec47",
+      "item_id": "ship",
+      "managed": true
+    },
+    ".codex/skills/skill-builder": {
+      "checksum": "04f92517e1e9f3a6572f682b0c3d9966f72009bd1c18c2da29b69931cb5965b6",
+      "item_id": "skill-builder",
+      "managed": true
+    },
+    ".codex/skills/test": {
+      "checksum": "5793fa55e382779a8be10dfd6318a905a0ef17f9b21a7e2deccc42843644cec8",
+      "item_id": "test",
+      "managed": true
+    },
+    ".gemini/skills/bug-report": {
+      "checksum": "f7bf4349b5b80217d4acfc4c2c61cdb6250e430a44e9799e5572bc0964378ccb",
+      "item_id": "bug-report",
+      "managed": true
+    },
+    ".gemini/skills/context7": {
+      "checksum": "",
+      "item_id": "context7",
+      "managed": true
+    },
+    ".gemini/skills/dev-infra-onboard": {
+      "checksum": "e4d6af87ec40a0406ab981c0e4524d94036f31d8f7aefe1f9c297002d7483845",
+      "item_id": "dev-infra-onboard",
+      "managed": true
+    },
+    ".gemini/skills/dev-infra-scaffold": {
+      "checksum": "a80770847e1f34a8471688bd0ed126f90e53641491a4c57396bb24384637adcb",
+      "item_id": "dev-infra-scaffold",
+      "managed": true
+    },
+    ".gemini/skills/dev-infra-update": {
+      "checksum": "c80b960053637a3da0e8c2ae71c9183dc4f92edb5bb5041c3b71e49896937b41",
+      "item_id": "dev-infra-update",
+      "managed": true
+    },
+    ".gemini/skills/done": {
+      "checksum": "256fbc0965f2867491bc0876f895c3bfb1a1b2666625ef32919b2352fd1e4f06",
+      "item_id": "done",
+      "managed": true
+    },
+    ".gemini/skills/mcp-recommend": {
+      "checksum": "e8205138ac4139c0c142aa13130949195b63eabf01ae2b7315c2e0e074d60131",
+      "item_id": "mcp-recommend",
+      "managed": true
+    },
+    ".gemini/skills/pipeline": {
+      "checksum": "",
+      "item_id": "pipeline",
+      "managed": true
+    },
+    ".gemini/skills/planner": {
+      "checksum": "67d0a0a941806bd80d9c3999115824a1734539c60ae147cc5c0315a584030181",
+      "item_id": "planner",
+      "managed": true
+    },
+    ".gemini/skills/rca": {
+      "checksum": "8552a022a67144cce9d6347d63e9fbb451fe9ffeb7b6ab24396d515b0f33f219",
+      "item_id": "rca",
+      "managed": true
+    },
+    ".gemini/skills/session-complete": {
+      "checksum": "bcdefdff097f877a86a9944e4740fcb38a0cf304eeb8860234048a9b4c4eb400",
+      "item_id": "session-complete",
+      "managed": true
+    },
+    ".gemini/skills/ship": {
+      "checksum": "ebac2b94ca510fdf0a47808cdaf84f4ddb3e7a614be09794f24702ec686fec47",
+      "item_id": "ship",
+      "managed": true
+    },
+    ".gemini/skills/skill-builder": {
+      "checksum": "04f92517e1e9f3a6572f682b0c3d9966f72009bd1c18c2da29b69931cb5965b6",
+      "item_id": "skill-builder",
+      "managed": true
+    },
+    ".gemini/skills/test": {
+      "checksum": "5793fa55e382779a8be10dfd6318a905a0ef17f9b21a7e2deccc42843644cec8",
+      "item_id": "test",
+      "managed": true
+    }
+  },
+  "synced_at": "2026-05-24T16:18:35Z"
+}
