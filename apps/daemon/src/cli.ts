@@ -6,6 +6,7 @@ import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
+import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-cli-help.js';
 import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
@@ -5072,12 +5073,9 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
-  if (!args[0] || args[0] === 'help') {
-    console.log(`Usage:
-  od design-systems list                       List design systems.
-  od design-systems show <id>                  Print one entry.
-  od design-systems rename <id> --title <new>  Rename an editable design system.`);
-    process.exit(args[0] ? 0 : 2);
+  if (!args[0] || isDesignSystemsHelpArg(args[0])) {
+    console.log(DESIGN_SYSTEMS_USAGE);
+    process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
   }
   return runLibraryList('design-systems', args);
 }
