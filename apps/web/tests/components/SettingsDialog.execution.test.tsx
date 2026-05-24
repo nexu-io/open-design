@@ -3253,7 +3253,7 @@ describe('SettingsDialog MCP server interactions', () => {
     );
 
     await waitFor(() => {
-      const errorCard = document.querySelector('.empty-card');
+      const errorCard = document.querySelector('.settings-card.danger');
       expect(errorCard?.textContent).toContain('reach the local daemon to resolve install paths');
     });
     expect(screen.getByText(/# resolving paths failed, see the error above/i)).toBeTruthy();

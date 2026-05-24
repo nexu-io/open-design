@@ -25,10 +25,17 @@ describe('host bridge boundary', () => {
       '__od__',
       'OPEN_DESIGN_HOST_GLOBAL',
     ];
+    // Intentional bridge files: the type declaration and the desktop utility
+    // module are the canonical places that reference preload globals so the
+    // rest of the codebase doesn't have to.
+    const allowed = [
+      join(webRoot, 'src/types/electron.d.ts'),
+      join(webRoot, 'src/utils/desktop.ts'),
+    ];
     const candidates = [
       ...filesUnder(join(webRoot, 'src')),
       ...filesUnder(join(webRoot, 'tests')).filter((path) => !path.endsWith('host-boundary.test.ts')),
-    ];
+    ].filter((path) => !allowed.includes(path));
     const offenders = candidates.flatMap((path) => {
       const source = readFileSync(path, 'utf8');
       return forbidden

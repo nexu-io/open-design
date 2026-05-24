@@ -154,7 +154,7 @@ import {
   showCompletionNotification,
 } from '../utils/notifications';
 
-import { isPackagedDesktop } from '../utils/desktop';
+import { getAutoLaunchEnabled, isPackagedDesktop, setAutoLaunch } from '../utils/desktop';
 
 export type SettingsSection =
   | 'execution'
@@ -7253,17 +7253,6 @@ function IntegrationsSection() {
             {t('settings.mcpCapabilitiesTitle')}
           </p>
         </div>{/* end mcp-setup-card */}
-
-        <p
-          style={{
-            marginTop: 14,
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            lineHeight: 1.5,
-          }}
-        >
-          {t('settings.mcpRunningNote')}
-        </p>
       </div>
     </section>
   );
@@ -7484,7 +7473,7 @@ function DesktopSection() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    window.electronAPI?.autoLaunch?.get?.().then((v) => {
+    getAutoLaunchEnabled().then((v) => {
       setEnabled(v);
       setLoaded(true);
     }).catch(() => setLoaded(true));
@@ -7492,7 +7481,7 @@ function DesktopSection() {
 
   const toggle = async () => {
     const next = !enabled;
-    const ok = await window.electronAPI?.autoLaunch?.set?.(next);
+    const ok = await setAutoLaunch(next);
     if (ok === true) setEnabled(next);
   };
 
