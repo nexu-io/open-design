@@ -209,7 +209,7 @@ export function renderLoginPage(error?: string, next?: string, isLocal?: boolean
       <button type="submit">Sign in</button>
     </form>
     <p class="hint">
-      Generate a key from <code>Settings &rarr; Security</code> or use <code>od auth gen</code>.
+      Generate a key from <code>Settings &rarr; Security</code> or use <code>od auth key generate</code>.
     </p>
     ${resetSection}
   </div>
