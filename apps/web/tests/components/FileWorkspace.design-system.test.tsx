@@ -118,7 +118,7 @@ describe('FileWorkspace design-system project surface', () => {
 
     expect(markup).toContain('data-testid="design-system-project-tab"');
     expect(markup).toContain('data-testid="design-files-tab"');
-    expect(markup).toContain('Review draft design system');
+    expect(markup).toContain('Review Acme design system');
     expect(markup).not.toContain('<h2>Needs review</h2>');
     expect(markup).toContain('Type');
     expect(markup).toContain('Colors');
@@ -159,7 +159,7 @@ describe('FileWorkspace design-system project surface', () => {
     expect(markup).toContain('Creating your design system...');
     expect(markup).toContain('Keep this tab open. You can come back in a few minutes.');
     expect(markup).toContain('role="progressbar"');
-    expect(markup).not.toContain('Review draft design system');
+    expect(markup).not.toContain('Review Acme design system');
   });
 
   it('keeps generated preview cards hidden until the initial run finishes', () => {
@@ -187,7 +187,7 @@ describe('FileWorkspace design-system project surface', () => {
     );
 
     expect(markup).toContain('Creating your design system...');
-    expect(markup).not.toContain('Review draft design system');
+    expect(markup).not.toContain('Review Acme design system');
     expect(markup).not.toContain('typography-specimens');
     expect(markup).not.toContain('<iframe');
   });
@@ -270,15 +270,15 @@ describe('FileWorkspace design-system project surface', () => {
         })}
       />,
     );
-    const publishToggle = container.querySelector<HTMLInputElement>(
-      '.ds-project-publish-card input[type="checkbox"]',
+    const publishButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-system-publish"]',
     );
 
     expect(container.textContent).toContain('Connect your repo to pull aspects of your design system');
-    expect(publishToggle?.disabled).toBe(true);
+    expect(publishButton?.disabled).toBe(true);
 
     await act(async () => {
-      publishToggle?.click();
+      publishButton?.click();
       await Promise.resolve();
     });
 
@@ -386,5 +386,40 @@ describe('FileWorkspace design-system project surface', () => {
       button.textContent?.includes('Import repo'),
     );
     expect(importButton).toBeTruthy();
+  });
+
+  it('collapses a section once it is marked looks-good', () => {
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('preview/typography-specimens.html'),
+          workspaceFile('preview/colors-primary.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        designSystemReview={{
+          'typography-specimens': { decision: 'looks-good', updatedAt: '2026-05-14T00:00:00.000Z' },
+        }}
+      />,
+    );
+
+    const items = Array.from(container.querySelectorAll('.ds-project-review-item'));
+    const titleOf = (el: Element) =>
+      el.querySelector('.ds-project-section-title strong')?.textContent ?? '';
+    const reviewed = items.find((el) => titleOf(el) === 'typography-specimens');
+    const unreviewed = items.find((el) => titleOf(el) === 'colors-primary');
+
+    // A validated section collapses and reads as "Looks good".
+    expect(reviewed?.classList.contains('is-collapsed')).toBe(true);
+    expect(reviewed?.querySelector('.ds-project-section-state')?.textContent).toContain('Looks good');
+    // An unreviewed section stays expanded for review.
+    expect(unreviewed?.classList.contains('is-expanded')).toBe(true);
   });
 });
