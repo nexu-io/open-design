@@ -229,9 +229,9 @@ async function safeProbe(
   try {
     return await probe(def, configuredEnv);
   } catch (err) {
-    // Only recover from typed env/config errors (e.g. invalid inherited
-    // CODEBUDDY_INTERNET_ENVIRONMENT). Unexpected probe bugs should still
-    // fail fast so they are not silently hidden as "agent unavailable".
+    // Fault isolation: one adapter's probe blowing up must not collapse
+    // the whole agent picker.  Config/env errors get a distinct
+    // unavailableReason so the UI can offer a Configure action.
     if (err instanceof AgentEnvConfigError) {
       return {
         ...unavailableAgent(def),
@@ -239,7 +239,9 @@ async function safeProbe(
         authMessage: err.message,
       };
     }
-    throw err;
+    // Other unexpected probe failures still get isolated so the
+    // /api/agents response can return the remaining agents.
+    return unavailableAgent(def);
   }
 }
 
