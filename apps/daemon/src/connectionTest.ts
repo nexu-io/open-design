@@ -525,7 +525,7 @@ interface ProviderCallShape {
   retryBodyOnUnsupportedMaxTokens?: unknown;
 }
 
-function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
+export function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
   const baseUrl = String(input.baseUrl);
   const apiKey = String(input.apiKey);
   const model = String(input.model);
@@ -650,12 +650,20 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
     }
     case 'ollama': {
       const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+      // Local Ollama servers don't require auth and some versions
+      // (>=0.5 with `OLLAMA_API_KEY` mode unset) reject a malformed
+      // empty `Bearer ` header with 400. Only attach Authorization
+      // when the user actually supplied a key — matches what
+      // Ollama Cloud expects without breaking loopback installs.
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+      };
+      if (apiKey.trim()) {
+        headers.authorization = `Bearer ${apiKey.trim()}`;
+      }
       return {
         url: `${trimmedBase}/api/chat`,
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${apiKey}`,
-        },
+        headers,
         body: {
           model,
           messages: [{ role: 'user', content: SMOKE_PROMPT }],

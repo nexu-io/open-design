@@ -342,6 +342,32 @@ export async function saveMessage(
   }
 }
 
+// ---------- ollama local probe ----------
+
+// Asks the daemon whether a local Ollama instance is reachable so the
+// Settings UI can offer a one-click switch instead of making the user
+// paste the base URL by hand. Always resolves (never throws); the UI
+// treats every failure mode as "no local instance detected".
+export interface OllamaProbeResult {
+  available: boolean;
+  baseUrl: string;
+  version?: string;
+  models?: string[];
+  error?: string;
+}
+
+export async function fetchOllamaProbe(
+  signal?: AbortSignal,
+): Promise<OllamaProbeResult> {
+  try {
+    const resp = await fetch('/api/ollama/probe', { signal });
+    if (!resp.ok) return { available: false, baseUrl: '' };
+    return (await resp.json()) as OllamaProbeResult;
+  } catch {
+    return { available: false, baseUrl: '' };
+  }
+}
+
 // ---------- tabs ----------
 
 export async function loadTabs(projectId: string): Promise<OpenTabsState> {

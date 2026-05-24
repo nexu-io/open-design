@@ -476,6 +476,68 @@ describe('POST /api/provider/models', () => {
 });
 
 describe('POST /api/test/connection provider mode', () => {
+  // Issue #2549: local Ollama installs have no apiKey. The route used
+  // to reject the empty-key body with a 400 before it ever reached
+  // the per-protocol call shape, so the new banner's "Use it" flow
+  // (which fills baseUrl + clears apiKey) silently broke. Verify the
+  // route accepts the empty key for ollama AND forwards it to the
+  // smoke call so the daemon's no-Authorization header logic runs.
+  it('accepts an empty apiKey for local ollama and omits the Bearer header on the upstream call', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      capturedHeaders = Object.fromEntries(
+        Object.entries(((init?.headers ?? {}) as Record<string, string>)),
+      );
+      return Promise.resolve(
+        jsonResponse({
+          message: { role: 'assistant', content: 'ok' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'ollama',
+        baseUrl: 'http://localhost:11434',
+        apiKey: '',
+        model: 'gemma3:4b',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+    expect(capturedHeaders).toBeDefined();
+    // The route used to reject before reaching the call. Now it
+    // forwards and the upstream sees content-type but NO authorization.
+    expect(Object.keys(capturedHeaders!).map((k) => k.toLowerCase())).not.toContain(
+      'authorization',
+    );
+  });
+
+  it('still requires baseUrl and model for ollama even when apiKey is omitted', async () => {
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'ollama',
+        baseUrl: '',
+        apiKey: '',
+        model: 'gemma3:4b',
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect((body as { error?: { message?: string } }).error?.message).toContain('baseUrl');
+  });
+
   it('reports success and returns the model sample for an Anthropic 200', async () => {
     vi.stubGlobal(
       'fetch',

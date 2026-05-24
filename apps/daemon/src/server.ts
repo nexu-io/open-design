@@ -3938,6 +3938,68 @@ export async function startServer({
     });
   });
 
+  // Probe a locally-running Ollama instance so the Settings UI can
+  // detect it automatically instead of making the user paste the
+  // base URL by hand (issue #2549 — "unable to detect ollama" on
+  // Windows). Honors the standard `OLLAMA_HOST` env var the ollama
+  // CLI itself uses, and falls back to the documented default of
+  // 127.0.0.1:11434 when unset. Returns models list when /api/tags
+  // succeeds so the UI can pre-populate the model picker.
+  app.get('/api/ollama/probe', async (_req, res) => {
+    const candidate = (() => {
+      const raw = (process.env.OLLAMA_HOST || '').trim();
+      if (!raw) return 'http://127.0.0.1:11434';
+      // OLLAMA_HOST may be `host:port`, `http(s)://host:port`, or just
+      // `host`. Normalize all three into a base URL the fetch can use.
+      if (/^https?:\/\//i.test(raw)) return raw.replace(/\/+$/, '');
+      const [host, port = '11434'] = raw.split(':');
+      return `http://${host}:${port}`;
+    })();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2_000);
+    let version: string | null = null;
+    let models: string[] | null = null;
+    let error: string | null = null;
+    try {
+      const versionRes = await fetch(`${candidate}/api/version`, {
+        signal: controller.signal,
+      });
+      if (versionRes.ok) {
+        const body = await versionRes.json().catch(() => ({})) as { version?: unknown };
+        if (typeof body.version === 'string') version = body.version;
+      } else {
+        error = `version probe returned ${versionRes.status}`;
+      }
+      if (version !== null) {
+        const tagsRes = await fetch(`${candidate}/api/tags`, {
+          signal: controller.signal,
+        });
+        if (tagsRes.ok) {
+          const body = await tagsRes.json().catch(() => ({})) as {
+            models?: Array<{ name?: unknown; model?: unknown }>;
+          };
+          if (Array.isArray(body.models)) {
+            models = body.models
+              .map((m) => (typeof m?.name === 'string' ? m.name : typeof m?.model === 'string' ? m.model : null))
+              .filter((id): id is string => Boolean(id));
+          }
+        }
+      }
+    } catch (err) {
+      const e = err as Error;
+      error = e?.name === 'AbortError' ? 'probe timed out' : (e?.message ?? 'probe failed');
+    } finally {
+      clearTimeout(timeout);
+    }
+    res.json({
+      available: version !== null,
+      baseUrl: candidate,
+      ...(version ? { version } : {}),
+      ...(models ? { models } : {}),
+      ...(error ? { error } : {}),
+    });
+  });
+
   // Plan §3.GG1 — `od daemon db status`. Inventory of the SQLite
   // backend: file path, size on disk (primary + WAL + SHM), schema
   // version (the user_version PRAGMA we use for migrations), and
