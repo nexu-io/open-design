@@ -184,6 +184,7 @@ export const hu: Dict = {
   'settings.rescanTitle': 'PATH újraellenőrzése',
   'settings.rescanRunning': 'Ellenőrzés...',
   'settings.rescanSuccess': 'Ellenőrzés kész. {count} elérhető.',
+  'settings.designSystemRenameFailed': 'Az átnevezés sikertelen. Ellenőrizd a daemont, majd próbáld újra.',
   'settings.rescanFailed': 'Az ellenőrzés sikertelen. Ellenőrizd a daemont, majd próbáld újra.',
   'settings.test': 'Teszt',
   'settings.testTitle': 'Küldj egy apró tesztkérdést a kapcsolat ellenőrzéséhez',

@@ -184,6 +184,7 @@ export const uk: Dict = {
   'settings.rescanTitle': 'Повторно сканувати PATH',
   'settings.rescanRunning': 'Сканування...',
   'settings.rescanSuccess': 'Сканування завершено. Доступно: {count}.',
+  'settings.designSystemRenameFailed': 'Не вдалося перейменувати. Перевірте фоновий процес і спробуйте ще раз.',
   'settings.rescanFailed':
     'Сканування не вдалося. Перевірте фоновий процес і спробуйте ще раз.',
   'settings.test': 'Перевірити',

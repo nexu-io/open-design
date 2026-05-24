@@ -184,6 +184,7 @@ export const ko: Dict = {
   'settings.rescanTitle': 'PATH 다시 스캔',
   'settings.rescanRunning': '스캔 중...',
   'settings.rescanSuccess': '스캔 완료. {count}개 사용 가능.',
+  'settings.designSystemRenameFailed': '이름 변경에 실패했습니다. 데몬을 확인한 후 다시 시도하세요.',
   'settings.rescanFailed': '스캔에 실패했습니다. 데몬을 확인한 후 다시 시도하세요.',
   'settings.test': '테스트',
   'settings.testTitle': '연결을 확인하기 위해 아주 작은 테스트 프롬프트를 전송합니다',

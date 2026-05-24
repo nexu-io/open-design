@@ -184,6 +184,7 @@ export const esES: Dict = {
   'settings.rescanTitle': 'Reescanear PATH',
   'settings.rescanRunning': 'Escaneando...',
   'settings.rescanSuccess': 'Escaneo completado. {count} disponibles.',
+  'settings.designSystemRenameFailed': 'No se pudo cambiar el nombre. Comprueba el daemon e inténtalo de nuevo.',
   'settings.rescanFailed': 'El escaneo falló. Comprueba el daemon e inténtalo de nuevo.',
   'settings.test': 'Probar',
   'settings.testTitle': 'Envía un mensaje minúsculo de prueba para verificar la conexión',

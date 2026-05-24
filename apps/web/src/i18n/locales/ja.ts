@@ -184,6 +184,7 @@ export const ja: Dict = {
   'settings.rescanTitle': 'PATH を再スキャン',
   'settings.rescanRunning': 'スキャン中...',
   'settings.rescanSuccess': 'スキャン完了。{count} 件が利用可能です。',
+  'settings.designSystemRenameFailed': '名前の変更に失敗しました。デーモンを確認して再試行してください。',
   'settings.rescanFailed': 'スキャンに失敗しました。デーモンを確認して再試行してください。',
   'settings.test': 'テスト',
   'settings.testTitle': '接続を確認するため、ごく短いテストプロンプトを送信します',

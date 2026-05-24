@@ -184,6 +184,7 @@ export const tr: Dict = {
   'settings.rescanTitle': 'PATH’ı yeniden tara',
   'settings.rescanRunning': 'Taranıyor...',
   'settings.rescanSuccess': 'Tarama tamamlandı. {count} kullanılabilir.',
+  'settings.designSystemRenameFailed': 'Yeniden adlandırma başarısız. Daemon’u kontrol edip tekrar deneyin.',
   'settings.rescanFailed': 'Tarama başarısız. Daemon’u kontrol edip tekrar deneyin.',
   'settings.test': 'Test',
   'settings.testTitle': 'Bağlantıyı doğrulamak için minik bir test istemi gönderin',

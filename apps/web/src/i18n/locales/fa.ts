@@ -184,6 +184,7 @@ export const fa: Dict = {
   'settings.rescanTitle': 'اسکن مجدد PATH',
   'settings.rescanRunning': 'در حال اسکن...',
   'settings.rescanSuccess': 'اسکن کامل شد. {count} مورد در دسترس است.',
+  'settings.designSystemRenameFailed': 'تغییر نام ناموفق بود. daemon را بررسی کنید و دوباره تلاش کنید.',
   'settings.rescanFailed': 'اسکن ناموفق بود. daemon را بررسی کنید و دوباره تلاش کنید.',
   'settings.test': 'آزمایش',
   'settings.testTitle': 'یک پیام کوچک آزمایشی برای راستی‌آزمایی اتصال ارسال کنید',

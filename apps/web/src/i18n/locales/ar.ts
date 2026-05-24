@@ -184,6 +184,7 @@ export const ar: Dict = {
   'settings.rescanTitle': 'إعادة مسح PATH',
   'settings.rescanRunning': 'جارٍ المسح...',
   'settings.rescanSuccess': 'اكتمل المسح. {count} متاح.',
+  'settings.designSystemRenameFailed': 'فشلت إعادة التسمية. تحقق من البرنامج الخفي وحاول مرة أخرى.',
   'settings.rescanFailed': 'فشل المسح. تحقق من البرنامج الخفي وحاول مرة أخرى.',
   'settings.test': 'اختبار',
   'settings.testTitle': 'أرسل مطالبة اختبار صغيرة للتحقق من الاتصال',

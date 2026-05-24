@@ -170,6 +170,7 @@ export const en: Dict = {
   'settings.rescanTitle': 'Re-scan PATH',
   'settings.rescanRunning': 'Scanning...',
   'settings.rescanSuccess': 'Scan complete. {count} available.',
+  'settings.designSystemRenameFailed': 'Rename failed. Check that the daemon is running and try again.',
   'settings.rescanFailed': 'Scan failed. Check the daemon and try again.',
   'settings.test': 'Test',
   'settings.testTitle': 'Send a tiny test prompt to verify the connection',

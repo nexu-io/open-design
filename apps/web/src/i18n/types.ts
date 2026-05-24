@@ -376,6 +376,7 @@ export interface Dict {
   'settings.designSystems': string;
   'settings.designSystemsHint': string;
   'settings.designSystemsInstalled': string;
+  'settings.designSystemRenameFailed': string;
   'settings.designSystemsAdd': string;
   'settings.designSystemsHiddenCount': string;
   'settings.designSystemsShowAll': string;

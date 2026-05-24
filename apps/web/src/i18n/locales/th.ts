@@ -183,6 +183,7 @@ export const th: Dict = {
   'settings.rescanTitle': 'สแกน PATH ใหม่',
   'settings.rescanRunning': 'กำลังสแกน...',
   'settings.rescanSuccess': 'สแกนเสร็จสิ้น พบ {count} ตัวที่ใช้งานได้',
+  'settings.designSystemRenameFailed': 'การเปลี่ยนชื่อล้มเหลว ตรวจสอบ daemon แล้วลองอีกครั้ง',
   'settings.rescanFailed': 'การสแกนล้มเหลว ตรวจสอบ daemon แล้วลองอีกครั้ง',
   'settings.test': 'ทดสอบ',
   'settings.testTitle': 'ส่งข้อความทดสอบขนาดเล็กเพื่อยืนยันการเชื่อมต่อ',

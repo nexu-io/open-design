@@ -185,7 +185,7 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     // failure. Keep the modal open with the typed title intact so a transient
     // daemon/network error can be retried instead of silently disappearing.
     if (!updated) {
-      setRenameError('Rename failed. Check that the daemon is running and try again.');
+      setRenameError(t('settings.designSystemRenameFailed'));
       return;
     }
     setRenameTarget(null);

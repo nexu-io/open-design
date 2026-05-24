@@ -183,6 +183,7 @@ export const id: Dict = {
   'settings.rescanTitle': 'Pindai ulang PATH',
   'settings.rescanRunning': 'Memindai...',
   'settings.rescanSuccess': 'Pemindaian selesai. {count} tersedia.',
+  'settings.designSystemRenameFailed': 'Gagal mengganti nama. Periksa daemon lalu coba lagi.',
   'settings.rescanFailed': 'Pemindaian gagal. Periksa daemon lalu coba lagi.',
   'settings.test': 'Tes',
   'settings.testTitle': 'Kirim prompt kecil untuk memverifikasi koneksi',

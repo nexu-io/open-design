@@ -184,6 +184,7 @@ export const pl: Dict = {
   'settings.rescanTitle': 'Ponownie skanuj PATH',
   'settings.rescanRunning': 'Skanowanie...',
   'settings.rescanSuccess': 'Skanowanie zakończone. Dostępne: {count}.',
+  'settings.designSystemRenameFailed': 'Zmiana nazwy nie powiodła się. Sprawdź daemon i spróbuj ponownie.',
   'settings.rescanFailed': 'Skanowanie nie powiodło się. Sprawdź daemon i spróbuj ponownie.',
   'settings.test': 'Test',
   'settings.testTitle': 'Wyślij maleńki monit testowy, aby zweryfikować połączenie',

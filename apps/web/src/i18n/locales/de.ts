@@ -184,6 +184,7 @@ export const de: Dict = {
   'settings.rescanTitle': 'PATH erneut scannen',
   'settings.rescanRunning': 'Scannen...',
   'settings.rescanSuccess': 'Scan abgeschlossen. {count} verfuegbar.',
+  'settings.designSystemRenameFailed': 'Umbenennen fehlgeschlagen. Pruefen Sie den Daemon und versuchen Sie es erneut.',
   'settings.rescanFailed': 'Scan fehlgeschlagen. Pruefen Sie den Daemon und versuchen Sie es erneut.',
   'settings.test': 'Test',
   'settings.testTitle': 'Sende einen winzigen Testprompt, um die Verbindung zu pruefen',

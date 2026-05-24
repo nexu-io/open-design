@@ -183,6 +183,7 @@ export const zhTW: Dict = {
   'settings.rescanTitle': '重新掃描 PATH',
   'settings.rescanRunning': '掃描中...',
   'settings.rescanSuccess': '掃描完成，{count} 個可用。',
+  'settings.designSystemRenameFailed': '重新命名失敗，請檢查背景守護程序後重試。',
   'settings.rescanFailed': '掃描失敗，請檢查背景守護程序後重試。',
   'settings.test': '測試',
   'settings.testTitle': '傳送極小的測試提示以驗證連線',

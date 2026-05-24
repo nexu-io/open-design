@@ -184,6 +184,7 @@ export const ptBR: Dict = {
   'settings.rescanTitle': 'Reescanear PATH',
   'settings.rescanRunning': 'Escaneando...',
   'settings.rescanSuccess': 'Escaneamento concluido. {count} disponiveis.',
+  'settings.designSystemRenameFailed': 'Falha ao renomear. Verifique o daemon e tente novamente.',
   'settings.rescanFailed': 'Falha ao escanear. Verifique o daemon e tente novamente.',
   'settings.test': 'Testar',
   'settings.testTitle': 'Envie um pequeno prompt de teste para verificar a conexão',

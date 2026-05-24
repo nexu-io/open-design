@@ -170,6 +170,7 @@ export const zhCN: Dict = {
   'settings.rescanTitle': '重新扫描 PATH',
   'settings.rescanRunning': '扫描中...',
   'settings.rescanSuccess': '扫描完成，{count} 个可用。',
+  'settings.designSystemRenameFailed': '重命名失败，请检查后台守护进程后重试。',
   'settings.rescanFailed': '扫描失败，请检查后台守护进程后重试。',
   'settings.test': '测试',
   'settings.testTitle': '发送极小的测试提示词以验证连接',

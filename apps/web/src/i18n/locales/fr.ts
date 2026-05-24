@@ -184,6 +184,7 @@ export const fr: Dict = {
   'settings.rescanTitle': 'Réanalyser le PATH',
   'settings.rescanRunning': 'Analyse...',
   'settings.rescanSuccess': 'Analyse terminée. {count} disponible(s).',
+  'settings.designSystemRenameFailed': 'Le renommage a échoué. Vérifiez le daemon et réessayez.',
   'settings.rescanFailed': 'L’analyse a échoué. Vérifiez le daemon et réessayez.',
   'settings.test': 'Tester',
   'settings.testTitle': 'Envoie un tout petit message de test pour vérifier la connexion',

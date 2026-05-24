@@ -183,6 +183,7 @@ export const it: Dict = {
   'settings.rescanTitle': 'Rianalizza il PATH',
   'settings.rescanRunning': 'Analisi in corso...',
   'settings.rescanSuccess': 'Analisi completata. {count} disponibile/i.',
+  'settings.designSystemRenameFailed': 'Rinomina non riuscita. Controlla il daemon e riprova.',
   'settings.rescanFailed': 'Analisi fallita. Controlla il daemon e riprova.',
   'settings.test': 'Testa',
   'settings.testTitle': 'Invia un piccolo messaggio di test per verificare la connessione',

@@ -184,6 +184,7 @@ export const ru: Dict = {
   'settings.rescanTitle': 'Пересканировать PATH',
   'settings.rescanRunning': 'Сканирование...',
   'settings.rescanSuccess': 'Сканирование завершено. Доступно: {count}.',
+  'settings.designSystemRenameFailed': 'Не удалось переименовать. Проверьте демон и повторите попытку.',
   'settings.rescanFailed': 'Сканирование не удалось. Проверьте демон и повторите попытку.',
   'settings.test': 'Тест',
   'settings.testTitle': 'Отправить крошечный тестовый запрос для проверки соединения',
