@@ -1674,20 +1674,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <span className="composer-spacer" />
             {streaming ? (
               <>
-                <button
-                  type="button"
-                  className="composer-send stop"
-                  onClick={onStop}
-                >
-                  <Icon name="stop" size={13} />
-                  <span>{t('chat.stop')}</span>
-                </button>
                 {onQueue && draft.trim() ? (
                   // Queue this prompt to run automatically when the current
                   // run finishes — saves the user having to Stop and resend
                   // a follow-up they already typed. Parent owns the queue
                   // (ChatPane), so we just forward the text and clear the
-                  // textarea.
+                  // textarea. Sits to the LEFT of Stop so the primary
+                  // streaming action (Stop) keeps its trailing-edge spot
+                  // where the Send button lives during the idle state.
                   <button
                     type="button"
                     className="composer-send queue"
@@ -1704,6 +1698,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     <span>{t('chat.queue')}</span>
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  className="composer-send stop"
+                  onClick={onStop}
+                >
+                  <Icon name="stop" size={13} />
+                  <span>{t('chat.stop')}</span>
+                </button>
               </>
             ) : (
               <button

@@ -473,25 +473,23 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M5 12h14" />
         </svg>
       );
-<<<<<<< HEAD
     case 'plus-filled':
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z" />
-=======
+        </svg>
+      );
     case 'queue':
-      // Three stacked list rows with a leading dot per row — visually a
-      // "queue of pending items waiting for the current one to finish".
-      // The dots are filled so they read at small sizes.
+      // Four stacked bars feeding into an open tray at the bottom —
+      // visually "items piling up in a queue, waiting to drop in". Reads
+      // distinct from list / kanban / history at icon-button sizes.
       return (
         <svg {...common}>
-          <line x1="9" y1="6" x2="20" y2="6" />
-          <line x1="9" y1="12" x2="20" y2="12" />
-          <line x1="9" y1="18" x2="20" y2="18" />
-          <circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none" />
-          <circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none" />
-          <circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none" />
->>>>>>> b0c81635 (fix(web): use a list-style 'queue' icon for the Queue button)
+          <line x1="5" y1="4" x2="19" y2="4" />
+          <line x1="5" y1="8" x2="19" y2="8" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <line x1="5" y1="16" x2="19" y2="16" />
+          <path d="M3 19v2h18v-2" />
         </svg>
       );
     case 'play':

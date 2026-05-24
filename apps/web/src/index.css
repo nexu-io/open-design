@@ -2255,7 +2255,9 @@ a.avatar-item:visited {
 .composer-send.stop { background: var(--text); border-color: var(--text); color: var(--bg); }
 .composer-send.stop:hover { background: var(--text-strong); border-color: var(--text-strong); color: var(--bg); }
 .composer-send.queue {
-  background: transparent;
+  /* Soft surface tint so it stands apart from the white composer
+     background without competing with the primary Stop action. */
+  background: var(--surface-muted);
   border-color: var(--border);
   color: var(--text);
   /* Icon-only — the label collapses to save footer real estate next to
@@ -2265,7 +2267,7 @@ a.avatar-item:visited {
 }
 .composer-send.queue span { display: none; }
 .composer-send.queue:hover:not(:disabled) {
-  background: var(--surface-muted);
+  background: var(--surface-strong, #e5e7eb);
   border-color: var(--text-faint);
 }
 .chat-send-queue {
