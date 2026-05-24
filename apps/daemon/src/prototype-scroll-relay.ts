@@ -22,6 +22,25 @@ const LOCATION_RELAY_SCRIPT = `<script ${RELAY_MARKER}>(function(){
       return result;
     };
   });
+  // Plain <a href> click triggers a full navigation; relative URLs drop the
+  // base's ?preview=1, so the destination raw response goes through the
+  // byte-accurate branch with no relay injected and the host stops receiving
+  // od:url-load-loc. Re-stamp preview=1 on same-origin navigations so the
+  // next page keeps the relay.
+  document.addEventListener('click', function(e){
+    var link = e.target && e.target.closest && e.target.closest('a[href]');
+    if (!link) return;
+    if (e.defaultPrevented) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (link.target && link.target !== '' && link.target !== '_self') return;
+    var url;
+    try { url = new URL(link.href, location.href); } catch (_) { return; }
+    if (url.origin !== location.origin) return;
+    if (url.searchParams.get('preview') === '1') return;
+    e.preventDefault();
+    url.searchParams.set('preview', '1');
+    try { location.assign(url.toString()); } catch (_) {}
+  }, true);
 })();</script>`;
 
 export function injectPrototypeLocationRelay(html: string): string {

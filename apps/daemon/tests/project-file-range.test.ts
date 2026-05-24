@@ -235,6 +235,12 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(text).toContain('<html');
     expect(text).toContain('data-od-prototype-location-relay');
     expect(text).toContain('od:url-load-loc');
+    // Anchor click must re-stamp preview=1 so the destination raw response
+    // keeps the relay (RFC 3986 relative-URL resolution drops the base
+    // query). Without this, multi-file prototypes that navigate via plain
+    // <a href> snap back to the entry page on the next file refresh because
+    // the host never receives od:url-load-loc from the new page.
+    expect(text).toContain("searchParams.set('preview', '1')");
   });
 
   it('returns 404 for a missing file', async () => {
