@@ -1201,7 +1201,7 @@ export const ko: Dict = {
   'assistant.downloadFile': '다운로드',
   'assistant.thinking': '생각 중 (Thinking)',
   'assistant.systemReminder': '시스템 알림',
-  'assistant.possiblePromptInjection': 'Possible prompt injection',
+  'assistant.possiblePromptInjection': '프롬프트 인젝션 가능성',
   'assistant.waitingFirstOutput': '첫 번째 출력 대기 중',
   'assistant.statusBootingAgent': '에이전트 부팅 중',
   'assistant.statusStarting': '시작 중',

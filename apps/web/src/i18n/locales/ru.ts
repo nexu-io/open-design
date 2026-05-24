@@ -1242,7 +1242,7 @@ export const ru: Dict = {
   'assistant.downloadFile': 'Скачать',
   'assistant.thinking': 'Думает',
   'assistant.systemReminder': 'Системное напоминание',
-  'assistant.possiblePromptInjection': 'Possible prompt injection',
+  'assistant.possiblePromptInjection': 'Возможная инъекция промпта',
   'assistant.waitingFirstOutput': 'Ожидание первого ответа',
   'assistant.statusBootingAgent': 'Загрузка агента',
   'assistant.statusStarting': 'Запуск',

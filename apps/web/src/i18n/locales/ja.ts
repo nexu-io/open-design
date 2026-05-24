@@ -1088,7 +1088,7 @@ export const ja: Dict = {
   'assistant.downloadFile': 'ダウンロード',
   'assistant.thinking': '考え中',
   'assistant.systemReminder': 'システムリマインダー',
-  'assistant.possiblePromptInjection': 'Possible prompt injection',
+  'assistant.possiblePromptInjection': 'プロンプトインジェクションの疑い',
   'assistant.waitingFirstOutput': '最初の出力を待っています',
   'assistant.statusBootingAgent': 'エージェントを起動中',
   'assistant.statusStarting': '開始中',

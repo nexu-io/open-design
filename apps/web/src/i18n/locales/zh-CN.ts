@@ -1842,7 +1842,7 @@ export const zhCN: Dict = {
   'assistant.downloadFile': '下载',
   'assistant.thinking': '思考中',
   'assistant.systemReminder': '系统提示',
-  'assistant.possiblePromptInjection': 'Possible prompt injection',
+  'assistant.possiblePromptInjection': '可能的提示词注入',
   'assistant.waitingFirstOutput': '等待首批输出中',
   'assistant.statusBootingAgent': '正在启动代理',
   'assistant.statusStarting': '启动中',

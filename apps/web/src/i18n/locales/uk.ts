@@ -1243,7 +1243,7 @@ export const uk: Dict = {
   'assistant.downloadFile': 'Завантажити',
   'assistant.thinking': 'Мислення',
   'assistant.systemReminder': 'Системне нагадування',
-  'assistant.possiblePromptInjection': 'Possible prompt injection',
+  'assistant.possiblePromptInjection': 'Можлива ін’єкція промпту',
   'assistant.waitingFirstOutput': 'Очікування першого виходу',
   'assistant.statusBootingAgent': 'Завантаження агента',
   'assistant.statusStarting': 'Запуск',

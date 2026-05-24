@@ -1408,7 +1408,7 @@ export const zhTW: Dict = {
   'assistant.continueRemaining': '繼續剩餘任務',
   'assistant.thinking': '思考中',
   'assistant.systemReminder': '系統提示',
-  'assistant.possiblePromptInjection': 'Possible prompt injection',
+  'assistant.possiblePromptInjection': '可能的提示詞注入',
   'assistant.waitingFirstOutput': '等待首批輸出中',
   'assistant.statusBootingAgent': '正在啟動代理',
   'assistant.statusStarting': '啟動中',
