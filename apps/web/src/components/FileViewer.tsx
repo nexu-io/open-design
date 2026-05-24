@@ -541,6 +541,29 @@ export function previewOverlayTransform(
   };
 }
 
+export function htmlPreviewUrlForLocation(
+  projectId: string,
+  fileName: string,
+  mtime: number,
+  reloadKey: number,
+  options: {
+    urlLoadSubPath?: string | null;
+    urlLoadHash?: string;
+    filesRefreshKey?: number;
+  } = {},
+): string {
+  const path = options.urlLoadSubPath && /\.html?$/i.test(options.urlLoadSubPath)
+    ? options.urlLoadSubPath
+    : fileName;
+  const query = new URLSearchParams({
+    v: String(Math.round(mtime)),
+    r: String(reloadKey),
+  });
+  if (options.filesRefreshKey !== undefined) query.set('fr', String(options.filesRefreshKey));
+  const hash = options.urlLoadHash?.startsWith('#') ? options.urlLoadHash : '';
+  return `${projectRawUrl(projectId, path)}?${query.toString()}${hash}`;
+}
+
 function previewScaleShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
@@ -4526,16 +4549,26 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => htmlPreviewUrlForLocation(projectId, file.name, file.mtime, reloadKey),
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
-  const activePreviewSrcUrl = (
+  const trackedPreviewSrcUrl = useMemo(
+    () => htmlPreviewUrlForLocation(projectId, file.name, file.mtime, reloadKey, {
+      urlLoadSubPath,
+      urlLoadHash,
+    }),
+    [projectId, file.name, file.mtime, reloadKey, urlLoadSubPath, urlLoadHash],
+  );
+  const hasTrackedPreviewLocation = Boolean(urlLoadSubPath || urlLoadHash);
+  const previewSrcMatchesBase =
     previewSrcUrl === basePreviewSrcUrl ||
-    previewSrcUrl.startsWith(`${basePreviewSrcUrl}&`)
-  )
-    ? previewSrcUrl
-    : basePreviewSrcUrl;
+    previewSrcUrl.startsWith(`${basePreviewSrcUrl}&`);
+  const activePreviewSrcUrl = hasTrackedPreviewLocation
+    ? trackedPreviewSrcUrl
+    : previewSrcMatchesBase
+      ? previewSrcUrl
+      : basePreviewSrcUrl;
   useEffect(() => {
     setPreviewSrcUrl(basePreviewSrcUrl);
   }, [basePreviewSrcUrl]);
