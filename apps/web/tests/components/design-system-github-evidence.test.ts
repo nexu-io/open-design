@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildRepoImportPrompt,
   designSystemGithubEvidenceState,
   designSystemNeedsRepoConnect,
   repoConnectCopy,
-  REPO_IMPORT_PROMPT,
 } from '../../src/components/design-system-github-evidence';
 import type { DesignSystemSummary } from '../../src/types';
 
@@ -120,10 +120,21 @@ describe('repoConnectCopy', () => {
   });
 });
 
-describe('REPO_IMPORT_PROMPT', () => {
-  it('tells the agent to run the bounded github-design-context intake', () => {
-    expect(REPO_IMPORT_PROMPT).toContain('context/source-context.md');
-    expect(REPO_IMPORT_PROMPT).toContain('github-design-context');
-    expect(REPO_IMPORT_PROMPT).toContain('context/github/');
+describe('buildRepoImportPrompt', () => {
+  it('runs the bounded intake from the linked repo URLs', () => {
+    const prompt = buildRepoImportPrompt(githubBacked, ['DESIGN.md']);
+    expect(prompt).toContain('github-design-context');
+    expect(prompt).toContain('context/github/');
+    expect(prompt).toContain('https://github.com/acme/product');
+  });
+
+  it('does not require source-context.md when the manifest is absent', () => {
+    const prompt = buildRepoImportPrompt(githubBacked, ['DESIGN.md']);
+    expect(prompt).not.toContain('context/source-context.md');
+  });
+
+  it('points at source-context.md only once the manifest exists', () => {
+    const prompt = buildRepoImportPrompt(githubBacked, ['DESIGN.md', 'context/source-context.md']);
+    expect(prompt).toContain('context/source-context.md');
   });
 });

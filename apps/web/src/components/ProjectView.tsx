@@ -146,7 +146,7 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
-import { designSystemNeedsRepoConnect, REPO_IMPORT_PROMPT } from './design-system-github-evidence';
+import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
@@ -3506,11 +3506,14 @@ export function ProjectView({
   // with the import instruction so the user can review and send it.
   const handleConnectRepo = useCallback(() => {
     if (githubConnected) {
-      setComposerDraftSignal({ text: REPO_IMPORT_PROMPT, nonce: Date.now() });
+      setComposerDraftSignal({
+        text: buildRepoImportPrompt(designSystemProject, projectFiles.map((file) => file.name)),
+        nonce: Date.now(),
+      });
     } else {
       onOpenSettings('composio');
     }
-  }, [githubConnected, onOpenSettings]);
+  }, [githubConnected, onOpenSettings, designSystemProject, projectFiles]);
 
   const isDeck = useMemo(
     () =>

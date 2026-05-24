@@ -65,13 +65,30 @@ export function designSystemNeedsRepoConnect(
 
 /**
  * Instruction dropped into the chat composer when GitHub is connected and the
- * user clicks "Import repo". The design-system project agent already has the
- * bounded `od tools connectors github-design-context` command in
- * `context/source-context.md`; this prompt tells it to run that intake so the
- * evidence notes and file snapshots get captured, which is what clears the CTA.
+ * user clicks "Import repo". Built from the design system's linked repo URLs so
+ * it runs even before `context/source-context.md` exists. The CTA shows for any
+ * incomplete GitHub-backed system, and that manifest may not be written yet, so
+ * keying the prompt to the manifest would dead-start the recovery on a missing
+ * file. When the manifest is present the agent is told to follow the exact
+ * bounded commands it lists.
  */
-export const REPO_IMPORT_PROMPT =
-  'Pull the linked GitHub repository into this design system. Read `context/source-context.md`, then run the bounded `github-design-context` intake command it lists for each linked repo so the evidence notes and file snapshots under `context/github/<repo>/files/` are captured. After the snapshots land, update DESIGN.md, the token files, and the preview cards from that evidence.';
+export function buildRepoImportPrompt(
+  system: DesignSystemSummary | null | undefined,
+  names: string[],
+): string {
+  const githubUrls = system?.provenance?.githubUrls ?? [];
+  const repoList = githubUrls.length ? ` for ${githubUrls.join(', ')}` : '';
+  const hasManifest = names.some(
+    (name) => normalizeDesignSystemPath(name) === 'context/source-context.md',
+  );
+  const manifestClause = hasManifest
+    ? ' If `context/source-context.md` is present, follow the exact bounded commands it lists.'
+    : '';
+  return (
+    `Pull the linked GitHub repository into this design system. Run the bounded \`github-design-context\` intake${repoList} so the evidence notes and file snapshots under \`context/github/<repo>/files/\` are captured.${manifestClause}` +
+    ' After the snapshots land, update DESIGN.md, the token files, and the preview cards from that evidence.'
+  );
+}
 
 export interface RepoConnectCopy {
   /** Heading used by the review banner. */
