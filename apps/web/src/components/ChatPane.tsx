@@ -24,6 +24,7 @@ import {
   type ChatComposerHandle,
   type ChatSendMeta,
 } from './ChatComposer';
+import { useAppConfirm } from './AppDialog';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon } from './Icon';
 
@@ -1324,6 +1325,7 @@ function ConversationRow({
   onRename?: (id: string, title: string) => void;
   t: TranslateFn;
 }) {
+  const confirmDialog = useAppConfirm();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(conversation.title ?? '');
   const titleEditClosedRef = useRef(false);
@@ -1396,11 +1398,15 @@ function ConversationRow({
         className="chat-conv-item-del"
         data-testid={`conversation-delete-${conversation.id}`}
         title={t('chat.deleteConversation')}
-        onClick={(e) => {
+        onClick={async (e) => {
           e.stopPropagation();
-          if (
-            confirm(t('chat.deleteConversationConfirm', { title: displayTitle }))
-          ) {
+          if (await confirmDialog({
+            title: t('chat.deleteConversation'),
+            message: t('chat.deleteConversationConfirm', { title: displayTitle }),
+            confirmLabel: t('common.delete'),
+            cancelLabel: t('common.cancel'),
+            danger: true,
+          })) {
             onDelete();
           }
         }}

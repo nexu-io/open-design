@@ -16,6 +16,7 @@ import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
+import { showAppAlert } from '../utils/app-dialog';
 import {
   isOpenDesignHostAvailable,
   printHostPdf,
@@ -625,14 +626,11 @@ export async function exportAsPdf(
     try {
       const result = await printHostPdf(doc, nonce, opts?.deck ? { deck: true } : undefined);
       if (result.ok) return;
-      if (typeof alert !== 'undefined') {
-        alert('Print failed. Please try Export PDF again or use the browser version.');
-      }
     } catch {
-      if (typeof alert !== 'undefined') {
-        alert('Print failed. Please try Export PDF again or use the browser version.');
-      }
+      // Fall through to the app-level alert below so all export failures use
+      // the same dialog surface.
     }
+    await showAppAlert('Print failed. Please try Export PDF again or use the browser version.');
     return;
   }
 
@@ -654,9 +652,7 @@ export async function exportAsPdf(
   const win = window.open('', '_blank');
 
   if (!win) {
-    if (typeof alert !== 'undefined') {
-      alert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
-    }
+    await showAppAlert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     URL.revokeObjectURL(url);
     return;
   }

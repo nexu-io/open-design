@@ -27,6 +27,7 @@ import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
+import { useAppConfirm } from './AppDialog';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
@@ -4821,6 +4822,7 @@ function MediaProvidersSection({
   onChange: (providerId: string) => void;
 }) {
   const { t } = useI18n();
+  const confirmDialog = useAppConfirm();
   const analytics = useAnalytics();
   const [reloadRunning, setReloadRunning] = useState(false);
   const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
@@ -5098,7 +5100,7 @@ function MediaProvidersSection({
                   type="button"
                   className="ghost"
                   disabled={!clearable}
-                  onClick={() => {
+                  onClick={async () => {
                     trackSettingsMediaProvidersClick(analytics.track, {
                       page_name: 'settings',
                       area: 'media_providers',
@@ -5110,20 +5112,19 @@ function MediaProvidersSection({
                       // dashboard cares about the intent signal.
                       is_configured: clearable,
                     });
-                    // Match the existing window.confirm guard the rest of
-                    // the app uses for destructive actions (conversation
-                    // delete, design delete, file delete in FileWorkspace).
+                    // Match the app-level confirm guard used for destructive
+                    // actions such as conversation, design, and file delete.
                     // Without this a stray click on the row's Clear button
                     // wipes the saved key with no recovery. Issue #737.
-                    if (
-                      !confirm(
-                        t('settings.mediaProviderClearConfirm', {
-                          name: provider.label,
-                        }),
-                      )
-                    ) {
-                      return;
-                    }
+                    if (!(await confirmDialog({
+                      title: t('settings.mediaProviders'),
+                      message: t('settings.mediaProviderClearConfirm', {
+                        name: provider.label,
+                      }),
+                      confirmLabel: t('settings.mediaProviderClear'),
+                      cancelLabel: t('common.cancel'),
+                      danger: true,
+                    }))) return;
                     updateProvider(provider, {
                       apiKey: '',
                       baseUrl: '',

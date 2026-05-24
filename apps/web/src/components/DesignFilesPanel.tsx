@@ -5,6 +5,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import { useAppAlert } from './AppDialog';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -130,6 +131,7 @@ export function DesignFilesPanel({
   hiddenPluginActionPaths = new Set(),
 }: Props) {
   const t = useT();
+  const alertDialog = useAppAlert();
   const analytics = useAnalytics();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
@@ -516,7 +518,10 @@ export function DesignFilesPanel({
       });
       setRenaming(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      await alertDialog({
+        title: 'Open Design',
+        message: err instanceof Error ? err.message : String(err),
+      });
       setRenaming({ name, draft, saving: false });
     }
   }

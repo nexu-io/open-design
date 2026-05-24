@@ -13,6 +13,7 @@ import {
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
 import { EntryView } from './components/EntryView';
+import { AppDialogProvider } from './components/AppDialog';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
@@ -1457,7 +1458,7 @@ export function App() {
     );
   }
   return (
-    <>
+    <AppDialogProvider>
       <div
         className={`workspace-shell workspace-shell--${clientType}`}
         data-client-type={clientType}
@@ -1536,7 +1537,7 @@ export function App() {
           }}
         />
       ) : null}
-    </>
+    </AppDialogProvider>
   );
 }
 

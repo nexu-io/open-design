@@ -1411,8 +1411,10 @@ describe('SettingsDialog media providers interactions', () => {
     fireEvent.click(clearButtons[0]!);
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect((screen.getByLabelText('OpenAI API key') as HTMLInputElement).value).toBe('');
-    expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe('');
+    await waitFor(() => {
+      expect((screen.getByLabelText('OpenAI API key') as HTMLInputElement).value).toBe('');
+      expect((screen.getByLabelText('OpenAI Base URL') as HTMLInputElement).value).toBe('');
+    });
 
     await waitForPersist(
       onPersist,
@@ -1483,7 +1485,7 @@ describe('SettingsDialog media providers interactions', () => {
     );
   });
 
-  it('re-masks a replacement media provider API key until reveal is used again', () => {
+  it('re-masks a replacement media provider API key until reveal is used again', async () => {
     renderSettingsDialog(
       {
         mode: 'daemon',
@@ -1506,7 +1508,7 @@ describe('SettingsDialog media providers interactions', () => {
     // the clear and leave this test asserting the wrong reveal state.
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[0]!);
-    expect(apiKeyInput.type).toBe('password');
+    await waitFor(() => expect(apiKeyInput.type).toBe('password'));
 
     fireEvent.change(apiKeyInput, { target: { value: 'sk-replacement' } });
     expect(apiKeyInput.type).toBe('password');

@@ -10,6 +10,7 @@ import type {
 } from '@open-design/contracts';
 
 import { Icon } from './Icon';
+import { useAppConfirm } from './AppDialog';
 import { navigate } from '../router';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -456,6 +457,7 @@ function RunHistory({
 }
 
 export function RoutinesSection({ onClose }: RoutinesSectionProps) {
+  const confirmDialog = useAppConfirm();
   const t = useT();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -597,7 +599,13 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm(t('routines.confirmDelete'))) return;
+    if (!(await confirmDialog({
+      title: 'Delete automation',
+      message: t('routines.confirmDelete'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+    }))) return;
     setBusyId(id);
     try {
       const res = await fetch(`/api/routines/${id}`, { method: 'DELETE' });

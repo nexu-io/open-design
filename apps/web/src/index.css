@@ -2906,6 +2906,17 @@ a.avatar-item:visited {
   color: #fff;
 }
 .modal-confirm .row button.primary.danger:hover { filter: brightness(0.95); }
+.app-dialog-backdrop {
+  z-index: 9500;
+}
+.app-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+.app-dialog .row button.primary:not(.danger) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 
 /* Project category tags */
 .design-card-tag {

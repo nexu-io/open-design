@@ -43,6 +43,7 @@ import {
   type ProjectFile,
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
+import { useAppAlert, useAppConfirm } from './AppDialog';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
@@ -218,6 +219,8 @@ export function FileWorkspace({
   onUseDesignSystem,
 }: Props) {
   const t = useT();
+  const alertDialog = useAppAlert();
+  const confirmDialog = useAppConfirm();
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -330,11 +333,16 @@ export function FileWorkspace({
     setActiveTab(openName);
   }
 
-  function closeTab(name: string) {
+  async function closeTab(name: string) {
     const sketchEntry = sketches[name];
     const isPending = sketchEntry && !sketchEntry.persisted;
     const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
-    if (hasUnsavedStrokes && !confirm(t('sketch.closeConfirm'))) return;
+    if (hasUnsavedStrokes && !(await confirmDialog({
+      title: t('workspace.closeTab'),
+      message: t('sketch.closeConfirm'),
+      confirmLabel: t('common.close'),
+      cancelLabel: t('common.cancel'),
+    }))) return;
     if (isPending) {
       setSketches((curr) => {
         const next = { ...curr };
@@ -536,7 +544,13 @@ export function FileWorkspace({
   }, [quickSwitcherOpen]);
 
   async function handleDelete(name: string) {
-    if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
+    if (!(await confirmDialog({
+      title: t('designFiles.delete'),
+      message: t('workspace.deleteFileConfirm', { name }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+    }))) return;
     const ok = await deleteProjectFile(projectId, name);
     if (ok) {
       await onRefreshFiles();
@@ -567,7 +581,13 @@ export function FileWorkspace({
 
   async function handleDeleteMany(names: string[]) {
     if (names.length === 0) return;
-    if (!confirm(t('workspace.deleteSelectedFilesConfirm', { n: names.length }))) return;
+    if (!(await confirmDialog({
+      title: t('designFiles.deleteSelected'),
+      message: t('workspace.deleteSelectedFilesConfirm', { n: names.length }),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      danger: true,
+    }))) return;
     const deleted: string[] = [];
     const failed: string[] = [];
     for (const name of names) {
@@ -595,7 +615,10 @@ export function FileWorkspace({
       });
     }
     if (failed.length > 0) {
-      alert(t('workspace.deleteSelectedFilesPartial', { n: failed.length }));
+      await alertDialog({
+        title: 'Open Design',
+        message: t('workspace.deleteSelectedFilesPartial', { n: failed.length }),
+      });
     }
   }
 
