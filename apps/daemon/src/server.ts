@@ -4737,7 +4737,8 @@ export async function startServer({
     // CSRF protection: reject cross-origin POSTs.
     const origin = req.headers.origin;
     const host = req.headers.host ?? `localhost:${resolvedPortRef.current}`;
-    const expectedOrigin = `http://${host}`;
+    const proto = isProxyTrusted() ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
+    const expectedOrigin = `${proto}://${host}`;
     if (origin && origin !== expectedOrigin) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'cross-origin request rejected' });
       return;
