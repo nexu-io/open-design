@@ -6977,7 +6977,10 @@ function HtmlViewer({
               )}
               <p className="hint">{t(deployProvider.previewHintKey)}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
-              {!deployError && deployPhase === 'idle' && deployResultCards.length > 0 ? (
+              {!deployError
+                && deployPhase === 'idle'
+                && deployResultCards.length > 0
+                && deployResultState(activeDeployment?.status) === 'ready' ? (
                 <p className="hint" role="status">
                   {t('fileViewer.deployLinkReady')} · {t('fileViewer.deployResultLabel')}
                 </p>
