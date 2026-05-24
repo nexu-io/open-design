@@ -249,6 +249,11 @@ export function DesignFilesPanel({
   const [page, setPage] = useState(() => navState?.page ?? 0);
   const [pageSize, setPageSize] = useState<number | 'all'>(() => navState?.pageSize ?? 30);
 
+  // Prevents the page-reset effects below from overwriting the page restored
+  // from navState on the initial render. Set to false by an effect declared
+  // after all reset effects so it transitions after mount effects complete.
+  const skipPageResetOnMount = useRef(true);
+
   const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
   const safePage = Math.min(page, totalPages - 1);
@@ -285,6 +290,7 @@ export function DesignFilesPanel({
   const showListControls = sortedFiles.length > 15 || selected.size > 0;
 
   useEffect(() => {
+    if (skipPageResetOnMount.current) return;
     setPage(0);
   }, [pageSize]);
 
@@ -296,6 +302,7 @@ export function DesignFilesPanel({
   // Reset to the first page when the filter changes — the previous page
   // index may no longer exist (or may now sit past the new totalPages).
   useEffect(() => {
+    if (skipPageResetOnMount.current) return;
     setPage(0);
   }, [kindFilter]);
 
@@ -322,10 +329,16 @@ export function DesignFilesPanel({
   // Reset page, selection, and renaming state when the user navigates
   // into or out of a directory.
   useEffect(() => {
+    if (skipPageResetOnMount.current) return;
     setPage(0);
     setSelected(new Set());
     setRenaming(null);
   }, [currentDir]);
+
+  // Allow page-reset effects above to fire on user-initiated changes.
+  useEffect(() => {
+    skipPageResetOnMount.current = false;
+  }, []);
 
   // Navigate up to the nearest ancestor that still exists when files under
   // currentDir disappear (e.g. after deleting the last file in a subfolder).

@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
+import type { DesignFilesNavState } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind } from '../../src/types';
 
 function extForKind(kind: ProjectFileKind): string {
@@ -628,5 +629,47 @@ describe('DesignFilesPanel directory navigation', () => {
 
     // "All" must expose every file including those in subdirectories
     expect(fileRows()).toBe(35);
+  });
+
+  it('preserves page number when remounted with navState from a previous render', () => {
+    // Simulate the parent capturing onNavStateChange and feeding it back as
+    // navState when the tab is revisited (the tab-switch preservation fix).
+    const files = generateFiles(90);
+    let saved: DesignFilesNavState | undefined;
+
+    function makePanel(nav?: DesignFilesNavState) {
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={files}
+          liveArtifacts={[]}
+          navState={nav}
+          onNavStateChange={(s) => { saved = s; }}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    const { container, unmount } = render(makePanel());
+
+    // Navigate to page 2 (files 31–60)
+    fireEvent.click(getPageBtns(container)[1]!);
+    expect(getPageInfo(container)).toContain('31–60');
+
+    // Simulate tab switch: unmount (tab hidden), then mount fresh with saved state (tab revisited)
+    unmount();
+    const { container: container2 } = render(makePanel(saved));
+
+    // Page 2 must be restored — not reset to page 1
+    expect(getPageInfo(container2)).toContain('31–60');
   });
 });
