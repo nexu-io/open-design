@@ -37,6 +37,8 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [previewSystem, setPreviewSystem] = useState<DesignSystemSummary | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
   const [renameInput, setRenameInput] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const [importPath, setImportPath] = useState('');
   const [importSource, setImportSource] = useState<'local' | 'github'>('local');
   const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
@@ -127,31 +129,44 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   function startRename(ds: DesignSystemSummary) {
     setRenameTarget({ id: ds.id, original: ds.title });
     setRenameInput(ds.title);
+    setRenameError(null);
   }
 
   function cancelRename() {
     setRenameTarget(null);
+    setRenameError(null);
+    setRenaming(false);
   }
 
   // Rename an editable design system via PATCH /api/design-systems/:id, then
   // reflect the new title in the local list (re-sorted to keep card order
   // stable). Built-in systems never reach here — the button is editable-only.
   async function commitRename() {
-    if (!renameTarget) return;
+    if (!renameTarget || renaming) return;
     const trimmed = renameInput.trim();
     if (!trimmed || trimmed === renameTarget.original) {
       setRenameTarget(null);
+      setRenameError(null);
       return;
     }
+    setRenaming(true);
+    setRenameError(null);
     const updated = await updateDesignSystemDraft(renameTarget.id, { title: trimmed });
-    if (updated) {
-      setDesignSystems((current) =>
-        current
-          .map((d) => (d.id === renameTarget.id ? { ...d, title: updated.title } : d))
-          .sort((a, b) => a.title.localeCompare(b.title)),
-      );
+    setRenaming(false);
+    // updateDesignSystemDraft returns null on any non-OK response or fetch
+    // failure. Keep the modal open with the typed title intact so a transient
+    // daemon/network error can be retried instead of silently disappearing.
+    if (!updated) {
+      setRenameError('Rename failed. Check that the daemon is running and try again.');
+      return;
     }
+    setDesignSystems((current) =>
+      current
+        .map((d) => (d.id === renameTarget.id ? { ...d, title: updated.title } : d))
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    );
     setRenameTarget(null);
+    setRenameError(null);
   }
 
   function clearImportFeedback() {
@@ -544,6 +559,7 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
                 }}
               />
             </label>
+            {renameError ? <p className="library-install-error">{renameError}</p> : null}
             <div className="row">
               <button type="button" onClick={cancelRename}>
                 {t('common.cancel')}
@@ -551,7 +567,11 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
               <button
                 type="submit"
                 className="primary"
-                disabled={!renameInput.trim() || renameInput.trim() === renameTarget.original}
+                disabled={
+                  renaming ||
+                  !renameInput.trim() ||
+                  renameInput.trim() === renameTarget.original
+                }
               >
                 {t('common.save')}
               </button>

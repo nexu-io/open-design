@@ -69,6 +69,24 @@ describe('DesignSystemsSection rename (issue #2811)', () => {
     });
   });
 
+  it('keeps the rename modal open with the typed title when the update fails', async () => {
+    vi.mocked(updateDesignSystemDraft).mockResolvedValueOnce(null);
+    render(<DesignSystemsSection cfg={cfg} setCfg={() => {}} />);
+
+    const renameButton = await screen.findByRole('button', {
+      name: /Rename Acme Design System/i,
+    });
+    fireEvent.click(renameButton);
+
+    const input = screen.getByDisplayValue('Acme Design System');
+    fireEvent.change(input, { target: { value: 'Acme v2' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    // A failed update must not close the modal; the typed title stays for retry.
+    await screen.findByText(/Rename failed/i);
+    expect(screen.getByDisplayValue('Acme v2')).toBeTruthy();
+  });
+
   it('offers no Rename for built-in (read-only) design systems', async () => {
     render(<DesignSystemsSection cfg={cfg} setCfg={() => {}} />);
     await screen.findByText('Linear');

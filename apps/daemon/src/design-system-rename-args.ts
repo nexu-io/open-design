@@ -14,6 +14,14 @@ export interface DesignSystemRenameArgs {
 
 const STRING_FLAGS_WITH_VALUE = new Set(['daemon-url', 'query', 'tag', 'title']);
 
+// A separate flag value must be a real token, not the next flag. Without this
+// guard, `--title --json` would read "--json" as the title and rename the
+// system to a flag name. A leading dash means the user must use the
+// `--title=<value>` form for a title that genuinely starts with a dash.
+function isFlagValue(token: string | undefined): token is string {
+  return token !== undefined && !token.startsWith('-');
+}
+
 export function parseDesignSystemRenameArgs(args: string[]): DesignSystemRenameArgs | null {
   let flagTitle: string | undefined;
   const positionals: string[] = [];
@@ -24,8 +32,14 @@ export function parseDesignSystemRenameArgs(args: string[]): DesignSystemRenameA
       const key = eq >= 0 ? arg.slice(2, eq) : arg.slice(2);
       const inlineValue = eq >= 0 ? arg.slice(eq + 1) : undefined;
       if (key === 'title') {
-        flagTitle = inlineValue ?? args[++i];
-      } else if (inlineValue === undefined && STRING_FLAGS_WITH_VALUE.has(key)) {
+        if (inlineValue !== undefined) {
+          flagTitle = inlineValue;
+        } else if (isFlagValue(args[i + 1])) {
+          flagTitle = args[++i];
+        }
+        // else: `--title` with no real value -> leave it unset so the missing
+        // title fails usage validation below instead of swallowing a flag.
+      } else if (inlineValue === undefined && STRING_FLAGS_WITH_VALUE.has(key) && isFlagValue(args[i + 1])) {
         i++; // consume the separate flag value so it is not read as a positional
       }
       continue;

@@ -45,4 +45,22 @@ describe('parseDesignSystemRenameArgs', () => {
     expect(parseDesignSystemRenameArgs(['--title', 'Acme v2'])).toBeNull();
     expect(parseDesignSystemRenameArgs([])).toBeNull();
   });
+
+  it('does not treat a following flag as the --title value', () => {
+    expect(parseDesignSystemRenameArgs(['user:acme', '--title', '--json'])).toBeNull();
+    expect(
+      parseDesignSystemRenameArgs(['user:acme', '--title', '--daemon-url', 'http://127.0.0.1:7456']),
+    ).toBeNull();
+  });
+
+  it('returns null when --title is the last token with no value', () => {
+    expect(parseDesignSystemRenameArgs(['user:acme', '--title'])).toBeNull();
+  });
+
+  it('still accepts a dash-leading title via the --title=<value> form', () => {
+    expect(parseDesignSystemRenameArgs(['user:acme', '--title=-dash-brand'])).toEqual({
+      id: 'user:acme',
+      title: '-dash-brand',
+    });
+  });
 });
