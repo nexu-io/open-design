@@ -51,6 +51,7 @@ export type IconName =
   | 'plus'
   | 'plus-filled'
   | 'puzzle'
+  | 'queue'
   | 'star'
   | 'play'
   | 'present'
@@ -472,10 +473,25 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M5 12h14" />
         </svg>
       );
+<<<<<<< HEAD
     case 'plus-filled':
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z" />
+=======
+    case 'queue':
+      // Three stacked list rows with a leading dot per row — visually a
+      // "queue of pending items waiting for the current one to finish".
+      // The dots are filled so they read at small sizes.
+      return (
+        <svg {...common}>
+          <line x1="9" y1="6" x2="20" y2="6" />
+          <line x1="9" y1="12" x2="20" y2="12" />
+          <line x1="9" y1="18" x2="20" y2="18" />
+          <circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none" />
+          <circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none" />
+          <circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none" />
+>>>>>>> b0c81635 (fix(web): use a list-style 'queue' icon for the Queue button)
         </svg>
       );
     case 'play':

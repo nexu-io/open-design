@@ -1700,7 +1700,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       setDraft('');
                     }}
                   >
-                    <Icon name="plus" size={13} />
+                    <Icon name="queue" size={13} />
                     <span>{t('chat.queue')}</span>
                   </button>
                 ) : null}
