@@ -902,6 +902,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res.setHeader('Content-Type', meta.mime);
 
         if (meta.size === 0) {
+          if (req.headers.range) {
+            res.setHeader('Content-Range', 'bytes */0');
+            return res.status(416).end();
+          }
           res.setHeader('Content-Length', '0');
           return res.status(200).end();
         }

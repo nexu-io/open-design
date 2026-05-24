@@ -88,6 +88,22 @@ describe('parseByteRange', () => {
   it('handles a range that exactly covers the last byte', () => {
     expect(parseByteRange('bytes=999-999', 1000)).toEqual({ start: 999, end: 999 });
   });
+
+  it('returns unsatisfiable for well-formed ranges on an empty file (fileSize === 0)', () => {
+    // Non-suffix ranges: start >= fileSize (0 >= 0) is already caught by the guard.
+    expect(parseByteRange('bytes=0-0', 0)).toBe('unsatisfiable');
+    expect(parseByteRange('bytes=0-', 0)).toBe('unsatisfiable');
+    // Suffix range: the only case that previously yielded { start: 0, end: -1 }.
+    expect(parseByteRange('bytes=-1', 0)).toBe('unsatisfiable');
+    expect(parseByteRange('bytes=-9999', 0)).toBe('unsatisfiable');
+  });
+
+  it('malformed headers still return null on an empty file — contract unchanged', () => {
+    // Guard is inside the suffix branch only; malformed headers must not be
+    // reclassified as 'unsatisfiable' just because the file happens to be empty.
+    expect(parseByteRange('bytes=abc-xyz', 0)).toBeNull();
+    expect(parseByteRange('bytes=0-0,1-1', 0)).toBeNull(); // multi-range → null
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -163,6 +179,7 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     const dir = path.join(projectsRoot, projectId);
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, 'clip.mp4'), Buffer.alloc(FILE_SIZE, 0x42));
+    await writeFile(path.join(dir, 'empty.mp4'), Buffer.alloc(0));
     await writeFile(path.join(dir, 'audio.mp3'), Buffer.alloc(FILE_SIZE, 0x43));
     await writeFile(path.join(dir, 'page.html'), Buffer.from('<html/>'));
   });
@@ -229,5 +246,20 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
   it('returns 404 for a missing file', async () => {
     const res = await fetch(rawUrl('missing.mp4'));
     expect(res.status).toBe(404);
+  });
+
+  it('returns 416 with Content-Range: bytes */0 for any range request on a zero-byte media file', async () => {
+    const res = await fetch(rawUrl('empty.mp4'), {
+      headers: { Range: 'bytes=-1' },
+    });
+    expect(res.status).toBe(416);
+    expect(res.headers.get('content-range')).toBe('bytes */0');
+  });
+
+  it('returns 200 with empty body for a zero-byte media file with no Range header', async () => {
+    const res = await fetch(rawUrl('empty.mp4'));
+    expect(res.status).toBe(200);
+    expect(Number(res.headers.get('content-length'))).toBe(0);
+    expect(res.headers.get('accept-ranges')).toBe('bytes');
   });
 });
