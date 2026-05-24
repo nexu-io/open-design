@@ -638,7 +638,9 @@ export const ROUTE_PERSIST_SCRIPT = `<script data-od-route-persist>(function(){
         window.parent.postMessage({
           type: 'od:route-snapshot',
           path: snap(),
-          generation: readGen() || ''
+          generation: readGen() || '',
+          scrollX: window.scrollX || document.documentElement.scrollLeft || 0,
+          scrollY: window.scrollY || document.documentElement.scrollTop || 0
         }, '*');
       } catch (_) {}
     }, 100);
@@ -679,6 +681,14 @@ export const ROUTE_PERSIST_SCRIPT = `<script data-od-route-persist>(function(){
     if (data.path) {
       write(data.path);
       try { history.replaceState(history.state, '', data.path); } catch (_) {}
+    }
+    // Restore scroll position relayed from parent (survives transport flips)
+    if (typeof data.scrollX === 'number' || typeof data.scrollY === 'number') {
+      var sx = Number(data.scrollX || 0);
+      var sy = Number(data.scrollY || 0);
+      if (sx || sy) {
+        setTimeout(function() { window.scrollTo(sx, sy); }, 0);
+      }
     }
   });
 })();</script>`;

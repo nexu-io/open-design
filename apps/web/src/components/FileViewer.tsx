@@ -3633,7 +3633,7 @@ function HtmlViewer({
   // The route-persist bridge posts snapshots to the parent on every navigation;
   // we store the latest here so it survives iframe teardown during mode toggles
   // that force a transport switch (edit/tweaks/draw/palette).
-  const previewRouteRef = useRef<{ path: string; generation: string } | null>(null);
+  const previewRouteRef = useRef<{ path: string; generation: string; scrollX?: number; scrollY?: number } | null>(null);
   const previewScrollPositionRef = useRef({
     frameLeft: 0,
     frameTop: 0,
@@ -4267,9 +4267,9 @@ function HtmlViewer({
   useEffect(() => {
     function onRouteSnapshot(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
-      const data = ev.data as { type?: string; path?: string; generation?: string } | null;
+      const data = ev.data as { type?: string; path?: string; generation?: string; scrollX?: number; scrollY?: number } | null;
       if (!data || data.type !== 'od:route-snapshot' || !data.path) return;
-      previewRouteRef.current = { path: data.path, generation: data.generation || '' };
+      previewRouteRef.current = { path: data.path, generation: data.generation || '', scrollX: data.scrollX, scrollY: data.scrollY };
     }
     window.addEventListener('message', onRouteSnapshot);
     return () => window.removeEventListener('message', onRouteSnapshot);
@@ -6335,6 +6335,8 @@ function HtmlViewer({
                             type: 'od:route-restore',
                             path: route.path,
                             generation: route.generation,
+                            scrollX: route.scrollX,
+                            scrollY: route.scrollY,
                           }, '*');
                         }
                       }}
@@ -6374,6 +6376,8 @@ function HtmlViewer({
                             type: 'od:route-restore',
                             path: route.path,
                             generation: route.generation,
+                            scrollX: route.scrollX,
+                            scrollY: route.scrollY,
                           }, '*');
                         }
                       }}
