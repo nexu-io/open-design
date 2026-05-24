@@ -1299,12 +1299,21 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   // Restore and persist the native zoom factor. `did-finish-load` re-applies
   // it after every navigation/reload (Electron resets per load). `zoom-changed`
-  // only fires for Ctrl+wheel, so we also capture menu/keyboard zoom on close.
+  // only fires for Ctrl+wheel; View-menu accelerators call setZoomFactor
+  // directly without emitting the event. To avoid did-finish-load restoring a
+  // stale value after a menu zoom, snapshot the live factor on did-start-loading
+  // (reload case) and will-navigate (navigation case) — both fire before the
+  // webContents zoom resets, so we carry the freshest value into did-finish-load.
   let currentZoomFactor = readPersistedZoomFactor();
   const persistZoomFactor = (factor: number) => {
     currentZoomFactor = clampZoomFactor(factor);
     void writePersistedZoomFactor(currentZoomFactor);
   };
+  const snapshotLiveZoom = () => {
+    if (!window.isDestroyed()) currentZoomFactor = clampZoomFactor(window.webContents.getZoomFactor());
+  };
+  window.webContents.on("did-start-loading", snapshotLiveZoom);
+  window.webContents.on("will-navigate", snapshotLiveZoom);
   window.webContents.on("did-finish-load", () => {
     if (!window.isDestroyed()) window.webContents.setZoomFactor(currentZoomFactor);
   });
