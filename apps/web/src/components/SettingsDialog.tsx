@@ -100,10 +100,14 @@ import {
 import {
   ACCENT_SWATCHES,
   DEFAULT_ACCENT_COLOR,
+  DEFAULT_UI_SCALE,
+  UI_SCALE_PRESETS,
   applyAppearanceToDocument,
   normalizeAccentColor,
   resolveAccentColor,
 } from '../state/appearance';
+import { detectClientType } from '../analytics/identity';
+import { getHostZoomFactor, setHostZoomFactor } from '@open-design/host';
 import { isAutosaveDraftOnlyChange } from '../App';
 import {
   FAILURE_SOUNDS,
@@ -811,6 +815,8 @@ export function SettingsDialog({
   const lastSavedAppearanceRef = useRef({
     theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
+    // Desktop uses native zoom; keep CSS zoom at identity there.
+    uiScale: detectClientType() === 'desktop' ? DEFAULT_UI_SCALE : (initial.uiScale ?? DEFAULT_UI_SCALE),
   });
 
   // settings_view — fire on dialog open and on every section switch so the
@@ -823,8 +829,9 @@ export function SettingsDialog({
     lastSavedAppearanceRef.current = {
       theme: initial.theme ?? 'system',
       accentColor: resolveAccentColor(initial.accentColor),
+      uiScale: detectClientType() === 'desktop' ? DEFAULT_UI_SCALE : (initial.uiScale ?? DEFAULT_UI_SCALE),
     };
-  }, [initial.theme, initial.accentColor]);
+  }, [initial.theme, initial.accentColor, initial.uiScale]);
 
   // Revert the live theme preview to the most recently persisted appearance.
   // That is the initial appearance until autosave succeeds; after autosave,
@@ -1617,6 +1624,7 @@ export function SettingsDialog({
           lastSavedAppearanceRef.current = {
             theme: snapshot.theme ?? 'system',
             accentColor: resolveAccentColor(snapshot.accentColor),
+            uiScale: detectClientType() === 'desktop' ? DEFAULT_UI_SCALE : (snapshot.uiScale ?? DEFAULT_UI_SCALE),
           };
           // If a newer edit landed while the request was in flight,
           // leave the status as 'pending' so the next debounce tick
@@ -5748,6 +5756,8 @@ function AppearanceSection({
   const accentLabel = t('pet.fieldAccent');
   const defaultAccentLabel = t('pet.fieldAccentDefault');
   const customAccentLabel = t('pet.fieldAccentCustom');
+  const isDesktopClient = detectClientType() === 'desktop';
+  const uiScale = cfg.uiScale ?? DEFAULT_UI_SCALE;
 
   // Apply the draft theme immediately so the user sees a live preview
   // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
@@ -5755,8 +5765,10 @@ function AppearanceSection({
     applyAppearanceToDocument({
       theme: current,
       accentColor: currentAccent,
+      // Desktop scales through native Electron zoom, not CSS.
+      uiScale: isDesktopClient ? DEFAULT_UI_SCALE : uiScale,
     });
-  }, [current, currentAccent]);
+  }, [current, currentAccent, uiScale, isDesktopClient]);
 
   const setAccentColor = (color: string) => {
     setCfg((c) => ({ ...c, accentColor: normalizeAccentColor(color) ?? c.accentColor ?? DEFAULT_ACCENT_COLOR }));
@@ -5825,8 +5837,78 @@ function AppearanceSection({
           />
         </div>
       </div>
+      {isDesktopClient ? (
+        <DesktopInterfaceScaleField />
+      ) : (
+        <InterfaceScaleField
+          scale={uiScale}
+          onSelect={(value) => setCfg((c) => ({ ...c, uiScale: value }))}
+        />
+      )}
     </section>
   );
+}
+
+// Segmented interface-scale control. The web build drives `cfg.uiScale`
+// (CSS zoom); the desktop build drives Electron's native zoom factor.
+function InterfaceScaleField({
+  scale,
+  onSelect,
+}: {
+  scale: number;
+  onSelect: (value: number) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="field">
+      <span className="field-label">{t('settings.uiScale')}</span>
+      <div
+        className="seg-control"
+        role="group"
+        aria-label={t('settings.uiScale')}
+        style={{ '--seg-cols': UI_SCALE_PRESETS.length } as React.CSSProperties}
+      >
+        {UI_SCALE_PRESETS.map((preset) => {
+          const active = Math.abs(scale - preset) < 0.001;
+          return (
+            <button
+              key={preset}
+              type="button"
+              className={'seg-btn' + (active ? ' active' : '')}
+              aria-pressed={active}
+              onClick={() => onSelect(preset)}
+            >
+              <span className="seg-title">{Math.round(preset * 100)}%</span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span className="hint">{t('settings.uiScaleHint')}</span>
+        <button type="button" className="ghost" onClick={() => onSelect(DEFAULT_UI_SCALE)}>
+          {t('settings.uiScaleReset')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DesktopInterfaceScaleField() {
+  const [factor, setFactor] = useState<number>(DEFAULT_UI_SCALE);
+  useEffect(() => {
+    let alive = true;
+    void getHostZoomFactor().then((value) => {
+      if (alive && typeof value === 'number') setFactor(value);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const apply = (value: number) => {
+    setFactor(value);
+    void setHostZoomFactor(value);
+  };
+  return <InterfaceScaleField scale={factor} onSelect={apply} />;
 }
 
 /**
