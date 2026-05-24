@@ -381,6 +381,24 @@ export function ChatPane({
   // the next time the agent emits a different snapshot the card returns,
   // but the same snapshot stays hidden across renders / streaming ticks.
   const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(null);
+  // Composer Send-Queue. Users can stack prompts while a run is in flight
+  // (Stop neighbour button in ChatComposer). When the current run finishes
+  // (streaming flips true → false) the next queued item is auto-sent.
+  // Empty array hides the queue list entirely.
+  const [sendQueue, setSendQueue] = useState<string[]>([]);
+  const prevStreamingRef = useRef(streaming);
+  useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+    if (wasStreaming && !streaming && sendQueue.length > 0) {
+      const next = sendQueue[0];
+      if (!next) return;
+      setSendQueue((q) => q.slice(1));
+      pinnedToBottomRef.current = true;
+      scrolledToFormRef.current = new Set();
+      onSend(next, [], []);
+    }
+  }, [streaming, sendQueue, onSend]);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const hasActiveRunMessage = messages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
@@ -1069,6 +1087,37 @@ export function ChatPane({
             onDismiss={setDismissedPinnedTodoKey}
             containerRef={pinnedTodoRef}
           />
+          {sendQueue.length > 0 ? (
+            // Send-Queue list — shows the prompts stacked under the active
+            // run. Each row carries an X that removes that one item from
+            // the queue (run order is preserved). The slot collapses when
+            // the queue empties.
+            <div className="chat-send-queue" data-testid="chat-send-queue">
+              <div className="chat-send-queue-header">
+                {t('chat.queued', { count: sendQueue.length })}
+              </div>
+              <ul className="chat-send-queue-list">
+                {sendQueue.map((text, i) => (
+                  <li key={`${i}-${text}`} className="chat-send-queue-item">
+                    <span className="chat-send-queue-item-text" title={text}>
+                      {text}
+                    </span>
+                    <button
+                      type="button"
+                      className="chat-send-queue-remove"
+                      aria-label={t('chat.queueRemove')}
+                      title={t('chat.queueRemove')}
+                      onClick={() => {
+                        setSendQueue((q) => q.filter((_, idx) => idx !== i));
+                      }}
+                    >
+                      <Icon name="close" size={11} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <ChatComposer
             ref={composerRef}
             projectId={projectId}
@@ -1086,6 +1135,7 @@ export function ChatPane({
               onSend(prompt, attachments, commentAttachments, meta);
             }}
             onStop={onStop}
+            onQueue={(text) => setSendQueue((q) => [...q, text])}
             onOpenSettings={onOpenSettings}
             onOpenMcpSettings={onOpenMcpSettings}
             petConfig={petConfig}

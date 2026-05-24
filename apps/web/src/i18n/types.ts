@@ -1701,6 +1701,10 @@ export interface Dict {
   'chat.linkedFolderPickError': string;
   'chat.send': string;
   'chat.stop': string;
+  'chat.queue': string;
+  'chat.queueTooltip': string;
+  'chat.queueRemove': string;
+  'chat.queued': string;
   'chat.removeAria': string;
   'chat.example1Title': string;
   'chat.example1Tag': string;

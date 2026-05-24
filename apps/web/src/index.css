@@ -2254,6 +2254,78 @@ a.avatar-item:visited {
 .composer-send:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .composer-send.stop { background: var(--text); border-color: var(--text); color: var(--bg); }
 .composer-send.stop:hover { background: var(--text-strong); border-color: var(--text-strong); color: var(--bg); }
+.composer-send.queue {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+.composer-send.queue:hover:not(:disabled) {
+  background: var(--surface-muted);
+  border-color: var(--text-faint);
+}
+.chat-send-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 6px;
+  padding: 6px 8px 8px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.chat-send-queue-header {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.chat-send-queue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-send-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid transparent;
+}
+.chat-send-queue-item:hover {
+  border-color: var(--border);
+}
+.chat-send-queue-item-text {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.chat-send-queue-remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+              color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-send-queue-remove:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
 .composer-hint {
   font-size: 11px;
   color: var(--text-faint);

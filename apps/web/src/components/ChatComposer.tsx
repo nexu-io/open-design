@@ -116,6 +116,13 @@ interface Props {
     meta?: ChatSendMeta,
   ) => void;
   onStop: () => void;
+  // Optional "queue this prompt to run after the current one finishes" hook.
+  // When provided, a Queue button shows up next to Stop while a run is in
+  // flight and the textarea has draft text. Calling it should append the
+  // draft to a parent-owned queue; the composer just clears the textarea.
+  // Surfaces that don't want queuing (e.g. one-shot screenshot harnesses)
+  // can omit it — the button disappears.
+  onQueue?: (text: string) => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
   // without leaving the chat.
@@ -196,6 +203,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       skills = [],
       onSend,
       onStop,
+      onQueue,
       onOpenMcpSettings,
       petConfig,
       onAdoptPet,
@@ -1426,6 +1434,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     setMention(null);
                     return;
                   }
+                  // Cmd/Ctrl + Shift + Enter while a run is in flight stacks
+                  // the current draft into the Send-Queue (mirrors the
+                  // Queue button next to Stop). No-op if the surface didn't
+                  // wire onQueue or the textarea is empty.
+                  if (
+                    streaming &&
+                    onQueue &&
+                    e.key === 'Enter' &&
+                    e.shiftKey &&
+                    (e.metaKey || e.ctrlKey) &&
+                    !e.altKey
+                  ) {
+                    const text = draft.trim();
+                    if (text) {
+                      e.preventDefault();
+                      onQueue(text);
+                      setDraft('');
+                      return;
+                    }
+                  }
                   if (
                     e.key === 'Enter' &&
                     !e.shiftKey &&
@@ -1645,14 +1673,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {footerAccessory}
             <span className="composer-spacer" />
             {streaming ? (
-              <button
-                type="button"
-                className="composer-send stop"
-                onClick={onStop}
-              >
-                <Icon name="stop" size={13} />
-                <span>{t('chat.stop')}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="composer-send stop"
+                  onClick={onStop}
+                >
+                  <Icon name="stop" size={13} />
+                  <span>{t('chat.stop')}</span>
+                </button>
+                {onQueue && draft.trim() ? (
+                  // Queue this prompt to run automatically when the current
+                  // run finishes — saves the user having to Stop and resend
+                  // a follow-up they already typed. Parent owns the queue
+                  // (ChatPane), so we just forward the text and clear the
+                  // textarea.
+                  <button
+                    type="button"
+                    className="composer-send queue"
+                    data-testid="chat-queue"
+                    title={t('chat.queueTooltip')}
+                    onClick={() => {
+                      const text = draft.trim();
+                      if (!text) return;
+                      onQueue(text);
+                      setDraft('');
+                    }}
+                  >
+                    <Icon name="plus" size={13} />
+                    <span>{t('chat.queue')}</span>
+                  </button>
+                ) : null}
+              </>
             ) : (
               <button
                 type="button"
