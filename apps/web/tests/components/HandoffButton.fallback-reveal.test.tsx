@@ -47,4 +47,28 @@ describe('HandoffButton zero-editors fallback', () => {
 
     await waitFor(() => expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'finder'));
   });
+
+  it('surfaces a daemon spawn failure inline so the fallback is not a silent no-op', async () => {
+    // The production caller (`ProjectView`) mounts `<HandoffButton projectId={…} />`
+    // with no `onRequestRevealInFinder` callback, so a rejected
+    // `openProjectInEditor` would otherwise leave users with a CTA that
+    // advertises Finder/Explorer/File Manager but does nothing visible.
+    fetchHostEditors.mockResolvedValue({
+      platform: 'darwin',
+      editors: [{ id: 'vscode', label: 'VS Code', available: false }],
+    });
+    openProjectInEditor.mockRejectedValue(new Error('daemon refused: ENOENT'));
+
+    render(
+      <I18nProvider initial="en">
+        <HandoffButton projectId="p1" />
+      </I18nProvider>,
+    );
+
+    const fallback = (await screen.findByText('Finder')).closest('button') as HTMLButtonElement;
+    fireEvent.click(fallback);
+
+    const errorEl = await screen.findByTestId('handoff-fallback-error');
+    expect(errorEl.textContent).toContain('daemon refused: ENOENT');
+  });
 });

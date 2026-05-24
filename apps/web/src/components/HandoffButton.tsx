@@ -133,31 +133,42 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
     const fallbackLabel = platform === 'win32' ? 'Explorer' : platform === 'linux' ? 'File Manager' : 'Finder';
     const fallbackId: HostEditorId =
       platform === 'win32' ? 'explorer' : platform === 'linux' ? 'file-manager' : 'finder';
+    // Wrap the solo button so a daemon spawn failure can surface an
+    // inline error next to it — without this, ProjectView's
+    // `<HandoffButton projectId={…} />` (no reveal callback) turns a
+    // rejected `openProjectInEditor` into a silent no-op.
     return (
-      <button
-        type="button"
-        className="handoff-trigger handoff-trigger--solo"
-        title={t('handoff.fallbackTitle', { target: fallbackLabel })}
-        disabled={busy === fallbackId}
-        onClick={() => {
-          // The fallback opens the project folder in the OS file manager.
-          // finder / explorer / file-manager are real entries in the daemon's
-          // open-in catalogue (open / explorer / xdg-open), so this performs a
-          // genuine reveal rather than a no-op; the renderer reveal bridge is a
-          // secondary fallback if the daemon spawn fails.
-          setError(null);
-          setBusy(fallbackId);
-          void openProjectInEditor(projectId, fallbackId)
-            .catch((err) => {
-              setError(err instanceof Error ? err.message : String(err));
-              onRequestRevealInFinder?.();
-            })
-            .finally(() => setBusy(null));
-        }}
-      >
-        <EditorIcon editorId={fallbackId} size={20} />
-        <span className="handoff-trigger-label">{fallbackLabel}</span>
-      </button>
+      <div className="handoff-wrap handoff-wrap--solo" data-testid="handoff-wrap">
+        <button
+          type="button"
+          className="handoff-trigger handoff-trigger--solo"
+          title={t('handoff.fallbackTitle', { target: fallbackLabel })}
+          disabled={busy === fallbackId}
+          onClick={() => {
+            // The fallback opens the project folder in the OS file manager.
+            // finder / explorer / file-manager are real entries in the daemon's
+            // open-in catalogue (open / explorer / xdg-open), so this performs a
+            // genuine reveal rather than a no-op; the renderer reveal bridge is a
+            // secondary fallback if the daemon spawn fails.
+            setError(null);
+            setBusy(fallbackId);
+            void openProjectInEditor(projectId, fallbackId)
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+                onRequestRevealInFinder?.();
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          <EditorIcon editorId={fallbackId} size={20} />
+          <span className="handoff-trigger-label">{fallbackLabel}</span>
+        </button>
+        {error ? (
+          <div className="handoff-menu-error" role="alert" data-testid="handoff-fallback-error">
+            {error}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
