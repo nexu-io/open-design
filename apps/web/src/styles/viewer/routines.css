@@ -117,6 +117,18 @@
   z-index: 1000;
   pointer-events: auto;
 }
+.od-toast.placement-top {
+  top: 24px;
+  bottom: auto;
+}
+.od-toast.tone-success {
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
+  background: color-mix(in srgb, var(--success, #2da44e) 14%, var(--bg));
+  color: var(--text);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.14),
+    0 0 0 1px color-mix(in srgb, var(--success, #2da44e) 12%, transparent);
+}
 .od-toast-message {
   font-weight: 500;
 }

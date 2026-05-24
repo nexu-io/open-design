@@ -1,5 +1,5 @@
 import type http from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -677,6 +677,9 @@ describe('deploy provider routes', () => {
     const projectId = `vercel-payload-${Date.now()}`;
     const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
     await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    await writeFile(path.join(dir, 'index-v1.html'), '<!doctype html><h1>V1</h1>');
+    await mkdir(path.join(dir, 'screens'), { recursive: true });
+    await writeFile(path.join(dir, 'screens', 'k1-waiting.html'), '<!doctype html><h1>K1</h1>');
     try {
       const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
         method: 'POST',
@@ -714,6 +717,11 @@ describe('deploy provider routes', () => {
           const body = JSON.parse(String(init?.body ?? '{}'));
           expect(body).not.toHaveProperty('cloudflarePages');
           expect(JSON.stringify(body)).not.toContain('example.com');
+          expect(body.files.map((item: { file: string }) => item.file).sort()).toEqual([
+            'index-v1.html',
+            'index.html',
+            'screens/k1-waiting.html',
+          ]);
           return new Response(JSON.stringify({
             id: 'vercel-dep-1',
             readyState: 'READY',

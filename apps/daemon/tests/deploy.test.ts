@@ -235,6 +235,51 @@ describe('deploy file set', () => {
     expect(files.map((f) => f.file)).toEqual(['index.html']);
   });
 
+  it('can include all visible project files while keeping the selected entry at index.html', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'screens'), { recursive: true });
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Launcher</h1>');
+    await writeFile(path.join(dir, 'index-v1.html'), '<!doctype html><h1>V1</h1>');
+    await writeFile(path.join(dir, 'screens', 'k1-waiting.html'), '<!doctype html><h1>K1</h1>');
+    await writeFile(path.join(dir, 'index-v1.html.artifact.json'), '{}');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index-v1.html', {
+      includeProjectFiles: true,
+    });
+    const index = files.find((item) => item.file === 'index.html');
+
+    expect(files.map((f) => f.file).sort()).toEqual([
+      'index-v1.html',
+      'index.html',
+      'screens/k1-waiting.html',
+    ]);
+    expect(index?.sourcePath).toBe('index-v1.html');
+    expect(index?.data.toString('utf8')).toContain('V1');
+  });
+
+  it('does not publish unreferenced files from linked-folder projects', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-linked-test-'));
+    const projectsRoot = path.join(root, 'projects');
+    const linkedDir = path.join(root, 'linked');
+    const projectId = 'linked-p1';
+    const metadata = { baseDir: linkedDir };
+    await mkdir(path.join(linkedDir, 'src'), { recursive: true });
+    await writeFile(path.join(linkedDir, 'index.html'), '<!doctype html><link rel="stylesheet" href="style.css"><h1>Linked</h1>');
+    await writeFile(path.join(linkedDir, 'style.css'), 'body { color: black; }');
+    await writeFile(path.join(linkedDir, 'README.md'), '# Private notes');
+    await writeFile(path.join(linkedDir, 'src', 'app.ts'), 'export const secret = true;');
+
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index.html', {
+      metadata,
+      includeProjectFiles: true,
+    });
+
+    expect(files.map((f) => f.file).sort()).toEqual([
+      'index.html',
+      'style.css',
+    ]);
+  });
+
   it('injects a closeable deploy hook script from cdn when configured', async () => {
     const { projectsRoot, projectId, dir } = await setupProject();
     await writeFile(path.join(dir, 'page.html'), '<!doctype html><body><h1>Hello</h1></body>');

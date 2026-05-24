@@ -3896,6 +3896,7 @@ function HtmlViewer({
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
+  const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -5484,6 +5485,15 @@ function HtmlViewer({
       }));
       setDeployment(next);
       setDeployResult(next);
+      if (deployResultState(next.status) !== 'failed') {
+        setDeploySavedToast({
+          message: t('fileViewer.deploySuccessToast'),
+          details: t('fileViewer.deploySuccessToastDetails', {
+            provider: deployProviderLabel,
+            url: next.url,
+          }),
+        });
+      }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
       setDeployError(
@@ -5728,7 +5738,7 @@ function HtmlViewer({
       ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
       : deployPhase === 'preparing-link'
         ? t('fileViewer.preparingPublicLink')
-        : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+        : deployActionLabelFor(deployProviderId);
   const copyDeployLabel = (url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
@@ -6967,6 +6977,11 @@ function HtmlViewer({
               )}
               <p className="hint">{t(deployProvider.previewHintKey)}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
+              {!deployError && deployPhase === 'idle' && deployResultCards.length > 0 ? (
+                <p className="hint" role="status">
+                  {t('fileViewer.deployLinkReady')} · {t('fileViewer.deployResultLabel')}
+                </p>
+              ) : null}
               {deployResultCards.length > 0 ? (
                 <div className={`deploy-result-block ${deployResultState(activeDeployment?.status)}`}>
                   <div className="deploy-result-summary">
@@ -7068,6 +7083,16 @@ function HtmlViewer({
             </div>
           </div>
         </div>
+      ) : null}
+      {deploySavedToast ? (
+        <Toast
+          message={deploySavedToast.message}
+          details={deploySavedToast.details}
+          tone="success"
+          placement="top"
+          ttlMs={3600}
+          onDismiss={() => setDeploySavedToast(null)}
+        />
       ) : null}
     </div>
   );
