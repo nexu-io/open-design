@@ -76,6 +76,22 @@ describe('installFromLocalFolder', () => {
     expect(list[0]?.fsPath).toBe(path.join(pluginsRoot, 'sample-plugin'));
   });
 
+  it('installs via temp folder then rename; no .tmp debris left', async () => {
+    for await (const ev of installFromLocalFolder(db, {
+      source: sourceFolder,
+      roots: { userPluginsRoot: pluginsRoot },
+    })) {
+      if (ev.kind === 'error') throw new Error(ev.message);
+    }
+
+    const dest = path.join(pluginsRoot, 'sample-plugin');
+    expect(await readFile(path.join(dest, 'open-design.json'), 'utf8')).toContain('sample-plugin');
+
+    const entries = await (await import('node:fs/promises')).readdir(pluginsRoot);
+    const tmpDebris = entries.filter((e) => e.endsWith('.tmp'));
+    expect(tmpDebris).toEqual([]);
+  });
+
   it('rejects symbolic links inside the source tree', async () => {
     // Create a benign symlink — the installer must refuse anything that
     // could escape the staged folder.
