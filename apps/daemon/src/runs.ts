@@ -196,25 +196,29 @@ export function createChatRunService({
     }
   };
 
-  const cancel = (run) => {
-    if (!TERMINAL_RUN_STATUSES.has(run.status)) {
-      run.cancelRequested = true;
-      run.updatedAt = Date.now();
-      // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
-      // abort() sends the graceful shutdown signal; cancel() owns the
-      // SIGTERM fallback so that a misbehaving session can't leave the
-      // child alive indefinitely.
-      if (run.acpSession?.abort) {
-        run.acpSession.abort();
-        const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-        setTimeout(() => {
-          if (run.child && !run.child.killed) run.child.kill('SIGTERM');
-        }, graceMs).unref();
-      } else if (run.child && !run.child.killed) {
-        run.child.kill('SIGTERM');
-      } else {
-        finish(run, 'canceled', null, 'SIGTERM');
-      }
+  const cancel = async (run) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    run.cancelRequested = true;
+    run.updatedAt = Date.now();
+    // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
+    // abort() sends the graceful shutdown signal; cancel() owns the
+    // SIGTERM fallback so that a misbehaving session can't leave the
+    // child alive indefinitely.
+    if (run.acpSession?.abort) {
+      run.acpSession.abort();
+    } else if (run.child && !run.child.killed) {
+      run.child.kill('SIGTERM');
+    } else {
+      finish(run, 'canceled', null, 'SIGTERM');
+      return;
+    }
+    // Wait for the child to exit so callers (e.g. shutdown, test cleanup)
+    // don't race ahead and close the DB or delete project dirs while the
+    // child is still writing.
+    const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
+    if (run.child && !(await waitForChildExit(run.child, graceMs))) {
+      killChild(run, 'SIGKILL');
+      await waitForChildExit(run.child, 500);
     }
   };
 

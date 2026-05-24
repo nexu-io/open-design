@@ -94,6 +94,36 @@ describe('chat run service shutdown', () => {
   });
 });
 
+  it('cancel awaits child exit before returning', async () => {
+    const runs = createRuns();
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    (run as any).child = child;
+
+    const cancelPromise = runs.cancel(run);
+    // cancel must not resolve until the child has exited.
+    expect(child.signals).toEqual(['SIGTERM']);
+    expect(run.cancelRequested).toBe(true);
+
+    // Promise resolves only after the child process has exited.
+    await expect(cancelPromise).resolves.toBeUndefined();
+  });
+
+  it('cancel escalates to SIGKILL when child ignores SIGTERM grace window', async () => {
+    const prevGrace = process.env.PI_ABORT_GRACE_MS;
+    process.env.PI_ABORT_GRACE_MS = '10';
+    const runs = createRuns();
+    const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
+    const run = runs.create();
+    run.status = 'running';
+    (run as any).child = child;
+
+    await runs.cancel(run);
+    expect(child.signals).toEqual(['SIGTERM', 'SIGKILL']);
+    process.env.PI_ABORT_GRACE_MS = prevGrace;
+  });
+
 describe('chat run service stream replay', () => {
   it('always replays the final event when a reattaching client cursor is at the end of a terminal run', () => {
     const sendCalls: Array<{ event: string; data: unknown; id: number }> = [];
