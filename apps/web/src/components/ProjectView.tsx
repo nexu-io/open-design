@@ -26,6 +26,7 @@ import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   deletePreviewComment,
+  fetchConnectorStatuses,
   fetchPreviewComments,
   fetchDesignSystem,
   fetchDesignTemplate,
@@ -145,6 +146,7 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
+import { designSystemNeedsRepoConnect, REPO_IMPORT_PROMPT } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
@@ -152,6 +154,7 @@ import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
 import { CenteredLoader } from './Loading';
+import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -203,7 +206,7 @@ interface Props {
     choice: { model?: string; reasoning?: string },
   ) => void;
   onRefreshAgents: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: SettingsSection) => void;
   onOpenMcpSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
@@ -3462,6 +3465,52 @@ export function ProjectView({
     () => designSystemProject ? latestDesignSystemActivityEvents(messages) : [],
     [designSystemProject, messages],
   );
+  const connectRepoNeeded = useMemo(
+    () => designSystemNeedsRepoConnect(designSystemProject, projectFiles.map((file) => file.name)),
+    [designSystemProject, projectFiles],
+  );
+  // Only the connect-repo CTA copy depends on this (connect vs re-import), so
+  // resolve it lazily and only while the CTA is actually showing.
+  const [githubConnected, setGithubConnected] = useState(false);
+  useEffect(() => {
+    if (!connectRepoNeeded) {
+      setGithubConnected(false);
+      return;
+    }
+    let aborted = false;
+    const controller = new AbortController();
+    const refresh = () => {
+      void fetchConnectorStatuses({ signal: controller.signal }).then((statuses) => {
+        if (!aborted) setGithubConnected(statuses.github?.status === 'connected');
+      });
+    };
+    refresh();
+    // Connecting GitHub happens in the Connectors dialog or an external OAuth
+    // window, neither of which changes connectRepoNeeded. Re-check on focus so
+    // the CTA flips from "Connect GitHub" to "Import repo" when the user returns.
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      aborted = true;
+      controller.abort();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [connectRepoNeeded]);
+
+  // Signal that pushes a draft into the chat composer (the "Import repo" CTA).
+  const [composerDraftSignal, setComposerDraftSignal] = useState<{ text: string; nonce: number }>();
+  // One handler for both the review banner and the chat CTA. When GitHub is
+  // not connected it opens Connectors; once connected it prefills the composer
+  // with the import instruction so the user can review and send it.
+  const handleConnectRepo = useCallback(() => {
+    if (githubConnected) {
+      setComposerDraftSignal({ text: REPO_IMPORT_PROMPT, nonce: Date.now() });
+    } else {
+      onOpenSettings('composio');
+    }
+  }, [githubConnected, onOpenSettings]);
 
   const isDeck = useMemo(
     () =>
@@ -4116,6 +4165,10 @@ export function ProjectView({
               onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
               onOpenMcpSettings={onOpenMcpSettings}
+              connectRepoNeeded={connectRepoNeeded}
+              githubConnected={githubConnected}
+              onConnectRepo={handleConnectRepo}
+              composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}
@@ -4186,6 +4239,8 @@ export function ProjectView({
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
           designSystemReview={project.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
+          onConnectRepo={handleConnectRepo}
+          githubConnected={githubConnected}
         />
       </div>
       {projectActionsToast ? (

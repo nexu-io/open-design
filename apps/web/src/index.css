@@ -13346,6 +13346,59 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   }
 }
 
+/* Connect-your-repo CTA in the empty chat state. Shares the example cards'
+   sizing and accent system but stands apart with a tinted fill so it reads as
+   guidance rather than another starter prompt. */
+.chat-connect-repo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  padding: 14px 16px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  animation: chat-example-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 220ms forwards;
+}
+.chat-connect-repo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+}
+.chat-connect-repo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-connect-repo-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.chat-connect-repo-text {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.chat-connect-repo button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .assistant-header {
   display: flex;
   align-items: center;
@@ -26745,6 +26798,27 @@ body.desktop-pet-shell .pet-task-item {
 .app .chat-example-cta {
   width: 22px;
   height: 22px;
+}
+.app .chat-connect-repo {
+  max-width: none;
+  padding: 10px 12px;
+  gap: 10px;
+  border-radius: 10px;
+  box-shadow: none;
+  animation: none;
+  opacity: 1;
+}
+.app .chat-connect-repo-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.app .chat-connect-repo-title {
+  font-size: 12.8px;
+}
+.app .chat-connect-repo-text {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .app .composer {
