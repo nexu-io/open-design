@@ -42,6 +42,7 @@ import {
   type ProjectMetadata,
   type ProjectFile,
 } from '../types';
+import type { PreviewChatContext } from '../preview-chat-context';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
@@ -80,6 +81,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onPreviewLocationChange?: (context: PreviewChatContext | null) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -209,6 +211,7 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onPreviewLocationChange,
   onPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
@@ -781,6 +784,10 @@ export function FileWorkspace({
     }
     return null;
   }, [activeTab, visibleFiles, sketches]);
+  useEffect(() => {
+    if (activeFile) return;
+    onPreviewLocationChange?.(null);
+  }, [activeFile, onPreviewLocationChange]);
 
   const activeLiveArtifact = useMemo<LiveArtifactWorkspaceEntry | null>(() => {
     if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return null;
@@ -1067,6 +1074,7 @@ export function FileWorkspace({
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            onPreviewLocationChange={onPreviewLocationChange}
             onFileSaved={onRefreshFiles}
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}

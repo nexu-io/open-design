@@ -136,6 +136,11 @@ import {
   mergeAttachedComments,
   removeAttachedComment,
 } from '../comments';
+import {
+  historyWithPreviewContext,
+  samePreviewChatContext,
+  type PreviewChatContext,
+} from '../preview-chat-context';
 import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
@@ -571,6 +576,7 @@ export function ProjectView({
   const [messagesInitialized, setMessagesInitialized] = useState(false);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
+  const [previewChatContext, setPreviewChatContext] = useState<PreviewChatContext | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -2745,9 +2751,10 @@ export function ProjectView({
               },
             }
           : undefined;
+        const daemonHistory = historyWithPreviewContext(nextHistory, userMsg.id, previewChatContext);
         void streamViaDaemon({
           agentId: config.agentId,
-          history: nextHistory,
+          history: daemonHistory,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
           handlers,
@@ -2855,7 +2862,11 @@ export function ProjectView({
         }
         const systemPrompt = await composedSystemPrompt();
         const apiHistory = await historyWithApiAttachmentContext(
-          historyWithCommentAttachmentContext(nextHistory, userMsg.id),
+          historyWithPreviewContext(
+            historyWithCommentAttachmentContext(nextHistory, userMsg.id),
+            userMsg.id,
+            previewChatContext,
+          ),
           userMsg.id,
           project.id,
           projectFiles,
@@ -2908,6 +2919,7 @@ export function ProjectView({
       agentsById,
       composedSystemPrompt,
       onTouchProject,
+      previewChatContext,
       project.id,
       project.name,
       projectFiles,
@@ -2965,6 +2977,10 @@ export function ProjectView({
     handleSend,
     removeQueuedChatSend,
   ]);
+
+  const handlePreviewLocationChange = useCallback((next: PreviewChatContext | null) => {
+    setPreviewChatContext((prev) => (samePreviewChatContext(prev, next) ? prev : next));
+  }, []);
 
   const handleRetry = useCallback(
     (assistantMessage: ChatMessage) => {
@@ -4561,6 +4577,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onPreviewLocationChange={handlePreviewLocationChange}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
           focusMode={workspaceFocused}

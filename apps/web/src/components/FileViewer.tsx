@@ -117,6 +117,7 @@ import type {
   PreviewCommentMember,
   PreviewCommentTarget,
 } from '../types';
+import type { PreviewChatContext } from '../preview-chat-context';
 import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
 import {
   applyManualEditPatch,
@@ -717,6 +718,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onPreviewLocationChange?: (context: PreviewChatContext | null) => void;
   onFileSaved?: () => Promise<void> | void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
@@ -739,6 +741,7 @@ export function FileViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onPreviewLocationChange,
   onFileSaved,
   onOpenFileReplacing,
   commentPortalId,
@@ -763,6 +766,10 @@ export function FileViewer({
       page_name: 'artifact',
     });
   }, [projectId, projectKind, file.name, file.kind, rendererMatch?.renderer.id, analytics.track]);
+  useEffect(() => {
+    if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') return;
+    onPreviewLocationChange?.(null);
+  }, [onPreviewLocationChange, rendererMatch?.renderer.id]);
 
   if (rendererMatch?.renderer.id === 'html' || rendererMatch?.renderer.id === 'deck-html') {
     return (
@@ -779,6 +786,7 @@ export function FileViewer({
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onPreviewLocationChange={onPreviewLocationChange}
         onFileSaved={onFileSaved}
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
@@ -3874,6 +3882,7 @@ function HtmlViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onPreviewLocationChange,
   onFileSaved,
   commentPortalId,
   onCommentModeChange,
@@ -3890,6 +3899,7 @@ function HtmlViewer({
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onPreviewLocationChange?: (context: PreviewChatContext | null) => void;
   onFileSaved?: () => Promise<void> | void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
@@ -4093,6 +4103,13 @@ function HtmlViewer({
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const [urlLoadSubPath, setUrlLoadSubPath] = useState<string | null>(null);
   const [urlLoadHash, setUrlLoadHash] = useState('');
+  useEffect(() => {
+    onPreviewLocationChange?.({
+      activeFilePath: file.name,
+      visibleFilePath: urlLoadSubPath || file.name,
+      hash: urlLoadHash || undefined,
+    });
+  }, [file.name, onPreviewLocationChange, urlLoadHash, urlLoadSubPath]);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
