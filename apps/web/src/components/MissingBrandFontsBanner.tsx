@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Icon } from './Icon';
 
@@ -38,6 +38,14 @@ export function MissingBrandFontsBanner({
   onUploadAssets,
 }: MissingBrandFontsBannerProps) {
   const [dismissed, setDismissed] = useState(() => isFontBannerDismissed(projectId));
+  // FileWorkspace renders this banner without a per-project key, so the same
+  // instance is reused across projects. useState only reads projectId once, so
+  // re-read the dismissal whenever projectId changes. Without this, dismissing
+  // project A would keep the banner hidden for project B even though only A was
+  // written to localStorage.
+  useEffect(() => {
+    setDismissed(isFontBannerDismissed(projectId));
+  }, [projectId]);
   if (dismissed) return null;
 
   function useSystemFonts(): void {

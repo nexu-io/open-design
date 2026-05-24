@@ -43,6 +43,23 @@ describe('MissingBrandFontsBanner (issue #2814)', () => {
     expect(screen.getByText('Missing brand fonts')).toBeTruthy();
   });
 
+  it('resyncs dismissal when the same instance switches projects', () => {
+    // FileWorkspace renders the banner without a per-project key, so one
+    // instance is reused as the user moves between projects.
+    const { rerender, container } = render(<MissingBrandFontsBanner projectId="p1" />);
+    fireEvent.click(screen.getByRole('button', { name: /use system fonts/i }));
+    expect(container.querySelector('.ds-project-warning-card')).toBeNull();
+    expect(window.localStorage.getItem('od:font-banner-dismissed:p1')).toBe('1');
+
+    // Switching to a project that was never dismissed shows the banner again.
+    rerender(<MissingBrandFontsBanner projectId="p2" />);
+    expect(screen.getByText('Missing brand fonts')).toBeTruthy();
+
+    // Switching back to the dismissed project hides it again.
+    rerender(<MissingBrandFontsBanner projectId="p1" />);
+    expect(container.querySelector('.ds-project-warning-card')).toBeNull();
+  });
+
   it('invokes onUploadAssets when Upload fonts is clicked', () => {
     const onUploadAssets = vi.fn();
     render(<MissingBrandFontsBanner projectId="p1" onUploadAssets={onUploadAssets} />);
