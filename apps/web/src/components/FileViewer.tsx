@@ -5029,6 +5029,7 @@ function HtmlViewer({
     logManualEditDebug('host:content-save-flush', { pendingCount: pending.length });
     for (let index = 0; index < pending.length; index += 1) {
       const entry = pending[index];
+      if (!entry) continue;
       const ok = await applyManualEdit(entry.patch, entry.label);
       if (!ok) {
         const remaining = pending.slice(index);
