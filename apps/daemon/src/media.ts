@@ -287,6 +287,37 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @param {string} [args.language]
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
  */
+
+/**
+ * Resolve the media model for a generate request: an explicit body model wins,
+ * otherwise fall back to the project's selected model for the surface
+ * (`metadata.imageModel` / `videoModel` / `audioModel`). This lets a local
+ * `od media generate --project <id>` omit `--model` and still use whatever the
+ * project picked, without an env var. Returns undefined when neither is set
+ * (generateMedia then throws "model required").
+ */
+export function resolveProjectMediaModel(
+  surface: unknown,
+  bodyModel: unknown,
+  project: { metadata?: unknown } | null | undefined,
+): string | undefined {
+  if (typeof bodyModel === 'string' && bodyModel.trim()) return bodyModel.trim();
+  const meta = (project?.metadata ?? {}) as {
+    imageModel?: unknown;
+    videoModel?: unknown;
+    audioModel?: unknown;
+  };
+  const candidate =
+    surface === 'image'
+      ? meta.imageModel
+      : surface === 'video'
+        ? meta.videoModel
+        : surface === 'audio'
+          ? meta.audioModel
+          : undefined;
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : undefined;
+}
+
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
@@ -2342,10 +2373,21 @@ const ASPECT_RATIO_VALUE: Record<string, number> = {
 function senseAudioImageSize(model: string, aspect?: string, explicit?: string): string {
   const sizes = SENSEAUDIO_IMAGE_SIZES[model] ?? SENSEAUDIO_IMAGE_DEFAULT_SIZES;
   // An explicit, documented size (from the composer's Size dropdown / project
-  // metadata.imageSize) is authoritative; otherwise map the requested aspect
-  // to the closest supported size.
+  // metadata.imageSize) is authoritative.
   if (explicit && sizes.includes(explicit)) return explicit;
-  const target = ASPECT_RATIO_VALUE[aspect ?? '1:1'] ?? 1;
+  // An explicit but UNSUPPORTED size (e.g. one carried over from a different
+  // model after a model switch — like image-2.0's 1024x2048 sent to image-1.0)
+  // still encodes the caller's intended orientation. Map ITS width/height ratio
+  // to the closest supported size so a portrait request never silently becomes
+  // square; only fall back to the requested --aspect when no usable explicit
+  // size was given.
+  let target = ASPECT_RATIO_VALUE[aspect ?? '1:1'] ?? 1;
+  const explicitWh = explicit ? /^(\d+)x(\d+)$/.exec(explicit) : null;
+  if (explicitWh) {
+    const w = Number(explicitWh[1]);
+    const h = Number(explicitWh[2]);
+    if (w > 0 && h > 0) target = w / h;
+  }
   let best = sizes[0]!;
   let bestDiff = Infinity;
   for (const s of sizes) {

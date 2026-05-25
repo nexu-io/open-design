@@ -578,6 +578,19 @@ export function ProjectView({
   const [imageModelOverride, setImageModelOverride] = useState<string>('');
   const [videoModelOverride, setVideoModelOverride] = useState<string>('');
   const [audioModelOverride, setAudioModelOverride] = useState<string>('');
+  // Seed the composer's media-model dropdowns from the project's own selected
+  // models when entering a project, so the dropdown reflects what the project
+  // was created with — and a later change in the dropdown then cleanly
+  // overrides it for that turn (the daemon prefers the per-turn pick over the
+  // stored project model). Keyed on project.id so a manual mid-session change
+  // is not clobbered until the user switches projects.
+  useEffect(() => {
+    const meta = project.metadata;
+    setImageModelOverride(typeof meta?.imageModel === 'string' ? meta.imageModel : '');
+    setVideoModelOverride(typeof meta?.videoModel === 'string' ? meta.videoModel : '');
+    setAudioModelOverride(typeof meta?.audioModel === 'string' ? meta.audioModel : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
   // `closed` → no surface; `review` → read-only saved-state panel with a
   // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
   const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');

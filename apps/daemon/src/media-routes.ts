@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
+import { resolveProjectMediaModel } from './media.js';
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
 
@@ -152,13 +153,19 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
 
+      // When the caller omits the model, fall back to the project's selected
+      // model for this surface (metadata.imageModel/videoModel/audioModel) so a
+      // local `od media generate --project <id>` uses what the project picked —
+      // no --model flag or env var needed.
+      const resolvedModel = resolveProjectMediaModel(req.body?.surface, req.body?.model, project);
+
       const taskId = randomUUID();
       const task = createMediaTask(taskId, projectId, {
         surface: req.body?.surface,
-        model: req.body?.model,
+        model: resolvedModel,
       });
       console.error(
-        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
+        `[task ${taskId.slice(0, 8)}] queued model=${resolvedModel} ` +
           `surface=${req.body?.surface} ` +
           `image=${req.body?.image ? 'yes' : 'no'} ` +
           `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
@@ -171,7 +178,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         projectsRoot: PROJECTS_DIR,
         projectId,
         surface: req.body?.surface,
-        model: req.body?.model,
+        model: resolvedModel,
         prompt: req.body?.prompt,
         output: req.body?.output,
         aspect: req.body?.aspect,

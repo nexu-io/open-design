@@ -236,7 +236,7 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
-import { generateMedia } from './media.js';
+import { generateMedia, resolveProjectMediaModel } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
@@ -9147,13 +9147,18 @@ export async function startServer({
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
 
+      // Omitted model falls back to the project's selected model for this
+      // surface so a local CLI can `od media generate --project <id>` without
+      // --model. See resolveProjectMediaModel.
+      const resolvedModel = resolveProjectMediaModel(req.body?.surface, req.body?.model, project);
+
       const taskId = randomUUID();
       const task = createMediaTask(db, taskId, projectId, {
         surface: req.body?.surface,
-        model: req.body?.model,
+        model: resolvedModel,
       });
       console.error(
-        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
+        `[task ${taskId.slice(0, 8)}] queued model=${resolvedModel} ` +
           `surface=${req.body?.surface} ` +
           `image=${req.body?.image ? 'yes' : 'no'} ` +
           `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
@@ -9166,7 +9171,7 @@ export async function startServer({
         projectsRoot: PROJECTS_DIR,
         projectId,
         surface: req.body?.surface,
-        model: req.body?.model,
+        model: resolvedModel,
         prompt: req.body?.prompt,
         output: req.body?.output,
         aspect: req.body?.aspect,
@@ -9796,6 +9801,27 @@ export async function startServer({
       }
     }
 
+    // A per-turn model pick from the chat composer's model dropdown overrides
+    // the project's stored model for THIS turn (so switching the model in the
+    // dropdown actually takes effect, instead of being shadowed by the model
+    // chosen at project creation). When the model changes we also drop the
+    // now-stale size/resolution that was tied to the old model, so the agent
+    // never states a size that doesn't belong to the new model.
+    let effectiveMetadata: typeof metadata = metadata;
+    if (metadata && defaultMediaModels) {
+      const next = { ...metadata } as Record<string, unknown>;
+      if (defaultMediaModels.image) {
+        if (defaultMediaModels.image !== next.imageModel) delete next.imageSize;
+        next.imageModel = defaultMediaModels.image;
+      }
+      if (defaultMediaModels.video) {
+        if (defaultMediaModels.video !== next.videoModel) delete next.videoResolution;
+        next.videoModel = defaultMediaModels.video;
+      }
+      if (defaultMediaModels.audio) next.audioModel = defaultMediaModels.audio;
+      effectiveMetadata = next as typeof metadata;
+    }
+
     const prompt = composeSystemPrompt({
       agentId,
       includeCodexImagegenOverride: false,
@@ -9814,7 +9840,7 @@ export async function startServer({
       craftBody,
       craftSections,
       memoryBody,
-      metadata,
+      metadata: effectiveMetadata,
       template,
       audioVoiceOptions,
       audioVoiceOptionsError,

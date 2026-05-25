@@ -491,22 +491,18 @@ async function runMediaGenerate(rawArgs) {
     console.error('--surface must be one of: image | video | audio');
     process.exit(2);
   }
-  // Model resolution: an explicit --model wins (the user named a model). When
-  // omitted, fall back to the composer-selected default the daemon injected
-  // as OD_DEFAULT_<SURFACE>_MODEL on spawn. This lets a normal agent chat set
-  // a default media model without the agent having to know the id.
+  // Model resolution order: an explicit --model wins; else the composer-selected
+  // default the daemon injected as OD_DEFAULT_<SURFACE>_MODEL on spawn; else
+  // left unset so the daemon resolves it from the project's metadata for this
+  // surface (imageModel/videoModel/audioModel). So a local
+  // `od media generate --project <id>` needs no --model when the project
+  // already has a model selected — the daemon errors clearly if none is found.
   const ENV_DEFAULT_BY_SURFACE = {
     image: 'OD_DEFAULT_IMAGE_MODEL',
     video: 'OD_DEFAULT_VIDEO_MODEL',
     audio: 'OD_DEFAULT_AUDIO_MODEL',
   };
   const model = flags.model || process.env[ENV_DEFAULT_BY_SURFACE[surface]];
-  if (!model) {
-    console.error(
-      `--model required (or set ${ENV_DEFAULT_BY_SURFACE[surface]}; see http://<daemon>/api/media/models)`,
-    );
-    process.exit(2);
-  }
 
   const body = {
     surface,

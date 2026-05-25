@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateMedia } from '../src/media.js';
+import { generateMedia, resolveProjectMediaModel } from '../src/media.js';
 
 const TEST_SENSEAUDIO_BASE_URL = 'https://senseaudio-gateway.example.test';
 const TEST_IMAGE_URL = 'https://cdn.example.test/generated/abc.png';
@@ -147,6 +147,41 @@ describe('senseaudio image generation', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves orientation when an explicit size is unsupported for the model', async () => {
+    await writeConfig({
+      providers: {
+        senseaudio: { apiKey: 'sense-test-key', baseUrl: TEST_SENSEAUDIO_BASE_URL },
+      },
+    });
+    let sentSize: string | undefined;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const urlStr = String(input);
+      if (urlStr === `${TEST_SENSEAUDIO_BASE_URL}/v1/image/sync`) {
+        sentSize = JSON.parse(String(init?.body)).size;
+        return buildOkResponse();
+      }
+      return buildImageFetchResponse(TEST_IMAGE_BYTES);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // 1024x2048 is image-2.0's portrait size, NOT valid for image-1.0 (e.g.
+    // carried over after a model switch). The renderer must keep the portrait
+    // orientation and map to the closest image-1.0 portrait size — never fall
+    // back to a square.
+    await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'senseaudio-image-1.0-260319',
+      size: '1024x2048',
+      prompt: 'Portrait carried over from another model.',
+      output: 'sa-portrait.png',
+    });
+
+    expect(sentSize).toBe('928x1664');
   });
 
   it('falls back to the canonical base URL when none is configured', async () => {
@@ -303,5 +338,36 @@ describe('senseaudio image generation', () => {
         output: 'sa-missing-url.png',
       }),
     ).rejects.toThrow('senseaudio image response missing url');
+  });
+});
+
+describe('resolveProjectMediaModel', () => {
+  it('prefers an explicit (trimmed) body model over project metadata', () => {
+    const project = { metadata: { imageModel: 'metadata-model' } };
+    expect(resolveProjectMediaModel('image', 'senseaudio-image-2.0-260319', project)).toBe(
+      'senseaudio-image-2.0-260319',
+    );
+    expect(resolveProjectMediaModel('image', '  senseaudio-image-2.0-260319  ', project)).toBe(
+      'senseaudio-image-2.0-260319',
+    );
+  });
+
+  it('falls back to the project metadata model for the requested surface', () => {
+    const project = {
+      metadata: {
+        imageModel: 'senseaudio-image-1.0-260319',
+        videoModel: 'senseaudio-video-2.0-260128',
+        audioModel: 'senseaudio-tts',
+      },
+    };
+    expect(resolveProjectMediaModel('image', undefined, project)).toBe('senseaudio-image-1.0-260319');
+    expect(resolveProjectMediaModel('video', '', project)).toBe('senseaudio-video-2.0-260128');
+    expect(resolveProjectMediaModel('audio', '   ', project)).toBe('senseaudio-tts');
+  });
+
+  it('returns undefined when neither the body nor the project metadata has a model', () => {
+    expect(resolveProjectMediaModel('image', undefined, { metadata: {} })).toBeUndefined();
+    expect(resolveProjectMediaModel('video', undefined, null)).toBeUndefined();
+    expect(resolveProjectMediaModel('image', undefined, { metadata: { videoModel: 'x' } })).toBeUndefined();
   });
 });
