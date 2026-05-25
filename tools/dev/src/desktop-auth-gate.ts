@@ -44,7 +44,7 @@ export type EnsureDaemonGateDeps = {
    * (e.g. an IPC-only mode); in that case the closure must fall back to
    * whatever port the original CLI options carried.
    */
-  startDaemonGated: (opts: { port: number | null }) => Promise<void>;
+  startDaemonGated: (opts: { port: number | null; webPort: number | null }) => Promise<void>;
   /** Symmetric to `startDaemonGated` for the web restart leg. */
   startWeb: (opts: { port: number | null }) => Promise<void>;
   log: (msg: string) => void;
@@ -78,6 +78,6 @@ export async function ensureDaemonGateForDesktop(deps: EnsureDaemonGateDeps): Pr
   const webPort = extractRuntimePort(web?.url);
   if (web != null) await deps.stopApp(APP_KEYS.WEB);
   await deps.stopApp(APP_KEYS.DAEMON);
-  await deps.startDaemonGated({ port: daemonPort });
+  await deps.startDaemonGated({ port: daemonPort, webPort });
   if (web != null) await deps.startWeb({ port: webPort });
 }

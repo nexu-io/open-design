@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  LocalizedTextSchema,
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   OpenDesignSpecVersionSchema,
 } from './manifest.js';
@@ -54,7 +55,9 @@ export const MarketplacePluginEntrySchema = z.object({
   yankReason:  z.string().optional(),
   tags:        z.array(z.string()).optional(),
   title:       z.string().optional(),
+  title_i18n:  LocalizedTextSchema.optional(),
   description: z.string().optional(),
+  description_i18n: LocalizedTextSchema.optional(),
   icon:        z.string().optional(),
 }).passthrough();
 

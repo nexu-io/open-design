@@ -21,6 +21,7 @@ import {
 } from '../providers/registry';
 import {
   createConversation,
+  getProject,
   listConversations,
   listMessages,
   loadTabs,
@@ -59,16 +60,56 @@ import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import { trackPageView } from '../analytics/events';
+import {
+  trackDesignSystemCreateResult,
+  trackDesignSystemReviewResult,
+  trackDesignSystemSourceIngestResult,
+  trackDesignSystemStatusResult,
+  trackFileUploadResult,
+  trackPageView,
+} from '../analytics/events';
 import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
 } from '../analytics/onboarding-session';
+import { deriveUploadCohort } from '../analytics/upload-tracking';
+import {
+  designSystemFolderCountBucket,
+  designSystemLengthBucket,
+  designSystemModuleSlug,
+  designSystemModuleType,
+  designSystemRepoHostFromUrl,
+  designSystemTotalSizeBucket,
+} from '@open-design/contracts/analytics';
 import type {
+  TrackingDesignSystemCreateEntryFrom,
+  TrackingDesignSystemIngestMethod,
+  TrackingDesignSystemIngestSourceType,
+  TrackingDesignSystemOrigin,
+  TrackingDesignSystemRepoHost,
+  TrackingDesignSystemSourceIngestEntryFrom,
+  TrackingDesignSystemSourceIngestResult,
   TrackingDesignSystemStatus,
+  TrackingDesignSystemStatusAction,
+  TrackingDesignSystemStatusValue,
   TrackingDesignSystemsEntryFrom,
 } from '@open-design/contracts/analytics';
 import { useI18n } from '../i18n';
+
+// Source counts the embedded DS creation flow can report back to its
+// wrapper at Generate-click time. OnboardingView uses this to emit the
+// `generate` ui_click + `onboarding_complete_result` events with the
+// runtime/about-you context that only it knows; without this hook the
+// onboarding wrapper would have no way to see the user-pinned source
+// material because the form state lives inside `DesignSystemCreationFlow`.
+export interface DesignSystemGenerateSnapshot {
+  sourceCount: number;
+  hasBrandDescription: boolean;
+  githubRepoCount: number;
+  localFolderCount: number;
+  figFileCount: number;
+  assetFileCount: number;
+}
 
 interface CreationProps {
   onBack: () => void;
@@ -78,6 +119,21 @@ interface CreationProps {
   config?: AppConfig;
   onOpenConnectorsTab?: () => void;
   chrome?: 'standalone' | 'embedded';
+  // Intent signal: user clicked Generate. Fires before any async work,
+  // so a wrapper (OnboardingView) can emit the `generate` ui_click row
+  // even when generation later fails.
+  onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
+  // Outcome signal: generation either kicked off successfully (workspace
+  // opened, project handed off) or hit a failure branch. Wrappers use
+  // this to emit lifecycle completion events with the right result so
+  // a draft-create error or workspace-open error doesn't ship as
+  // `completed_with_design_system`. `error_code` is the daemon's
+  // generic failure code; the exact message stays in the local error
+  // toast.
+  onGenerateSettled?: (
+    snapshot: DesignSystemGenerateSnapshot,
+    outcome: { result: 'success' } | { result: 'failed'; errorCode: string },
+  ) => void;
 }
 
 interface DetailProps {
@@ -94,6 +150,11 @@ interface DetailProps {
 
 type SetupStep = 'setup' | 'confirm';
 type ReviewTab = 'system' | 'files';
+
+interface ResolvedDesignSystemWorkspaceProject {
+  projectId: string;
+  files: ProjectFile[];
+}
 
 interface SetupState {
   company: string;
@@ -184,6 +245,26 @@ function readRememberedGenerationJob(designSystemId: string): string | null {
   }
 }
 
+async function resolveDesignSystemWorkspaceProject(
+  system: Pick<DesignSystemDetail, 'id' | 'projectId'>,
+): Promise<ResolvedDesignSystemWorkspaceProject | null> {
+  const workspace = await ensureDesignSystemWorkspace(system.id);
+  if (workspace) {
+    return {
+      projectId: workspace.project.id,
+      files: workspace.files,
+    };
+  }
+  if (!system.projectId) return null;
+  const fallbackProject = await getProject(system.projectId);
+  if (!fallbackProject) return null;
+  const files = await fetchProjectFiles(system.projectId);
+  return {
+    projectId: system.projectId,
+    files,
+  };
+}
+
 function clearRememberedGenerationJob(designSystemId: string): void {
   try {
     window.sessionStorage.removeItem(generationJobStorageKey(designSystemId));
@@ -200,6 +281,8 @@ export function DesignSystemCreationFlow({
   config,
   onOpenConnectorsTab,
   chrome = 'standalone',
+  onBeforeGenerate,
+  onGenerateSettled,
 }: CreationProps) {
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
@@ -233,6 +316,33 @@ export function DesignSystemCreationFlow({
       entry_from: onboardingSessionId ? 'onboarding' : 'design_systems_page',
     });
   }, [analytics.track, embedded]);
+
+  // `emitDsFileUpload` reports the user-side dropzone batch. `picked`
+  // is the raw FileList; `staged` is what survived the size/count
+  // filters (selectLocalCodeFiles / selectFigmaFiles / selectAssetFiles).
+  // The result is `failed` only when zero files pass the filter (e.g.
+  // every dropped file was over the per-source size cap); cohort math
+  // mirrors the chat-composer + onboarding uploads via
+  // `deriveUploadCohort`. The onboarding variant of this event lives
+  // in EntryShell; this fires from the standalone /design-systems/create
+  // route so the dashboard gets both flows.
+  function emitDsFileUpload(
+    sourceType: 'local_code' | 'fig' | 'assets',
+    picked: File[],
+    staged: File[],
+  ) {
+    if (embedded) return;
+    if (picked.length === 0) return;
+    const cohort = deriveUploadCohort(picked);
+    trackFileUploadResult(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_source',
+      source_type: sourceType,
+      ...cohort,
+      result: staged.length > 0 ? 'success' : 'failed',
+      error_code: staged.length === 0 ? 'DS_UPLOAD_ALL_FILTERED' : undefined,
+    });
+  }
 
   const refreshGithubConnector = useCallback(async () => {
     if (!composioConfigured) {
@@ -378,8 +488,65 @@ export function DesignSystemCreationFlow({
 
   async function generate() {
     if (generationStarting) return;
+    // Snapshot the user-pinned source state up front. Used for the
+    // pre-async ui_click intent signal AND the post-async lifecycle
+    // outcome — both rides need the same numbers so the
+    // dashboard can correlate "user attempted generate with N
+    // sources" → "generate eventually succeeded / failed with the
+    // same N". Computed here because OnboardingView can't peek into
+    // this flow's setup form.
+    const githubRepoCount = state.githubUrls?.length ?? 0;
+    const localFolderCount = state.codeFolders?.length ?? 0;
+    const figFileCount = state.figFiles?.length ?? 0;
+    const assetFileCount = state.assetFiles?.length ?? 0;
+    const snapshot = {
+      sourceCount:
+        githubRepoCount + localFolderCount + figFileCount + assetFileCount,
+      hasBrandDescription: Boolean(state.company?.trim()),
+      githubRepoCount,
+      localFolderCount,
+      figFileCount,
+      assetFileCount,
+    };
+    onBeforeGenerate?.(snapshot);
     setGenerationStarting(true);
     setError(null);
+    const generateStartedAt = performance.now();
+    const onboardingSessionId = peekOnboardingSessionId();
+    const createEntryFrom: TrackingDesignSystemCreateEntryFrom = embedded
+      ? 'onboarding'
+      : onboardingSessionId
+        ? 'onboarding'
+        : 'design_systems_page';
+    const ingestEntryFrom: TrackingDesignSystemSourceIngestEntryFrom = embedded
+      ? 'onboarding'
+      : onboardingSessionId
+        ? 'onboarding'
+        : 'design_systems_page';
+    const designSystemOrigin = deriveDesignSystemOrigin(snapshot);
+    function emitCreateResult(
+      result: 'success' | 'failed' | 'cancelled',
+      designSystemId: string | undefined,
+      errorCode: string | undefined,
+      projectId: string | undefined,
+    ) {
+      trackDesignSystemCreateResult(analytics.track, {
+        page_name: 'design_systems',
+        area: 'design_system_create',
+        entry_from: createEntryFrom,
+        result,
+        design_system_id: designSystemId,
+        project_id: projectId,
+        design_system_source: designSystemOrigin,
+        source_count: snapshot.sourceCount,
+        created_as_project: result === 'success',
+        has_brand_description: snapshot.hasBrandDescription,
+        brand_description_length_bucket: designSystemLengthBucket(state.company),
+        notes_length_bucket: designSystemLengthBucket(state.notes),
+        error_code: errorCode,
+        duration_ms: Math.max(0, Math.round(performance.now() - generateStartedAt)),
+      });
+    }
     try {
       const title = inferDesignSystemTitle(state);
       const created = await createDesignSystemDraft({
@@ -395,18 +562,30 @@ export function DesignSystemCreationFlow({
       if (!created) {
         setError('Could not generate this design system.');
         setStep('setup');
+        emitCreateResult('failed', undefined, 'DS_DRAFT_CREATE_FAILED', undefined);
+        onGenerateSettled?.(snapshot, {
+          result: 'failed',
+          errorCode: 'DS_DRAFT_CREATE_FAILED',
+        });
         return;
       }
       const workspace = await ensureDesignSystemWorkspace(created.id);
       if (!workspace) {
         setError('Could not open the design system workspace.');
         setStep('setup');
+        emitCreateResult('failed', created.id, 'DS_WORKSPACE_OPEN_FAILED', undefined);
+        onGenerateSettled?.(snapshot, {
+          result: 'failed',
+          errorCode: 'DS_WORKSPACE_OPEN_FAILED',
+        });
         return;
       }
       const project = workspace.project;
       const setupState = state;
       const connector = githubConnector;
       onCreated(project.id, project);
+      emitCreateResult('success', created.id, undefined, project.id);
+      onGenerateSettled?.(snapshot, { result: 'success' });
       scheduleAfterProjectHandoff(() => {
         void prepareCreatedDesignSystemProject({
           project,
@@ -415,11 +594,19 @@ export function DesignSystemCreationFlow({
           githubConnector: connector,
           onProjectPrepared,
           onSystemsRefresh,
+          analyticsTrack: analytics.track,
+          ingestEntryFrom,
+          designSystemId: created.id,
         });
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
       setStep('setup');
+      const errorCode = err instanceof Error
+        ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
+        : 'DS_GENERATE_THREW';
+      emitCreateResult('failed', undefined, errorCode, undefined);
+      onGenerateSettled?.(snapshot, { result: 'failed', errorCode });
     } finally {
       setGenerationStarting(false);
     }
@@ -557,6 +744,7 @@ export function DesignSystemCreationFlow({
               onFiles={(_names, files) => {
                 const stagedFiles = selectLocalCodeFiles(files);
                 const stagedNames = stagedFiles.map((file) => localCodeRelativePath(file));
+                emitDsFileUpload('local_code', files, stagedFiles);
                 setState((curr) => ({
                   ...curr,
                   codeFiles: Array.from(new Set([...curr.codeFiles, ...stagedNames])),
@@ -573,6 +761,7 @@ export function DesignSystemCreationFlow({
               onFiles={(_names, files) => {
                 const stagedFiles = selectFigmaFiles(files);
                 const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
+                emitDsFileUpload('fig', files, stagedFiles);
                 setState((curr) => ({
                   ...curr,
                   figFiles: Array.from(new Set([...curr.figFiles, ...stagedNames])),
@@ -587,6 +776,7 @@ export function DesignSystemCreationFlow({
               onFiles={(_names, files) => {
                 const stagedFiles = selectAssetFiles(files);
                 const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
+                emitDsFileUpload('assets', files, stagedFiles);
                 setState((curr) => ({
                   ...curr,
                   assetFiles: Array.from(new Set([...curr.assetFiles, ...stagedNames])),
@@ -663,6 +853,7 @@ export function DesignSystemDetailView({
   const [chatSeed, setChatSeed] = useState<{ id: string; text: string } | null>(null);
   const [workspaceProjectId, setWorkspaceProjectId] = useState<string | null>(null);
   const [workspaceProjectFiles, setWorkspaceProjectFiles] = useState<ProjectFile[]>([]);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [projectChatMessages, setProjectChatMessages] = useState<ChatMessage[]>([]);
@@ -678,6 +869,7 @@ export function DesignSystemDetailView({
   const pendingWorkspaceFileWritesRef = useRef<Map<string, string>>(new Map());
   const workspaceTabsLoadedRef = useRef(false);
   const openedProjectRef = useRef<string | null>(null);
+  const suppressedInitialConversationProjectIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -685,6 +877,7 @@ export function DesignSystemDetailView({
     setRevisions([]);
     setWorkspaceProjectId(null);
     setWorkspaceProjectFiles([]);
+    setWorkspaceLoadError(null);
     setConversations([]);
     setActiveConversationId(null);
     setProjectChatMessages([]);
@@ -694,6 +887,7 @@ export function DesignSystemDetailView({
     setWorkspaceOpenRequest(null);
     openedProjectRef.current = null;
     workspaceTabsLoadedRef.current = false;
+    suppressedInitialConversationProjectIdsRef.current.clear();
     pendingWorkspaceFileWritesRef.current.clear();
     void fetchDesignSystem(id).then((detail) => {
       if (cancelled) return;
@@ -710,18 +904,24 @@ export function DesignSystemDetailView({
   }, [id]);
 
   useEffect(() => {
-    if (!system || system.source !== 'user') return undefined;
-    const designSystemId = system.id;
+    if (!system) return undefined;
+    const currentSystem = system;
     let cancelled = false;
     async function syncWorkspaceProject() {
-      const workspace = await ensureDesignSystemWorkspace(designSystemId);
-      if (cancelled || !workspace) return;
-      setWorkspaceProjectId(workspace.project.id);
-      setWorkspaceProjectFiles(workspace.files);
-      if (onOpenProject && openedProjectRef.current !== workspace.project.id) {
-        openedProjectRef.current = workspace.project.id;
+      setWorkspaceLoadError(null);
+      const resolved = await resolveDesignSystemWorkspaceProject(currentSystem);
+      if (cancelled) return;
+      if (!resolved) {
+        setWorkspaceLoadError('Could not open the design system workspace.');
+        return;
+      }
+      const projectId = resolved.projectId;
+      setWorkspaceProjectId(projectId);
+      setWorkspaceProjectFiles(resolved.files);
+      if (onOpenProject && openedProjectRef.current !== projectId) {
+        openedProjectRef.current = projectId;
         await onProjectsRefresh?.();
-        if (!cancelled) onOpenProject(workspace.project.id);
+        if (!cancelled) onOpenProject(projectId);
       }
     }
     void syncWorkspaceProject();
@@ -733,6 +933,9 @@ export function DesignSystemDetailView({
   useEffect(() => {
     if (!workspaceProjectId) return undefined;
     const projectId = workspaceProjectId;
+    if (suppressedInitialConversationProjectIdsRef.current.delete(projectId)) {
+      return undefined;
+    }
     let cancelled = false;
     async function loadWorkspaceConversation() {
       const existing = await listConversations(projectId);
@@ -912,6 +1115,7 @@ export function DesignSystemDetailView({
         view_type: 'page',
         entry_from: entryFrom,
         design_system_id: system.id,
+        project_id: workspaceProjectId ?? undefined,
         // Origin is the DS's provenance-style source. We don't yet
         // have a precise mapping from `system.source` / provenance
         // metadata to the v2 enum, so we report `unknown` rather
@@ -939,11 +1143,12 @@ export function DesignSystemDetailView({
         view_type: 'page',
         entry_from: entryFrom,
         design_system_id: system.id,
+        project_id: workspaceProjectId ?? undefined,
         design_system_source: 'unknown',
         design_system_status: designSystemStatus,
       });
     }
-  }, [analytics.track, system?.id, generationActive, designSystemStatus, system]);
+  }, [analytics.track, system?.id, generationActive, designSystemStatus, system, workspaceProjectId]);
   const introChatMessages = useMemo(
     () => buildDesignSystemChatMessages({
       system,
@@ -987,18 +1192,80 @@ export function DesignSystemDetailView({
   }
 
   async function togglePublished(next: boolean) {
-    const updated = await savePatch({ body, status: next ? 'published' : 'draft' });
-    setStatusLine(updated ? (next ? 'Published' : 'Moved back to draft') : 'Could not update status');
+    const startedAt = performance.now();
+    const action: TrackingDesignSystemStatusAction = next ? 'publish' : 'unpublish';
+    const statusBefore = mapDsStatusToTracking(system?.status);
+    const isDefaultBefore = system?.id === selectedId;
+    let succeeded = false;
+    let errorCode: string | undefined;
+    try {
+      const updated = await savePatch({ body, status: next ? 'published' : 'draft' });
+      succeeded = Boolean(updated);
+      if (!succeeded) errorCode = 'DS_STATUS_UPDATE_RETURNED_NULL';
+      setStatusLine(updated ? (next ? 'Published' : 'Moved back to draft') : 'Could not update status');
+    } catch (err) {
+      errorCode = err instanceof Error
+        ? `DS_STATUS_UPDATE_THREW:${err.message.slice(0, 80)}`
+        : 'DS_STATUS_UPDATE_THREW';
+      throw err;
+    } finally {
+      if (system?.id) {
+        trackDesignSystemStatusResult(analytics.track, {
+          page_name: 'design_system_project',
+          area: 'design_system_status',
+          action,
+          result: succeeded ? 'success' : 'failed',
+          design_system_id: system.id,
+          project_id: workspaceProjectId ?? undefined,
+          status_before: statusBefore,
+          status_after: succeeded
+            ? next
+              ? 'published'
+              : 'draft'
+            : statusBefore,
+          is_default_before: isDefaultBefore,
+          is_default_after: isDefaultBefore,
+          error_code: errorCode,
+          duration_ms: Math.round(performance.now() - startedAt),
+        });
+      }
+    }
   }
 
-  async function ensureWorkspaceProject() {
+  function emitReviewResult(
+    section: { title: string },
+    index: number,
+    reviewAction: 'looks_good' | 'needs_work',
+  ) {
+    if (!system) return;
+    const slug = designSystemModuleSlug(section.title);
+    trackDesignSystemReviewResult(analytics.track, {
+      page_name: 'design_system_project',
+      area: 'design_system_preview',
+      review_action: reviewAction,
+      result: 'submitted',
+      design_system_id: system.id,
+      project_id: workspaceProjectId ?? '',
+      module_id: slug,
+      module_type: designSystemModuleType(slug),
+      module_index: index,
+      feedback_length_bucket: designSystemLengthBucket(null),
+      has_custom_feedback: false,
+      duration_ms: 0,
+    });
+  }
+
+  async function ensureWorkspaceProject(options?: { suppressInitialConversation?: boolean }) {
     if (!system) return workspaceProjectId;
     if (workspaceProjectId) return workspaceProjectId;
-    const workspace = await ensureDesignSystemWorkspace(system.id);
-    if (!workspace) return null;
-    setWorkspaceProjectId(workspace.project.id);
-    setWorkspaceProjectFiles(workspace.files);
-    return workspace.project.id;
+    const resolved = await resolveDesignSystemWorkspaceProject(system);
+    if (!resolved) return null;
+    if (options?.suppressInitialConversation) {
+      suppressedInitialConversationProjectIdsRef.current.add(resolved.projectId);
+    }
+    setWorkspaceProjectId(resolved.projectId);
+    setWorkspaceProjectFiles(resolved.files);
+    return resolved.projectId;
   }
 
   const refreshWorkspaceProjectFiles = useCallback(async (projectId: string) => {
@@ -1084,6 +1351,32 @@ export function DesignSystemDetailView({
       setChatError(null);
       setStatusLine(null);
       setChatSeed(null);
+      // `design_system_review_result` with `submit_revision` fires
+      // once per send that originates from a Needs-work section seed.
+      // The earlier Looks good / Needs work click emitted
+      // `result: submitted` with `review_action: looks_good|needs_work`
+      // — this is the second leg (`action=submit_revision`), recording
+      // the moment the user actually dispatched a fix request with
+      // text. Without it the funnel can't separate "user picked Needs
+      // work but never sent" from "user picked Needs work and sent a
+      // revision request".
+      if (feedbackSection && system) {
+        const slug = designSystemModuleSlug(feedbackSection);
+        trackDesignSystemReviewResult(analytics.track, {
+          page_name: 'design_system_project',
+          area: 'design_system_preview',
+          review_action: 'submit_revision',
+          result: 'submitted',
+          design_system_id: system.id,
+          project_id: projectId,
+          module_id: slug,
+          module_type: designSystemModuleType(slug),
+          module_index: 0,
+          feedback_length_bucket: designSystemLengthBucket(rawText),
+          has_custom_feedback: rawText.length > 0,
+          duration_ms: 0,
+        });
+      }
       setFeedbackSection(null);
       const startedAt = Date.now();
       const userMsg: ChatMessage = {
@@ -1147,6 +1440,16 @@ export function DesignSystemDetailView({
       pendingWorkspaceFileWritesRef.current.clear();
       setChatStreaming(true);
 
+      // DS workspace chat = the run that generates / regenerates the
+      // DESIGN.md and preview modules. Every send from this surface
+      // is a DS-variant run, so we always populate analyticsHints. The
+      // `regenerate_from_review` entry_from is reserved for revisions
+      // triggered by the Looks good / Needs work loop (which today
+      // also flows through this composer); a future split can detect
+      // a pending revision and switch entry_from accordingly.
+      const wasOnboardingHandoff =
+        Boolean(peekOnboardingSessionId())
+        || sessionStorage.getItem(`od:auto-send-first:${projectId}`) === '1';
       void streamViaDaemon({
         agentId: config.agentId,
         history: agentHistory,
@@ -1163,6 +1466,17 @@ export function DesignSystemDetailView({
         model: selectedModel?.model ?? null,
         reasoning: selectedModel?.reasoning ?? null,
         locale,
+        analyticsHints: {
+          entryFrom: wasOnboardingHandoff
+            ? 'onboarding_design_system'
+            : feedbackSection
+              ? 'regenerate_from_review'
+              : 'design_system_create',
+          projectKind: 'design_system',
+          designSystemRunContext: {
+            origin: 'manual_create',
+          },
+        },
         handlers: {
           onDelta: (delta) => {
             updateAssistant((message) => ({
@@ -1317,25 +1631,29 @@ export function DesignSystemDetailView({
   }, []);
 
   const createProjectChatConversation = useCallback(() => {
-    const projectId = workspaceProjectId;
-    if (!projectId) {
-      setChatSeed({
-        id: `general-${Date.now()}`,
-        text: 'Update this design system: ',
+    void (async () => {
+      const projectId = workspaceProjectId ?? await ensureWorkspaceProject({
+        suppressInitialConversation: true,
       });
-      return;
-    }
-    void createConversation(projectId, 'Design system').then((fresh) => {
-      if (!fresh) return;
+      if (!projectId) {
+        setChatError('Could not open the design system workspace.');
+        return;
+      }
+      const fresh = await createConversation(projectId, 'Design system');
+      if (!fresh) {
+        setChatError('Could not create a design system conversation.');
+        return;
+      }
       setConversations((current) => [fresh, ...current]);
       setActiveConversationId(fresh.id);
       setProjectChatMessages([]);
+      setChatError(null);
       setChatSeed({
         id: `general-${Date.now()}`,
         text: 'Update this design system: ',
       });
-    });
-  }, [workspaceProjectId]);
+    })();
+  }, [ensureWorkspaceProject, workspaceProjectId]);
 
   async function resolveRevision(
     revision: DesignSystemRevision,
@@ -1464,7 +1782,27 @@ export function DesignSystemDetailView({
                 Published
               </label>
               {selectedId !== system.id ? (
-                <button type="button" className="ghost compact" onClick={() => onSetDefault(system.id)}>
+                <button
+                  type="button"
+                  className="ghost compact"
+                  onClick={() => {
+                    const statusBefore = mapDsStatusToTracking(system.status);
+                    onSetDefault(system.id);
+                    trackDesignSystemStatusResult(analytics.track, {
+                      page_name: 'design_system_project',
+                      area: 'design_system_status',
+                      action: 'set_default',
+                      result: 'success',
+                      design_system_id: system.id,
+                      project_id: workspaceProjectId ?? undefined,
+                      status_before: statusBefore,
+                      status_after: statusBefore,
+                      is_default_before: false,
+                      is_default_after: true,
+                      duration_ms: 0,
+                    });
+                  }}
+                >
                   Make default
                 </button>
               ) : null}
@@ -1517,6 +1855,7 @@ export function DesignSystemDetailView({
                             onClick={() => {
                               setReviewDecisions((curr) => ({ ...curr, [section.title]: 'good' }));
                               setStatusLine(`${section.title} marked as looks good`);
+                              emitReviewResult(section, index, 'looks_good');
                             }}
                           >
                             <Icon name="check" />
@@ -1532,6 +1871,7 @@ export function DesignSystemDetailView({
                                 id: `${section.title}-${Date.now()}`,
                                 text: `Needs work on ${section.title}: `,
                               });
+                              emitReviewResult(section, index, 'needs_work');
                             }}
                           >
                             <Icon name="comment" />
@@ -1576,6 +1916,8 @@ export function DesignSystemDetailView({
                 tabsState={workspaceTabsState}
                 onTabsStateChange={persistWorkspaceTabsState}
               />
+            ) : workspaceLoadError ? (
+              <div className="viewer-empty">{workspaceLoadError}</div>
             ) : (
               <div className="viewer-empty">Opening the design system workspace...</div>
             )}
@@ -2609,6 +2951,9 @@ async function prepareCreatedDesignSystemProject({
   githubConnector,
   onProjectPrepared,
   onSystemsRefresh,
+  analyticsTrack,
+  ingestEntryFrom,
+  designSystemId,
 }: {
   project: Project;
   state: SetupState;
@@ -2616,11 +2961,114 @@ async function prepareCreatedDesignSystemProject({
   githubConnector: ConnectorDetail | null;
   onProjectPrepared?: (project: Project) => void;
   onSystemsRefresh?: () => Promise<void> | void;
+  analyticsTrack: (
+    event: string,
+    props: Record<string, unknown>,
+    options?: { requestId?: string; insertId?: string },
+  ) => void;
+  ingestEntryFrom: TrackingDesignSystemSourceIngestEntryFrom;
+  designSystemId: string;
 }): Promise<void> {
   try {
+    if (state.githubUrls.length > 0) {
+      const githubStart = performance.now();
+      emitSourceIngestResult(analyticsTrack, {
+        sourceType: 'github_repo',
+        ingestMethod: githubConnector?.status === 'connected'
+          ? 'github_api'
+          : 'git_clone',
+        result: 'success',
+        hasFallback: composioConfigured && githubConnector?.status === 'connected',
+        fallbackType: composioConfigured && githubConnector?.status === 'connected'
+          ? 'native_github_auth'
+          : 'none',
+        repoHost: dominantRepoHost(state.githubUrls),
+        fileCount: state.githubUrls.length,
+        totalBytes: null,
+        durationMs: Math.round(performance.now() - githubStart),
+        entryFrom: ingestEntryFrom,
+        projectId: project.id,
+        designSystemId,
+      });
+    }
+    const localStart = performance.now();
     const stagedLocalCode = await stageLocalCodeFiles(project.id, state.codeFileObjects);
+    if (state.codeFileObjects.length > 0 || state.codeFolders.length > 0) {
+      emitSourceIngestResult(analyticsTrack, {
+        sourceType: 'local_code',
+        ingestMethod: 'local_snapshot',
+        result: stagedLocalCode.uploadedPaths.length > 0
+          ? (stagedLocalCode.skippedCount > 0 ? 'partial_success' : 'success')
+          : 'failed',
+        hasFallback: false,
+        fallbackType: 'none',
+        repoHost: 'unknown',
+        fileCount: stagedLocalCode.uploadedPaths.length,
+        totalBytes: state.codeFileObjects.reduce(
+          (sum, f) => sum + (f.size || 0),
+          0,
+        ),
+        durationMs: Math.round(performance.now() - localStart),
+        errorCode: stagedLocalCode.uploadedPaths.length === 0
+          ? 'DS_LOCAL_INGEST_EMPTY'
+          : undefined,
+        entryFrom: ingestEntryFrom,
+        projectId: project.id,
+        designSystemId,
+      });
+    }
+    const figStart = performance.now();
     const stagedFigma = await stageFigmaFiles(project.id, state.figFileObjects);
+    if (state.figFileObjects.length > 0) {
+      emitSourceIngestResult(analyticsTrack, {
+        sourceType: 'fig',
+        ingestMethod: 'fig_parse',
+        result: stagedFigma.summaryPaths.length > 0
+          ? (stagedFigma.skippedCount > 0 ? 'partial_success' : 'success')
+          : 'failed',
+        hasFallback: false,
+        fallbackType: 'none',
+        repoHost: 'unknown',
+        fileCount: stagedFigma.summaryPaths.length,
+        totalBytes: state.figFileObjects.reduce(
+          (sum, f) => sum + (f.size || 0),
+          0,
+        ),
+        durationMs: Math.round(performance.now() - figStart),
+        errorCode: stagedFigma.summaryPaths.length === 0
+          ? 'DS_FIG_INGEST_EMPTY'
+          : undefined,
+        entryFrom: ingestEntryFrom,
+        projectId: project.id,
+        designSystemId,
+      });
+    }
+    const assetStart = performance.now();
     const stagedAssets = await stageAssetFiles(project.id, state.assetFileObjects);
+    if (state.assetFileObjects.length > 0) {
+      emitSourceIngestResult(analyticsTrack, {
+        sourceType: 'assets',
+        ingestMethod: 'asset_upload',
+        result: stagedAssets.uploadedPaths.length > 0
+          ? (stagedAssets.skippedCount > 0 ? 'partial_success' : 'success')
+          : 'failed',
+        hasFallback: false,
+        fallbackType: 'none',
+        repoHost: 'unknown',
+        fileCount: stagedAssets.uploadedPaths.length,
+        totalBytes: state.assetFileObjects.reduce(
+          (sum, f) => sum + (f.size || 0),
+          0,
+        ),
+        durationMs: Math.round(performance.now() - assetStart),
+        errorCode: stagedAssets.uploadedPaths.length === 0
+          ? 'DS_ASSET_INGEST_EMPTY'
+          : undefined,
+        entryFrom: ingestEntryFrom,
+        projectId: project.id,
+        designSystemId,
+      });
+    }
     await writeProjectTextFile(
       project.id,
       SOURCE_CONTEXT_MANIFEST_PATH,
@@ -2656,6 +3104,118 @@ async function prepareCreatedDesignSystemProject({
   } catch (err) {
     console.error('Could not prepare the design system project after opening it.', err);
   }
+}
+
+// Picks the dominant repo host across a batch of GitHub URLs. Mixed
+// batches default to the most-common host; ties go to `'unknown'`.
+function dominantRepoHost(urls: string[]): TrackingDesignSystemRepoHost {
+  if (urls.length === 0) return 'unknown';
+  const counts = new Map<TrackingDesignSystemRepoHost, number>();
+  for (const url of urls) {
+    const host = designSystemRepoHostFromUrl(url);
+    counts.set(host, (counts.get(host) ?? 0) + 1);
+  }
+  let top: TrackingDesignSystemRepoHost = 'unknown';
+  let topCount = 0;
+  let tie = false;
+  for (const [host, count] of counts) {
+    if (count > topCount) {
+      top = host;
+      topCount = count;
+      tie = false;
+    } else if (count === topCount) {
+      tie = true;
+    }
+  }
+  return tie ? 'unknown' : top;
+}
+
+// Maps a generate-time snapshot to the DS origin enum. The dashboard
+// uses this on `design_system_create_result.design_system_source` to
+// split "user added a GitHub repo" vs "user only typed a description"
+// without inspecting per-source counts.
+function deriveDesignSystemOrigin(snapshot: {
+  sourceCount: number;
+  hasBrandDescription: boolean;
+  githubRepoCount: number;
+  localFolderCount: number;
+  figFileCount: number;
+  assetFileCount: number;
+}): TrackingDesignSystemOrigin {
+  const filled = [
+    snapshot.githubRepoCount > 0,
+    snapshot.localFolderCount > 0,
+    snapshot.figFileCount > 0,
+    snapshot.assetFileCount > 0,
+  ].filter(Boolean).length;
+  if (filled >= 2) return 'mixed';
+  if (snapshot.githubRepoCount > 0) return 'github_repo';
+  if (snapshot.localFolderCount > 0) return 'local_code';
+  if (snapshot.figFileCount > 0) return 'fig';
+  if (snapshot.assetFileCount > 0) return 'assets';
+  if (snapshot.hasBrandDescription) return 'manual_create';
+  return 'unknown';
+}
+
+// Mirrors the DesignSystemsTab helper but lives here too so the
+// detail-view's status emissions don't have to import across files.
+function mapDsStatusToTracking(
+  status: string | null | undefined,
+): TrackingDesignSystemStatusValue {
+  switch (status) {
+    case 'draft':
+    case 'published':
+      return status;
+    default:
+      return 'unknown';
+  }
+}
+
+function emitSourceIngestResult(
+  track: (
+    event: string,
+    props: Record<string, unknown>,
+    options?: { requestId?: string; insertId?: string },
+  ) => void,
+  args: {
+    sourceType: TrackingDesignSystemIngestSourceType;
+    ingestMethod: TrackingDesignSystemIngestMethod;
+    result: TrackingDesignSystemSourceIngestResult;
+    hasFallback: boolean;
+    fallbackType:
+      | 'none'
+      | 'native_github_auth'
+      | 'local_git_clone'
+      | 'manual_upload'
+      | 'unknown';
+    repoHost: TrackingDesignSystemRepoHost;
+    fileCount: number;
+    totalBytes: number | null;
+    durationMs: number;
+    errorCode?: string;
+    entryFrom: TrackingDesignSystemSourceIngestEntryFrom;
+    projectId?: string;
+    designSystemId?: string;
+  },
+): void {
+  trackDesignSystemSourceIngestResult(track, {
+    page_name: 'design_systems',
+    area: 'design_system_create',
+    entry_from: args.entryFrom,
+    source_type: args.sourceType,
+    ingest_method: args.ingestMethod,
+    result: args.result,
+    has_fallback: args.hasFallback,
+    fallback_type: args.fallbackType,
+    repo_host: args.repoHost,
+    file_count: args.fileCount,
+    folder_file_count_bucket: designSystemFolderCountBucket(args.fileCount),
+    total_size_bucket: designSystemTotalSizeBucket(args.totalBytes),
+    error_code: args.errorCode,
+    duration_ms: Math.max(0, args.durationMs),
+    project_id: args.projectId,
+    design_system_id: args.designSystemId,
+  });
 }
 
 function humanizeRepositoryName(repo: string): string | undefined {

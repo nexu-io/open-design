@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatPane } from '../../src/components/ChatPane';
+import { ChatPane, retryableAssistantMessage } from '../../src/components/ChatPane';
 import { DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX } from '../../src/design-system-auto-prompt';
 import type { ChatMessage, Conversation, ProjectMetadata } from '../../src/types';
 
@@ -34,6 +34,25 @@ afterEach(() => {
 });
 
 describe('ChatPane streaming state', () => {
+  it('exposes retry only for the last failed assistant when the pane is idle', () => {
+    const failed: ChatMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Generation failed',
+      createdAt: 1,
+      runStatus: 'failed',
+    };
+    const messages: ChatMessage[] = [
+      { id: 'user-1', role: 'user', content: 'Create a login page', createdAt: 0 },
+      failed,
+    ];
+
+    expect(retryableAssistantMessage(messages, failed.id, false)).toBe(failed);
+    expect(retryableAssistantMessage(messages, failed.id, true)).toBeNull();
+    expect(retryableAssistantMessage([...messages, { ...messages[0]!, id: 'user-2' }], failed.id, false))
+      .toBeNull();
+  });
+
   it('renders user turns with the chat bubble styling hook', () => {
     const messages: ChatMessage[] = [
       {
@@ -46,6 +65,7 @@ describe('ChatPane streaming state', () => {
 
     render(
       <ChatPane
+        projectKindForTracking="prototype"
         messages={messages}
         streaming={false}
         error={null}
@@ -117,6 +137,7 @@ Expected output:
 
     render(
       <ChatPane
+        projectKindForTracking="prototype"
         messages={messages}
         streaming={false}
         error={null}

@@ -242,6 +242,17 @@
   right: calc(100% + 12px);
 }
 
+.entry-main__topbar .entry-updater-menu .updater-popup {
+  top: calc(100% + 10px);
+  right: 0;
+  left: auto;
+}
+
+[dir='rtl'] .entry-main__topbar .entry-updater-menu .updater-popup {
+  right: auto;
+  left: 0;
+}
+
 .updater-popup__icon {
   width: 44px;
   height: 44px;
@@ -2147,4 +2158,3 @@
     justify-content: flex-start;
   }
 }
-

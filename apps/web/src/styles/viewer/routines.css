@@ -1031,6 +1031,28 @@
   width: 22px;
   height: 22px;
 }
+.app .chat-connect-repo {
+  max-width: none;
+  padding: 10px 12px;
+  gap: 10px;
+  border-radius: 10px;
+  box-shadow: none;
+  animation: none;
+  opacity: 1;
+  width: auto;
+}
+.app .chat-connect-repo-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.app .chat-connect-repo-title {
+  font-size: 12.8px;
+}
+.app .chat-connect-repo-text {
+  font-size: 12px;
+  line-height: 1.35;
+}
 
 .app .composer {
   padding: 8px 10px 10px;

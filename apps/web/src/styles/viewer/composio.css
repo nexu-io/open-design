@@ -593,8 +593,9 @@
 .op-waiting {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  max-width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -616,12 +617,16 @@
   color: var(--text);
 }
 .op-waiting-detail {
+  min-width: 0;
+  max-width: 100%;
   font-family: var(--mono);
   font-size: 11px;
   background: var(--bg-panel);
   padding: 1px 6px;
   border-radius: 4px;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .op-waiting-hint {
   flex-basis: 100%;
@@ -1258,6 +1263,7 @@
   border-radius: 8px 0 0 8px;
 }
 .ds-modal-stage-handle.is-collapse {
+  position: sticky;
   left: 0;
   border-left: none;
   border-radius: 0 8px 8px 0;

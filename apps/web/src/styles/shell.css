@@ -1053,6 +1053,10 @@
   flex-direction: column;
   gap: 2px;
 }
+[dir='rtl'] .avatar-popover {
+  right: auto;
+  left: 0;
+}
 .avatar-popover-head {
   padding: 10px 10px 8px;
   display: flex;

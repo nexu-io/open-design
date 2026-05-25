@@ -490,7 +490,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 aria-label={t('common.close')}
                 onClick={() => closeTab(tab.id)}
               >
-                <Icon name="close" size={11} />
+                <Icon name="close" size={10} />
               </button>
             </div>
           );

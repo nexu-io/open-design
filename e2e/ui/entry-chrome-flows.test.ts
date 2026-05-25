@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Request } from '@playwright/test';
-
-const STORAGE_KEY = 'open-design:config';
-const SAVED_PLUGIN_IDS_KEY = 'open-design:saved-plugin-ids';
+import { applyStandardMocks, STORAGE_KEY } from '@/playwright/mock-factory';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
@@ -65,62 +63,7 @@ const DESIGN_SYSTEMS = [
 ] as const;
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(({ configKey, savedKey }) => {
-    window.localStorage.removeItem(savedKey);
-    window.localStorage.setItem(
-      configKey,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, { configKey: STORAGE_KEY, savedKey: SAVED_PLUGIN_IDS_KEY });
-
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 test('entry chrome exposes the primary home creation surface and settings entry', async ({ page }) => {
@@ -981,7 +924,7 @@ test('home hero attachment-only submit uploads the file and sends it with the fi
 async function gotoEntryHome(page: Page) {
   await page.goto('/');
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }

@@ -590,6 +590,12 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+.df-inline-notice a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
 .df-row:hover { background: var(--bg-subtle); }
 .df-row.active { background: var(--blue-bg); color: var(--text); }
 .df-row.active .df-row-name { color: var(--text-strong); }

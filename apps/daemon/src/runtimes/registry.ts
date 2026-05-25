@@ -4,6 +4,7 @@ import { devinAgentDef } from './defs/devin.js';
 import { geminiAgentDef } from './defs/gemini.js';
 import { opencodeAgentDef } from './defs/opencode.js';
 import { hermesAgentDef } from './defs/hermes.js';
+import { traeCliAgentDef } from './defs/trae-cli.js';
 import { grokBuildAgentDef } from './defs/grok-build.js';
 import { kimiAgentDef } from './defs/kimi.js';
 import { cursorAgentDef } from './defs/cursor-agent.js';
@@ -25,6 +26,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   geminiAgentDef,
   opencodeAgentDef,
   hermesAgentDef,
+  traeCliAgentDef,
   grokBuildAgentDef,
   kimiAgentDef,
   cursorAgentDef,

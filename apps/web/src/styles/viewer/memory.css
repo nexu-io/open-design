@@ -641,16 +641,17 @@
 /* Manual edit mode */
 .manual-edit-workspace {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 280px;
+  grid-template-columns: 280px minmax(420px, 1fr) 280px;
   gap: 10px;
   height: 100%;
   min-height: 0;
   padding: 10px;
   background: var(--bg);
 }
-.manual-edit-workspace > .manual-edit-canvas { grid-column: 1; grid-row: 1; }
+.manual-edit-workspace > .manual-edit-canvas { grid-column: 2; grid-row: 1; }
+.manual-edit-workspace > .manual-edit-layers { grid-column: 1; grid-row: 1; }
 .manual-edit-workspace > .manual-edit-right {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   height: 100%;
   min-height: 0;

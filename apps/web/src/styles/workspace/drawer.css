@@ -514,6 +514,9 @@
 .design-card-status-failed {
   color: var(--red);
 }
+.design-card-status-published {
+  color: var(--green);
+}
 .design-card-close {
   position: absolute;
   top: 8px;
@@ -1506,4 +1509,3 @@
   display: flex;
   flex-direction: column;
 }
-

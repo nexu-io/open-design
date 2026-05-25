@@ -1,7 +1,7 @@
 ---
 import TemplatePage, {
   getStaticPaths as getTemplateStaticPaths,
-} from '../../templates/[slug].astro';
+} from '../../templates/[slug]/index.astro';
 import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
 
 export async function getStaticPaths() {

@@ -24,6 +24,31 @@ afterEach(() => {
   }
 });
 
+describe("resolveToolPackConfig namespace defaults", () => {
+  it("keeps ordinary local builds on the default namespace", () => {
+    expect(resolveToolPackConfig("mac").namespace).toBe("default");
+    expect(resolveToolPackConfig("win", { appVersion: "0.8.0" }).namespace).toBe("default");
+  });
+
+  it("defaults prerelease mac builds to their release channel namespace", () => {
+    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta");
+    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-preview.4" }).namespace).toBe("release-preview");
+    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0.nightly.4" }).namespace).toBe("release-nightly");
+  });
+
+  it("defaults prerelease non-mac builds to platform-specific release channel namespaces", () => {
+    expect(resolveToolPackConfig("win", { appVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta-win");
+    expect(resolveToolPackConfig("linux", { appVersion: "0.8.0-preview.4" }).namespace).toBe("release-preview-linux");
+    expect(resolveToolPackConfig("win", { appVersion: "0.8.0.nightly.4" }).namespace).toBe("release-nightly-win");
+  });
+
+  it("keeps an explicit namespace ahead of the prerelease channel default", () => {
+    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-beta.4", namespace: "custom-beta" }).namespace).toBe(
+      "custom-beta",
+    );
+  });
+});
+
 describe("resolveToolPackConfig telemetry relay", () => {
   it("reads and normalizes OPEN_DESIGN_TELEMETRY_RELAY_URL for packaged config", () => {
     process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = "https://telemetry.open-design.ai/api/langfuse//";

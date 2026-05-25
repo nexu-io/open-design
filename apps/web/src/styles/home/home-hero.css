@@ -266,6 +266,10 @@
   margin-top: 0;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.home-hero__input-card--compact-authoring {
+  max-width: 640px;
+  padding-block: 12px 10px;
+}
 .home-hero__input-card:focus-within {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   box-shadow: var(--shadow-md);
@@ -299,6 +303,18 @@
   background: var(--bg-subtle);
   color: var(--text);
   border-color: var(--border-soft);
+}
+.home-hero__active-chip--example {
+  max-width: 100%;
+  background: color-mix(in srgb, var(--accent-tint) 78%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent);
+}
+.home-hero__active-chip--example > span:not(.home-hero__active-dot) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .home-hero__active-chip-body {
   appearance: none;
@@ -341,9 +357,6 @@
 }
 .home-hero__active-clear:hover {
   opacity: 1;
-}
-.home-hero__context-summary {
-  color: var(--text-muted);
 }
 .home-hero__prompt-surface {
   display: flex;
@@ -1885,14 +1898,14 @@
 .home-hero__plugin-preset {
   appearance: none;
   position: relative;
-  flex: 0 0 202px;
+  flex: 0 0 218px;
   min-width: 0;
   display: grid;
-  grid-template-rows: 104px minmax(0, 1fr);
-  gap: 8px;
-  padding: 8px;
+  grid-template-rows: 132px minmax(0, 1fr);
+  gap: 6px;
+  padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -1932,7 +1945,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--bg-subtle);
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
@@ -1947,22 +1960,26 @@
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html {
-  padding: 6px;
+  padding: 5px;
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html-chrome {
-  height: 16px;
-  padding: 0 6px;
+  height: 15px;
+  padding: 0 5px;
 }
 
 .home-hero__plugin-preset-preview .plugins-home__html-url {
-  font-size: 8px;
+  font-size: 7.5px;
+}
+
+.home-hero__plugin-preset-preview .plugins-home__html-iframe {
+  transform: scale(0.135);
 }
 
 .home-hero__plugin-preset-body {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .home-hero__plugin-preset-title {
@@ -1970,9 +1987,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .home-hero__plugin-preset-prompt {
@@ -1980,16 +1997,16 @@
   min-width: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   color: var(--text-muted);
-  font-size: 11.5px;
-  line-height: 1.32;
+  font-size: 10.5px;
+  line-height: 1.25;
 }
 
 .home-hero__plugin-preset > svg {
   position: absolute;
-  right: 9px;
-  bottom: 9px;
+  right: 8px;
+  bottom: 8px;
   color: var(--text-faint);
   transition: color 140ms ease, transform 140ms ease;
 }
@@ -2119,7 +2136,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .home-hero__plugin-preset {
-    flex-basis: 188px;
+    flex-basis: 204px;
+    grid-template-rows: 122px minmax(0, 1fr);
+  }
+  .home-hero__plugin-preset-preview .plugins-home__html-iframe {
+    transform: scale(0.126);
   }
   /* Plan §B follow-up: chip rail must never require horizontal
      scrolling. The base rule already wraps; on narrow viewports
@@ -2153,7 +2174,10 @@
     grid-template-columns: 1fr;
   }
   .home-hero__plugin-preset {
-    flex-basis: 174px;
-    grid-template-rows: 96px minmax(0, 1fr);
+    flex-basis: 188px;
+    grid-template-rows: 112px minmax(0, 1fr);
+  }
+  .home-hero__plugin-preset-preview .plugins-home__html-iframe {
+    transform: scale(0.114);
   }
 }

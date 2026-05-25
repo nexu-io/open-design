@@ -365,6 +365,12 @@
   font-size: 11.5px;
   line-height: 1.35;
 }
+.plugin-action-card__notice a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
 
 /* "Files this turn" summary — derived from Read/Write/Edit tool_use events
    so users can scan every file the agent touched without expanding tool-

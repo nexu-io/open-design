@@ -147,6 +147,11 @@ export type MacSizeReport = {
     compression: ToolPackConfig["macCompression"];
     electronLanguages: readonly string[];
     filePatterns: readonly string[];
+    nativeRebuild: {
+      buildFromSource: boolean;
+      mode: "parallel" | "sequential";
+      modules: readonly string[];
+    };
     targets: ElectronBuilderTarget[];
     webOutputMode: ToolPackConfig["webOutputMode"];
   };

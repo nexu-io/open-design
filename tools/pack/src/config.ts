@@ -17,6 +17,7 @@ export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
+type ToolPackPrereleaseChannel = "beta" | "nightly" | "preview";
 
 export type ToolPackCliOptions = {
   appVersion?: string;
@@ -85,6 +86,32 @@ export type ToolPackConfig = {
    */
   posthogKey?: string;
   posthogHost?: string;
+  /**
+   * Personal API key (`phx_...`) used by the @posthog/cli sourcemap helper to
+   * upload browser sourcemaps to PostHog after `next build` and before the
+   * web bundle is copied into the Electron package. Sourced from
+   * `POSTHOG_CLI_API_KEY` (or the legacy `POSTHOG_PERSONAL_API_KEY` alias)
+   * in CI; when missing (local packaging by a contributor, fork builds, PRs)
+   * the helper still strips the .map files so source never leaks into the
+   * shipped installer — it just skips the upload step.
+   */
+  posthogCliApiKey?: string;
+  /**
+   * PostHog project ID (e.g. `420348` for the official Open Design project)
+   * used by `@posthog/cli sourcemap upload`. Sourced from
+   * `POSTHOG_CLI_PROJECT_ID` (or the alias `POSTHOG_PROJECT_ID`) in CI.
+   * Required for upload to be attempted; missing → strip-only path.
+   */
+  posthogCliProjectId?: string;
+  /**
+   * PostHog **management** host used by `@posthog/cli sourcemap upload`. This
+   * is the regional app host (e.g. `https://us.posthog.com`) — distinct from
+   * `posthogHost` above, which is the **ingest** host (`us.i.posthog.com`)
+   * used by the runtime SDK and accepts `/capture/` traffic only. Sourced
+   * from `POSTHOG_CLI_HOST`; when missing, the CLI defaults to the US Cloud
+   * app host on its own, which is correct for the official project.
+   */
+  posthogCliHost?: string;
   to: ToolPackBuildOutput;
   webOutputMode: ToolPackWebOutputMode;
   workspaceRoot: string;
@@ -110,6 +137,22 @@ function resolveToolPackAppVersion(value: string | undefined): string | undefine
   if (normalized.length === 0) throw new Error("--app-version must not be empty");
   if (/\s/.test(normalized)) throw new Error(`--app-version must not contain whitespace: ${value}`);
   return normalized;
+}
+
+function channelFromAppVersion(value: string | undefined): ToolPackPrereleaseChannel | null {
+  if (value == null || value.length === 0) return null;
+  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(value)) return "beta";
+  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(value)) return "nightly";
+  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(value)) return "preview";
+  return null;
+}
+
+function defaultNamespaceForAppVersion(platform: ToolPackPlatform, appVersion: string | undefined): string {
+  const channel = channelFromAppVersion(appVersion);
+  if (channel == null) return SIDECAR_DEFAULTS.namespace;
+
+  const namespace = `release-${channel}`;
+  return platform === "mac" ? namespace : `${namespace}-${platform}`;
 }
 
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
@@ -147,6 +190,46 @@ function resolveToolPackPosthogHost(value: string | undefined): string | undefin
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error(`POSTHOG_HOST must be http(s): ${value}`);
+  }
+  return normalized.replace(/\/+$/, "");
+}
+
+function resolveToolPackPosthogCliApiKey(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  // Personal API keys start with `phx_`. As with POSTHOG_KEY, third-party
+  // PostHog deployments may use different prefixes; only flag obviously-wrong
+  // values (whitespace, control chars) so a misconfigured CI secret doesn't
+  // silently corrupt the upload step.
+  if (/[\s\x00-\x1f]/.test(normalized)) {
+    throw new Error(`POSTHOG_CLI_API_KEY contains whitespace or control chars`);
+  }
+  return normalized;
+}
+
+function resolveToolPackPosthogCliProjectId(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  if (!/^[0-9]+$/.test(normalized)) {
+    throw new Error(`POSTHOG_CLI_PROJECT_ID must be a numeric project id: ${value}`);
+  }
+  return normalized;
+}
+
+function resolveToolPackPosthogCliHost(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`POSTHOG_CLI_HOST must be an absolute URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`POSTHOG_CLI_HOST must be http(s): ${value}`);
   }
   return normalized.replace(/\/+$/, "");
 }
@@ -194,10 +277,11 @@ export function resolveToolPackConfig(
   platform: ToolPackPlatform,
   options: ToolPackCliOptions = {},
 ): ToolPackConfig {
+  const appVersion = resolveToolPackAppVersion(options.appVersion);
   const namespace = resolveNamespace({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     env: process.env,
-    namespace: options.namespace ?? SIDECAR_DEFAULTS.namespace,
+    namespace: options.namespace ?? defaultNamespaceForAppVersion(platform, appVersion),
   });
   const toolPackRoot = resolve(options.dir ?? join(WORKSPACE_ROOT, ".tmp", "tools-pack"));
   const cacheRoot = resolve(options.cacheDir ?? join(toolPackRoot, "cache"));
@@ -207,7 +291,7 @@ export function resolveToolPackConfig(
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
 
   return {
-    appVersion: resolveToolPackAppVersion(options.appVersion),
+    appVersion,
     containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
@@ -239,6 +323,13 @@ export function resolveToolPackConfig(
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
+    posthogCliApiKey: resolveToolPackPosthogCliApiKey(
+      process.env.POSTHOG_CLI_API_KEY ?? process.env.POSTHOG_PERSONAL_API_KEY,
+    ),
+    posthogCliProjectId: resolveToolPackPosthogCliProjectId(
+      process.env.POSTHOG_CLI_PROJECT_ID ?? process.env.POSTHOG_PROJECT_ID,
+    ),
+    posthogCliHost: resolveToolPackPosthogCliHost(process.env.POSTHOG_CLI_HOST),
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,

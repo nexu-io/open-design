@@ -129,9 +129,9 @@ Linux AppImage packaging is available through the optional release lane and is c
 
 ## Skills
 
-**31 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**132 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
-Two top-level **modes** carry the catalog: **`prototype`** (27 skills — anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (4 skills — horizontal-swipe presentations with deck-framework chrome). The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+Two **modes** anchor the interactive catalog: **`prototype`** (32 skills — anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (9 skills — horizontal-swipe presentations with deck-framework chrome). The catalog also ships `image`, `video`, `audio`, `template`, `design-system`, and `utility` modes for media generation, catalog updaters, and post-export audit helpers. The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
 ### Showcase examples
 
@@ -259,8 +259,8 @@ What you compose at send time isn't "system + user". It's:
 ```
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
+  + active DESIGN.md   (150 systems available)
+  + active SKILL.md    (132 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -392,7 +392,7 @@ For desktop/background startup, fixed-port restarts, and media generation dispat
 The first load:
 
 1. Detects which agent CLIs you have on `PATH` and picks one automatically.
-2. Loads 31 skills + 72 design systems.
+2. Loads 132 skills + 150 design systems.
 3. Pops the welcome dialog so you can paste an Anthropic key (only needed for the BYOK fallback path).
 4. **Auto-creates `./.od/`** — the local runtime folder for the SQLite project DB, per-project artifacts, and saved renders. There is no `od init` step; the daemon `mkdir`s everything it needs on boot.
 
@@ -693,7 +693,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
+├── skills/                        ← 132 SKILL.md skill bundles (32 prototype + 9 deck + image / video / audio / template / design-system / utility)
 │   ├── web-prototype/             ← default for prototype mode
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -708,7 +708,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 DESIGN.md systems
+├── design-systems/                ← 150 DESIGN.md systems
 │   ├── default/                   ← Neutral Modern (starter)
 │   ├── warm-editorial/            ← Warm Editorial (starter)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -750,10 +750,10 @@ open-design/
 ## Design Systems
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="The 72 design systems library — style guide spread" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="The 150 design systems library — style guide spread" width="100%" />
 </p>
 
-72 systems out of the box, each as a single [`DESIGN.md`](design-systems/README.md):
+150 systems out of the box, each as a single [`DESIGN.md`](design-systems/README.md):
 
 <details>
 <summary><b>Full catalog</b> (click to expand)</summary>
@@ -972,7 +972,7 @@ Long-form provenance write-up — what we take from each, what we deliberately d
 
 - [x] Daemon + agent detection (16 CLI adapters) + skill registry + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 31 skills + 72 design systems + 5 visual directions + 5 device frames
+- [x] 132 skills + 150 design systems + 5 visual directions + 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) with SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)
@@ -1018,7 +1018,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-22" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-24" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -1035,9 +1035,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-22" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-22" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-22" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-24" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-24" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-24" />
   </picture>
 </a>
 

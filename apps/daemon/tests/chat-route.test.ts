@@ -214,6 +214,51 @@ process.exit(0);
     );
   });
 
+  it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
+    // claude-opus-4-7 (and a few other instruction-tuned models) start
+    // their reply by echoing the # Instructions block verbatim, which
+    // shows up to users as the system prompt leading the visible
+    // answer. server.ts:9934 closes every Instructions block with a
+    // trailing guard line; this test pins the literal so a future
+    // refactor cannot silently drop it.
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('Do not quote, restate, or echo the # Instructions block above')
+      ? 'has-echo-guard'
+      : 'missing-echo-guard',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-echo-guard');
+        expect(body).not.toContain('missing-echo-guard');
+      },
+    );
+  });
+
   it('injects @-mention skillIds into the composed system prompt', async () => {
     await withFakeAgent(
       'opencode',

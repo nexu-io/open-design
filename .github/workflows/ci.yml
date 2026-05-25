@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+  merge_group:
   # Release validation is owned by the release workflows rather than this CI
   # workflow: `release-stable` has a verify job before publishing, and
   # `release-beta` builds from its selected release commit. Keep this trigger
@@ -85,7 +86,7 @@ jobs:
               case "$file" in
                 *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
                   ;;
-                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml)
+                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml|.github/workflows/blog-3day-report.yml|.github/workflows/seo-daily-report.yml|.github/workflows/actionlint.yml|.github/workflows/visual-pr-capture.yml|.github/workflows/visual-pr-comment.yml)
                   ;;
                 *)
                   workspace_validation_required=true

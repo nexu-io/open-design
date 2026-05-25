@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-light-leak-cinema",
-  "title": "胶片漏光电影帧",
+  "title": "Light-Leak Cinematic Frame",
   "version": "0.1.0",
-  "description": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡",
+  "description": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -40,11 +40,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「胶片漏光电影帧」模板把我的内容做成一段「胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Light-Leak Cinematic Frame template to turn my content into a cinematic opening or chapter card with film light leaks, grain, letterbox framing, and large serif type. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「胶片漏光电影帧」模板把我的内容做成一段「胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "胶片漏光电影帧"
+          "title": "Light-Leak Cinematic Frame",
+          "title_i18n": {
+            "en": "Light-Leak Cinematic Frame",
+            "zh-CN": "胶片漏光电影帧"
+          }
         }
       ]
     },
@@ -73,5 +80,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Light-Leak Cinematic Frame",
+    "zh-CN": "胶片漏光电影帧"
+  },
+  "description_i18n": {
+    "en": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
+    "zh-CN": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡"
   }
 }

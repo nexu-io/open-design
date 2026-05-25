@@ -15,11 +15,11 @@
   font-size: 12.5px;
   color: var(--text-muted);
   gap: 8px;
-  height: 44px;
+  min-height: 44px;
   flex-shrink: 0;
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
-.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
+.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; }
 .viewer-toolbar .icon-only,
 .viewer-toolbar-actions .icon-only {
   width: 28px;
@@ -36,6 +36,71 @@
 }
 .viewer-toolbar .icon-only:hover:not(:disabled),
 .viewer-toolbar-actions .icon-only:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+
+/* Shown when a .jsx/.tsx module (loaded by a sibling HTML entry) is opened on
+   its own — it has no standalone preview, so we point at the page(s) that
+   render it. Issue #2744. */
+.viewer-module-pointer {
+  max-width: 460px;
+  margin: 64px auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.viewer-module-pointer__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.viewer-module-pointer__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.viewer-module-pointer__cta {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.viewer-module-pointer__entries {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  align-items: center;
+}
+.viewer-module-pointer__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.viewer-module-pointer__link:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+.viewer-module-pointer__link:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
 .viewer-action {
   display: inline-flex;
   align-items: center;
@@ -1720,4 +1785,3 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   background: var(--bg-panel);
   min-height: 100%;
 }
-

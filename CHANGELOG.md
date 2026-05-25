@@ -7,73 +7,177 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-20
+
+The rebuilt-core release: **everything is a plugin**, **headless by default**, **plugins create plugins**. Open Design's research-preview architecture has been replaced with a small, boring engine plus a plugin surface — design systems, slices, prototypes, exports, and Figma itself all live in plugins now. The desktop app is a thin wrapper around the OD CLI, so the same engine runs in Claude Code, OpenClaw, Hermes Agent, and chat bots in Lark / Discord / Slack. **Critique Theater** matures through **Phase 16** (rollout ratchet, conformance API, 9 Prometheus metrics, Grafana dashboard, M0 dark-launch by default). **149 design systems** now ship with structured `tokens.css` + components manifests across 60+ new brand fixtures. **Italian (it) locale** + **CJK font fallback**. New media providers: **Leonardo.ai**, **ElevenLabs**, **SenseAudio**. **Packaged auto-update** lands on both **macOS and Windows**, battle-hardened through the preview cycle. Plus a **top-to-bottom visual refresh**, **Quick-brief discovery overhaul**, **PostHog v2 analytics schema**, **manual edit UX overhaul** (focus mode, uploads, remove-element patch), **custom CLI agent profiles**, and **HTML Anything** landing page. 305 merged PRs by 75 contributors since 0.7.0.
+
 ### Added
 
-- Critique Theater Settings toggle with i18n across 6 locales. ([#1484])
-- Custom select web component primitive. ([#1714])
-- AskUserQuestion tool wired through chat with TodoWrite pinning. ([#1743])
-- Structured tokens for Notion, Linear, GitHub design systems. ([#1825])
-- Structured tokens for Cursor, Apple, Stripe design systems. ([#1831])
-- OpenAI-compatible media providers in daemon. ([#1712])
-- Leonardo.ai image generation provider. ([#1123])
-- Italian (`it`) locale support. ([#1323])
+#### Plugin engine, registry & publishing
+- **Plugin engine rebuild** with `packages/plugin-runtime`, `packages/registry-protocol`, and `packages/host` — the engine surfaces the plugin lifecycle through a small, neutral API so design systems, slices, prototypes, exports, and even Figma itself can live as plugins.
+- **Plugin registry detail drawer** with trust badges and marketplace metadata. ([#2087])
+- **GitHub rate-limit fallback for marketplace plugins** keeps install / refresh flows reliable when GitHub API is throttled. ([#2064])
+- **Plugin Publish-repo flow creates the author's repo correctly.** ([#2332], [#2363])
+- **CLI plugin publish reads manifest version** when the stored row is the `0.0.0` sentinel. ([#1903])
+- **Block raw publish CLIs from the authoring summary** — keep agents on the OD publish path. ([#2380])
+- **Demote Plugins + Integrations to the nav rail footer** so primary surface stays focused. ([#1806], [#2360], [#2397])
+
+#### Critique Theater (Phases 9 – 16)
+- **Phase 9** — drop-in mount wrapper, native i18n for `de` / `ja` / `ko` / `zh-TW`. ([#1315])
+- **Phase 10** — daemon adapter conformance lab + degraded registry. ([#1316])
+- **Phase 11** — Playwright stage suite (happy path, interrupt, 3 viewports, a11y). ([#1317], [#1483])
+- **Phase 12** — 9 Prometheus metrics + 6 log events + OTel span + Grafana dashboard. ([#1485])
+- **Phase 13** — reducer p99 benchmark + surface coverage walker. ([#1318])
+- **Phase 15** — rollout resolver + Settings toggle hook. ([#1320])
+- **Phase 16** — M-phase rollout ratchet + `/api/critique/conformance`. ([#1499])
+- **Wireup with M0 dark-launch by default.** ([#1338])
+- **Settings toggle** with dedicated section + i18n keys across 6 locales. ([#1484])
+
+#### Design systems & tokens
+- **Token channel default-on (PR-D)** so the new fixture pipeline is the default surface. ([#1544])
+- **Structured `tokens.css` for 60+ new brands** across AI, devtool, SaaS, fintech, docs, consumer, hardware, cultural categories (Apple, Stripe, Airbnb, Vercel, Notion, Linear, GitHub, Figma, Slack, Discord, OpenAI, Shopify, Spotify, Uber, Cursor, and many more). ([#1652], [#1794], [#1841], [#2023], [#2028], [#2029], [#2033])
+- **Token fixture catalog** — 20 brand + 20 product + remaining style fixtures, component-fixture coverage report. ([#2037], [#2040], [#2043], [#2049])
+- **Component manifests** — extract + consume manifests for design systems. ([#2051])
+- **Import design-system projects** via the discovery flow.
+- **Perplexity design system.** ([#1747])
+
+#### Agents, providers & media
+- **Local custom CLI agent profiles** for arbitrary CLI agents. ([#378])
+- **Leonardo.ai image provider.** ([#1123])
+- **ElevenLabs audio support.** ([#1384])
+- **SenseAudio TTS provider** + BYOK chat with image / video generation tools. ([#1633], [#2065])
+- **User-configurable model alias for the media dispatcher.** ([#1277])
+- **Cursor Agent live model id parsing** + auth diagnostics. ([#1538], [#2228])
+
+#### Web UI
+- **Manual edit UX overhaul** — focus mode, inline uploads, remove-element patch. ([#1516])
+- **Manual edit inspector.** ([#1448])
+- **Tweaks toolbar bound to the artifact panel** (toggle visibility from the panel chrome).
+- **Custom select primitive** for cleaner dropdowns.
+- **Collapsible comment side panel.**
+- **Export as image** in the share menu.
+- **Render GFM tables in markdown artifacts and chat.**
+- **Surface saved Project instructions** for review and retrieval.
+- **Copy-to-clipboard for user messages.**
+- **Filter-by-kind dropdown** on the design-files viewer.
+
+#### Discovery & onboarding
+- **Quick-brief: collapse freeform clarification into a single form.** ([#2226])
+- **Plugin inputs as authoritative Quick-brief answers.** ([#2243])
+- **Stabilize discovery brand answers** in prompts. ([#1861])
+- **Daemon surfaces discovery form answers to agents.** ([#2071])
+
+#### Desktop & packaging
+- **Packaged auto-update for both macOS and Windows.** ([#2362], [#2270], [#2403])
+- **Updater hardening** through the preview cycle — release validation, deferred installer on Windows, applied-state clearing, download / install handoff hardening, smoke-recovery. ([#2565], [#2575], [#2592], [#2595], [#2677], [#2687], [#2700])
+- **Desktop updater UI flow** — new in-app updater popup.
+- **Packaged update apply observations** captured for telemetry / debugging. ([#2429])
+- **Nightly + preview package identity** so beta installs don't collide with stable. ([#2437])
+- **macOS Dock icon stays put** when desktop-pet window opens. ([#2413])
+- **Refresh Open Design app visuals** — new app icons, logo, brand glyphs. ([#2436])
+- **Linux packaged client parity smoke coverage.**
+- **Ensure node binary dir is on PATH for agent sub-processes on Windows.** ([#1989])
+
+#### Internationalization
+- **Italian (it) locale** — full UI translation, brings supported languages to 19. ([#1323])
+- **CJK font fallback** for Chinese / Japanese / Korean. ([#2227])
+- **Refresh + polish French UI locale.**
+- **Translate template platform selection + Companion surfaces to Chinese.** ([#1491])
+- **Localize accent controls in settings**, comment-panel strings ([#1390], [#1392]), and skill validation messages.
+
+#### Analytics, observability & infra
+- **PostHog v2 event schema.** ([#2285])
+- **Unify `page_name` + onboarding / design-system page_views.** ([#2390])
+- **Upgrade `posthog-node` 4 → 5 in the daemon.** ([#2309])
+- **One-click log export from Settings → About.**
+
+#### Templates, landing & tutorials
+- **HTML Anything page + responsive landing header.** ([#2452])
+- **Rebuild `/templates` catalog from `design-templates`.** ([#2369])
+- **Refresh templates + add tutorials channel** on the landing site. ([#2409])
+- **Blog routes** on the landing site.
+- **Search Console reporting workflows** + GSC report opportunities. ([#2388])
+- **WeRead year-in-review HyperFrames template.**
 
 ### Changed
 
-- Packaged client lazy-loads Electron to enable headless config imports. ([#1798])
-- Claude design import canvas no longer zooms on scroll. ([#1726])
+- **Critique Theater dark-launched at M0 by default**, gated through the new rollout ratchet so phases can be promoted independently.
+- **Plugin trust badges unified** across registry surfaces.
+- Plugins and Integrations moved to the nav rail footer ([#1806], [#2360], [#2397]) — keep primary surface focused.
 
 ### Fixed
 
-#### Web / UI
-- Agent model select duplicate chevrons on macOS (wrapper+icon pattern). ([#1831])
-- Memory editor reveal after edit click. ([#1827])
-- Memory preview action distinct from delete. ([#1813], follow-up [#1863])
-- Settings subtab-pill hover contrast in dark theme. ([#1815])
-- Filter pill hover label readability across themes. ([#1828])
-- Comment marker numbering in panels. ([#1826])
-- Draw overlay scroll interaction. ([#1848])
-- Plugin publish footer spacing. ([#1849])
-- Picker hint clarity relative to comments panel. ([#1820])
-- Draw ink clears when exiting draw mode. ([#1821])
-- Chrome action icon alignment. ([#1783])
-- Manual folder import error feedback. ([#1666])
-- Template toolbar stickiness during scroll. ([#1785])
-- Comment panel string localization. ([#1443])
-- Resolved comments hidden from preview overlays. ([#1762])
-- HTML preview sandbox fallback to `srcDoc`. ([#1754])
-- BYOK chat inlines attached file context. ([#1730])
+#### Web
+- Block pitch-deck placeholder publishes and unbreak framework decks.
+- Rename FileViewer "Share" button to "Export".
+- Confirm before deleting a saved template in New Project.
+- Restore consistent app header layout on the entry view. ([#1519])
+- Refine preview and project dropdown controls. ([#1514])
+- Pin chat during content growth.
+- Auto-scroll feedback form.
+- Routines history rows deep-link to their specific conversation. (Fixes [#1505])
+- Hide resolved comments from preview overlays.
+- Keep filter pill hover labels readable.
+- Improve replace-modal button hover contrast.
+- Freeze completed run durations across conversations.
+- Align Home prompt overlay with textarea so caret lands on click.
+- Restore release-light background. ([#1540])
+- Allow downloads from preview iframes; fall back to srcDoc when HTML preview needs sandbox shim.
+- Coalesce chokidar rewrite bursts before refreshing files.
+- Reveal memory editor after edit click; distinguish expanded memory preview action.
+- Auto-annotate imported HTML elements for Tweaks selection. ([#892])
+- Stable shared frame screen paths from referrer.
+- Restore custom dropdown chevron for timezone selector in dark mode.
+- Daemon run recovery across reloads. ([#2374])
 
-#### Desktop
-- "Export PDF" now opens a direct "Save as PDF" file dialog and writes the PDF to disk, instead of opening the macOS system print dialog. Fixes [#1774](https://github.com/nexu-io/open-design/issues/1774).
+#### Desktop & packaging
+- macOS Dock icon stays put when desktop-pet window opens. ([#2413])
+- Align Windows smoke update root with portable installs. ([#2376])
+- Nightly release smoke identity. ([#2446])
+- Improve desktop updater ready UI. ([#2403])
+- Forward proxy env vars to packaged sidecars.
+- Detect mise-installed npm package bins.
+- Launch Windows updater fixture via Node. ([#2364])
+- Desktop "Export PDF" opens a direct "Save as PDF" file dialog and writes the PDF to disk, instead of opening the macOS system print dialog. (Fixes [#1774])
+- macOS close exits fullscreen before hiding.
+- Daemon's external-browser opener fixed on Windows.
 
-#### Daemon
-- Claude connection smoke wraps stdin properly. ([#1844])
-- BYOK proxy honors IP-literal `OD_ALLOWED_ORIGINS` in no-Origin Host check. ([#1775])
-- ACP stage timeout aligned to outer chat inactivity window. ([#1743])
+#### Daemon, runtime & connectivity
+- Surface discovery form answers to agents. ([#2071])
+- Stabilize discovery brand answers in prompts. ([#1861])
+- ACP model detection timeout is configurable.
+- Wrap Claude smoke test stdin as stream-json.
+- Preserve Claude tool inputs. ([#1476])
+- Codex CLI path fallback UX. ([#1205])
+- Treat Codex reconnect events as warnings, not fatal errors. ([#1482])
+- ACP config options used for model selection. ([#1208])
+- Remove OpenCode stdin dash sentinel; soft empty API response handling.
+- Forward external MCP servers to OpenCode.
 
-#### Documentation
-- Korean README desktop/background startup paragraph. ([#1876])
-- Windows troubleshooting link synced across 12 locale READMEs. ([#1875])
-- 0.8.0-preview banner pointing to Discussion [#1727]. ([#1781])
-- Clarify that packaged macOS support includes a verified Intel x64 ZIP path on Monterey, and document the Finder `PATH` caveat for packaged CLI detection. Fixes [#327](https://github.com/nexu-io/open-design/issues/327).
+### Documentation
 
-#### Packaging
-- Nix flake `pnpmDepsHash` refresh after merging main. ([#1765])
+- Critique Theater Phase 14 user guide + 2 AGENTS module maps. ([#1319])
+- Windows native setup notes in `AGENTS.md`.
+- Comprehensive contributor guide in `TRANSLATIONS.md`.
+- RTL_LOCALES UI guidance + `es-ES` alignment.
+- Sync `zh-TW` README with the English version.
+- Sync Windows troubleshooting link across locale READMEs.
+- Refresh contributors wall + GitHub metrics SVG.
+- Clarify Intel Mac ZIP packaging support (includes the Monterey verified path and the Finder `PATH` caveat for packaged CLI detection). (Fixes [#327])
+- README inventory badges sync — skills 31 → 131, design-systems 72 → 149. ([#1899])
+- 0.8.0-preview banner + Discussion #1727 pointer. ([#1781])
+- Active 0.8.0 contributors point at `main`. ([#1846])
 
-### Security
+### Internal
 
-- DNS-rebinding SSRF prevented by resolving hostname before approving external API base URLs. ([#1176])
-- Tightened `LiveArtifactSsePayload.refreshStatus` to the canonical `LiveArtifactRefreshStatus` enum, preventing future REST↔SSE type drift. ([#1871])
-- `nix-check.yml` workflow scoped to `permissions: contents: read`, matching the rest of the workflow suite. ([#1870])
-
-### Internal / Tests
-
-- Italian locale cleanup (`onImportFolder` signature + stale pet rail keys). ([#1814])
-- Linux packaged client parity smoke coverage. ([#1204])
-- Metrics PRs trigger required checks. ([#1801])
-- Packaged-linux runtime logs captured into headless artifact. ([#1823])
-- Memory preview icon assertion decoupled for test stability. ([#1863])
+- Critique Theater Playwright stage suite (happy, interrupt, 3 viewports, a11y). ([#1317], [#1483])
+- Reducer p99 bench + surface coverage walker. ([#1318])
+- Harden e2e extended coverage state assertions. ([#2245])
+- Visual regression PR workflow (CI).
+- Component manifest extraction + daemon consume path. ([#2051])
+- OD CLI wraps GitHub CLI (so plugins create plugins).
+- `pnpm i18n:coverage` informational report.
+- Issue templates: bug, feature, preview/v0.8.0 + chooser config. ([#1708])
 
 ## [0.7.0] - 2026-05-12
 
@@ -1006,7 +1110,8 @@ First public release of Open Design — a local-first, open-source alternative t
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])
 
-[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.7.0...HEAD
+[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.8.0...HEAD
+[0.8.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0
 [0.7.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.7.0
 [0.6.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.6.0
 [0.5.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.5.0
@@ -1515,7 +1620,6 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1105]: https://github.com/nexu-io/open-design/pull/1105
 [#1115]: https://github.com/nexu-io/open-design/pull/1115
 [#1117]: https://github.com/nexu-io/open-design/pull/1117
-[#1123]: https://github.com/nexu-io/open-design/pull/1123
 [#1126]: https://github.com/nexu-io/open-design/pull/1126
 [#1128]: https://github.com/nexu-io/open-design/pull/1128
 [#1132]: https://github.com/nexu-io/open-design/pull/1132
@@ -1529,13 +1633,11 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1150]: https://github.com/nexu-io/open-design/pull/1150
 [#1156]: https://github.com/nexu-io/open-design/pull/1156
 [#1159]: https://github.com/nexu-io/open-design/pull/1159
-[#1176]: https://github.com/nexu-io/open-design/pull/1176
 [#1171]: https://github.com/nexu-io/open-design/pull/1171
 [#1173]: https://github.com/nexu-io/open-design/pull/1173
 [#1183]: https://github.com/nexu-io/open-design/pull/1183
 [#1188]: https://github.com/nexu-io/open-design/pull/1188
 [#1203]: https://github.com/nexu-io/open-design/pull/1203
-[#1204]: https://github.com/nexu-io/open-design/pull/1204
 [#1206]: https://github.com/nexu-io/open-design/pull/1206
 [#1205]: https://github.com/nexu-io/open-design/pull/1205
 [#1207]: https://github.com/nexu-io/open-design/pull/1207
@@ -1563,7 +1665,6 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1300]: https://github.com/nexu-io/open-design/pull/1300
 [#1307]: https://github.com/nexu-io/open-design/pull/1307
 [#1308]: https://github.com/nexu-io/open-design/pull/1308
-[#1323]: https://github.com/nexu-io/open-design/pull/1323
 [#1328]: https://github.com/nexu-io/open-design/pull/1328
 [#1330]: https://github.com/nexu-io/open-design/pull/1330
 [#1161]: https://github.com/nexu-io/open-design/pull/1161
@@ -1579,40 +1680,97 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1402]: https://github.com/nexu-io/open-design/pull/1402
 [#1439]: https://github.com/nexu-io/open-design/pull/1439
 [#1442]: https://github.com/nexu-io/open-design/pull/1442
-[#1443]: https://github.com/nexu-io/open-design/pull/1443
+[#327]: https://github.com/nexu-io/open-design/issues/327
+[#378]: https://github.com/nexu-io/open-design/pull/378
+[#892]: https://github.com/nexu-io/open-design/pull/892
+[#1123]: https://github.com/nexu-io/open-design/pull/1123
+[#1277]: https://github.com/nexu-io/open-design/pull/1277
+[#1315]: https://github.com/nexu-io/open-design/pull/1315
+[#1316]: https://github.com/nexu-io/open-design/pull/1316
+[#1317]: https://github.com/nexu-io/open-design/pull/1317
+[#1318]: https://github.com/nexu-io/open-design/pull/1318
+[#1319]: https://github.com/nexu-io/open-design/pull/1319
+[#1320]: https://github.com/nexu-io/open-design/pull/1320
+[#1323]: https://github.com/nexu-io/open-design/pull/1323
+[#1338]: https://github.com/nexu-io/open-design/pull/1338
+[#1384]: https://github.com/nexu-io/open-design/pull/1384
+[#1390]: https://github.com/nexu-io/open-design/pull/1390
+[#1392]: https://github.com/nexu-io/open-design/pull/1392
+[#1448]: https://github.com/nexu-io/open-design/pull/1448
+[#1476]: https://github.com/nexu-io/open-design/pull/1476
+[#1482]: https://github.com/nexu-io/open-design/pull/1482
+[#1483]: https://github.com/nexu-io/open-design/pull/1483
 [#1484]: https://github.com/nexu-io/open-design/pull/1484
-[#1666]: https://github.com/nexu-io/open-design/pull/1666
-[#1712]: https://github.com/nexu-io/open-design/pull/1712
-[#1714]: https://github.com/nexu-io/open-design/pull/1714
-[#1726]: https://github.com/nexu-io/open-design/pull/1726
-[#1727]: https://github.com/nexu-io/open-design/discussions/1727
-[#1730]: https://github.com/nexu-io/open-design/pull/1730
-[#1743]: https://github.com/nexu-io/open-design/pull/1743
-[#1754]: https://github.com/nexu-io/open-design/pull/1754
-[#1762]: https://github.com/nexu-io/open-design/pull/1762
-[#1765]: https://github.com/nexu-io/open-design/pull/1765
-[#1775]: https://github.com/nexu-io/open-design/pull/1775
+[#1485]: https://github.com/nexu-io/open-design/pull/1485
+[#1491]: https://github.com/nexu-io/open-design/pull/1491
+[#1499]: https://github.com/nexu-io/open-design/pull/1499
+[#1505]: https://github.com/nexu-io/open-design/issues/1505
+[#1514]: https://github.com/nexu-io/open-design/pull/1514
+[#1516]: https://github.com/nexu-io/open-design/pull/1516
+[#1519]: https://github.com/nexu-io/open-design/pull/1519
+[#1538]: https://github.com/nexu-io/open-design/pull/1538
+[#1540]: https://github.com/nexu-io/open-design/pull/1540
+[#1544]: https://github.com/nexu-io/open-design/pull/1544
+[#1633]: https://github.com/nexu-io/open-design/pull/1633
+[#1652]: https://github.com/nexu-io/open-design/pull/1652
+[#1708]: https://github.com/nexu-io/open-design/pull/1708
+[#1747]: https://github.com/nexu-io/open-design/pull/1747
+[#1774]: https://github.com/nexu-io/open-design/issues/1774
 [#1781]: https://github.com/nexu-io/open-design/pull/1781
-[#1783]: https://github.com/nexu-io/open-design/pull/1783
-[#1785]: https://github.com/nexu-io/open-design/pull/1785
-[#1798]: https://github.com/nexu-io/open-design/pull/1798
-[#1801]: https://github.com/nexu-io/open-design/pull/1801
-[#1813]: https://github.com/nexu-io/open-design/pull/1813
-[#1814]: https://github.com/nexu-io/open-design/pull/1814
-[#1815]: https://github.com/nexu-io/open-design/pull/1815
-[#1820]: https://github.com/nexu-io/open-design/pull/1820
-[#1821]: https://github.com/nexu-io/open-design/pull/1821
-[#1823]: https://github.com/nexu-io/open-design/pull/1823
-[#1825]: https://github.com/nexu-io/open-design/pull/1825
-[#1826]: https://github.com/nexu-io/open-design/pull/1826
-[#1827]: https://github.com/nexu-io/open-design/pull/1827
-[#1828]: https://github.com/nexu-io/open-design/pull/1828
-[#1831]: https://github.com/nexu-io/open-design/pull/1831
-[#1844]: https://github.com/nexu-io/open-design/pull/1844
-[#1848]: https://github.com/nexu-io/open-design/pull/1848
-[#1849]: https://github.com/nexu-io/open-design/pull/1849
-[#1863]: https://github.com/nexu-io/open-design/pull/1863
-[#1870]: https://github.com/nexu-io/open-design/pull/1870
-[#1871]: https://github.com/nexu-io/open-design/pull/1871
-[#1875]: https://github.com/nexu-io/open-design/pull/1875
-[#1876]: https://github.com/nexu-io/open-design/pull/1876
+[#1794]: https://github.com/nexu-io/open-design/pull/1794
+[#1806]: https://github.com/nexu-io/open-design/pull/1806
+[#1841]: https://github.com/nexu-io/open-design/pull/1841
+[#1846]: https://github.com/nexu-io/open-design/pull/1846
+[#1861]: https://github.com/nexu-io/open-design/pull/1861
+[#1899]: https://github.com/nexu-io/open-design/pull/1899
+[#1903]: https://github.com/nexu-io/open-design/pull/1903
+[#1989]: https://github.com/nexu-io/open-design/pull/1989
+[#2023]: https://github.com/nexu-io/open-design/pull/2023
+[#2028]: https://github.com/nexu-io/open-design/pull/2028
+[#2029]: https://github.com/nexu-io/open-design/pull/2029
+[#2033]: https://github.com/nexu-io/open-design/pull/2033
+[#2037]: https://github.com/nexu-io/open-design/pull/2037
+[#2040]: https://github.com/nexu-io/open-design/pull/2040
+[#2043]: https://github.com/nexu-io/open-design/pull/2043
+[#2049]: https://github.com/nexu-io/open-design/pull/2049
+[#2051]: https://github.com/nexu-io/open-design/pull/2051
+[#2064]: https://github.com/nexu-io/open-design/pull/2064
+[#2065]: https://github.com/nexu-io/open-design/pull/2065
+[#2071]: https://github.com/nexu-io/open-design/pull/2071
+[#2087]: https://github.com/nexu-io/open-design/pull/2087
+[#2226]: https://github.com/nexu-io/open-design/pull/2226
+[#2227]: https://github.com/nexu-io/open-design/pull/2227
+[#2228]: https://github.com/nexu-io/open-design/pull/2228
+[#2243]: https://github.com/nexu-io/open-design/pull/2243
+[#2245]: https://github.com/nexu-io/open-design/pull/2245
+[#2264]: https://github.com/nexu-io/open-design/pull/2264
+[#2270]: https://github.com/nexu-io/open-design/pull/2270
+[#2285]: https://github.com/nexu-io/open-design/pull/2285
+[#2309]: https://github.com/nexu-io/open-design/pull/2309
+[#2332]: https://github.com/nexu-io/open-design/pull/2332
+[#2360]: https://github.com/nexu-io/open-design/pull/2360
+[#2362]: https://github.com/nexu-io/open-design/pull/2362
+[#2363]: https://github.com/nexu-io/open-design/pull/2363
+[#2364]: https://github.com/nexu-io/open-design/pull/2364
+[#2369]: https://github.com/nexu-io/open-design/pull/2369
+[#2374]: https://github.com/nexu-io/open-design/pull/2374
+[#2376]: https://github.com/nexu-io/open-design/pull/2376
+[#2380]: https://github.com/nexu-io/open-design/pull/2380
+[#2388]: https://github.com/nexu-io/open-design/pull/2388
+[#2390]: https://github.com/nexu-io/open-design/pull/2390
+[#2397]: https://github.com/nexu-io/open-design/pull/2397
+[#2403]: https://github.com/nexu-io/open-design/pull/2403
+[#2409]: https://github.com/nexu-io/open-design/pull/2409
+[#2413]: https://github.com/nexu-io/open-design/pull/2413
+[#2429]: https://github.com/nexu-io/open-design/pull/2429
+[#2436]: https://github.com/nexu-io/open-design/pull/2436
+[#2437]: https://github.com/nexu-io/open-design/pull/2437
+[#2446]: https://github.com/nexu-io/open-design/pull/2446
+[#2452]: https://github.com/nexu-io/open-design/pull/2452
+[#2565]: https://github.com/nexu-io/open-design/pull/2565
+[#2575]: https://github.com/nexu-io/open-design/pull/2575
+[#2592]: https://github.com/nexu-io/open-design/pull/2592
+[#2595]: https://github.com/nexu-io/open-design/pull/2595
+[#2677]: https://github.com/nexu-io/open-design/pull/2677
+[#2687]: https://github.com/nexu-io/open-design/pull/2687
+[#2700]: https://github.com/nexu-io/open-design/pull/2700

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -26,6 +26,8 @@ import {
 } from './ChatComposer';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon } from './Icon';
+import { repoConnectCopy } from './design-system-github-evidence';
+import type { SettingsSection } from './SettingsDialog';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -235,6 +237,7 @@ interface Props {
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
   ) => void;
+  onRetry?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
   // Skills available for @-mention assembly. ProjectView filters out the
   // user's disabled set before passing them in here.
@@ -246,7 +249,10 @@ interface Props {
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
+  forceStreamingMessageIds?: Set<string>;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
@@ -256,10 +262,6 @@ interface Props {
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   newConversationDisabled?: boolean;
-  // Header "resume" button — synthesizes a handoff prompt from the
-  // current transcript and opens a fresh conversation seeded with it.
-  onResumeConversation?: () => void;
-  resumeConversationDisabled?: boolean;
   // Conversation list that used to live in the topbar. The chat tab now
   // owns the list so users can browse + switch conversations without
   // leaving the pane.
@@ -270,10 +272,24 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
-  onOpenSettings?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
   onOpenMcpSettings?: () => void;
+  // True when this project is a GitHub-backed design system whose repository
+  // evidence has not fully landed. Surfaces a "Connect your repo" CTA in the
+  // empty chat state alongside the starter examples.
+  connectRepoNeeded?: boolean;
+  // Live GitHub connector status, used only to pick the connect-repo CTA copy
+  // (connect vs re-import). Undefined until the status fetch resolves.
+  githubConnected?: boolean;
+  // Fires when the connect-repo CTA button is clicked. The parent decides what
+  // it does based on connector status (open Connectors, or prefill the composer
+  // with the import instruction).
+  onConnectRepo?: () => void;
+  // Bumped by the parent to push a draft into the composer (used by the
+  // "Import repo" CTA). The nonce lets the same text fire more than once.
+  composerDraftSignal?: { text: string; nonce: number };
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -321,17 +337,19 @@ export function ChatPane({
   onDetachComment,
   onDeleteComment,
   onSend,
+  onRetry,
   onStop,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
+  activePluginActionPaths,
+  hiddenPluginActionPaths,
+  forceStreamingMessageIds,
   initialDraft,
   onSubmitForm,
   onContinueRemainingTasks,
   onAssistantFeedback,
   onNewConversation,
   newConversationDisabled = false,
-  onResumeConversation,
-  resumeConversationDisabled = false,
   conversations,
   activeConversationId,
   onSelectConversation,
@@ -339,6 +357,10 @@ export function ChatPane({
   onRenameConversation,
   onOpenSettings,
   onOpenMcpSettings,
+  connectRepoNeeded,
+  githubConnected,
+  onConnectRepo,
+  composerDraftSignal,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -361,6 +383,7 @@ export function ChatPane({
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
+  const pinnedTodoRef = useRef<HTMLDivElement | null>(null);
   const didInitialScrollRef = useRef(false);
   // Tracks whether the user is glued close enough to the bottom that
   // streamed content should auto-follow. Distinct from the jump-button
@@ -382,6 +405,7 @@ export function ChatPane({
   const hasActiveRunMessage = messages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
+  const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
   // Only the first user message gets the active-plugin chip — the
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
@@ -425,6 +449,17 @@ export function ChatPane({
       composerRef.current?.setDraft('');
     }
   }, [initialDraft]);
+
+  // Parent-driven composer prefill (the "Import repo" CTA). Reuse the same
+  // imperative setDraft the starter cards use; the nonce guards against
+  // re-applying the same signal on unrelated re-renders.
+  const lastDraftSignalNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!composerDraftSignal) return;
+    if (lastDraftSignalNonceRef.current === composerDraftSignal.nonce) return;
+    lastDraftSignalNonceRef.current = composerDraftSignal.nonce;
+    composerRef.current?.setDraft(composerDraftSignal.text);
+  }, [composerDraftSignal]);
 
   useEffect(() => {
     const el = logRef.current;
@@ -609,12 +644,32 @@ export function ChatPane({
       }
     };
 
+    // The PinnedTodoSlot renders outside the scroll container. When the todo
+    // card grows, the chat-log's clientHeight shrinks (flex layout) and the
+    // user drifts away from the bottom. Observe the pinned-todo div so
+    // followLatestIfPinned fires whenever the card changes height.
+    let observedPinnedTodo: Element | null = null;
+    const syncPinnedTodo = () => {
+      if (!resizeObserver) return;
+      const pinnedEl = pinnedTodoRef.current;
+      if (pinnedEl && observedPinnedTodo !== pinnedEl) {
+        if (observedPinnedTodo) resizeObserver.unobserve(observedPinnedTodo);
+        resizeObserver.observe(pinnedEl);
+        observedPinnedTodo = pinnedEl;
+      } else if (!pinnedEl && observedPinnedTodo) {
+        resizeObserver.unobserve(observedPinnedTodo);
+        observedPinnedTodo = null;
+      }
+    };
+
     syncObservedChildren();
+    syncPinnedTodo();
 
     const mutationObserver =
       typeof MutationObserver !== 'undefined'
         ? new MutationObserver(() => {
             syncObservedChildren();
+            syncPinnedTodo();
             followLatestIfPinned();
           })
         : null;
@@ -623,6 +678,15 @@ export function ChatPane({
       subtree: true,
       characterData: true,
     });
+    // PinnedTodoSlot lives outside the chat-log subtree (it is a sibling of
+    // .chat-log-wrap inside .pane). The MutationObserver above only fires for
+    // changes inside el, so it cannot detect the slot mounting or unmounting.
+    // Watch the nearest common ancestor (.pane) with childList-only to catch
+    // those transitions and keep syncPinnedTodo current.
+    const paneEl = el.parentElement?.parentElement ?? null;
+    if (paneEl && mutationObserver) {
+      mutationObserver.observe(paneEl, { childList: true });
+    }
 
     return () => {
       if (followFrame !== null) cancelAnimationFrame(followFrame);
@@ -652,6 +716,65 @@ export function ChatPane({
 
   const activeConversation =
     conversations.find((c) => c.id === activeConversationId) ?? null;
+  const activeConversationMissing = !activeConversation;
+  const activeConversationTitle =
+    activeConversation
+      ? activeConversation.title || t('chat.untitledConversation')
+      : t('chat.conversationsHeading');
+  const activeConversationRenameLabel = activeConversation
+    ? t('chat.renameConversationLabel', { title: activeConversationTitle })
+    : '';
+  const titleEditClosedRef = useRef(false);
+  const [editingActiveTitle, setEditingActiveTitle] = useState(false);
+  const [activeTitleDraft, setActiveTitleDraft] = useState('');
+
+  useEffect(() => {
+    if (editingActiveTitle) return;
+    setActiveTitleDraft(activeConversation?.title ?? '');
+  }, [activeConversation?.title, editingActiveTitle]);
+
+  // Switching conversations should always close the inline editor so the
+  // old draft cannot leak into the next conversation.
+  useEffect(() => {
+    titleEditClosedRef.current = true;
+    setEditingActiveTitle(false);
+  }, [activeConversationId]);
+
+  // The selected id can stay stable while the record temporarily vanishes
+  // during a reload; cancel the editor in that case as well.
+  useEffect(() => {
+    if (!activeConversationMissing) return;
+    titleEditClosedRef.current = true;
+    setEditingActiveTitle(false);
+  }, [activeConversationMissing]);
+
+  function beginActiveTitleRename() {
+    if (!activeConversation || !onRenameConversation) return;
+    titleEditClosedRef.current = false;
+    setActiveTitleDraft(activeConversation.title ?? '');
+    setEditingActiveTitle(true);
+  }
+
+  function commitActiveTitleRename() {
+    if (titleEditClosedRef.current) return;
+    titleEditClosedRef.current = true;
+    if (activeConversation && onRenameConversation) {
+      const nextTitle = normalizeConversationRename(
+        activeConversation.title,
+        activeTitleDraft,
+      );
+      if (nextTitle !== null) {
+        onRenameConversation(activeConversation.id, nextTitle);
+      }
+    }
+    setEditingActiveTitle(false);
+  }
+
+  function cancelActiveTitleRename() {
+    titleEditClosedRef.current = true;
+    setActiveTitleDraft(activeConversation?.title ?? '');
+    setEditingActiveTitle(false);
+  }
 
   function jumpToBottom() {
     const el = logRef.current;
@@ -662,6 +785,49 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-header">
+        <div className="chat-active-conversation">
+          {editingActiveTitle && activeConversation && onRenameConversation ? (
+            <input
+              autoFocus
+              className="chat-active-conversation-input"
+              data-testid="chat-active-conversation-rename-input"
+              aria-label={activeConversationRenameLabel}
+              value={activeTitleDraft}
+              onChange={(e) => setActiveTitleDraft(e.target.value)}
+              onBlur={commitActiveTitleRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitActiveTitleRename();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelActiveTitleRename();
+                }
+              }}
+            />
+          ) : (
+            <>
+              <span
+                className="chat-active-conversation-title"
+                data-testid="chat-active-conversation-title"
+                title={activeConversationTitle}
+              >
+                {activeConversationTitle}
+              </span>
+              {activeConversation && onRenameConversation ? (
+                <button
+                  type="button"
+                  className="chat-active-conversation-rename"
+                  aria-label={activeConversationRenameLabel}
+                  title={t('common.rename')}
+                  onClick={beginActiveTitleRename}
+                >
+                  <Icon name="pencil" size={13} />
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
         <div className="chat-header-actions">
           <div
             className={`chat-history-wrap${showConvList ? ' open' : ''}`}
@@ -762,19 +928,6 @@ export function ChatPane({
           >
             <Icon name="plus" size={16} />
           </button>
-          {onResumeConversation ? (
-            <button
-              type="button"
-              className="icon-only"
-              data-testid="resume-conversation"
-              title={t('chat.resumeConversation')}
-              aria-label={t('chat.resumeConversation')}
-              onClick={onResumeConversation}
-              disabled={resumeConversationDisabled}
-            >
-              <Icon name="reload" size={16} />
-            </button>
-          ) : null}
           {onCollapse ? (
             <button
               type="button"
@@ -841,6 +994,30 @@ export function ChatPane({
                       </button>
                     ))}
                   </div>
+                  {connectRepoNeeded ? (
+                    <div className="chat-connect-repo" role="note">
+                      <span className="chat-connect-repo-icon" aria-hidden>
+                        <Icon name="github" size={18} />
+                      </span>
+                      <span className="chat-connect-repo-body">
+                        <span className="chat-connect-repo-title">
+                          {repoConnectCopy(githubConnected).cardTitle}
+                        </span>
+                        <span className="chat-connect-repo-text">
+                          {repoConnectCopy(githubConnected).cardBody}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="primary-ghost"
+                        disabled={githubConnected === undefined}
+                        onClick={() => onConnectRepo?.()}
+                      >
+                        <Icon name="github" size={13} />
+                        {repoConnectCopy(githubConnected).buttonLabel}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {messages.map((m, i) => {
@@ -849,6 +1026,7 @@ export function ChatPane({
                   m,
                   streaming,
                   lastAssistantId,
+                  forceStreamingMessageIds,
                 );
                 return (
                   <Fragment key={m.id}>
@@ -882,6 +1060,8 @@ export function ChatPane({
                         projectFileNames={projectFileNames}
                         onRequestOpenFile={onRequestOpenFile}
                         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
+                        activePluginActionPaths={activePluginActionPaths}
+                        hiddenPluginActionPaths={hiddenPluginActionPaths}
                         isLast={m.id === lastAssistantId}
                         nextUserContent={nextUserContentByAssistantId.get(m.id)}
                         suppressDirectionForms={hasActiveDesignSystem}
@@ -906,7 +1086,20 @@ export function ChatPane({
                   </Fragment>
                 );
               })}
-              {error ? <div className="msg error">{error}</div> : null}
+              {error ? (
+                <div className="msg error">
+                  <span className="chat-error-text">{error}</span>
+                  {retryAssistant && onRetry ? (
+                    <button
+                      type="button"
+                      className="ghost chat-error-retry"
+                      onClick={() => onRetry(retryAssistant)}
+                    >
+                      {t('promptTemplates.retry')}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             {/* Always mounted so the CSS transition can play in both
                 directions; the `chat-jump-btn-active` class flips the
@@ -929,6 +1122,7 @@ export function ChatPane({
             streaming={streaming}
             dismissedKey={dismissedPinnedTodoKey}
             onDismiss={setDismissedPinnedTodoKey}
+            containerRef={pinnedTodoRef}
           />
           <ChatComposer
             ref={composerRef}
@@ -981,11 +1175,13 @@ function PinnedTodoSlot({
   streaming,
   dismissedKey,
   onDismiss,
+  containerRef,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
   dismissedKey: string | null;
   onDismiss: (key: string | null) => void;
+  containerRef?: MutableRefObject<HTMLDivElement | null>;
 }) {
   // `exiting` lets the dismiss click play a slide-down transition before
   // the slot tears down. Without it React would unmount immediately and
@@ -1001,7 +1197,7 @@ function PinnedTodoSlot({
   }
   if (snapshotKey === dismissedKey) return null;
   return (
-    <div className={`chat-pinned-todo${exiting ? ' chat-pinned-todo-exit' : ''}`}>
+    <div className={`chat-pinned-todo${exiting ? ' chat-pinned-todo-exit' : ''}`} ref={containerRef}>
       <TodoCard
         input={input}
         runStreaming={streaming}
@@ -1140,12 +1336,26 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'succeeded' || status === 'failed' || status === 'canceled';
 }
 
+export function retryableAssistantMessage(
+  messages: ChatMessage[],
+  lastAssistantId: string | null | undefined,
+  paneStreaming: boolean,
+): ChatMessage | null {
+  if (paneStreaming) return null;
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== 'assistant') return null;
+  if (last.id !== lastAssistantId) return null;
+  return last.runStatus === 'failed' ? last : null;
+}
+
 export function isAssistantMessageStreaming(
   message: ChatMessage,
   paneStreaming: boolean,
   lastAssistantId: string | null | undefined,
+  forceStreamingMessageIds?: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
+  if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;
@@ -1171,8 +1381,35 @@ function ConversationRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(conversation.title ?? '');
+  const titleEditClosedRef = useRef(false);
   const displayTitle =
     conversation.title || t('chat.untitledConversation');
+
+  function beginConversationRename() {
+    if (!onRename) return;
+    titleEditClosedRef.current = false;
+    setDraft(conversation.title ?? '');
+    setEditing(true);
+  }
+
+  function commitConversationRename() {
+    if (titleEditClosedRef.current) return;
+    titleEditClosedRef.current = true;
+    if (onRename) {
+      const nextTitle = normalizeConversationRename(conversation.title, draft);
+      if (nextTitle !== null) {
+        onRename(conversation.id, nextTitle);
+      }
+    }
+    setEditing(false);
+  }
+
+  function cancelConversationRename() {
+    titleEditClosedRef.current = true;
+    setDraft(conversation.title ?? '');
+    setEditing(false);
+  }
+
   return (
     <div
       className={`chat-conv-item${active ? ' active' : ''}`}
@@ -1184,16 +1421,14 @@ function ConversationRow({
           className="chat-conv-rename-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            onRename(conversation.id, draft);
-            setEditing(false);
-          }}
+          onBlur={commitConversationRename}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              onRename(conversation.id, draft);
-              setEditing(false);
+              e.preventDefault();
+              commitConversationRename();
             } else if (e.key === 'Escape') {
-              setEditing(false);
+              e.preventDefault();
+              cancelConversationRename();
             }
           }}
           style={{ flex: 1, padding: '2px 6px', fontSize: 12 }}
@@ -1205,11 +1440,7 @@ function ConversationRow({
           data-testid={`conversation-select-${conversation.id}`}
           style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left' }}
           onClick={onSelect}
-          onDoubleClick={() => {
-            if (!onRename) return;
-            setDraft(conversation.title ?? '');
-            setEditing(true);
-          }}
+          onDoubleClick={beginConversationRename}
         >
           {displayTitle}
         </button>
@@ -1233,6 +1464,15 @@ function ConversationRow({
       </button>
     </div>
   );
+}
+
+function normalizeConversationRename(
+  currentTitle: string | null | undefined,
+  draft: string,
+): string | null {
+  const current = (currentTitle ?? '').trim();
+  const next = draft.trim();
+  return next === current ? null : next;
 }
 
 function UserMessage({

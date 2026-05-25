@@ -407,10 +407,23 @@ describe('OrbitService', () => {
   });
 
   it('tracks the most recent run per template alongside the global last run', async () => {
+    const realSetImmediate = setImmediate;
     vi.useFakeTimers();
     const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));
     try {
       const service = new OrbitService(dataDir);
+      const waitForStatus = async (
+        predicate: (status: Awaited<ReturnType<OrbitService['status']>>) => boolean,
+      ) => {
+        let status = await service.status();
+        for (let attempt = 0; attempt < 50 && !predicate(status); attempt += 1) {
+          await vi.advanceTimersByTimeAsync(1);
+          // Fake timers do not drive the real filesystem callbacks that persist Orbit summaries.
+          await new Promise<void>((resolve) => realSetImmediate(resolve));
+          status = await service.status();
+        }
+        return status;
+      };
       let runCount = 0;
       service.setTemplateResolver(async (skillId) => ({
         id: skillId,
@@ -435,41 +448,23 @@ describe('OrbitService', () => {
       service.configure({ enabled: false, time: '08:00', templateSkillId: 'orbit-general' });
       vi.setSystemTime(new Date('2026-05-06T08:00:00.000Z'));
       await service.start('manual');
-      let status = await service.status();
-      for (
-        let attempt = 0;
-        attempt < 10 && (status.running || status.lastRunsByTemplate['orbit-general']?.agentRunId !== 'agent-1');
-        attempt += 1
-      ) {
-        await vi.advanceTimersByTimeAsync(1);
-        status = await service.status();
-      }
+      await waitForStatus((status) =>
+        !status.running && status.lastRunsByTemplate['orbit-general']?.agentRunId === 'agent-1',
+      );
 
       service.configure({ enabled: false, time: '08:00', templateSkillId: 'orbit-editorial' });
       vi.setSystemTime(new Date('2026-05-06T09:00:00.000Z'));
       await service.start('manual');
-      for (
-        let attempt = 0;
-        attempt < 10 && (status.running || status.lastRunsByTemplate['orbit-editorial']?.agentRunId !== 'agent-2');
-        attempt += 1
-      ) {
-        await vi.advanceTimersByTimeAsync(1);
-        status = await service.status();
-      }
+      await waitForStatus((status) =>
+        !status.running && status.lastRunsByTemplate['orbit-editorial']?.agentRunId === 'agent-2',
+      );
 
       service.configure({ enabled: false, time: '08:00', templateSkillId: 'orbit-general' });
       vi.setSystemTime(new Date('2026-05-06T10:00:00.000Z'));
       await service.start('manual');
-      for (
-        let attempt = 0;
-        attempt < 10 && (status.running || status.lastRunsByTemplate['orbit-general']?.agentRunId !== 'agent-3');
-        attempt += 1
-      ) {
-        await vi.advanceTimersByTimeAsync(1);
-        status = await service.status();
-      }
-
-      status = await service.status();
+      const status = await waitForStatus((status) =>
+        !status.running && status.lastRunsByTemplate['orbit-general']?.agentRunId === 'agent-3',
+      );
 
       expect(status.lastRun).toMatchObject({
         agentRunId: 'agent-3',

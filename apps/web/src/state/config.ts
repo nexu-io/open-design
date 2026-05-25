@@ -82,6 +82,17 @@ export const DEFAULT_CONFIG: AppConfig = {
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
   orbit: DEFAULT_ORBIT,
+  // Telemetry defaults to ON so fresh-install users emit onboarding /
+  // ui_click events from the first frame. The disclosure modal still
+  // appears after `onboardingCompleted` flips, and Settings → Privacy
+  // remains the one-click opt-out. Without these defaults the gate at
+  // `daemon/src/analytics.ts` (`if (telemetry?.metrics !== true) return`)
+  // dropped every event fired during onboarding because no consent
+  // existed yet — observed live on the nightly.10 QA run, which left
+  // zero `page_view pn=onboarding` rows on PostHog despite the user
+  // completing the flow. `artifactManifest` stays off; the existing
+  // PrivacySection lets the user enable it explicitly.
+  telemetry: { metrics: true, content: true, artifactManifest: false },
 };
 
 /** Well-known providers with pre-filled base URLs. */
