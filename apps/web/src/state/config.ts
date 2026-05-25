@@ -108,6 +108,8 @@ export interface KnownProvider {
   models?: string[];
   /** Some local/self-hosted endpoints do not require bearer credentials. */
   requiresApiKey?: boolean;
+  /** Default reasoning effort for DeepSeek models (low/medium/high/max) */
+  defaultReasoning?: string;
 }
 
 // Some providers appear more than once because they expose both
@@ -180,7 +182,8 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'DeepSeek — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-pro',
+    defaultReasoning: 'high',
     models: [
       'deepseek-chat',
       'deepseek-reasoner',
