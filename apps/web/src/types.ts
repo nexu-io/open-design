@@ -192,6 +192,7 @@ export interface ApiProtocolConfig {
    *  per-protocol so flipping between BYOK tabs doesn't reset the
    *  SenseAudio image-model choice. */
   byokImageModel?: string;
+  reasoning?: string;
 }
 
 // Per-CLI model + reasoning the user picked in the model menu. Each agent

@@ -236,7 +236,11 @@ export function PreviewDrawOverlay({
     const win = iframe?.contentWindow;
     if (!win || typeof win.scrollBy !== 'function') return;
     e.preventDefault();
-    win.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: 'auto' });
+    try {
+      win.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: 'auto' });
+    } catch {
+      // Ignore cross-origin scroll failures.
+    }
   }
 
   function clearInk() {
