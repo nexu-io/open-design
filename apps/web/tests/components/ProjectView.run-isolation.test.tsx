@@ -432,6 +432,7 @@ describe('ProjectView conversation run isolation', () => {
     renderProjectView();
 
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
 
     fireEvent.click(screen.getByTestId('new-conversation'));
     await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-c'));

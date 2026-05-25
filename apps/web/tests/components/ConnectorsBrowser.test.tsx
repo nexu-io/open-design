@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorDetail } from '@open-design/contracts';
 
@@ -771,6 +771,7 @@ describe('ConnectorsBrowser', () => {
     await screen.findByText('GitHub');
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await screen.findByRole('button', { name: 'Cancel' });
+    await act(async () => {}); // flush connectorAuthorizationPendingRef update effect
 
     vi.setSystemTime(startMs + 10 * 60 * 1000);
 
@@ -815,6 +816,7 @@ describe('ConnectorsBrowser', () => {
     await screen.findByText('GitHub');
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await screen.findByRole('button', { name: 'Cancel' });
+    await act(async () => {}); // flush connectorAuthorizationPendingRef update effect
 
     vi.setSystemTime(startMs + 10 * 60 * 1000);
 
