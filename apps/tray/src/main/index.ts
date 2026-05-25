@@ -280,7 +280,7 @@ export async function runTrayMain(
   async function setAutoStart(enabled: boolean): Promise<void> {
     try {
       if (enabled) {
-        await enableAutoStart(process.execPath);
+        await enableAutoStart(runtime.namespace, runtime.ipc);
       } else {
         await disableAutoStart();
       }
@@ -289,6 +289,8 @@ export async function runTrayMain(
       await refreshTray();
     } catch (err) {
       console.error("[tray] setAutoStart failed:", err);
+      // Re-throw so caller knows it failed
+      throw err;
     }
   }
 
