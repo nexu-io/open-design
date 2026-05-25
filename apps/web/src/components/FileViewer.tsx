@@ -4992,7 +4992,19 @@ function HtmlViewer({
       }
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
-      setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      if (patch.kind === 'remove-element') {
+        if (manualEditPendingStyleRef.current?.id === patch.id) {
+          manualEditPendingStyleRef.current = null;
+          clearManualEditStyleTimer();
+        }
+        selectedManualEditTargetIdRef.current = null;
+        setSelectedManualEditTarget(null);
+        setManualEditTargets((current) => current.filter((target) => target.id !== patch.id));
+        setManualEditDraft(emptyManualEditDraft(result.source));
+        postSelectedManualEditTargetToIframe(null);
+      } else {
+        setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
+      }
       if (patch.kind === 'set-style') {
         reconcileManualEditStyleSave(patch.id, patch.styles, result.source);
       }
