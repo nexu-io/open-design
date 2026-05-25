@@ -354,7 +354,7 @@
 }
 .plugin-action-button--primary:hover:not(:disabled) {
   color: #fff;
-  filter: brightness(0.98);
+  filter: brightness(0.85);
 }
 .plugin-action-card__notice {
   padding: 6px 8px;
