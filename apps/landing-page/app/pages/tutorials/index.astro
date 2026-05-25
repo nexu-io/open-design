@@ -13,16 +13,29 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
+import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
 import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
+import {
+  DEFAULT_LOCALE,
+  getLandingUiCopy,
+  getLocaleDefinition,
+  localeFromPath,
+  localizedHref,
+} from '../../i18n';
 import '../../globals.css';
 import '../../sub-pages.css';
 
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
 const tutorials = (await getCollection('tutorials')).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime(),
 );
@@ -35,24 +48,24 @@ const headerHtml = renderToStaticMarkup(
     github,
     brandHref: '/',
     active: 'tutorials',
+    locale,
   }),
 );
 
-const seoTitle = 'Tutorials — Open Design';
-const seoDescription =
-  'Watch Open Design from the inside — getting-started walkthroughs, plugin tutorials, demos, and community deep-dives, curated from YouTube and embedded for in-page playback.';
+const seoTitle = ui.tutorials.seoTitle;
+const seoDescription = ui.tutorials.description;
 
 const categoryChips = [
-  { label: 'All', value: 'all' },
-  { label: 'Getting started', value: 'getting-started' },
-  { label: 'Tutorials', value: 'tutorial' },
-  { label: 'Demos', value: 'demo' },
-  { label: 'Reviews', value: 'review' },
-  { label: 'Community', value: 'community' },
+  { label: ui.tutorials.categories.all, value: 'all' },
+  { label: ui.tutorials.categories.gettingStarted, value: 'getting-started' },
+  { label: ui.tutorials.categories.tutorial, value: 'tutorial' },
+  { label: ui.tutorials.categories.demo, value: 'demo' },
+  { label: ui.tutorials.categories.review, value: 'review' },
+  { label: ui.tutorials.categories.community, value: 'community' },
 ];
 
 const fmtDate = (d: Date) =>
-  d.toLocaleDateString('en-US', {
+  d.toLocaleDateString(localeDef.htmlLang, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -67,15 +80,43 @@ const fmtDuration = (seconds: number) => {
 };
 
 const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
+const localizedCategory = (category: string) => {
+  const value = categoryValue(category);
+  if (value === 'getting-started') return ui.tutorials.categories.gettingStarted;
+  if (value === 'tutorial') return ui.tutorials.categories.tutorial;
+  if (value === 'demo') return ui.tutorials.categories.demo;
+  if (value === 'review') return ui.tutorials.categories.review;
+  if (value === 'community') return ui.tutorials.categories.community;
+  return category;
+};
+const localizedTutorial = (entry: (typeof tutorials)[number]) => {
+  if (locale === DEFAULT_LOCALE) {
+    return {
+      title: entry.data.title,
+      summary: entry.data.summary,
+      category: entry.data.category,
+    };
+  }
+  return {
+    title: ui.tutorials.localizedTitle(entry.data.title, entry.data.author),
+    summary: ui.tutorials.localizedSummary(
+      entry.data.title,
+      entry.data.author,
+      localizedCategory(entry.data.category),
+    ),
+    category: localizedCategory(entry.data.category),
+  };
+};
 
 const ytThumb = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
 
 const featuredTutorial = tutorials[0];
 const cardTutorials = tutorials.slice(1);
+const featuredCopy = featuredTutorial ? localizedTutorial(featuredTutorial) : undefined;
 ---
 
 <!doctype html>
-<html lang='en'>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
   <head>
     <meta charset='utf-8' />
     <meta name='viewport' content='width=device-width, initial-scale=1' />
@@ -85,27 +126,27 @@ const cardTutorials = tutorials.slice(1);
       description={seoDescription}
       pathname={Astro.url.pathname}
     />
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='shell'>
-      <Topbar github={github} />
-      <Fragment set:html={headerHtml} />
+      <div class='site-chrome' data-chrome-headroom>
+        <Topbar github={github} locale={locale} />
+        <Fragment set:html={headerHtml} />
+      </div>
 
       <main class='tut-shell'>
         <section class='tut-masthead'>
           <div class='container'>
-            <h1 class='tut-title'>Tutorials</h1>
+            <h1 class='tut-title'>{ui.tutorials.title}</h1>
             <p class='tut-sub'>
-              Watch Open Design from the inside — getting-started walkthroughs,
-              plugin tutorials, demos, and community deep-dives. Each video
-              plays in-page; the source link points back to the original
-              YouTube channel.
+              {ui.tutorials.description}
             </p>
           </div>
         </section>
 
         {
-          featuredTutorial && (
+          featuredTutorial && featuredCopy && (
             <section
               class='tut-feature'
               data-featured
@@ -114,13 +155,13 @@ const cardTutorials = tutorials.slice(1);
               <div class='container'>
                 <a
                   class='tut-feature-card'
-                  href={`/tutorials/${featuredTutorial.id}/`}
+                  href={href(`/tutorials/${featuredTutorial.id}/`)}
                   style={`--accent-index: 1;`}
                 >
                   <span class='tut-feature-thumb'>
                     <img
                       src={featuredTutorial.data.thumbnail ?? ytThumb(featuredTutorial.data.youtubeId)}
-                      alt={`Thumbnail for ${featuredTutorial.data.title}`}
+                      alt={ui.tutorials.thumbnailAlt(featuredCopy.title)}
                       loading='eager'
                     />
                     <span class='tut-play' aria-hidden='true'>▶</span>
@@ -130,18 +171,18 @@ const cardTutorials = tutorials.slice(1);
                   </span>
                   <span class='tut-feature-copy'>
                     <span class='tut-card-cat'>
-                      {featuredTutorial.data.category}
+                      {featuredCopy.category}
                       {featuredTutorial.data.official && (
-                        <span class='tut-badge-official'>Official</span>
+                        <span class='tut-badge-official'>{ui.tutorials.official}</span>
                       )}
                     </span>
-                    <h2 class='tut-feature-title'>{featuredTutorial.data.title}</h2>
-                    <p class='tut-feature-summary'>{featuredTutorial.data.summary}</p>
+                    <h2 class='tut-feature-title'>{featuredCopy.title}</h2>
+                    <p class='tut-feature-summary'>{featuredCopy.summary}</p>
                     <span class='tut-feature-meta'>
                       <span>{featuredTutorial.data.author}</span>
                       <span>·</span>
                       <span>{fmtDate(featuredTutorial.data.date)}</span>
-                      <span class='tut-feature-cta'>Watch →</span>
+                      <span class='tut-feature-cta'>{ui.tutorials.watchCta}</span>
                     </span>
                   </span>
                 </a>
@@ -152,11 +193,11 @@ const cardTutorials = tutorials.slice(1);
 
         <section class='tut-categories'>
           <div class='container'>
-            <div class='tut-category-strip' aria-label='Tutorial categories'>
+            <div class='tut-category-strip' aria-label={ui.tutorials.categoriesLabel}>
               {categoryChips.map((category, index) => (
                 <a
                   class:list={['tut-chip', index === 0 && 'is-active']}
-                  href={category.value === 'all' ? '/tutorials/' : `/tutorials/?category=${category.value}`}
+                  href={category.value === 'all' ? href('/tutorials/') : href(`/tutorials/?category=${category.value}`)}
                   data-category-filter={category.value}
                 >
                   {category.label}
@@ -171,63 +212,66 @@ const cardTutorials = tutorials.slice(1);
             {
               tutorials.length === 0 ? (
                 <p class='tut-empty'>
-                  No tutorials yet. We're curating the first batch — check back soon, or
+                  {ui.tutorials.noEntries}
                   <a href='https://github.com/nexu-io/open-design/issues/new' target='_blank' rel='noreferrer noopener'>
-                    {' '}suggest a video
+                    {' '}{ui.tutorials.suggestVideo}
                   </a>.
                 </p>
               ) : cardTutorials.length === 0 ? null : (
                 <ol class='tut-grid'>
-                  {cardTutorials.map((entry, idx) => (
-                    <li
-                      class='tut-card'
-                      data-tut-item
-                      data-category={categoryValue(entry.data.category)}
-                    >
-                      <a
-                        class='tut-card-link'
-                        href={`/tutorials/${entry.id}/`}
-                        style={`--accent-index: ${idx + 2};`}
+                  {cardTutorials.map((entry, idx) => {
+                    const copy = localizedTutorial(entry);
+                    return (
+                      <li
+                        class='tut-card'
+                        data-tut-item
+                        data-category={categoryValue(entry.data.category)}
                       >
-                        <span class='tut-card-thumb'>
-                          <img
-                            src={entry.data.thumbnail ?? ytThumb(entry.data.youtubeId)}
-                            alt={`Thumbnail for ${entry.data.title}`}
-                            loading='lazy'
-                          />
-                          <span class='tut-play' aria-hidden='true'>▶</span>
-                          <span class='tut-duration-pill'>
-                            {fmtDuration(entry.data.durationSeconds)}
+                        <a
+                          class='tut-card-link'
+                          href={href(`/tutorials/${entry.id}/`)}
+                          style={`--accent-index: ${idx + 2};`}
+                        >
+                          <span class='tut-card-thumb'>
+                            <img
+                              src={entry.data.thumbnail ?? ytThumb(entry.data.youtubeId)}
+                              alt={ui.tutorials.thumbnailAlt(copy.title)}
+                              loading='lazy'
+                            />
+                            <span class='tut-play' aria-hidden='true'>▶</span>
+                            <span class='tut-duration-pill'>
+                              {fmtDuration(entry.data.durationSeconds)}
+                            </span>
                           </span>
-                        </span>
-                        <span class='tut-card-body'>
-                          <span class='tut-card-cat'>
-                            {entry.data.category}
-                            {entry.data.official && (
-                              <span class='tut-badge-official'>Official</span>
-                            )}
+                          <span class='tut-card-body'>
+                            <span class='tut-card-cat'>
+                              {copy.category}
+                              {entry.data.official && (
+                                <span class='tut-badge-official'>{ui.tutorials.official}</span>
+                              )}
+                            </span>
+                            <h2 class='tut-card-title'>{copy.title}</h2>
+                            <p class='tut-card-summary'>{copy.summary}</p>
+                            <span class='tut-card-foot'>
+                              <span class='tut-card-author'>{entry.data.author}</span>
+                              <span class='tut-card-date'>{fmtDate(entry.data.date)}</span>
+                              <span class='tut-card-cta'>{ui.tutorials.watchCta}</span>
+                            </span>
                           </span>
-                          <h2 class='tut-card-title'>{entry.data.title}</h2>
-                          <p class='tut-card-summary'>{entry.data.summary}</p>
-                          <span class='tut-card-foot'>
-                            <span class='tut-card-author'>{entry.data.author}</span>
-                            <span class='tut-card-date'>{fmtDate(entry.data.date)}</span>
-                            <span class='tut-card-cta'>Watch →</span>
-                          </span>
-                        </span>
-                      </a>
-                    </li>
-                  ))}
+                        </a>
+                      </li>
+                    );
+                  })}
                 </ol>
               )
             }
             <p class='tut-empty is-filter-empty' data-tut-empty hidden>
-              No tutorials in this category yet. More are on the way.
+              {ui.tutorials.noCategory}
             </p>
           </div>
         </section>
       </main>
-      <SiteFooter counts={counts} />
+      <SiteFooter counts={counts} locale={locale} />
     </div>
 
     <script is:inline>
@@ -265,6 +309,7 @@ const cardTutorials = tutorials.slice(1);
       })();
     </script>
     <HeaderEnhancer />
+    <LocaleSwitcherScript />
 
     <style>
       .tut-shell {

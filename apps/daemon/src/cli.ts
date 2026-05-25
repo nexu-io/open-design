@@ -6,6 +6,8 @@ import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
+import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-cli-help.js';
+import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
@@ -306,6 +308,10 @@ function printRootHelp() {
 
   od plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
       Discover, install, and apply plugins through the local daemon.
+  od plugin publish-repo <folder>
+      Create/update the author's GitHub repo for a local plugin folder.
+  od plugin open-design-pr <folder>
+      Push a community-catalog branch and open the Open Design PR form.
 
   od automation <list|get|create|update|run|runs|pause|resume|delete> [args]
       Drive the Automations surface headlessly. Same store as the UI's
@@ -928,6 +934,8 @@ async function runPlugin(args) {
     case 'whoami':   return runPluginWhoami(rest);
     case 'export':   return runPluginExport(rest);
     case 'publish':  return runPluginPublish(rest);
+    case 'publish-repo': return runPluginPublishRepo(rest);
+    case 'open-design-pr': return runPluginOpenDesignPr(rest);
     case 'yank':     return runPluginYank(rest);
     default:
       console.error(`unknown subcommand: od plugin ${sub}`);
@@ -1176,12 +1184,12 @@ Wraps GitHub CLI auth for Open Design registry publishing. The token stays in gh
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
-  const version = await execFileBuffered('gh', ['--version'], { timeout: 10_000 });
+  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
   if (!version.ok) {
     console.error('[plugin login] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
     process.exit(1);
   }
-  const result = await spawnPassthrough('gh', ['auth', 'login', '--hostname', host, '--web']);
+  const result = await spawnGhPassthrough(['auth', 'login', '--hostname', host, '--web']);
   process.exit(result.code ?? 0);
 }
 
@@ -1198,7 +1206,7 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
-  const auth = await execFileBuffered('gh', ['auth', 'status', '--hostname', host], { timeout: 10_000 });
+  const auth = await execGhBuffered(['auth', 'status', '--hostname', host], { timeout: 10_000 });
   if (!auth.ok) {
     if (flags.json) {
       process.stdout.write(JSON.stringify({
@@ -1213,7 +1221,7 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
     if (auth.stderr || auth.stdout) console.error(auth.stderr || auth.stdout);
     process.exit(1);
   }
-  const user = await execFileBuffered('gh', ['api', 'user', '--hostname', host], { timeout: 10_000 });
+  const user = await execGhBuffered(['api', 'user', '--hostname', host], { timeout: 10_000 });
   let login = '';
   let name = '';
   try {
@@ -1256,12 +1264,42 @@ async function execFileBuffered(command, args, opts = {}) {
   });
 }
 
-async function spawnPassthrough(command, args) {
+function quotePosixShellArg(value) {
+  const text = String(value ?? '');
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function buildGhShellCommand(args) {
+  return ['gh', ...args].map(quotePosixShellArg).join(' ');
+}
+
+function buildLoginShellCommand(innerCommand) {
+  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
+}
+
+async function execGhBuffered(args, opts = {}) {
+  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+    env: process.env,
+    ...opts,
+  });
+}
+
+async function spawnPassthrough(command, args, opts = {}) {
   const { spawn } = await import('node:child_process');
   return await new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: 'inherit' });
+    const child = spawn(command, args, { stdio: 'inherit', ...opts });
     child.on('error', (error) => resolve({ code: 1, error }));
     child.on('close', (code) => resolve({ code }));
+  });
+}
+
+async function spawnGhPassthrough(args) {
+  if (process.platform === 'win32') return spawnPassthrough('gh', args);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return spawnPassthrough(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+    env: process.env,
   });
 }
 
@@ -3106,6 +3144,288 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   }
 }
 
+async function runPluginPublishRepo(rest) {
+  const flags = parseFlags(rest, {
+    string: new Set(['host', 'owner']),
+    boolean: new Set(['help', 'h', 'json', 'dry-run']),
+  });
+  if (rest.length === 0 || flags.help || flags.h) {
+    console.log(`Usage:
+  od plugin publish-repo <folder> [--host github.com] [--owner github-login-or-org] [--dry-run] [--json]
+
+Creates or updates the public GitHub repository named by the plugin manifest.
+If plugin.repo is missing or uses a placeholder owner, the CLI resolves the
+target from --owner, a trusted manifest owner, local gh auth status, then the
+GitHub API as a last resort. It never publishes to placeholder owners.`);
+    process.exit(rest.length === 0 ? 2 : 0);
+  }
+  const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
+  if (!folder) {
+    console.error('Usage: od plugin publish-repo <folder>');
+    process.exit(2);
+  }
+
+  const [{ resolve, join }, { readFile, writeFile, stat, mkdtemp, readdir, rm, mkdir, cp }, { pathToFileURL }, os] = await Promise.all([
+    import('node:path'),
+    import('node:fs/promises'),
+    import('node:url'),
+    import('node:os'),
+  ]);
+  const absFolder = resolve(process.cwd(), folder);
+  const manifestPath = resolve(absFolder, 'open-design.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const host = typeof flags.host === 'string' ? flags.host : 'github.com';
+  const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'publish-repo' });
+  const normalized = normalizeManifestRepoForOwner(manifest, target.owner);
+  if (normalized.changed && !flags['dry-run']) {
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    await pluginCliValidateFolder(absFolder);
+  }
+
+  const repo = parseGithubRepoUrl(normalized.repoUrl);
+  if (!repo) {
+    console.error(`[publish-repo] invalid plugin.repo after normalization: ${normalized.repoUrl}`);
+    process.exit(2);
+  }
+  const steps = [];
+  const run = async (label, command, args, opts = {}) => {
+    steps.push({ label, command: [command, ...args].join(' ') });
+    if (flags['dry-run']) return { ok: true, stdout: '', stderr: '' };
+    const result = await (command === 'gh'
+      ? execGhBuffered(args, { cwd: opts.cwd ?? absFolder, timeout: opts.timeout ?? 120_000 })
+      : execFileBuffered(command, args, { cwd: opts.cwd ?? absFolder, timeout: opts.timeout ?? 120_000 }));
+    steps[steps.length - 1].ok = result.ok;
+    steps[steps.length - 1].stdout = result.stdout;
+    steps[steps.length - 1].stderr = result.stderr;
+    if (!result.ok) {
+      emitPluginWorkflowResult(flags, {
+        ok: false,
+        action: 'publish-repo',
+        folder: absFolder,
+        repoUrl: normalized.repoUrl,
+        login: target.login,
+        owner: target.owner,
+        ownerSource: target.ownerSource,
+        apiRateLimited: target.apiRateLimited,
+        steps,
+        error: { label, stdout: result.stdout, stderr: result.stderr, code: result.code },
+      });
+      process.exit(1);
+    }
+    return result;
+  };
+
+  let exists = false;
+  const view = flags['dry-run']
+    ? { ok: false, stderr: 'dry-run' }
+    : await execGhBuffered(['repo', 'view', repo.fullName], { cwd: absFolder, timeout: 30_000 });
+  steps.push({ label: 'check repo', command: `gh repo view ${repo.fullName}`, ok: view.ok, stdout: view.stdout, stderr: view.stderr });
+  if (view.ok) {
+    exists = true;
+  } else if (!flags['dry-run'] && !isRepoNotFound(view)) {
+    emitPluginWorkflowResult(flags, {
+      ok: false,
+      action: 'publish-repo',
+      folder: absFolder,
+      repoUrl: normalized.repoUrl,
+      login: target.login,
+      owner: target.owner,
+      ownerSource: target.ownerSource,
+      apiRateLimited: target.apiRateLimited,
+      steps,
+      error: { label: 'check repo', stdout: view.stdout, stderr: view.stderr, code: view.code },
+    });
+    process.exit(1);
+  }
+
+  let workdir = absFolder;
+  let cleanupDir = null;
+  if (exists && !flags['dry-run']) {
+    cleanupDir = await mkdtemp(join(os.tmpdir(), 'od-plugin-publish-sync-'));
+    workdir = join(cleanupDir, repo.name);
+    await run('clone repo', 'gh', ['repo', 'clone', repo.fullName, workdir], { cwd: cleanupDir, timeout: 240_000 });
+    for (const entry of await readdir(workdir)) {
+      if (entry === '.git') continue;
+      await rm(join(workdir, entry), { recursive: true, force: true });
+    }
+    await mkdir(workdir, { recursive: true });
+    for (const entry of await readdir(absFolder)) {
+      if (entry === '.git') continue;
+      await cp(join(absFolder, entry), join(workdir, entry), { recursive: true, force: true });
+    }
+  } else if (!flags['dry-run']) {
+    let hasGit = false;
+    try { await stat(resolve(absFolder, '.git')); hasGit = true; } catch {}
+    if (!hasGit) await run('git init', 'git', ['init']);
+  }
+
+  await run('git add', 'git', ['add', '-A'], { cwd: workdir });
+  const status = flags['dry-run']
+    ? { stdout: 'dry-run' }
+    : await execFileBuffered('git', ['status', '--porcelain'], { cwd: workdir });
+  if (status.stdout.trim().length > 0 || !exists) {
+    const commitMessage = exists
+      ? `Update: ${manifest.name} v${manifest.version ?? '0.0.0'}`
+      : `Initial commit: ${manifest.name} v${manifest.version ?? '0.0.0'}`;
+    await run('git commit', 'git', ['commit', '-m', commitMessage], { cwd: workdir });
+  }
+  const tag = `v${manifest.version ?? '0.0.0'}`;
+  if (!flags['dry-run']) {
+    const localTag = await execFileBuffered('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`], { cwd: workdir });
+    if (!localTag.ok) await run('git tag', 'git', ['tag', tag], { cwd: workdir });
+  }
+
+  if (exists) {
+    await run('git push', 'git', ['push', 'origin', 'HEAD'], { cwd: workdir });
+  } else {
+    await run('gh repo create', 'gh', [
+      'repo', 'create', repo.fullName, '--public', '--source', '.', '--push',
+      '--description', String(manifest.description ?? ''),
+    ], { cwd: workdir });
+  }
+  await run('git push tags', 'git', ['push', '--tags'], { cwd: workdir });
+  const verify = flags['dry-run']
+    ? { ok: true, stdout: JSON.stringify({ nameWithOwner: repo.fullName, url: normalized.repoUrl }) }
+    : await run('verify repo', 'gh', ['repo', 'view', repo.fullName, '--json', 'url,nameWithOwner'], { cwd: workdir });
+  const parsedVerify = safeJson(verify.stdout);
+  if (cleanupDir && !flags['dry-run']) {
+    await rm(cleanupDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+  emitPluginWorkflowResult(flags, {
+    ok: true,
+    action: 'publish-repo',
+    folder: absFolder,
+    login: target.login,
+    owner: target.owner,
+    ownerSource: target.ownerSource,
+    apiRateLimited: target.apiRateLimited,
+    repoUrl: parsedVerify?.url ?? normalized.repoUrl,
+    manifestRewritten: normalized.changed,
+    manifestPath: pathToFileURL(manifestPath).pathname,
+    steps,
+  });
+}
+
+async function runPluginOpenDesignPr(rest) {
+  const flags = parseFlags(rest, {
+    string: new Set(['host', 'owner']),
+    boolean: new Set(['help', 'h', 'json', 'dry-run']),
+  });
+  if (rest.length === 0 || flags.help || flags.h) {
+    console.log(`Usage:
+  od plugin open-design-pr <folder> [--host github.com] [--owner github-login-or-fork-owner] [--dry-run] [--json]
+
+Copies a local plugin folder into plugins/community/<name>/ on the author's
+fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`);
+    process.exit(rest.length === 0 ? 2 : 0);
+  }
+  const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
+  if (!folder) {
+    console.error('Usage: od plugin open-design-pr <folder>');
+    process.exit(2);
+  }
+  const [{ resolve, join }, fsp, os] = await Promise.all([
+    import('node:path'),
+    import('node:fs/promises'),
+    import('node:os'),
+  ]);
+  const absFolder = resolve(process.cwd(), folder);
+  const manifestPath = resolve(absFolder, 'open-design.json');
+  const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  const host = typeof flags.host === 'string' ? flags.host : 'github.com';
+  const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'open-design-pr' });
+  const name = String(manifest.name ?? '').trim();
+  if (!name) {
+    console.error('[open-design-pr] manifest.name is required');
+    process.exit(2);
+  }
+  const title = String(manifest.title ?? name).trim();
+  const branch = `plugin/${name}-${Math.floor(Date.now() / 1000)}`;
+  const tmpRoot = await fsp.mkdtemp(join(os.tmpdir(), 'od-open-design-pr-'));
+  const checkout = join(tmpRoot, 'open-design');
+  const steps = [];
+  const run = async (label, command, args, opts = {}) => {
+    steps.push({ label, command: [command, ...args].join(' ') });
+    if (flags['dry-run']) return { ok: true, stdout: '', stderr: '' };
+    const result = await (command === 'gh'
+      ? execGhBuffered(args, { cwd: opts.cwd ?? process.cwd(), timeout: opts.timeout ?? 180_000 })
+      : execFileBuffered(command, args, { cwd: opts.cwd ?? process.cwd(), timeout: opts.timeout ?? 180_000 }));
+    steps[steps.length - 1].ok = result.ok;
+    steps[steps.length - 1].stdout = result.stdout;
+    steps[steps.length - 1].stderr = result.stderr;
+    if (!result.ok && !opts.tolerate?.(result)) {
+      emitPluginWorkflowResult(flags, {
+        ok: false,
+        action: 'open-design-pr',
+        folder: absFolder,
+        login: target.login,
+        owner: target.owner,
+        ownerSource: target.ownerSource,
+        apiRateLimited: target.apiRateLimited,
+        branch,
+        steps,
+        error: { label, stdout: result.stdout, stderr: result.stderr, code: result.code },
+      });
+      process.exit(1);
+    }
+    return result;
+  };
+
+  await run('fork', 'gh', ['repo', 'fork', 'nexu-io/open-design'], {
+    tolerate: (r) => /already exists|existing fork/i.test(`${r.stdout}\n${r.stderr}`),
+  });
+  await run('clone fork', 'git', [
+    'clone',
+    '--depth', '1',
+    '--single-branch',
+    '--branch', 'main',
+    '--filter=blob:none',
+    '--sparse',
+    `https://github.com/${target.owner}/open-design.git`,
+    checkout,
+  ], { timeout: 240_000 });
+  await run('sparse checkout', 'git', ['sparse-checkout', 'set', 'plugins/community'], { cwd: checkout });
+  await run('checkout branch', 'git', ['checkout', '-b', branch], { cwd: checkout });
+  const dest = join(checkout, 'plugins', 'community', name);
+  if (!flags['dry-run']) {
+    await fsp.rm(dest, { recursive: true, force: true });
+    await fsp.mkdir(dest, { recursive: true });
+    await fsp.cp(absFolder, dest, { recursive: true, force: true, filter: (src) => !src.includes(`${absFolder}/.git`) });
+  }
+  await run('git add', 'git', ['add', `plugins/community/${name}`], { cwd: checkout });
+  await run('git commit', 'git', ['commit', '-m', `Add ${title} plugin`], { cwd: checkout });
+  await run('git push branch', 'git', ['push', '-u', 'origin', branch], { cwd: checkout });
+  const body = [
+    `Add ${title} (${name}) plugin.`,
+    '',
+    `Version: ${manifest.version ?? '0.0.0'}`,
+    manifest.description ? `Description: ${manifest.description}` : '',
+  ].filter(Boolean).join('\n');
+  const pr = await run('open PR form', 'gh', [
+    'pr', 'create',
+    '--repo', 'nexu-io/open-design',
+    '--head', `${target.owner}:${branch}`,
+    '--base', 'main',
+    '--title', `Add ${title} plugin`,
+    '--body', body,
+    '--web',
+  ], { cwd: checkout });
+  const prUrl = extractFirstUrl(pr.stdout || pr.stderr) ?? `https://github.com/${target.owner}/open-design/pull/new/${branch}`;
+  emitPluginWorkflowResult(flags, {
+    ok: true,
+    action: 'open-design-pr',
+    folder: absFolder,
+    login: target.login,
+    owner: target.owner,
+    ownerSource: target.ownerSource,
+    apiRateLimited: target.apiRateLimited,
+    branch,
+    prUrl,
+    checkout,
+    steps,
+  });
+}
+
 async function publishToMarketplaceJson({ catalogPath, meta }) {
   const [{ dirname, resolve }, { mkdir, readFile, writeFile }, { PublishError, upsertMarketplaceJsonEntry }] = await Promise.all([
     import('node:path'),
@@ -3143,6 +3463,202 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
       plugins: outcome.manifest.plugins.length,
     },
   };
+}
+
+async function resolvePluginGithubTarget({ host = 'github.com', owner, manifest, purpose }) {
+  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
+  if (!version.ok) {
+    console.error('[plugin github] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
+    process.exit(1);
+  }
+  let status = await execGhBuffered(['auth', 'status', '--hostname', host, '--active'], { timeout: 10_000 });
+  if (!status.ok && /unknown flag: --active/i.test(`${status.stdout}\n${status.stderr}`)) {
+    status = await execGhBuffered(['auth', 'status', '--hostname', host], { timeout: 10_000 });
+  }
+  if (!status.ok) {
+    console.error(`[plugin github] gh is not authenticated for ${host}.`);
+    if (status.stderr || status.stdout) console.error(status.stderr || status.stdout);
+    console.error('Run: gh auth login -h github.com -s repo,workflow');
+    process.exit(1);
+  }
+  const manifestRepo = parseGithubRepoUrl(typeof manifest?.plugin?.repo === 'string' ? manifest.plugin.repo.trim() : '');
+  const trustedManifestOwner = purpose === 'publish-repo' && manifestRepo && !isPlaceholderRepoOwner(manifestRepo.owner) ? manifestRepo.owner : '';
+  const explicitOwner = typeof owner === 'string' ? owner.trim() : '';
+  if (explicitOwner && isPlaceholderRepoOwner(explicitOwner)) {
+    console.error(`[plugin github] refusing placeholder owner "${explicitOwner}". Pass a real GitHub login or org.`);
+    process.exit(2);
+  }
+  const statusLogin = parseGhAuthStatusLogin(status.stderr || status.stdout);
+  let login = statusLogin;
+  let resolvedOwner = explicitOwner || trustedManifestOwner || statusLogin;
+  let source = explicitOwner ? '--owner' : trustedManifestOwner ? 'plugin.repo' : statusLogin ? 'gh auth status' : '';
+  let apiError = null;
+  if (!resolvedOwner || !login) {
+    const user = await execGhBuffered(['api', 'user', '--hostname', host, '--jq', '.login'], { timeout: 20_000 });
+    if (user.ok && user.stdout.trim()) {
+      login = user.stdout.trim();
+      if (!resolvedOwner) {
+        resolvedOwner = login;
+        source = 'gh api user';
+      }
+    } else {
+      apiError = user;
+    }
+  }
+  if (!resolvedOwner) {
+    console.error(`[plugin github] could not resolve the GitHub owner for ${purpose}.`);
+    if (apiError?.stderr || apiError?.stdout) console.error(apiError.stderr || apiError.stdout);
+    if (apiError && isGhApiRateLimit(apiError)) {
+      const ownerHint = purpose === 'open-design-pr' ? '<github-login-or-fork-owner>' : '<github-login-or-org>';
+      console.error(`GitHub API is rate limited. Re-run with --owner ${ownerHint}, or authenticate/refresh gh and retry.`);
+    } else {
+      console.error('Run: gh auth refresh -h github.com -s repo,workflow');
+      console.error('Or:  gh auth login -h github.com -s repo,workflow');
+      console.error(purpose === 'open-design-pr'
+        ? 'If the fork owner differs from your auth login, pass --owner <github-login-or-fork-owner>.'
+        : 'If this is an org-owned plugin, pass --owner <github-org>.');
+    }
+    process.exit(1);
+  }
+  if (apiError && isGhApiRateLimit(apiError)) {
+    console.warn('[plugin github] GitHub API is rate limited; continuing with the owner resolved locally.');
+  }
+  if (isPlaceholderRepoOwner(resolvedOwner)) {
+    console.error(`[plugin github] refusing placeholder owner "${resolvedOwner}". Pass --owner <github-login-or-org>.`);
+    process.exit(2);
+  }
+  return {
+    host,
+    login: login || resolvedOwner,
+    owner: resolvedOwner,
+    ownerSource: source,
+    apiRateLimited: Boolean(apiError && isGhApiRateLimit(apiError)),
+    version: version.stdout,
+    status: status.stderr || status.stdout,
+  };
+}
+
+function parseGhAuthStatusLogin(output) {
+  const text = String(output ?? '');
+  const activeAccount = /Logged in to [^\s]+ account ([^\s()]+)/i.exec(text);
+  if (activeAccount?.[1]) return activeAccount[1].trim();
+  const tokenAccount = /Token account:\s*([^\s()]+)/i.exec(text);
+  if (tokenAccount?.[1]) return tokenAccount[1].trim();
+  return '';
+}
+
+function isGhApiRateLimit(result) {
+  const text = `${result?.stdout ?? ''}\n${result?.stderr ?? ''}`;
+  return /rate limit exceeded|authenticated requests get a higher rate limit/i.test(text);
+}
+
+function normalizeManifestRepoForOwner(manifest, owner) {
+  const name = String(manifest?.name ?? '').trim();
+  if (!name) {
+    console.error('[plugin repo] manifest.name is required');
+    process.exit(2);
+  }
+  const rawRepo = typeof manifest?.plugin?.repo === 'string' ? manifest.plugin.repo.trim() : '';
+  const parsed = parseGithubRepoUrl(rawRepo);
+  const placeholder = parsed ? isPlaceholderRepoOwner(parsed.owner) : false;
+  const shouldRewrite = !parsed || placeholder || parsed.name.toLowerCase() !== name.toLowerCase() || parsed.owner.toLowerCase() !== owner.toLowerCase();
+  const repoUrl = shouldRewrite ? `https://github.com/${owner}/${name}` : parsed.url;
+  if (shouldRewrite) {
+    if (!manifest.plugin || typeof manifest.plugin !== 'object') manifest.plugin = {};
+    manifest.plugin.repo = repoUrl;
+    manifest.homepage = repoUrl;
+    if (!manifest.author || typeof manifest.author !== 'object') manifest.author = {};
+    manifest.author.url = `https://github.com/${owner}`;
+  }
+  return {
+    changed: shouldRewrite,
+    repoUrl,
+    previousRepoUrl: rawRepo || null,
+  };
+}
+
+function parseGithubRepoUrl(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim().replace(/\.git$/i, '');
+  let owner = '';
+  let name = '';
+  try {
+    const url = new URL(trimmed);
+    if (!/^github\.com$/i.test(url.hostname)) return null;
+    const parts = url.pathname.split('/').filter(Boolean);
+    owner = parts[0] ?? '';
+    name = parts[1] ?? '';
+  } catch {
+    const match = /^([^/\s]+)\/([^/\s]+)$/.exec(trimmed);
+    if (!match) return null;
+    owner = match[1];
+    name = match[2];
+  }
+  if (!owner || !name) return null;
+  return {
+    owner,
+    name,
+    fullName: `${owner}/${name}`,
+    url: `https://github.com/${owner}/${name}`,
+  };
+}
+
+function isPlaceholderRepoOwner(owner) {
+  return /^(open-design-user|<vendor>|vendor|example-user|your-org|your-username|owner|user|username)$/i.test(String(owner ?? '').trim());
+}
+
+function isRepoNotFound(result) {
+  const text = `${result?.stdout ?? ''}\n${result?.stderr ?? ''}`;
+  return /could not resolve to a repository|not found|repository not found/i.test(text);
+}
+
+async function pluginCliValidateFolder(folder) {
+  const result = await execFileBuffered(process.execPath, [process.argv[1], 'plugin', 'validate', folder], {
+    timeout: 120_000,
+  });
+  if (!result.ok) {
+    console.error('[plugin validate] failed after manifest normalization');
+    if (result.stdout) console.error(result.stdout);
+    if (result.stderr) console.error(result.stderr);
+    process.exit(1);
+  }
+  return result;
+}
+
+function emitPluginWorkflowResult(flags, payload) {
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    return;
+  }
+  if (!payload.ok) {
+    console.error(`[${payload.action}] failed${payload.error?.label ? ` at ${payload.error.label}` : ''}`);
+    if (payload.error?.stderr) console.error(payload.error.stderr);
+    if (payload.error?.stdout) console.error(payload.error.stdout);
+    return;
+  }
+  if (payload.action === 'publish-repo') {
+    console.log(`Plugin published: ${payload.repoUrl}`);
+    if (payload.ownerSource) console.log(`[publish-repo] owner resolved from ${payload.ownerSource}: ${payload.owner}`);
+    if (payload.apiRateLimited) console.log('[publish-repo] GitHub API was rate limited; continued with the locally resolved owner.');
+    if (payload.manifestRewritten) console.log('[publish-repo] manifest repo fields were normalized before publishing.');
+    return;
+  }
+  if (payload.action === 'open-design-pr') {
+    if (payload.ownerSource) console.log(`[open-design-pr] owner resolved from ${payload.ownerSource}: ${payload.owner}`);
+    if (payload.apiRateLimited) console.log('[open-design-pr] GitHub API was rate limited; continued with the locally resolved owner.');
+    console.log(`Open this URL and click Create to file the PR: ${payload.prUrl}`);
+    return;
+  }
+  console.log(JSON.stringify(payload, null, 2));
+}
+
+function safeJson(raw) {
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function extractFirstUrl(text) {
+  const match = /https?:\/\/\S+/i.exec(String(text ?? ''));
+  return match ? match[0].replace(/[)\].,]+$/, '') : null;
 }
 
 async function runPluginYank(rest) {
@@ -3638,6 +4154,10 @@ function printPluginHelp() {
                                           (manifest parse + atom + ref checks).
   od plugin pack <folder> [--out <path>]  Build a .tgz archive of a plugin
                                           folder for distribution.
+  od plugin publish-repo <folder>         Create/update the author's public
+                                          GitHub repo for a plugin folder.
+  od plugin open-design-pr <folder>       Push a community-catalog branch and
+                                          open the nexu-io/open-design PR form.
   od plugin publish <folder> --to open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
                                           Prepare a registry submission link.
   od plugin login [--host github.com]      Authenticate registry publishing via gh.
@@ -4549,8 +5069,52 @@ async function runLibraryList(name, args) {
 }
 
 async function runSkills(args)        { return runLibraryList('skills', args); }
-async function runDesignSystems(args) { return runLibraryList('design-systems', args); }
 async function runCraft(args)         { return runLibraryList('craft', args); }
+
+async function runDesignSystems(args) {
+  if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (!args[0] || isDesignSystemsHelpArg(args[0])) {
+    console.log(DESIGN_SYSTEMS_USAGE);
+    process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
+  }
+  return runLibraryList('design-systems', args);
+}
+
+// od design-systems rename <id> --title <new-title> [--json]
+// Renames an editable (user-created) design system via PATCH
+// /api/design-systems/:id. Built-in systems are read-only and the daemon
+// returns 404, surfaced here as a structured failure. Arg parsing lives in
+// design-system-rename-args.ts so it can be unit-tested.
+async function runDesignSystemRename(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems rename <id> --title <new-title> [--json] [--daemon-url <url>]
+  od design-systems rename <id> "<new title>" [--json]
+
+Renames an editable (user-created) design system. Built-in systems are read-only.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const parsed = parseDesignSystemRenameArgs(args);
+  if (!parsed) {
+    console.error('Usage: od design-systems rename <id> --title <new-title>');
+    process.exit(2);
+  }
+  const flags = parseFlags(args, {
+    string: new Set([...LIBRARY_STRING_FLAGS, 'title']),
+    boolean: LIBRARY_BOOLEAN_FLAGS,
+  });
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(parsed.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: parsed.title }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const renamed = data.designSystem ?? data;
+  console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
+}
 
 async function runStatus(args) {
   // Alias of `od daemon status`.

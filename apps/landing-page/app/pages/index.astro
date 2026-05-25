@@ -3,27 +3,135 @@ import Page from '../page';
 import '../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import FontStylesheet from '../_components/font-stylesheet.astro';
-import HomeEnhancer from '../_components/home-enhancer.astro';
-import LocaleSwitcherEnhancer from '../_components/locale-switcher-enhancer.astro';
+import FaviconLinks from '../_components/favicon-links.astro';
+import GoogleAnalytics from '../_components/google-analytics.astro';
+import ResourceHints from '../_components/resource-hints.astro';
+import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import { heroImage, heroImageSrcset } from '../image-assets';
+import {
+  LANDING_LOCALES,
+  alternateLinksForPath,
+  getHomeFaq,
+  getHomeSeo,
+  getLocaleDefinition,
+  localeFromPath,
+  localePath,
+  type LandingLocaleCode,
+} from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
-import { alternateLinks, localeDir } from '../_lib/i18n';
 
+const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
-const title = 'Open Design — Design with the agent already on your laptop.';
-const description = `The open-source alternative to Claude Design. Your existing coding agent — Claude · Codex · Cursor · Gemini · OpenCode · Qwen — becomes the design engine, driven by ${counts.skills} composable skills and ${counts.systems} brand-grade design systems.`;
-const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const { title, description } = getHomeSeo(locale, counts);
+const canonical = new URL(localePath(locale), Astro.site).toString();
+const origin = Astro.site?.toString() ?? 'https://open-design.ai/';
+const logoUrl = new URL('/android-chrome-512x512.png', Astro.site).toString();
+const alternateLinks = alternateLinksForPath('/').map((entry) => ({
+  ...entry,
+  href: new URL(entry.hrefPath, Astro.site).toString(),
+}));
+const xDefaultHref = new URL('/', Astro.site).toString();
+
+const REPO_URL = 'https://github.com/nexu-io/open-design';
+const RELEASES_URL = `${REPO_URL}/releases`;
+const ISSUES_URL = `${REPO_URL}/issues`;
+const DOCS_URL = `${REPO_URL}#readme`;
+const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
+const OFFICIAL_URL = `${origin}official/`;
+
+// Pass bare hosts (not full URLs) so localized Q2 reads
+// "lives at open-design.ai" instead of the awkward
+// "lives at https://open-design.ai/" with a stray protocol/slash.
+const faq = getHomeFaq(locale, {
+  origin: 'open-design.ai',
+  repo: 'github.com/nexu-io/open-design',
+});
+
+const websiteSchema = {
+  '@type': 'WebSite',
+  '@id': `${origin}#website`,
+  name: 'Open Design',
+  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  url: origin,
+  inLanguage: localeDef.htmlLang,
+  availableLanguage: LANDING_LOCALES.map((entry) => entry.htmlLang),
+  publisher: { '@id': `${origin}#organization` },
+};
+
+const organizationSchema = {
+  '@type': 'Organization',
+  '@id': `${origin}#organization`,
+  name: 'Open Design',
+  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD', 'nexu-io/open-design'],
+  url: origin,
+  logo: {
+    '@type': 'ImageObject',
+    url: logoUrl,
+    width: 512,
+    height: 512,
+  },
+  // Five canonical pillars — Google uses sameAs to merge entity claims
+  // across sources. Listing the official site, GitHub repo, release
+  // feed, README docs, and Discord here prevents capture sites from
+  // splitting the brand entity.
+  sameAs: [REPO_URL, RELEASES_URL, DOCS_URL, DISCORD_URL, OFFICIAL_URL],
+};
+
+const softwareSchema = {
+  '@type': 'SoftwareApplication',
+  '@id': `${origin}#software`,
+  name: 'Open Design',
+  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  description,
+  url: origin,
+  inLanguage: localeDef.htmlLang,
+  applicationCategory: 'DesignApplication',
+  operatingSystem: 'macOS, Windows, Linux',
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  softwareVersion: github.versionLabel,
+  downloadUrl: RELEASES_URL,
+  installUrl: `${origin}quickstart/`,
+  softwareHelp: { '@type': 'CreativeWork', url: DOCS_URL },
+  releaseNotes: RELEASES_URL,
+  codeRepository: REPO_URL,
+  discussionUrl: DISCORD_URL,
+  issueTracker: ISSUES_URL,
+  sameAs: [REPO_URL, RELEASES_URL, DOCS_URL, DISCORD_URL, OFFICIAL_URL, LICENSE_URL],
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+  publisher: { '@id': `${origin}#organization` },
+};
+
+const faqSchema = {
+  '@type': 'FAQPage',
+  '@id': `${canonical}#faq`,
+  inLanguage: localeDef.htmlLang,
+  mainEntity: faq.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+};
+
+const homepageGraph = {
+  '@context': 'https://schema.org',
+  '@graph': [websiteSchema, organizationSchema, softwareSchema, faqSchema],
+};
 const pageHtml = renderToStaticMarkup(
-  Page({ counts, github, locale: 'en', pathname: Astro.url.pathname }) as ReturnType<typeof createElement>,
+  Page({ counts, github, faq, locale }) as ReturnType<typeof createElement>,
 );
 ---
 
 <!doctype html>
-<html lang="en" dir={localeDir('en')}>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -31,14 +139,15 @@ const pageHtml = renderToStaticMarkup(
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    {alternateLinks(Astro.url.pathname).map((item) => (
-      <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
+    {alternateLinks.map((entry) => (
+      <link rel="alternate" hreflang={entry.hreflang} href={entry.href} />
     ))}
+    <link rel="alternate" hreflang="x-default" href={xDefaultHref} />
 
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <FaviconLinks />
+    <ResourceHints />
 
-    <FontStylesheet />
+    <GoogleAnalytics />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
@@ -63,16 +172,222 @@ const pageHtml = renderToStaticMarkup(
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={heroImage} />
+    <meta property="og:locale" content={localeDef.ogLocale} />
+    {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
+      <meta property="og:locale:alternate" content={entry.ogLocale} />
+    ))}
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={heroImage} />
+
+    {/*
+     * Single @graph JSON-LD block — WebSite + Organization +
+     * SoftwareApplication + FAQPage. The FAQPage entries must mirror
+     * the visible FAQ rendered by `<HomeFaq />` further down the page.
+     */}
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
     <Fragment set:html={pageHtml} />
-    <LocaleSwitcherEnhancer />
     <PreciseLazyload />
-    <HomeEnhancer />
+    <LocaleSwitcherScript />
+    <script is:inline>
+      (() => {
+        const formatStars = (count) => {
+          if (!Number.isFinite(count) || count <= 0) return '0';
+          if (count < 1000) return String(count);
+          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+        };
+
+        // Pull a clean 'v0.3.0'-style label from a GitHub release record.
+        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+        // what we hand-author; fall back to tag_name (e.g.
+        // 'open-design-v0.3.0') with the project prefix stripped.
+        //
+        // Expected input shapes (release.name / release.tag_name):
+        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+        //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
+        //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
+        //   { name: null,                 tag_name: null }                  → null (caller skips)
+        const formatVersion = (release) => {
+          const fromTag = (tag) => {
+            if (typeof tag !== 'string') return null;
+            const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+            return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+          };
+          const fromName = (name) => {
+            if (typeof name !== 'string') return null;
+            const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+            return m ? `v${m[1]}` : null;
+          };
+          return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+        };
+
+        const enhanceHeader = () => {
+          const chrome = document.querySelector('[data-chrome-headroom]');
+          if (chrome) {
+            // Wrap the scroll listener's read + classList write in
+            // requestAnimationFrame. Trackpads and high-rate wheels fire
+            // scroll faster than the display refresh, and every callback
+            // that hits classList triggers a layout recalc. rAF collapses
+            // each burst to one DOM mutation per frame — PSI was
+            // attributing ~700ms of "forced reflow" to the un-throttled
+            // version on the previous build.
+            let lastY = window.scrollY;
+            let ticking = false;
+            const showTopThreshold = 100;
+            const scrollDelta = 6;
+            window.addEventListener(
+              'scroll',
+              () => {
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(() => {
+                  const y = window.scrollY;
+                  const delta = y - lastY;
+                  if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
+                  else if (delta > scrollDelta) chrome.classList.add('is-hidden');
+                  else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
+                  lastY = y;
+                  ticking = false;
+                });
+              },
+              { passive: true },
+            );
+          }
+
+          const stars = document.querySelector('[data-github-stars]');
+          if (stars) {
+            fetch('https://api.github.com/repos/nexu-io/open-design', {
+              headers: { Accept: 'application/vnd.github+json' },
+            })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+              .then((data) => {
+                if (typeof data?.stargazers_count === 'number') {
+                  stars.textContent = formatStars(data.stargazers_count);
+                }
+              })
+              .catch(() => {});
+          }
+
+          // Latest stable release powers every "v0.x.y" badge on the page
+          // (topbar pulse, hero CTA-foot, footer download). Hits one
+          // unauthenticated API call per page view; the static fallback in
+          // each slot keeps the layout sane if the request fails or 403s.
+          const versionSlots = document.querySelectorAll('[data-github-version]');
+          if (versionSlots.length === 0) return;
+          fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+            headers: { Accept: 'application/vnd.github+json' },
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+            .then((data) => {
+              const label = formatVersion(data);
+              if (!label) return;
+              for (const slot of versionSlots) slot.textContent = label;
+            })
+            .catch(() => {});
+        };
+
+        const enhanceWire = () => {
+          const track = document.querySelector('[data-wire-contributors-track]');
+          const count = document.querySelector('[data-wire-contributors-count]');
+          if (!track) return;
+
+          const roleOverrides = {
+            tw93: 'kami',
+            op7418: 'guizang',
+            alchaincyf: 'huashu',
+            OpenCoworkAI: 'codesign',
+            'nexu-io': 'studio',
+            lewislulu: 'html-ppt',
+          };
+          const roleFor = (login, contributions) =>
+            roleOverrides[login] ?? `${contributions} ${contributions === 1 ? 'commit' : 'commits'}`;
+          const isContributor = (value) =>
+            value &&
+            typeof value.login === 'string' &&
+            typeof value.html_url === 'string' &&
+            typeof value.type === 'string' &&
+            typeof value.contributions === 'number';
+          const renderContributor = (contributor, index) => {
+            const link = document.createElement('a');
+            link.className = 'wire-item is-link';
+            link.href = contributor.href;
+            link.target = '_blank';
+            link.rel = 'noreferrer noopener';
+            link.setAttribute('aria-label', `Open ${contributor.handle} on GitHub`);
+            link.dataset.liveWireItem = String(index);
+
+            const dot = document.createElement('span');
+            dot.className = 'wire-dot';
+            dot.textContent = '·';
+            const handle = document.createElement('span');
+            handle.className = 'wire-handle';
+            handle.textContent = `@${contributor.handle}`;
+            const role = document.createElement('span');
+            role.className = 'wire-role';
+            role.textContent = contributor.role;
+
+            link.append(dot, handle, role);
+            return link;
+          };
+
+          fetch('https://api.github.com/repos/nexu-io/open-design/contributors?per_page=12', {
+            headers: { Accept: 'application/vnd.github+json' },
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+            .then((data) => {
+              if (!Array.isArray(data)) return;
+              const live = data
+                .filter(isContributor)
+                .filter((c) => c.type !== 'Bot' && !c.login.endsWith('[bot]'))
+                .slice(0, 12)
+                .map((c) => ({
+                  handle: c.login,
+                  role: roleFor(c.login, c.contributions),
+                  href: c.html_url,
+                }));
+              if (live.length === 0) return;
+              live.push({
+                handle: 'you',
+                role: 'be next',
+                href: 'https://github.com/nexu-io/open-design/graphs/contributors',
+              });
+              if (count) count.textContent = String(Math.max(0, live.length - 1));
+              track.replaceChildren(
+                ...[...live, ...live].map((contributor, index) => renderContributor(contributor, index)),
+              );
+            })
+            .catch(() => {});
+        };
+
+        const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
+        enhanceHeader();
+        enhanceWire();
+        if (elements.length === 0) return;
+
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduceMotion || !('IntersectionObserver' in window)) {
+          for (const el of elements) el.dataset.revealed = 'true';
+          return;
+        }
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              entry.target.dataset.revealed = 'true';
+              observer.unobserve(entry.target);
+            }
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+        );
+
+        for (const el of elements) observer.observe(el);
+      })();
+    </script>
   </body>
 </html>

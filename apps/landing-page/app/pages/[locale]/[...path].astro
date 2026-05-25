@@ -97,7 +97,7 @@ const pageTitle = routeRoot === 'skills'
 const pageDescription = `Open Design ${routeRoot || 'landing'} page.`;
 ---
 
-<Layout title={pageTitle} description={pageDescription} active={routeRoot as HeaderProps['active']} locale={locale} prefixDefaultLocale={true}>
+<Layout title={pageTitle} description={pageDescription} active={routeRoot as HeaderProps['active']}>
     {routeRoot === 'blog' && (
       <>
         <header class='catalog-head'>

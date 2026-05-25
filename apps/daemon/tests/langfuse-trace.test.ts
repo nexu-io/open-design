@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildFeedbackPayload,
   buildTracePayload,
   readLangfuseConfig,
   readTelemetrySinkConfig,
   reportRunCompleted,
+  reportRunFeedback,
+  type FeedbackReportContext,
   type LangfuseConfig,
   type ReportContext,
   type TelemetrySinkConfig,
@@ -747,5 +750,112 @@ describe('reportRunCompleted', () => {
       },
     );
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+function makeFeedbackCtx(
+  overrides: Partial<FeedbackReportContext> = {},
+): FeedbackReportContext {
+  return {
+    runId: 'run-feedback-1',
+    installationId: 'install-uuid-1',
+    prefs: { metrics: true, content: true },
+    rating: 'positive',
+    reasonCodes: ['matched_request'],
+    hasCustomReason: false,
+    customReason: '',
+    ...overrides,
+  };
+}
+
+describe('buildFeedbackPayload', () => {
+  it('emits a numeric user_rating score plus per-reason categorical scores', () => {
+    const batch = buildFeedbackPayload(
+      makeFeedbackCtx({
+        rating: 'negative',
+        reasonCodes: ['missed_request', 'weak_visual'],
+        hasCustomReason: true,
+        customReason: 'It got the layout wrong on tablet',
+      }),
+    ) as Array<Record<string, any>>;
+    expect(batch).toHaveLength(3);
+    const ratingScore = batch[0]!;
+    expect(ratingScore.type).toBe('score-create');
+    expect(ratingScore.body.traceId).toBe('run-feedback-1');
+    expect(ratingScore.body.name).toBe('user_rating');
+    expect(ratingScore.body.value).toBe(-1);
+    expect(ratingScore.body.dataType).toBe('NUMERIC');
+    expect(ratingScore.body.comment).toBe('negative');
+    expect(ratingScore.body.metadata).toMatchObject({
+      reasonCount: 2,
+      customReason: 'It got the layout wrong on tablet',
+      hasCustomReason: true,
+    });
+    for (const reasonScore of batch.slice(1)) {
+      expect(reasonScore.body.name).toBe('user_rating_reason');
+      expect(reasonScore.body.dataType).toBe('CATEGORICAL');
+      expect(reasonScore.body.comment).toBe('negative');
+      expect(reasonScore.body.traceId).toBe('run-feedback-1');
+    }
+    expect(batch[1]!.body.value).toBe('missed_request');
+    expect(batch[2]!.body.value).toBe('weak_visual');
+  });
+
+  it('does not emit reason scores when no codes were submitted', () => {
+    const batch = buildFeedbackPayload(
+      makeFeedbackCtx({ reasonCodes: [] }),
+    ) as Array<Record<string, any>>;
+    expect(batch).toHaveLength(1);
+    expect(batch[0]!.body.name).toBe('user_rating');
+    expect(batch[0]!.body.value).toBe(1);
+  });
+});
+
+describe('reportRunFeedback', () => {
+  const TEST_CONFIG: LangfuseConfig = {
+    baseUrl: 'https://us.cloud.langfuse.com',
+    authHeader: 'Basic Zm9vOmJhcg==',
+    retries: 0,
+    timeoutMs: 1000,
+  };
+
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('skips when metrics consent is off', async () => {
+    const fetchSpy = vi.fn();
+    await reportRunFeedback(makeFeedbackCtx({ prefs: { metrics: false, content: true } }), {
+      config: TEST_CONFIG,
+      fetchImpl: fetchSpy as any,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips when content consent is off', async () => {
+    const fetchSpy = vi.fn();
+    await reportRunFeedback(makeFeedbackCtx({ prefs: { metrics: true, content: false } }), {
+      config: TEST_CONFIG,
+      fetchImpl: fetchSpy as any,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('posts a score-create batch to /api/public/ingestion when consent is on', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ successes: [], errors: [] }), { status: 207 }),
+    );
+    await reportRunFeedback(
+      makeFeedbackCtx({ reasonCodes: ['matched_request'] }),
+      { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('https://us.cloud.langfuse.com/api/public/ingestion');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body);
+    expect(body.batch).toHaveLength(2);
+    expect(body.batch[0].type).toBe('score-create');
+    expect(body.batch[0].body.value).toBe(1);
   });
 });

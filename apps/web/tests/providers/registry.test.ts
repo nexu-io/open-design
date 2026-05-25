@@ -12,6 +12,8 @@ import {
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
+  fetchPluginExampleHtml,
+  fetchPluginPreviewHtml,
   fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
   fetchSkillExample,
@@ -121,6 +123,91 @@ describe('fetchSkillExample', () => {
       error: 'HTTP 500',
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
+  });
+});
+
+// Plugin previews use the same daemon contract as skill examples (the
+// daemon returns 404 when the manifest declares a preview entry but no
+// file ships at that path). Skills already map that 404 to
+// { unavailable: true, kind: 'html' } per #897 so the modal renders a
+// calm "no shipped preview" placeholder instead of "Couldn't load this
+// example. The example HTML failed to fetch." Plugins lacked the
+// symmetric treatment, so bundled plugins like `example-live-artifact`
+// surfaced the misleading error from the Home Community grid even
+// though the catalog simply ships no example HTML for that plugin.
+describe('fetchPluginPreviewHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing previews as unavailable instead of an error', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('preview not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ unavailable: true, kind: 'html' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/preview',
+    );
+  });
+
+  it('forwards real preview fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ error: 'HTTP 500' });
+  });
+
+  it('returns html on success', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('<html><body>preview</body></html>', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ html: '<html><body>preview</body></html>' });
+  });
+});
+
+describe('fetchPluginExampleHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing example stems as unavailable instead of an error', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('example not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginExampleHtml('example-live-artifact', 'index'),
+    ).resolves.toEqual({ unavailable: true, kind: 'html' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/example/index',
+    );
+  });
+
+  it('forwards real example fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginExampleHtml('example-live-artifact', 'index'),
+    ).resolves.toEqual({ error: 'HTTP 500' });
   });
 });
 

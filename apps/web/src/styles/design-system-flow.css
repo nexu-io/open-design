@@ -1683,6 +1683,43 @@
   place-items: center;
   color: var(--accent);
 }
+/* While the design system is generating (and other waiting states), the small
+   block of the blocks icon hops, spins, and bounces back into the cluster. The
+   <rect> is the small block; transform-box keeps it spinning on its own center.
+   overflow: visible lets the hop rise past the 24-unit viewBox without clipping. */
+.ds-project-generation-mark svg {
+  overflow: visible;
+}
+.ds-project-generation-mark svg rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ds-generation-block 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes ds-generation-block {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  35% {
+    transform: translateY(-4px) rotate(180deg);
+  }
+  60% {
+    transform: translateY(0) rotate(360deg);
+  }
+  72% {
+    transform: translateY(-2px) rotate(360deg);
+  }
+  85% {
+    transform: translateY(0) rotate(360deg);
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-project-generation-mark svg rect {
+    animation: none;
+  }
+}
 .ds-project-generation-stage h1 {
   margin: 0;
   color: var(--text);
@@ -1784,17 +1821,30 @@
   line-height: 1.45;
 }
 .ds-project-publish-card__toggles {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 18px;
 }
-.ds-project-publish-card label {
+.ds-project-publish-card__toggles label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--text);
   font-size: 13px;
   white-space: nowrap;
+}
+.ds-project-publish-trigger {
+  display: inline-flex;
+}
+/* A disabled button does not fire the hover or focus that shows its own `title`,
+   so the publish guidance lives on this wrapper. Make the disabled button
+   transparent to pointer events so hovering it reveals the wrapper title, and
+   carry the not-allowed cursor the button would otherwise show. */
+.ds-project-publish-trigger:has(> button:disabled) {
+  cursor: not-allowed;
+}
+.ds-project-publish-trigger > button:disabled {
+  pointer-events: none;
 }
 .ds-project-use-row {
   margin-top: 14px;
@@ -1936,7 +1986,7 @@
   font-size: 13px;
 }
 .ds-project-warning-card {
-  margin: 14px 0 0;
+  margin: 14px 0 18px;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -1969,6 +2019,13 @@
   align-items: center;
   gap: 7px;
   white-space: nowrap;
+}
+/* Holds the Upload fonts + Use system fonts actions in the card's last cell.
+   Issue #2814. */
+.ds-warning-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ds-context-strip {
   margin: 22px 0 30px;
@@ -2009,18 +2066,36 @@
   gap: 28px;
 }
 .ds-project-section-head {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 10px;
 }
+/* Stretched toggle: covers the whole head so the entire row expands/collapses.
+   Sits behind the title (which is pointer-events: none, so clicks fall through)
+   and behind the review action buttons (which are lifted above it). */
+.ds-project-section-head-trigger {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: inherit;
+}
 .ds-project-section-title {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  flex: 1;
   min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 0;
@@ -2034,7 +2109,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 .ds-project-section-title strong {
   margin: 0;
@@ -2096,6 +2171,8 @@
   color: var(--amber);
 }
 .ds-project-review-actions {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -2118,6 +2195,51 @@
   border-color: color-mix(in srgb, var(--red) 42%, var(--border));
   background: color-mix(in srgb, var(--red) 9%, var(--bg-panel));
   color: var(--red);
+}
+/* "Needs work..." feedback form. Floats below the review buttons as a popover
+   instead of flowing inline in the actions row, which otherwise cramped the
+   section head. Anchored to .ds-project-review-actions (position: relative). */
+.ds-project-feedback-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(360px, 88vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: ds-feedback-pop-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-project-feedback-popover label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ds-project-feedback-popover textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.ds-project-feedback-popover > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@keyframes ds-feedback-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .ds-project-section-body {
   display: flex;
@@ -2159,7 +2281,6 @@
 }
 .ds-project-inline-preview iframe {
   border: 0;
-  pointer-events: none;
 }
 .ds-project-inline-preview img {
   object-fit: contain;
@@ -2304,7 +2425,11 @@
   width: min(940px, 100%);
 }
 .ds-project-head--review {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   border-bottom: 0;
   padding: 16px 0 28px;
 }
@@ -2325,11 +2450,6 @@
   color: var(--text-muted);
   font-size: 16px;
   line-height: 1.55;
-}
-.ds-project-publish-card--review .ds-project-publish-card__toggles {
-  min-height: 58px;
-  padding: 0 24px;
-  border-top: 1px solid var(--border);
 }
 .ds-project-publish-card--review .ds-project-use-row {
   margin: 0;
@@ -2463,6 +2583,10 @@
   }
   .ds-project-review-actions {
     justify-content: flex-start;
+  }
+  .ds-project-feedback-popover {
+    right: auto;
+    left: 0;
   }
   .ds-project-section-state {
     margin-left: 0;

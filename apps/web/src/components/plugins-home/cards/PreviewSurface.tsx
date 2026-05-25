@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function PreviewSurface({ pluginId, pluginTitle, preview }: Props) {
-  const { ref, inView } = useInView<HTMLDivElement>({ rootMargin: '320px' });
+  const { ref, inView } = useInView<HTMLDivElement>({ rootMargin: '120px', once: false });
 
   return (
     <div
@@ -39,7 +39,7 @@ export function PreviewSurface({ pluginId, pluginTitle, preview }: Props) {
           inView={inView}
         />
       ) : preview.kind === 'design' ? (
-        <DesignSystemSurface preview={preview} />
+        <DesignSystemSurface preview={preview} inView={inView} />
       ) : (
         <TextSurface pluginTitle={pluginTitle} />
       )}

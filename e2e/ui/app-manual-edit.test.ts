@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -143,7 +144,7 @@ test('manual edit inspector previews and persists page and selected element styl
     window as Window & typeof globalThis & { __manualEditSmokeMarker?: string }
   ).__manualEditSmokeMarker)).toBe('stable-frame');
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
+  await page.getByRole('button', { name: /^Export$/ }).click();
   await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
 });
 
@@ -171,7 +172,7 @@ test('manual edit mode preserves preview actions after style edits', async ({ pa
   await frame.getByRole('heading', { name: 'Original Hero' }).click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
+  await page.getByRole('button', { name: /^Export$/ }).click();
   await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
 });
 
@@ -238,7 +239,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -307,41 +308,38 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
-  if (
-    await preview
-      .waitFor({ state: 'visible', timeout: 5_000 })
-      .then(() => true)
-      .catch(() => false)
-  ) {
+  try {
+    await preview.waitFor({ state: 'visible', timeout: 5_000 });
     return;
+  } catch {
+    // Not yet visible; try opening via tab or file list
   }
 
-  const filePattern = new RegExp(fileName.replace('.', '\\.'), 'i');
+  const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
   const fileTabButton = page
     .locator('.workspace-tab')
     .filter({ hasText: filePattern })
     .locator('.workspace-tab__main')
     .first();
-  if (
-    await fileTabButton
-      .waitFor({ state: 'visible', timeout: 2_000 })
-      .then(() => true)
-      .catch(() => false)
-  ) {
-    await fileTabButton.click();
-    await expect(preview).toBeVisible();
-    return;
+  let tabFound = true;
+  try {
+    await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
+  } catch {
+    tabFound = false;
   }
 
-  const fileButton = page.getByRole('button', { name: filePattern });
-  await fileButton.click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  if (tabFound) {
+    await fileTabButton.click();
+  } else {
+    const fileButton = page.getByRole('button', { name: filePattern });
+    await fileButton.click();
+    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  }
   await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

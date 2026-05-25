@@ -22,17 +22,20 @@ export function emptyManualEditDraft(source = ''): ManualEditDraft {
 }
 
 export function ManualEditPanel({
+  targets,
   selectedTarget,
   draft,
   error,
   canUndo,
+  onSelectTarget,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
+  onApplyPatch,
   onError,
   onClearSelection,
-  onApplyPatch,
   onPickImage,
+  busy = false,
   pageStylesEnabled = true,
 }: {
   targets: ManualEditTarget[];
@@ -65,6 +68,10 @@ export function ManualEditPanel({
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
+  const [activeTab, setActiveTab] = useState<ManualEditTab>('style');
+  const tab = targetForInspector
+    ? (activeTab === 'page' ? 'style' : activeTab)
+    : (activeTab === 'source' ? 'source' : 'page');
 
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
@@ -81,32 +88,160 @@ export function ManualEditPanel({
     onError('');
     onStyleChange?.(targetForInspector.id, normalized.styles, `Style: ${targetForInspector.label}`);
   };
+  const applyAttributes = () => {
+    if (!targetForInspector) return;
+    try {
+      const parsed = JSON.parse(draft.attributesText) as unknown;
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error();
+      const attributes = Object.fromEntries(
+        Object.entries(parsed as Record<string, unknown>).map(([key, value]) => [key, String(value)]),
+      );
+      onError('');
+      onApplyPatch({ id: targetForInspector.id, kind: 'set-attributes', attributes }, `Attributes: ${targetForInspector.label}`);
+    } catch {
+      onError('Invalid attributes JSON.');
+    }
+  };
+  const applyContent = () => {
+    if (!targetForInspector) return;
+    if (targetForInspector.kind === 'link') {
+      onApplyPatch({ id: targetForInspector.id, kind: 'set-link', text: draft.text, href: draft.href }, `Content: ${targetForInspector.label}`);
+      return;
+    }
+    if (targetForInspector.kind === 'image') {
+      onApplyPatch({ id: targetForInspector.id, kind: 'set-image', src: draft.src, alt: draft.alt }, `Content: ${targetForInspector.label}`);
+      return;
+    }
+    onApplyPatch({ id: targetForInspector.id, kind: 'set-text', value: draft.text }, `Content: ${targetForInspector.label}`);
+  };
 
   return (
-    <aside className="manual-edit-right">
-      <section className="manual-edit-modal cc-panel">
-        {targetForInspector ? (
-          <StyleInspector
-            styles={draft.styles}
-            layoutEnabled={targetForInspector.isLayoutContainer}
-            onClearSelection={onClearSelection}
-            onChange={changeTargetStyle}
-          />
-        ) : !targetForInspector ? (
-          <PageInspector
-            enabled={pageStylesEnabled}
-            onStyleChange={(styles) => {
-              const normalized = normalizeManualEditStyles(styles, { layoutEnabled: true });
-              if (!normalized.ok) {
-                onError(normalized.error);
-                onInvalidStyle?.('__body__', Object.keys(styles) as Array<keyof ManualEditStyles>);
-                return;
-              }
-              onError('');
-              onStyleChange?.('__body__', normalized.styles, 'Page styles');
-            }}
-          />
-        ) : null}
+    <>
+      <section className="manual-edit-layers">
+        <div className="manual-edit-panel-head">
+          <h3>{t('manualEdit.layers')}</h3>
+          <span>{targets.length}</span>
+        </div>
+        <div className="manual-edit-layer-list">
+          {targets.length > 0 ? targets.map((target) => (
+            <button
+              key={target.id}
+              type="button"
+              className={`manual-edit-layer-row${selectedTarget?.id === target.id ? ' selected' : ''}`}
+              onClick={() => onSelectTarget(target)}
+            >
+              <strong>{target.label}</strong>
+              <span>
+                {target.tagName}
+                {target.isHidden ? ` - ${t('manualEdit.hiddenBadge')}` : ''}
+              </span>
+            </button>
+          )) : (
+            <p className="manual-edit-empty">{t('manualEdit.noEditableLayers')}</p>
+          )}
+        </div>
+      </section>
+      <aside className="manual-edit-right">
+        <section className="manual-edit-modal cc-panel">
+          <div className="manual-edit-tabs" role="tablist" aria-label="Manual edit tabs">
+            {(targetForInspector ? ELEMENT_TABS : PAGE_TABS).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                className={tab === item.id ? 'selected' : ''}
+                onClick={() => setActiveTab(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {targetForInspector ? (
+            <>
+              {tab === 'content' ? (
+                <ContentEditor
+                  target={targetForInspector}
+                  draft={draft}
+                  busy={busy}
+                  onDraftChange={onDraftChange}
+                  onApply={applyContent}
+                />
+              ) : null}
+              {tab === 'style' ? (
+                <StyleInspector
+                  styles={draft.styles}
+                  layoutEnabled={targetForInspector.isLayoutContainer}
+                  onClearSelection={onClearSelection}
+                  onChange={changeTargetStyle}
+                />
+              ) : null}
+              {tab === 'attributes' ? (
+                <div className="manual-edit-tab-body">
+                  <label className="manual-edit-field">
+                    <span>Attributes JSON</span>
+                    <textarea
+                      className="manual-edit-code"
+                      value={draft.attributesText}
+                      onChange={(event) => onDraftChange({ ...draft, attributesText: event.currentTarget.value })}
+                    />
+                  </label>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={applyAttributes}>Apply Attributes</button>
+                </div>
+              ) : null}
+              {tab === 'html' ? (
+                <div className="manual-edit-tab-body">
+                  <label className="manual-edit-field">
+                    <span>Selected element HTML</span>
+                    <textarea
+                      className="manual-edit-code tall"
+                      value={draft.outerHtml}
+                      onChange={(event) => onDraftChange({ ...draft, outerHtml: event.currentTarget.value })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy}
+                    onClick={() => onApplyPatch({ id: targetForInspector.id, kind: 'set-outer-html', html: draft.outerHtml }, `HTML: ${targetForInspector.label}`)}
+                  >
+                    Apply HTML
+                  </button>
+                </div>
+              ) : null}
+              {tab === 'source' ? (
+                <SourceEditor
+                  draft={draft}
+                  busy={busy}
+                  onDraftChange={onDraftChange}
+                  onApply={() => onApplyPatch({ kind: 'set-full-source', source: draft.fullSource }, 'Full source')}
+                />
+              ) : null}
+            </>
+          ) : !targetForInspector ? (
+            tab === 'source' ? (
+              <SourceEditor
+                draft={draft}
+                busy={busy}
+                onDraftChange={onDraftChange}
+                onApply={() => onApplyPatch({ kind: 'set-full-source', source: draft.fullSource }, 'Full source')}
+              />
+            ) : (
+              <PageInspector
+                enabled={pageStylesEnabled}
+                onStyleChange={(styles) => {
+                  const normalized = normalizeManualEditStyles(styles, { layoutEnabled: true });
+                  if (!normalized.ok) {
+                    onError(normalized.error);
+                    onInvalidStyle?.('__body__', Object.keys(styles) as Array<keyof ManualEditStyles>);
+                    return;
+                  }
+                  onError('');
+                  onStyleChange?.('__body__', normalized.styles, 'Page styles');
+                }}
+              />
+            )
+          ) : null}
 
           {targetForInspector?.kind === 'image' && onPickImage ? (
           <div className="cc-section">
@@ -191,8 +326,93 @@ export function ManualEditPanel({
         ) : null}
 
         {error ? <div className="manual-edit-error">{error}</div> : null}
-      </section>
-    </aside>
+        </section>
+      </aside>
+    </>
+  );
+}
+
+type ManualEditTab = 'page' | 'content' | 'style' | 'attributes' | 'html' | 'source';
+
+const ELEMENT_TABS: ReadonlyArray<{ id: ManualEditTab; label: string }> = [
+  { id: 'content', label: 'Content' },
+  { id: 'style', label: 'Style' },
+  { id: 'attributes', label: 'Attributes' },
+  { id: 'html', label: 'HTML' },
+  { id: 'source', label: 'Source' },
+];
+
+const PAGE_TABS: ReadonlyArray<{ id: ManualEditTab; label: string }> = [
+  { id: 'page', label: 'Page' },
+  { id: 'source', label: 'Source' },
+];
+
+function ContentEditor({
+  target,
+  draft,
+  busy,
+  onDraftChange,
+  onApply,
+}: {
+  target: ManualEditTarget;
+  draft: ManualEditDraft;
+  busy: boolean;
+  onDraftChange: (draft: ManualEditDraft) => void;
+  onApply: () => void;
+}) {
+  return (
+    <div className="manual-edit-tab-body">
+      {target.kind === 'image' ? (
+        <>
+          <label className="manual-edit-field">
+            <span>Image source</span>
+            <input value={draft.src} onChange={(event) => onDraftChange({ ...draft, src: event.currentTarget.value })} />
+          </label>
+          <label className="manual-edit-field">
+            <span>Alt text</span>
+            <input value={draft.alt} onChange={(event) => onDraftChange({ ...draft, alt: event.currentTarget.value })} />
+          </label>
+        </>
+      ) : (
+        <label className="manual-edit-field">
+          <span>Text</span>
+          <textarea value={draft.text} onChange={(event) => onDraftChange({ ...draft, text: event.currentTarget.value })} />
+        </label>
+      )}
+      {target.kind === 'link' ? (
+        <label className="manual-edit-field">
+          <span>Href</span>
+          <input value={draft.href} onChange={(event) => onDraftChange({ ...draft, href: event.currentTarget.value })} />
+        </label>
+      ) : null}
+      <button type="button" className="btn btn-primary" disabled={busy} onClick={onApply}>Apply Content</button>
+    </div>
+  );
+}
+
+function SourceEditor({
+  draft,
+  busy,
+  onDraftChange,
+  onApply,
+}: {
+  draft: ManualEditDraft;
+  busy: boolean;
+  onDraftChange: (draft: ManualEditDraft) => void;
+  onApply: () => void;
+}) {
+  return (
+    <div className="manual-edit-tab-body">
+      <label className="manual-edit-field">
+        <span>Full artifact source</span>
+        <textarea
+          className="manual-edit-code tall"
+          value={draft.fullSource}
+          onChange={(event) => onDraftChange({ ...draft, fullSource: event.currentTarget.value })}
+        />
+      </label>
+      <button type="button" className="btn btn-primary" disabled={busy} onClick={onApply}>Apply Source</button>
+    </div>
   );
 }
 

@@ -126,6 +126,7 @@ test('resolveAgentExecutable supports configured binary overrides for non-Codex 
     ['qoder', 'qodercli', 'QODER_BIN'],
     ['copilot', 'copilot', 'COPILOT_BIN'],
     ['deepseek', 'deepseek', 'DEEPSEEK_BIN'],
+    ['trae-cli', 'traecli', 'TRAE_CLI_BIN'],
   ];
   const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-overrides-'));
   try {
@@ -565,6 +566,161 @@ test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () 
       `expected ${agentId} to preserve ANTHROPIC_API_KEY`,
     );
   }
+});
+
+// Issue #2420: Codex CLI prefers OPENAI_API_KEY / CODEX_API_KEY over its own
+// `codex login` OAuth credentials when both are set. When the user has not
+// pointed Codex at a custom proxy via OPENAI_BASE_URL, a stale BYOK key
+// silently outranks `~/.codex/auth.json` and trips 401 invalid_api_key.
+// Strip the API keys in that case so Codex CLI's own auth resolution wins —
+// mirroring the existing ANTHROPIC_API_KEY behavior the claude adapter has
+// for issue #398.
+test('spawnEnvForAgent strips OPENAI_API_KEY for the codex adapter when OPENAI_BASE_URL is absent', () => {
+  const env = spawnEnvForAgent('codex', {
+    OPENAI_API_KEY: 'sk-stale-byok',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal('OPENAI_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+});
+
+test('spawnEnvForAgent strips CODEX_API_KEY for the codex adapter when OPENAI_BASE_URL is absent', () => {
+  const env = spawnEnvForAgent('codex', {
+    CODEX_API_KEY: 'sk-stale-byok',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('CODEX_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent strips Codex API keys when OPENAI_BASE_URL is empty', () => {
+  const env = spawnEnvForAgent('codex', {
+    OPENAI_API_KEY: 'sk-stale-byok',
+    CODEX_API_KEY: 'sk-stale-byok',
+    OPENAI_BASE_URL: '',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('OPENAI_API_KEY' in env, false);
+  assert.equal('CODEX_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent strips Codex API keys when OPENAI_BASE_URL is whitespace', () => {
+  const env = spawnEnvForAgent('codex', {
+    OPENAI_API_KEY: 'sk-stale-byok',
+    OPENAI_BASE_URL: '   ',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal('OPENAI_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves Codex API keys when OPENAI_BASE_URL is set to a custom proxy', () => {
+  const env = spawnEnvForAgent('codex', {
+    OPENAI_API_KEY: 'sk-proxy',
+    OPENAI_BASE_URL: 'https://proxy.example.com/v1',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.OPENAI_API_KEY, 'sk-proxy');
+  assert.equal(env.OPENAI_BASE_URL, 'https://proxy.example.com/v1');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves CODEX_API_KEY when OPENAI_BASE_URL is set to a custom proxy', () => {
+  const env = spawnEnvForAgent('codex', {
+    CODEX_API_KEY: 'sk-proxy',
+    OPENAI_BASE_URL: 'https://proxy.example.com/v1',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.CODEX_API_KEY, 'sk-proxy');
+  assert.equal(env.OPENAI_BASE_URL, 'https://proxy.example.com/v1');
+});
+
+test('spawnEnvForAgent strips Codex API keys case-insensitively when OPENAI_BASE_URL is absent', () => {
+  const env = spawnEnvForAgent('codex', {
+    Openai_Api_Key: 'sk-mixed-case',
+    openai_api_key: 'sk-lower-case',
+    Codex_Api_Key: 'sk-mixed-case',
+    PATH: '/usr/bin',
+  });
+
+  const remainingOpenAi = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'OPENAI_API_KEY',
+  );
+  const remainingCodex = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'CODEX_API_KEY',
+  );
+  assert.deepEqual(remainingOpenAi, []);
+  assert.deepEqual(remainingCodex, []);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves Codex API keys for non-codex adapters', () => {
+  for (const agentId of ['claude', 'gemini', 'opencode', 'devin']) {
+    const env = spawnEnvForAgent(agentId, {
+      OPENAI_API_KEY: 'sk-keep',
+      CODEX_API_KEY: 'sk-keep',
+      PATH: '/usr/bin',
+    });
+    assert.equal(
+      env.OPENAI_API_KEY,
+      'sk-keep',
+      `expected ${agentId} to preserve OPENAI_API_KEY`,
+    );
+    assert.equal(
+      env.CODEX_API_KEY,
+      'sk-keep',
+      `expected ${agentId} to preserve CODEX_API_KEY`,
+    );
+  }
+});
+
+// When the user has explicitly configured a BYOK Codex base URL through the
+// Settings → Execution mode → Local CLI form, the configured API key in
+// `agentCliEnv.codex.OPENAI_API_KEY` (or CODEX_API_KEY) flows through to the
+// spawn alongside the base URL. The stripping helper must keep both in sync
+// so the configured proxy actually authenticates.
+test('spawnEnvForAgent applies configured codex env and preserves API key when base URL is configured', () => {
+  const env = spawnEnvForAgent(
+    'codex',
+    { PATH: '/usr/bin' },
+    {
+      OPENAI_BASE_URL: 'https://proxy.example.com/v1',
+      OPENAI_API_KEY: 'sk-configured',
+    },
+  );
+
+  assert.equal(env.OPENAI_BASE_URL, 'https://proxy.example.com/v1');
+  assert.equal(env.OPENAI_API_KEY, 'sk-configured');
+});
+
+// The dual-key shape every BYOK Codex user hits in production: prior session
+// left OPENAI_API_KEY in the daemon's app-config, the user cleared the BYOK
+// dialog but never opened Settings → Local CLI → Codex env to also clear
+// OPENAI_API_KEY, then switched execution mode back to Local CLI. spawnEnv
+// must strip the stale BYOK key so Codex CLI's own `codex login` wins.
+test('spawnEnvForAgent strips stale configured OPENAI_API_KEY when configured base URL was also cleared', () => {
+  const env = spawnEnvForAgent(
+    'codex',
+    { PATH: '/usr/bin' },
+    {
+      // Empty OPENAI_BASE_URL — i.e. user is on Local CLI mode without a
+      // custom proxy. validateAgentCliEnv would drop the empty string in
+      // practice; we pass it explicitly here to lock the spawn-side guard.
+      OPENAI_API_KEY: 'sk-stale-byok',
+    },
+  );
+
+  assert.equal('OPENAI_API_KEY' in env, false);
+  assert.equal(env.PATH, '/usr/bin');
 });
 
 test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is set', () => {

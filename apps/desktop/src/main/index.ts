@@ -69,6 +69,32 @@ export {
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 
+// Argv prefix the preload uses to recover the OS locale main process
+// read at startup. The renderer wires `__od__.client.osLocale` from it.
+export const OS_LOCALE_PRELOAD_ARG_PREFIX = "--od-os-locale=";
+
+/**
+ * Read the OS preferred language and, when Electron has not yet
+ * emitted `ready`, point Chromium's `--lang` flag at it so the
+ * renderer's `navigator.language` follows the OS instead of falling
+ * back to en-US. Returns the resolved BCP-47 string so callers can
+ * forward it to `BrowserWindow.webPreferences.additionalArguments`
+ * for the preload to expose to the renderer.
+ *
+ * Safe to call multiple times: `appendSwitch('lang', ...)` is a no-op
+ * once `app.isReady()` is true. The packaged entry calls this once
+ * before its own `whenReady` (so the switch lands) and `runDesktopMain`
+ * calls it again later to recover the same string for the BrowserWindow.
+ */
+export function applyOsLocaleSwitch(electronApp: Electron.App): string {
+  const preferred = electronApp.getPreferredSystemLanguages?.() ?? [];
+  const osLocale = preferred[0] ?? "en";
+  if (!electronApp.isReady()) {
+    electronApp.commandLine.appendSwitch("lang", osLocale);
+  }
+  return osLocale;
+}
+
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
   discoverWebUrl?: () => Promise<string | null>;
@@ -83,9 +109,11 @@ export type DesktopMainOptions = {
    */
   discoverDaemonUrl?: () => Promise<string | null>;
   preloadPath?: string;
+  onDesktopReady?: (controls: { show(): void }) => void;
   update?: {
     currentVersion?: string | null;
     downloadRoot?: string | null;
+    installerObservationRoot?: string | null;
   };
 };
 
@@ -289,6 +317,13 @@ export async function runDesktopMain(
   // helper is promoted to a shared workspace package.
   attachDesktopProcessErrorFilter();
 
+  // dev (tools-dev) enters here without a prior `whenReady` — so this
+  // is where the `--lang` switch actually lands. In packaged builds
+  // `apps/packaged/src/index.ts` has already applied the switch before
+  // its own `whenReady`; this call is then a no-op for the switch and
+  // only recovers the locale string for the BrowserWindow below.
+  const osLocale = applyOsLocaleSwitch(app);
+
   await app.whenReady();
 
   // PR #974: mint a per-process auth secret and hand it to the daemon
@@ -321,6 +356,8 @@ export async function runDesktopMain(
     {
       currentVersion: options.update?.currentVersion,
       downloadRoot: options.update?.downloadRoot,
+      installerObservationRoot: options.update?.installerObservationRoot,
+      namespace: runtime.namespace,
       runtimeBase: runtime.base,
       source: runtime.source,
     },
@@ -367,6 +404,7 @@ export async function runDesktopMain(
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
     discoverDaemonUrl: options.discoverDaemonUrl,
+    osLocale,
     preloadPath: options.preloadPath,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
     // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
@@ -378,6 +416,7 @@ export async function runDesktopMain(
     requestQuit: shutdownAndExit,
     updater,
   });
+  options.onDesktopReady?.({ show: () => desktop?.show() });
   disposeMenu = installDesktopMenu(runtime);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc(runtime);
   updateScheduler = createDesktopUpdaterScheduler(updater, {

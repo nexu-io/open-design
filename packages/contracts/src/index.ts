@@ -12,6 +12,7 @@ export * from './api/connectionTest.js';
 export * from './api/files.js';
 export * from './api/host-tools.js';
 export * from './api/finalize.js';
+export * from './api/github.js';
 export * from './api/handoff.js';
 export * from './api/live-artifacts.js';
 export * from './api/mcp.js';

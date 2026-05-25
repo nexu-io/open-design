@@ -60,13 +60,24 @@ export const ANALYTICS_HEADER_REQUEST_ID = 'x-od-analytics-request-id';
 
 // Daemon serves the PostHog public config so the web bundle never embeds the
 // key at build time; loading via /api/analytics/config keeps POSTHOG_KEY /
-// POSTHOG_HOST as the single source of truth. The endpoint reports
-// enabled=true only when BOTH a key is present AND the user has consented
-// via Privacy → "Share usage data" (telemetry.metrics).
+// POSTHOG_HOST as the single source of truth.
 //
-// installationId is echoed back so the web client uses the same anonymous
-// id Langfuse already keys off of — one anonymous identity per install,
-// shared between both telemetry sinks. Null when consent is declined.
+//   `enabled` reflects ONLY the user's analytics consent toggle (Privacy →
+//   "Share usage data"). When false, posthog-js full autocapture
+//   ($pageview, $autocapture, $dead_click, web vitals, etc.) must stay off
+//   — that's the privacy contract.
+//
+//   `key` and `host` are populated whenever the build has POSTHOG_KEY,
+//   regardless of consent. The error-tracking module reads them directly
+//   to ship `$exception` events even when the user has opted out of
+//   general analytics — error reports flow unconditionally so we don't
+//   lose ground truth on stability. Forks / PR builds without
+//   POSTHOG_KEY get `key: null` and `host: null`, which fully disables
+//   both pipelines.
+//
+//   `installationId` is the anonymous id Langfuse and PostHog both key
+//   off of. Echoed when present so the web client uses the same anonymous
+//   identity PostHog already saw on prior runs.
 export interface AnalyticsConfigResponse {
   enabled: boolean;
   key: string | null;

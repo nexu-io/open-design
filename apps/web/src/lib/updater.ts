@@ -42,6 +42,7 @@ export type UpdaterModel = {
   hasDownloadedInstaller: boolean;
   installerOpened: boolean;
   promptKey: string | null;
+  upToDate: boolean;
   shouldShowControl: boolean;
   shouldPrompt: boolean;
   status: OpenDesignHostUpdaterStatusSnapshot | null;
@@ -66,8 +67,8 @@ function downloadProgressFromStatus(
   status: OpenDesignHostUpdaterStatusSnapshot | null,
 ): UpdaterDownloadProgress | null {
   if (status == null) return null;
+  if (status.state !== OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADING) return null;
   const sourceProgress = status.incoming?.progress ?? status.progress;
-  if (sourceProgress == null && status.state !== OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADING) return null;
 
   const receivedBytes = Math.max(0, sourceProgress?.receivedBytes ?? 0);
   const totalBytes =
@@ -107,6 +108,7 @@ export function deriveUpdaterModel(
   const availableVersion = status?.availableVersion ?? null;
   const currentVersion = status?.currentVersion ?? null;
   const downloadProgress = downloadProgressFromStatus(status);
+  const upToDate = state === OPEN_DESIGN_HOST_UPDATER_STATES.NOT_AVAILABLE;
   const promptKey =
     status == null || availableVersion == null
       ? null
@@ -117,17 +119,7 @@ export function deriveUpdaterModel(
           status.downloadPath ?? status.artifactUrl ?? status.artifact?.url ?? 'unknown-artifact',
         ].join(':');
   const canQuitAfterInstallerOpen = hostAvailable && installerOpened;
-  const hasVisibleUpdaterState = Boolean(
-    hostAvailable &&
-    status?.enabled &&
-    status.supported &&
-    (busy ||
-      downloadProgress != null ||
-      availableVersion != null ||
-      hasDownloadedInstaller ||
-      installerOpened ||
-      status.error != null),
-  );
+  const shouldShowControl = Boolean(canOpenInstaller && hasDownloadedInstaller && !installerOpened);
 
   return {
     availableVersion,
@@ -144,7 +136,8 @@ export function deriveUpdaterModel(
     hasDownloadedInstaller,
     installerOpened,
     promptKey,
-    shouldShowControl: hasVisibleUpdaterState,
+    upToDate,
+    shouldShowControl,
     shouldPrompt: canOpenInstaller && hasDownloadedInstaller && !installerOpened,
     status,
     supported: Boolean(status?.supported),

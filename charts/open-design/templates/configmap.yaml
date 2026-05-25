@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-design.fullname" . }}
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+data:
+  OD_BIND_HOST: {{ .Values.config.bindHost | quote }}
+  OD_PORT: {{ .Values.config.webPort | quote }}
+  OD_WEB_PORT: {{ .Values.config.webPort | quote }}
+  PROXY_PORT: {{ .Values.authProxy.port | quote }}
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
+{{- $publicBaseUrl := .Values.config.publicBaseUrl }}
+{{- if and (not $publicBaseUrl) .Values.ingress.enabled .Values.ingress.hosts }}
+  {{- if eq (len .Values.ingress.hosts) 1 }}
+    {{- $singleHost := (index .Values.ingress.hosts 0).host }}
+    {{- $isSecure := false }}
+    {{- range $.Values.ingress.tls }}
+      {{- if has $singleHost .hosts }}
+        {{- $isSecure = true }}
+      {{- end }}
+    {{- end }}
+    {{- $scheme := ternary "https://" "http://" $isSecure }}
+    {{- $publicBaseUrl = printf "%s%s" $scheme $singleHost }}
+  {{- else if gt (len .Values.ingress.hosts) 1 }}
+    {{- fail "CRITICAL ERROR: Multiple ingress hosts configured. You must explicitly set config.publicBaseUrl to define the canonical origin for OAuth callbacks." }}
+  {{- end }}
+{{- end }}
+{{- if $publicBaseUrl }}
+  OD_PUBLIC_BASE_URL: {{ $publicBaseUrl | quote }}
+{{- end }}
+
+{{- $origins := .Values.config.allowedOrigins }}
+  {{- if and .Values.ingress.enabled (not $origins) }}
+    {{- $hostList := list }}
+    {{- range .Values.ingress.hosts }}
+      {{- $currentHost := .host }}
+      {{- $isSecure := false }}
+      {{- range $.Values.ingress.tls }}
+        {{- if has $currentHost .hosts }}
+          {{- $isSecure = true }}
+        {{- end }}
+      {{- end }}
+      {{- $scheme := ternary "https://" "http://" $isSecure }}
+      {{- $hostList = append $hostList (printf "%s%s" $scheme $currentHost) }}
+    {{- end }}
+    {{- $origins = join "," $hostList }}
+  {{- else if not $origins }}
+    {{- if or (eq .Values.service.type "LoadBalancer") (eq .Values.service.type "NodePort") }}
+      {{- fail "CRITICAL ERROR: service.type is set to LoadBalancer or NodePort but config.allowedOrigins is empty. You must explicitly configure config.allowedOrigins when exposing the service directly without an Ingress." }}
+    {{- else }}
+      {{- /* Synthesize default local origins for port-forwarding when Ingress is disabled */ -}}
+      {{- $localProxy := printf "http://localhost:%v" .Values.authProxy.port }}
+      {{- $localSvc := printf "http://localhost:%v" .Values.service.port }}
+      {{- $origins = printf "%s,%s" $localProxy $localSvc }}
+    {{- end }}
+  {{- end }}
+  OD_ALLOWED_ORIGINS: {{ $origins | quote }}

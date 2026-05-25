@@ -1,0 +1,1305 @@
+/*
+  Tiny info button anchored to the Memory title. Hover surfaces the
+  storage path via the native tooltip; a click copies it to the
+  clipboard. Sized to the type so it sits as a quiet glyph rather than
+  a clickable affordance — the hover affordance + copy flash do all
+  the discovery work without a permanent string of /Users/... text
+  occupying a whole row in the card.
+*/
+.memory-info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.memory-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 120ms ease, background 120ms ease;
+}
+.memory-info-btn:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.memory-path-copied-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--success-fg, #16a34a);
+  background: var(--success-bg, #dcfce7);
+  padding: 1px 6px;
+  border-radius: 999px;
+  animation: memory-badge-in 160ms ease;
+  white-space: nowrap;
+}
+@keyframes memory-badge-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Advanced MEMORY.md (index) card, matching the "Advanced: proxy &
+   custom paths" card style. */
+.memory-collapsible-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  margin-top: 0;
+}
+
+.memory-advanced-section {
+  gap: 0;
+}
+
+.memory-advanced-section .memory-advanced {
+  margin: 0;
+}
+
+.memory-advanced-hint {
+  margin: 2px 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-advanced-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-advanced-card {
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.memory-details-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+}
+
+.memory-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.memory-details-summary::before {
+  /* Caret used to render at 10px in --text-faint (#aaa). On hi-dpi
+     panels that's a fuzzy speck the user can't even tell points right.
+     Bumping to 13px (matches the summary text weight) and switching to
+     --text-muted gives the disclosure marker enough mass to be obvious
+     without dominating the row. */
+  content: '▸';
+  flex: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 120ms ease, color 120ms ease;
+}
+
+.library-group[open] > .memory-details-summary::before {
+  transform: rotate(90deg);
+}
+
+.memory-details-summary:hover::before,
+.memory-details-summary:focus-visible::before {
+  color: var(--text);
+}
+
+.memory-details-summary:focus-visible {
+  outline: 2px solid var(--accent, #00946f);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.memory-details-title {
+  min-width: 0;
+}
+
+.memory-extraction-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: var(--surface-strong, rgba(0, 0, 0, 0.06));
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-pill.is-running {
+  background: rgba(64, 137, 255, 0.16);
+  color: #2864d6;
+}
+
+.memory-extraction-pill.is-success {
+  background: rgba(34, 139, 90, 0.16);
+  color: #1f7a4d;
+}
+
+.memory-extraction-pill.is-skipped {
+  background: rgba(150, 150, 150, 0.16);
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-pill.is-failed {
+  background: rgba(220, 53, 69, 0.14);
+  color: #b02a37;
+}
+
+.memory-extraction-reason {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
+
+.memory-extraction-failure {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(220, 53, 69, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(220, 53, 69, 0.06);
+  color: var(--text-muted, #888);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.memory-extraction-failure strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.memory-extraction-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted, #888);
+}
+
+.memory-extraction-ids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Memory section: pill that briefly confirms a manual save/create/delete.
+   Pinned to the right edge of the section's flex column. */
+.memory-flash-pill {
+  align-self: flex-end;
+  margin: 4px 0 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(34, 139, 90, 0.12);
+  color: var(--text-success, #1f7a4d);
+  border: 1px solid rgba(34, 139, 90, 0.32);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Library install UI */
+
+.library-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.library-install-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.library-install-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  border: none;
+  background: transparent;
+}
+
+.library-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.library-section-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.library-section-count {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.library-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.library-add-btn[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.library-add-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  color: currentColor;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.library-hidden-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin: -2px 0 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.library-hidden-banner-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.library-hidden-banner-link:hover {
+  text-decoration: underline;
+}
+
+.library-add-panel .library-install-form {
+  padding: 12px;
+  margin: 0 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.library-import-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.library-install-form .library-import-source-control,
+.library-install-form .library-import-mode-control {
+  width: fit-content;
+  min-height: 30px;
+  padding: 2px;
+  border-radius: 8px;
+}
+
+.library-install-form .library-import-source-control {
+  grid-template-columns: repeat(2, auto);
+}
+
+.library-install-form .library-import-mode-control {
+  grid-template-columns: repeat(3, auto);
+}
+
+.library-install-form .library-import-source-control button,
+.library-install-form .library-import-mode-control button {
+  min-height: 24px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.library-install-form .library-import-source-control button.active,
+.library-install-form .library-import-mode-control button.active {
+  border-color: var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.library-import-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+
+.library-import-option-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.library-import-mode-control {
+  --seg-cols: 3;
+}
+
+.library-import-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 30px;
+}
+
+.library-import-checkbox {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.library-import-checkbox input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.library-install-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.library-import-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.library-import-input:hover {
+  border-color: var(--border-strong);
+}
+
+.library-import-input:focus {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+
+.library-install-submit {
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.library-install-submit:disabled {
+  border-color: var(--border-subtle);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.library-install-error {
+  color: #e55;
+  font-size: 12px;
+  margin: 0;
+}
+
+.library-install-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin: 0;
+}
+
+.library-install-status-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.library-install-status-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .library-import-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .library-import-row,
+  .library-install-row {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .library-install-form .library-import-source-control,
+  .library-install-form .library-import-mode-control {
+    width: 100%;
+  }
+
+  .library-install-form .library-import-source-control button,
+  .library-install-form .library-import-mode-control button {
+    flex: 1 1 0;
+  }
+
+  .library-install-submit {
+    width: 100%;
+  }
+}
+
+.library-source-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.library-source-badge.installed {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.library-uninstall-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.library-uninstall-btn:hover {
+  background: color-mix(in srgb, #e55 12%, transparent);
+  color: #e55;
+}
+
+.library-ds-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.library-ds-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Toggle switch */
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border);
+  border-radius: 20px;
+  transition: background-color 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.toggle-switch-sm {
+  width: 30px;
+  height: 17px;
+}
+
+.toggle-switch-sm .toggle-slider::before {
+  height: 11px;
+  width: 11px;
+}
+
+.toggle-switch-sm input:checked + .toggle-slider::before {
+  transform: translateX(13px);
+}
+/* Manual edit mode */
+.manual-edit-workspace {
+  display: grid;
+  grid-template-columns: 280px minmax(420px, 1fr) 280px;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding: 10px;
+  background: var(--bg);
+}
+.manual-edit-workspace > .manual-edit-canvas { grid-column: 2; grid-row: 1; }
+.manual-edit-workspace > .manual-edit-layers { grid-column: 1; grid-row: 1; }
+.manual-edit-workspace > .manual-edit-right {
+  grid-column: 3;
+  grid-row: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Claude Code-style edit inspector panel. */
+.cc-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; overflow: auto; background: var(--bg-panel); }
+.cc-inspector { display: flex; flex-direction: column; gap: 12px; padding: 6px 12px; }
+.cc-inspector-nav {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: -4px;
+}
+.cc-inspector-page {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.cc-inspector-page:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.cc-section { display: flex; flex-direction: column; gap: 6px; }
+.cc-section-inactive { opacity: 0.58; }
+.cc-section-head {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  color: var(--text-muted); padding: 4px 0 2px;
+}
+.cc-section-body { display: flex; flex-direction: column; gap: 4px; }
+.cc-section-hint {
+  margin: -1px 0 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.cc-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.cc-row {
+  display: flex; align-items: center;
+  background: var(--surface-2, #f6f6f7);
+  border: 1px solid var(--border, #e4e4e7);
+  border-radius: 4px;
+  height: 26px; padding: 0 4px;
+  font-size: 10px; min-width: 0;
+}
+.cc-row:focus-within { border-color: var(--accent, #2563eb); }
+.cc-label {
+  color: var(--text-muted, #6b7280);
+  flex: 0 0 auto; padding-right: 8px;
+  white-space: nowrap;
+}
+.cc-value {
+  flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-end;
+  gap: 1px; min-width: 0;
+}
+.cc-step {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 18px;
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cc-step:hover:not(:disabled) {
+  background: var(--surface-hover, rgba(0,0,0,0.06));
+  color: var(--text);
+}
+.cc-step:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+.cc-value > input,
+.cc-value > select {
+  flex: 1 1 auto; min-width: 0; border: none; outline: none;
+  background: transparent; font: inherit; color: inherit;
+  padding: 0; text-align: right;
+}
+.cc-value > select { cursor: pointer; appearance: none; padding-right: 12px; }
+.cc-unit { flex: 0 0 auto; color: var(--text-muted); font-style: normal; font-size: 11px; }
+.cc-select { position: relative; }
+.cc-chevron {
+  position: absolute; right: 0; pointer-events: none;
+  color: var(--text-muted); font-style: normal; font-size: 9px;
+}
+.cc-color { padding-right: 4px; position: relative; }
+.cc-color-compact .cc-swatch { margin-left: auto; }
+.cc-swatch {
+  width: 14px; height: 14px; border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.18);
+  padding: 0; cursor: pointer; background-clip: padding-box;
+  flex: 0 0 auto;
+}
+.cc-color > input { text-align: right; }
+.cc-color-popover {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(168px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+}
+.cc-color-compact .cc-color-popover {
+  left: auto;
+  right: 0;
+}
+.cc-color-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.cc-color-tile {
+  width: 100%; aspect-ratio: 1; border-radius: 4px; padding: 0;
+  border: 1px solid rgba(0,0,0,0.08); cursor: pointer;
+}
+.cc-color-native {
+  width: 100%; height: 22px; border: 1px solid var(--border);
+  border-radius: 4px; padding: 0; background: var(--bg-panel);
+}
+
+.cc-quad { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.cc-quad-head {
+  display: flex; align-items: center; justify-content: space-between;
+  background: transparent; border: none; padding: 2px 4px;
+  font-size: 11px; color: var(--text-muted); cursor: pointer;
+}
+.cc-quad-head em { color: var(--text); font-style: normal; }
+.cc-chevron-small { color: var(--text-muted); font-size: 10px; }
+.cc-quad-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.cc-quad-cell {
+  display: flex; align-items: center;
+  background: var(--surface-2, #f6f6f7);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 0 6px; height: 26px; font-size: 12px; gap: 2px;
+}
+.cc-quad-axis { color: var(--text-muted); font-style: normal; font-size: 10px; flex: 0 0 auto; }
+.cc-step-quad {
+  flex-basis: 12px;
+  width: 12px;
+}
+.cc-quad-cell input {
+  flex: 1 1 auto; min-width: 0; border: none; outline: none;
+  background: transparent; font: inherit; padding: 0;
+  color: inherit; text-align: right;
+}
+.cc-quad-unit { color: var(--text-muted); font-style: normal; font-size: 10px; }
+
+.cc-disclosure { font-size: 11px; color: var(--text-muted); }
+.cc-disclosure > summary { cursor: pointer; padding: 4px 0; }
+
+.manual-edit-workspace.preview-viewport:not(.preview-viewport-desktop) {
+  grid-template-columns: 240px calc(var(--preview-viewport-width) * var(--preview-scale, 1)) 344px;
+  justify-content: start;
+}
+
+.manual-edit-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.manual-edit-canvas iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.manual-edit-layers,
+.manual-edit-right {
+  min-height: 0;
+}
+
+.manual-edit-layers,
+.manual-edit-modal,
+.manual-edit-changes {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.manual-edit-layers {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.manual-edit-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.manual-edit-panel-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.manual-edit-panel-head span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.manual-edit-layer-list,
+.manual-edit-history-list {
+  display: grid;
+  gap: 7px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.manual-edit-layer-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  height: auto;
+  padding: 9px 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+}
+
+.manual-edit-layer-row.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.manual-edit-layer-row strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.manual-edit-layer-row span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.manual-edit-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manual-edit-modal {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+}
+
+.manual-edit-modal.cc-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 72px;
+  scrollbar-gutter: stable;
+}
+
+.manual-edit-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.manual-edit-modal-head span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.manual-edit-modal-head h3 {
+  max-width: 220px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-edit-modal-head em {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.manual-edit-empty {
+  margin: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.manual-edit-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 12px 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.manual-edit-meta strong,
+.manual-edit-meta span,
+.manual-edit-meta code {
+  display: block;
+}
+
+.manual-edit-meta span {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.manual-edit-meta code {
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-edit-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.manual-edit-tabs button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--text-muted);
+  background: var(--bg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.manual-edit-tabs button.selected {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.manual-edit-tab-body {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 0 12px 12px;
+  overflow: auto;
+}
+
+.manual-edit-field {
+  display: grid;
+  gap: 6px;
+}
+
+.manual-edit-field span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.manual-edit-field input,
+.manual-edit-field textarea,
+.manual-edit-field select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 9px;
+  color: var(--text);
+  background: var(--bg-panel);
+  font: inherit;
+}
+
+.manual-edit-field textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.manual-edit-field.compact {
+  gap: 4px;
+}
+
+.manual-edit-field.compact input,
+.manual-edit-field.compact select {
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.manual-edit-code {
+  min-height: 150px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+  font-size: 11px !important;
+  white-space: pre;
+}
+
+.manual-edit-code.tall {
+  min-height: 260px;
+}
+
+.manual-edit-style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.manual-edit-style-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.manual-edit-error {
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--red-border);
+  border-radius: 6px;
+  color: var(--red);
+  background: var(--red-bg);
+  font-size: 12px;
+}
+
+.manual-edit-changes {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.manual-edit-history-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 8px;
+}
+
+.manual-edit-history-entry {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.manual-edit-history-entry strong {
+  font-size: 12px;
+}
+
+.manual-edit-history-entry code {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+/* Privacy panel layout. The toggle row stack reuses .toggle-row (the
+   iOS-style switch from NewProjectPanel); we only need to space the rows
+   apart. The disclosure list inside the consent card is purely a typography
+   block — no chrome of its own. */
+.settings-privacy-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-privacy-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.settings-privacy-disclosure > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-privacy-disclosure dt {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-privacy-disclosure dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.privacy-consent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.privacy-consent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.privacy-consent-action:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
+/* First-run privacy consent banner. Cookie-consent-style: anchored to the
+   bottom-right of the viewport, prominent but non-blocking. Reuses the
+   same typography + radii + shadow as the rest of the panels. */
+.privacy-consent-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  /* Above modal backdrops (z-index 100) so the banner remains visible and
+     actionable even while Settings or any other modal is open. The banner
+     uses pointer-events:none on the card itself with opt-in on interactive
+     children, so it never intercepts clicks meant for the layer below. */
+  z-index: 110;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+/* The banner is pointer-events:none so the user can click through the empty
+   card area to the app behind it. Interactive children opt back in. */
+.privacy-consent-banner .privacy-consent-actions,
+.privacy-consent-banner .privacy-consent-policy-link {
+  pointer-events: auto;
+}
+
+.privacy-consent-banner-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.privacy-consent-banner-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.privacy-consent-banner-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.privacy-consent-banner-lead {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.privacy-consent-banner-footer {
+  margin: 2px 0 0;
+}
+
+/* Privacy policy link — between the disclosure copy and the action buttons.
+   Underlined and accent-coloured so it's an obvious, distinct affordance,
+   not just tinted text. */
+.privacy-consent-policy-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.privacy-consent-policy-link:hover {
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+.privacy-consent-policy-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* On narrow viewports the fixed bottom-right card crowds page content —
+   stretch it into a bottom-edge bar with even gutters, and clear the
+   mobile browser chrome / home indicator via the safe-area inset. */
+@media (max-width: 540px) {
+  .privacy-consent-banner {
+    right: 12px;
+    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-width: none;
+    padding: 16px;
+  }
+}

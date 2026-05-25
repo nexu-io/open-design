@@ -19,6 +19,13 @@ env:
   # leave the user's machine, /api/analytics/config returns enabled=false).
   POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
   POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+  # PostHog Error tracking sourcemap upload. Personal API key (phx_...) and
+  # project ID let tools-pack's web-sourcemaps step ship browser sourcemaps
+  # to PostHog after `next build` and before the .map files are stripped
+  # from the packaged bundle. Missing in PR/fork builds → upload is skipped
+  # and the helper still strips .map to keep source out of the installer.
+  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
 
 jobs:
   metadata:
@@ -302,6 +309,7 @@ jobs:
         with:
           name: open-design-preview-mac-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   build_mac_intel:
     name: Build preview mac intel x64
@@ -372,6 +380,7 @@ jobs:
         with:
           name: open-design-preview-mac-intel-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   build_win:
     name: Build preview win x64
@@ -557,6 +566,7 @@ jobs:
         with:
           name: open-design-preview-win-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   build_linux:
     name: Build preview linux x64
@@ -607,6 +617,7 @@ jobs:
         with:
           name: open-design-preview-linux-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   publish:
     name: Publish preview release
@@ -736,4 +747,26 @@ jobs:
 
       - name: Cleanup workflow artifacts
         if: ${{ success() }}
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh
+
+  cleanup_partial_release_assets:
+    name: Cleanup unpublished preview asset artifacts
+    needs:
+      - build_mac
+      - build_mac_intel
+      - build_win
+      - build_linux
+      - publish
+    if: ${{ always() && needs.publish.result != 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Delete unpublished preview asset artifacts
+        env:
+          ARTIFACT_CLEANUP_DESCRIPTION: intermediate preview asset Actions artifacts from this unpublished run. Canonical manual downloads are only the R2 links in a successful publish summary
+          ARTIFACT_NAME_REGEX: "-release-assets$"
         run: bash .github/scripts/release/github/cleanup-artifacts.sh

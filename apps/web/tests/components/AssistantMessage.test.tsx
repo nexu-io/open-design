@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 
 /**
- * Visibility-gate coverage for assistant artifact feedback (issue #1288).
- * Feedback should only appear for successful assistant turns that produce
- * or update an artifact, not for text-only acknowledgements, failed runs,
- * streaming turns, or empty responses.
+ * Visibility-gate coverage for the assistant feedback widget. It should
+ * appear after any successfully completed turn, and stay hidden for
+ * streaming turns, failed runs, and empty responses.
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
@@ -61,7 +60,7 @@ function producedFile(name: string): ProjectFile {
   } as ProjectFile;
 }
 
-describe('AssistantMessage feedback gate (issue #1288)', () => {
+describe('AssistantMessage feedback gate', () => {
   it('shows the feedback widget after a successful turn that produced files', () => {
     render(
       <AssistantMessage
@@ -76,11 +75,7 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
     expect(screen.getByRole('button', { name: 'Not helpful' })).toBeTruthy();
   });
 
-  it('hides the feedback widget for a successful text-only turn with no producedFiles', () => {
-    // Regression for lefarcen P2: the issue scopes feedback to
-    // turns that delivered a final artifact, not every successful
-    // turn. Text-only acknowledgements ("Got it.") must not prompt
-    // for feedback.
+  it('shows the feedback widget for a successful text-only turn with no producedFiles', () => {
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [] })}
@@ -89,7 +84,7 @@ describe('AssistantMessage feedback gate (issue #1288)', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
   });
 
   it('hides the feedback widget while the turn is still streaming', () => {

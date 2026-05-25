@@ -17,12 +17,13 @@ import {
   useState,
 } from 'react';
 import type {
+  CSSProperties,
   ClipboardEvent as ReactClipboardEvent,
   DragEvent as ReactDragEvent,
   ForwardedRef,
   KeyboardEvent as ReactKeyboardEvent,
-  RefObject,
   ReactNode,
+  RefObject,
 } from 'react';
 import type {
   ConnectorDetail,
@@ -31,8 +32,11 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
+import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
+import { useAnalytics } from '../analytics/provider';
+import { trackHomeChatComposerClick } from '../analytics/events';
 import {
   chipsForGroup,
   type ChipGroup,
@@ -45,7 +49,12 @@ import {
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
 import type { Locale } from '../i18n/types';
+import {
+  localizeSkillDescription,
+  localizeSkillName,
+} from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
+import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { inferPluginPreview } from './plugins-home/preview';
 
 export interface HomeHeroSubmitHandler {
@@ -131,6 +140,11 @@ interface HomeMentionSection {
   options: HomeMentionOption[];
 }
 
+interface SelectedPromptExample {
+  label: string;
+  promptText: string;
+}
+
 export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero(
   {
     prompt,
@@ -182,6 +196,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   ref,
 ) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
@@ -189,6 +204,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const [dragActive, setDragActive] = useState(false);
   const [openInlineInputName, setOpenInlineInputName] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const composingRef = useRef(false);
   const inputElementRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -264,8 +280,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           options: skillMatches.map((skill) => ({
             id: `skill-${skill.id}`,
             icon: skill.id === activeSkillId ? 'check' : 'file',
-            title: skill.name,
-            description: skill.description || skill.id,
+            title: localizeSkillName(locale, skill),
+            description: localizeSkillDescription(locale, skill) || skill.id,
             meta: skill.id === activeSkillId ? t('common.active') : skill.mode,
             onPick: () => pickSkill(skill),
           })),
@@ -407,6 +423,15 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
+  const authoringLayoutActive =
+    activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
+  const promptMaxHeight = authoringLayoutActive
+    ? HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT
+    : HOME_HERO_PROMPT_MAX_HEIGHT;
+  const inputCardStyle = {
+    '--home-hero-prompt-max-height': `${promptMaxHeight}px`,
+  } as CSSProperties;
+
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
   }, [selectedIndex, visiblePickerOptions.length]);
@@ -417,6 +442,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
 
   useEffect(() => {
     setOpenInlineInputName(null);
+    setSelectedPromptExample(null);
   }, [activeChipId]);
 
   useEffect(() => {
@@ -448,16 +474,16 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     const el = inputElementRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const nextHeight = Math.min(el.scrollHeight, HOME_HERO_PROMPT_MAX_HEIGHT);
+    const nextHeight = Math.min(el.scrollHeight, promptMaxHeight);
     el.style.height = `${nextHeight}px`;
-    el.style.overflowY = el.scrollHeight > HOME_HERO_PROMPT_MAX_HEIGHT ? 'auto' : 'hidden';
-    if (el.scrollHeight <= HOME_HERO_PROMPT_MAX_HEIGHT && el.scrollTop !== 0) {
+    el.style.overflowY = el.scrollHeight > promptMaxHeight ? 'auto' : 'hidden';
+    if (el.scrollHeight <= promptMaxHeight && el.scrollTop !== 0) {
       el.scrollTop = 0;
       setPromptScrollTop(0);
     } else {
       setPromptScrollTop(el.scrollTop);
     }
-  }, [pluginInputValues, prompt, promptOverlayParts]);
+  }, [pluginInputValues, prompt, promptMaxHeight, promptOverlayParts]);
 
   const setInputRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
@@ -513,6 +539,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   }
 
   function usePromptExample(example: string) {
+    setSelectedPromptExample({
+      label: promptExampleChipLabel(example),
+      promptText: example,
+    });
     onPromptChange(example);
     setSelectedIndex(0);
     requestAnimationFrame(() => {
@@ -523,6 +553,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       input.setSelectionRange(position, position);
       input.scrollTop = input.scrollHeight;
     });
+  }
+
+  function pickExamplePluginPreset(record: InstalledPluginRecord, chipId: string, promptText: string) {
+    setSelectedPromptExample({
+      label: record.title,
+      promptText,
+    });
+    onPickExamplePlugin(record, chipId, promptText);
   }
 
   function handlePaste(event: ReactClipboardEvent<HTMLTextAreaElement>) {
@@ -583,6 +621,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const showActiveContextRow =
     (showActivePluginChip && activePluginTitle) ||
     activeSkillTitle ||
+    selectedPromptExample ||
     selectedPluginContexts.length > 0;
 
   let optionRenderIndex = 0;
@@ -597,11 +636,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">
-        {t('homeHero.subtitlePrefix')} <kbd>Enter</kbd>.
+        {t('homeHero.subtitlePrefix')}
       </p>
 
       <div
-        className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
+        className={`home-hero__input-card${
+          authoringLayoutActive ? ' home-hero__input-card--compact-authoring' : ''
+        }${dragActive ? ' is-drag-active' : ''}`}
+        style={inputCardStyle}
         onDragEnter={(event) => {
           if (event.dataTransfer.types.includes('Files')) setDragActive(true);
         }}
@@ -665,15 +707,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   <span className="home-hero__active-dot" aria-hidden />
                   <span>{activePluginTitle}</span>
                 </button>
-                <button
-                  type="button"
-                  className="home-hero__active-clear"
-                  onClick={onClearActivePlugin}
-                  aria-label={t('homeHero.clearActivePlugin')}
-                  title={t('homeHero.clearActivePlugin')}
-                >
-                  ×
-                </button>
+                {activeCreateChip ? null : (
+                  <button
+                    type="button"
+                    className="home-hero__active-clear"
+                    onClick={onClearActivePlugin}
+                    aria-label={t('homeHero.clearActivePlugin')}
+                    title={t('homeHero.clearActivePlugin')}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             ) : null}
             {activeSkillTitle ? (
@@ -694,9 +738,22 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                 </button>
               </span>
             ) : null}
-            {contextItemCount > 0 ? (
-              <span className="home-hero__context-summary">
-                {t('homeHero.contextItemsResolved', { n: contextItemCount })}
+            {selectedPromptExample ? (
+              <span
+                className="home-hero__active-chip home-hero__active-chip--example"
+                data-testid="home-hero-active-example"
+              >
+                <span className="home-hero__active-dot" aria-hidden />
+                <span>{t('homeHero.promptExamples')}: {selectedPromptExample.label}</span>
+                <button
+                  type="button"
+                  className="home-hero__active-clear"
+                  onClick={() => setSelectedPromptExample(null)}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                >
+                  ×
+                </button>
               </span>
             ) : null}
           </div>
@@ -760,6 +817,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               spellCheck={false}
               onChange={(e) => {
                 onPromptChange(e.target.value);
+                if (selectedPromptExample && e.target.value !== selectedPromptExample.promptText) {
+                  setSelectedPromptExample(null);
+                }
                 setSelectedIndex(0);
               }}
               onPaste={handlePaste}
@@ -998,7 +1058,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               type="button"
               className="home-hero__attach"
               data-testid="home-hero-attach"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'attachment',
+                });
+                fileInputRef.current?.click();
+              }}
               title={t('chat.attachAria')}
               aria-label={t('chat.attachAria')}
             >
@@ -1074,7 +1141,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           activePluginId={activePluginRecord?.id ?? null}
           pendingPluginId={pendingPluginId}
           locale={locale}
-          onPick={onPickExamplePlugin}
+          onPick={pickExamplePluginPreset}
         />
       ) : activePromptExamples.length > 0 ? (
         <div
@@ -1201,6 +1268,13 @@ function PluginPromptPresetCard({
   );
 }
 
+function promptExampleChipLabel(example: string): string {
+  const normalized = example.replace(/\s+/g, ' ').trim();
+  const [beforeDash] = normalized.split(/\s[—-]\s/u, 1);
+  const candidate = beforeDash?.trim() || normalized;
+  return candidate.length > 64 ? `${candidate.slice(0, 61).trimEnd()}...` : candidate;
+}
+
 interface ContextMention {
   start: number;
   end: number;
@@ -1280,6 +1354,7 @@ interface PromptHighlightPart {
 
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 const HOME_HERO_PROMPT_MAX_HEIGHT = 180;
+const HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT = 132;
 
 function buildPromptHighlightParts(
   template: string | null,
@@ -1705,15 +1780,18 @@ function FooterInputOption({
   }
   if (field.name === 'designSystem' && designSystemOptions.length > 0) {
     const selectedValue = value === undefined || value === null ? '' : String(value);
-    const hasSelectedValue = selectedValue.length > 0 && designSystemOptions.some((option) => option.title === selectedValue);
-    const currentValue = hasSelectedValue ? selectedValue : designSystemOptions[0]?.title ?? '';
+    const selectedOption = selectedValue.length > 0
+      ? designSystemOptions.find((option) => option.title === selectedValue || option.id === selectedValue)
+      : undefined;
+    const currentValue = selectedOption?.id ?? designSystemOptions[0]?.id ?? '';
     return (
       <FooterSelectOption
         fieldName={field.name}
         label={label}
         value={currentValue}
         options={designSystemOptions.map((option) => ({
-          value: option.title,
+          value: option.id,
+          submitValue: option.title,
           label: option.isDefault ? `${option.title} (${t('ds.badgeDefault')})` : option.title,
           group: option.group,
           icon: option.auto ? 'sparkles' : undefined,
@@ -1894,7 +1972,7 @@ function FooterSelectOption({
                     aria-selected={option.value === value}
                     className={`home-hero__footer-select-item${option.value === value ? ' is-selected' : ''}`}
                     onClick={() => {
-                      onChange(option.value);
+                      onChange(option.submitValue ?? option.value);
                       setOpen(false);
                     }}
                   >
@@ -1923,6 +2001,7 @@ function FooterSelectOption({
 
 interface FooterSelectItemOption {
   value: string;
+  submitValue?: string;
   label: string;
   group?: string;
   icon?: IconName;
@@ -2256,11 +2335,6 @@ function replaceMentionTokenWithText(
   return [before, replacement.trim(), after].filter(Boolean).join(' ').trim();
 }
 
-function isImeComposing(event: ReactKeyboardEvent<HTMLTextAreaElement>, composing: boolean): boolean {
-  const nativeEvent = event.nativeEvent as KeyboardEvent & { keyCode?: number };
-  return composing || nativeEvent.isComposing || nativeEvent.keyCode === 229;
-}
-
 function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -2556,11 +2630,52 @@ function homeHeroExamplePluginsForChip(
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
-  return plugins
-    .filter((plugin) => pluginMatchesExampleChip(plugin, chipId))
-    .filter((plugin) => Boolean(pluginPresetQuery(plugin, locale)))
-    .sort((a, b) => pluginPresetRank(b, chipId) - pluginPresetRank(a, chipId))
+  const presets = plugins
+    .filter((plugin) => (
+      pluginMatchesExampleChip(plugin, chipId) ||
+      curatedPluginPriorityForChip(plugin, chipId) !== null
+    ))
+    .filter((plugin) => (
+      Boolean(pluginPresetQuery(plugin, locale)) ||
+      curatedPluginPriorityForChip(plugin, chipId) !== null
+    ))
+    .sort((a, b) => comparePluginPresetOrder(a, b, chipId))
     .slice(0, 18);
+  if (chipId === 'image') {
+    return movePluginPresetToEnd(presets, 'example-hatch-pet');
+  }
+  return presets;
+}
+
+function comparePluginPresetOrder(
+  a: InstalledPluginRecord,
+  b: InstalledPluginRecord,
+  chipId: string,
+): number {
+  const aCurated = curatedPluginPriorityForChip(a, chipId);
+  const bCurated = curatedPluginPriorityForChip(b, chipId);
+  if (aCurated !== null || bCurated !== null) {
+    if (aCurated !== null && bCurated === null) return -1;
+    if (aCurated === null && bCurated !== null) return 1;
+    if (aCurated !== bCurated) return (aCurated ?? 0) - (bCurated ?? 0);
+  }
+  const rankDelta = pluginPresetRank(b, chipId) - pluginPresetRank(a, chipId);
+  if (rankDelta !== 0) return rankDelta;
+  return (a.title || a.id).localeCompare(b.title || b.id);
+}
+
+function movePluginPresetToEnd(
+  records: InstalledPluginRecord[],
+  pluginId: string,
+): InstalledPluginRecord[] {
+  const index = records.findIndex((record) => record.id === pluginId);
+  if (index < 0 || index === records.length - 1) return records;
+  const record = records[index]!;
+  return [
+    ...records.slice(0, index),
+    ...records.slice(index + 1),
+    record,
+  ];
 }
 
 function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
@@ -2579,8 +2694,10 @@ function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string)
       return has('deck', 'slides', 'slide-deck') || hasPart('slide', 'deck');
     case 'hyperframes':
       return hasPart('hyperframes', 'hyperframe');
+    case 'live-artifact':
+      return has('live-artifact') || hasPart('live-artifact');
     case 'image':
-      return (has('image') || hasPart('image-template')) && !hasPart('video', 'audio');
+      return (has('image') || hasPart('image-template')) && !hasPart('video', 'audio', 'live-artifact');
     case 'video':
       return (has('video') || hasPart('video-template')) && !hasPart('hyperframes', 'audio');
     case 'audio':

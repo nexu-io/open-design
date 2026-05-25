@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   _activeWatcherCount,
   _resetForTests,
+  makeIgnored,
   subscribe,
   type ProjectWatchEvent,
   type ProjectWatcherOptions,
@@ -125,6 +126,20 @@ describe('project-watchers (refcounting)', () => {
 });
 
 describe('project-watchers (real chokidar)', () => {
+  it('ignores generated build trees case-insensitively before chokidar descends', async () => {
+    const { root, projectId } = await makeProjectsRoot();
+    const projectRoot = path.join(root, projectId);
+    const ignored = makeIgnored(projectRoot);
+
+    expect(ignored(path.join(projectRoot, 'Build', 'DerivedData-KeeTests', 'index-store'))).toBe(true);
+    expect(ignored(path.join(projectRoot, 'Rust', 'KeePassCore', 'target', 'release', 'lib.a'))).toBe(true);
+    expect(ignored(path.join(projectRoot, 'vendor', 'package', 'generated.js'))).toBe(true);
+    expect(ignored(path.join(projectRoot, '.build', 'debug', 'Module.o'))).toBe(true);
+    expect(ignored(path.join(projectRoot, 'src', 'App.swift'))).toBe(false);
+
+    await rm(root, { recursive: true, force: true });
+  });
+
   it('emits file-changed events on add / change / unlink', async () => {
     const { root, projectId } = await makeProjectsRoot();
     const events: ProjectWatchEvent[] = [];

@@ -619,7 +619,7 @@
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-subtle);
+  background-color: var(--bg-subtle);
   color: var(--text);
   font: 12.5px/1.4 var(--font, system-ui);
 }
@@ -745,7 +745,7 @@
   font-weight: 600;
   letter-spacing: -0.005em;
   cursor: pointer;
-  transition:
+  transition: 
     color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -1337,13 +1337,48 @@
   transition:
     background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
-  max-width: 260px;
+  max-width: 320px;
 }
 
 .automation-pill > span:not(:first-child):not(:last-child) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.automation-pill__segments {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Schedule summary segments inside the pill */
+.automation-pill__freq {
+  font-weight: 700;
+  color: var(--text-strong);
+  flex-shrink: 0;
+}
+
+.automation-pill__sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.automation-pill__time {
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.automation-pill__tz {
+  color: var(--text-muted);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .automation-pill:hover {
@@ -1353,7 +1388,8 @@
 
 .automation-pill.is-active {
   border-color: color-mix(in srgb, var(--accent, #79a8ff) 58%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #79a8ff) 18%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--accent, #79a8ff) 18%, transparent);
 }
 
 .automation-modal__actions {
@@ -1448,10 +1484,10 @@
 }
 
 .automation-popover--schedule {
-  width: min(360px, calc(100vw - 48px));
+  width: min(380px, calc(100vw - 48px));
   min-width: 320px;
-  padding: 10px;
-  gap: 8px;
+  padding: 12px;
+  gap: 10px;
 }
 
 .automation-popover--templates {
@@ -1608,8 +1644,8 @@
 
 .automation-popover__row {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .automation-popover__field {
@@ -1632,13 +1668,23 @@
   -webkit-appearance: none;
   width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 0 30px 0 8px;
+  height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12.5px;
+}
+
+/* Hide the browser-native clock icon so it doesn't crowd the time field */
+.automation-popover__field
+  > input[type="time"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.automation-popover__field > input[type="time"]::-webkit-inner-spin-button {
+  display: none;
 }
 
 .automation-popover__field > select {
@@ -1649,7 +1695,9 @@
     calc(100% - 15px) 50%,
     calc(100% - 10px) 50%;
   background-repeat: no-repeat;
-  background-size: 5px 5px, 5px 5px;
+  background-size:
+    5px 5px,
+    5px 5px;
 }
 
 .automation-popover__done {
@@ -1676,10 +1724,6 @@
 }
 
 @media (max-width: 960px) {
-  .automation-ingest-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .automations-templates__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1703,12 +1747,6 @@
 
   .automations-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .automation-ingest-controls,
-  .automation-ingest-fields,
-  .automation-ingest-footer {
-    grid-template-columns: 1fr;
   }
 
   .automations-templates__grid {

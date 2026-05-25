@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-data-report",
-  "title": "数据可视化报告",
+  "title": "Data Visualization Report",
   "version": "0.1.0",
-  "description": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页",
+  "description": "Turns CSV, Excel, or JSON data into a polished visual report page.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -42,11 +42,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「数据可视化报告」模板把我的内容做成一份「把 CSV/Excel/JSON 数据转成漂亮的可视化报告页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Data Visualization Report template to turn my CSV, Excel, or JSON data into a polished visual report page. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「数据可视化报告」模板把我的内容做成一份「把 CSV/Excel/JSON 数据转成漂亮的可视化报告页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "数据可视化报告"
+          "title": "Data Visualization Report",
+          "title_i18n": {
+            "en": "Data Visualization Report",
+            "zh-CN": "数据可视化报告"
+          }
         }
       ]
     },
@@ -75,5 +82,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Data Visualization Report",
+    "zh-CN": "数据可视化报告"
+  },
+  "description_i18n": {
+    "en": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+    "zh-CN": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页"
   }
 }

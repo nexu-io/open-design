@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-flowchart-sticky",
-  "title": "便利贴流程图帧",
+  "title": "Sticky Flowchart Frame",
   "version": "0.1.0",
-  "description": "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm",
+  "description": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -40,11 +40,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Sticky Flowchart Frame template to turn my content into a whiteboard-brainstorm frame with SVG curve connectors, sticky-note nodes, and cursor interaction. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "便利贴流程图帧"
+          "title": "Sticky Flowchart Frame",
+          "title_i18n": {
+            "en": "Sticky Flowchart Frame",
+            "zh-CN": "便利贴流程图帧"
+          }
         }
       ]
     },
@@ -73,5 +80,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Sticky Flowchart Frame",
+    "zh-CN": "便利贴流程图帧"
+  },
+  "description_i18n": {
+    "en": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
+    "zh-CN": "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm"
   }
 }
