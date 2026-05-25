@@ -1,38 +1,93 @@
+/**
+ * auto-start.ts — Platform-specific auto-launch at login.
+ *
+ * Windows  writes a HKCU\...\Run registry value via `reg.exe add`.
+ * macOS    writes a LaunchAgents plist file.
+ *
+ * Both platforms use OD_APP_NAME (env) to distinguish release channels:
+ *   stable  → OpenDesign
+ *   beta    → OpenDesignBeta
+ *   preview → OpenDesignPreview
+ */
+
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
+import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 
-const RUN_KEY = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`;
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-// App name for the registry Run key.
-// Packaged releases set OD_APP_NAME to distinguish channels:
-//   stable  → OpenDesign       (matches existing key)
-//   beta    → OpenDesignBeta
-//   preview → OpenDesignPreview
+const REG_RUN_KEY = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`;
+
+// ─── Name resolution ──────────────────────────────────────────────────────────
+
+/**
+ * App name written to the registry Run key / plist Label.
+ * Controlled by the `OD_APP_NAME` environment variable so each packaged
+ * release channel writes to its own slot and does not overwrite another.
+ *
+ * Defaults to "OpenDesign".  Packaged launchers set this to
+ * "OpenDesignBeta" / "OpenDesignPreview" respectively.
+ *
+ * @throws if OD_APP_NAME contains characters outside the safe set.
+ */
 function resolveProductName(): string {
-  return process.env.OD_APP_NAME ?? "OpenDesign";
+  const name = process.env.OD_APP_NAME ?? "OpenDesign";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._ -]{0,64}$/.test(name)) {
+    throw new Error(`OD_APP_NAME contains invalid characters: ${name}`);
+  }
+  return name;
 }
 
-// Build the command written to the Windows Run registry key.
-//
-// process.argv[0] is the resolved binary that launched this process.
-// When the tray runs under Electron (normal dev), argv[0] = electron.exe.
-// When Windows restores from registry on login, argv[0] = the same path.
-// We verify the path exists before writing it so stale paths are never stored.
-//
-// Must be called with the ACTUAL runtime namespace/ipc, not defaults, so
-// the recovered session on login uses the same IPC path as normal startup.
+/**
+ * Stable identifier derived from the product name, used as the plist
+ * filename fragment and registry key value on Windows.
+ * All whitespace is collapsed so "Open Design Beta" → "OpenDesignBeta".
+ */
+function resolveAppId(): string {
+  return resolveProductName().replaceAll(/\s+/g, "");
+}
+
+// ─── Path validation ─────────────────────────────────────────────────────────
+
+/**
+ * Guard against cmd.exe command-injection in the electron executable path.
+ *
+ * `&`, `<`, `>`, `|` are all cmd.exe separators and must never appear in
+ * a path that will be passed literally to `cmd /c start ...`.
+ * The path must also be an absolute Windows path so that quoting is safe.
+ *
+ * @throws if the path is invalid or contains shell metacharacters.
+ */
+function validateElectronPath(path: string): void {
+  if (!/^[A-Za-z]:[^<>|&]{1,512}$/.test(path)) {
+    throw new Error(`unsafe or non-absolute electron path: ${path}`);
+  }
+}
+
+// ─── Windows implementation ─────────────────────────────────────────────────
+
+/**
+ * Build the command-line string stored in the registry Run key.
+ *
+ * Windows interprets the first token after `cmd /c start` as a window title
+ * unless it is preceded by an explicit empty `""` — hence `start "" /b`.
+ *
+ * The electron path is double-quoted so that paths containing spaces are
+ * handled correctly without any further escaping.
+ */
 function buildRunCommand(namespace: string, ipc: string): string {
   const electronExe = process.argv[0] ?? process.execPath;
 
   if (!existsSync(electronExe)) {
-    throw new Error(`electron.exe not found at: ${electronExe} — cannot set auto-start`);
+    throw new Error(`electron not found at: ${electronExe}`);
   }
 
-  const stampArgs = [
+  validateElectronPath(electronExe);
+
+  const stamp = [
     `--od-stamp-app=${APP_KEYS.TRAY}`,
     `--od-stamp-mode=dev`,
     `--od-stamp-namespace=${namespace}`,
@@ -40,19 +95,16 @@ function buildRunCommand(namespace: string, ipc: string): string {
     `--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}`,
   ];
 
-  // cmd /c "start "" /b <electron> <args>"
-  // `start ""` (empty window title) is required — without it Windows interprets
-  // the first token as the window title and the process never starts.
-  // The electron exe path MUST be quoted when it contains spaces.
-  const args = ["/c", "start", "", "/b", `"${electronExe}"`, ...stampArgs];
+  // `start "" /b` — empty title, background (no new console)
+  // Path must be quoted for the space-in-path case.
+  const args = ["/c", "start", "", "/b", `"${electronExe}"`, ...stamp];
 
-  // Build a command that works even with spaces in paths.
-  return `cmd.exe ${args.join(" ")}`;
+  return ["cmd.exe", ...args].join(" ");
 }
 
-// ─── Registry helpers ─────────────────────────────────────────────────────
+// ─── Registry I/O ─────────────────────────────────────────────────────────────
 
-function execReg(args: string[]): Promise<{ stdout: string; stderr: string }> {
+function execReg(args: readonly string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile("reg.exe", args, { windowsHide: true }, (error, stdout, stderr) => {
       if (error) reject(error);
@@ -63,12 +115,11 @@ function execReg(args: string[]): Promise<{ stdout: string; stderr: string }> {
 
 export async function enableAutoStart(namespace: string, ipc: string): Promise<void> {
   if (process.platform !== "win32") return;
-  const command = buildRunCommand(namespace, ipc);
   await execReg([
-    "add", RUN_KEY,
+    "add", REG_RUN_KEY,
     "/v", resolveProductName(),
     "/t", "REG_SZ",
-    "/d", command,
+    "/d", buildRunCommand(namespace, ipc),
     "/f",
   ]);
 }
@@ -76,40 +127,39 @@ export async function enableAutoStart(namespace: string, ipc: string): Promise<v
 export async function disableAutoStart(): Promise<void> {
   if (process.platform !== "win32") return;
   try {
-    await execReg(["delete", RUN_KEY, "/v", resolveProductName(), "/f"]);
+    await execReg(["delete", REG_RUN_KEY, "/v", resolveProductName(), "/f"]);
   } catch {
-    // ignore — key may not exist
+    // ignore — key may not exist yet
   }
 }
 
 export async function isAutoStartEnabled(): Promise<boolean> {
   if (process.platform !== "win32") return false;
   try {
-    const { stdout } = await execReg(["query", RUN_KEY]);
+    const { stdout } = await execReg(["query", REG_RUN_KEY]);
     return stdout.includes(resolveProductName());
   } catch {
     return false;
   }
 }
 
-// ─── macOS plist helpers ────────────────────────────────────────────────────
+// ─── macOS implementation ───────────────────────────────────────────────────
 
 export async function enableAutoStartMac(exePath: string): Promise<void> {
   if (process.platform !== "darwin") return;
   const { mkdir, writeFile } = await import("node:fs/promises");
-  const appName = resolveProductName().toLowerCase().replace(/\s+/g, "-");
+  const appId = resolveAppId();
   const plistDir = join(homedir(), "Library", "LaunchAgents");
-  const plistPath = join(plistDir, `ai.open-design.${appName}.plist`);
   await mkdir(plistDir, { recursive: true });
-  await writeFile(plistPath, generatePlist(exePath, appName), "utf8");
+  await writeFile(join(plistDir, `ai.open-design.${appId}.plist`), generatePlist(exePath, appId), "utf8");
 }
 
 export async function disableAutoStartMac(): Promise<void> {
   if (process.platform !== "darwin") return;
   try {
-    const { unlink } = await import("node:fs/promises");
-    const appName = resolveProductName().toLowerCase().replace(/\s+/g, "-");
-    await unlink(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${appName}.plist`));
+    await import("node:fs/promises").then(({ unlink }) =>
+      unlink(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${resolveAppId()}.plist`)),
+    );
   } catch {
     // ignore
   }
@@ -118,33 +168,33 @@ export async function disableAutoStartMac(): Promise<void> {
 export async function isAutoStartEnabledMac(): Promise<boolean> {
   if (process.platform !== "darwin") return false;
   try {
-    const { readFile } = await import("node:fs/promises");
-    const appName = resolveProductName().toLowerCase().replace(/\s+/g, "-");
-    await readFile(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${appName}.plist`));
+    await import("node:fs/promises").then(({ readFile }) =>
+      readFile(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${resolveAppId()}.plist`)),
+    );
     return true;
   } catch {
     return false;
   }
 }
 
-function generatePlist(exePath: string, appName: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>ai.open-design.${appName}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${exePath}</string>
-    <string>--od-stamp-app=${APP_KEYS.TRAY}</string>
-    <string>--od-stamp-mode=dev</string>
-    <string>--od-stamp-source=startup</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>LaunchOnlyOnce</key>
-  <true/>
-</dict>
-</plist>`;
+function generatePlist(exePath: string, appId: string): string {
+  return [
+    `<?xml version="1.0" encoding="UTF-8"?>`,
+    `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`,
+    `<plist version="1.0">`,
+    `<dict>`,
+    `<key>Label</key>`,
+    `<string>ai.open-design.${appId}</string>`,
+    `<key>ProgramArguments</key>`,
+    `<array>`,
+    `<string>${exePath}</string>`,
+    `<string>--od-stamp-app=${APP_KEYS.TRAY}</string>`,
+    `<string>--od-stamp-mode=dev</string>`,
+    `<string>--od-stamp-source=startup</string>`,
+    `</array>`,
+    `<key>RunAtLoad</key>`,
+    `<true/>`,
+    `</dict>`,
+    `</plist>`,
+  ].join("\n");
 }
