@@ -5722,7 +5722,8 @@ export async function startServer({
         res.setHeader('Access-Control-Allow-Origin', 'null');
       }
       res.setHeader('Cache-Control', 'no-store');
-      await res.sendFile(sheet.absPath);
+      const buf = await fs.promises.readFile(sheet.absPath);
+      res.send(buf);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
