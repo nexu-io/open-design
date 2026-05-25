@@ -50,7 +50,7 @@ bundle into your active agent's skills directory:
 open https://github.com/jiannanya/snow-d3/
 
 # Clone or copy the snow-d3/ folder into your workspace's skills/ directory
-git clone https://github.com/jiannanya/snow-d3.git
+git clone https://github.com/jiannanya/snow-d3.git skills/snow-d3
 
 ```
 
