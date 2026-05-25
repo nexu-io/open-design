@@ -1,8 +1,9 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 
 import { selectionKindLabel, type PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
 import type { PreviewComment, PreviewCommentMember } from '../types';
+import { isImeComposing } from '../utils/imeComposing';
 
 import { Icon } from './Icon';
 
@@ -53,6 +54,7 @@ export function BoardComposerPopover({
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
   const podMembers = target.podMembers ?? [];
   const titleId = useId();
+  const composingRef = useRef(false);
   const isFreePin = target.elementId.startsWith('pin-');
   return (
     <div
@@ -145,6 +147,25 @@ export function BoardComposerPopover({
         aria-label={t('chat.comments.placeholder')}
         placeholder={t('chat.comments.placeholder')}
         onChange={(event) => onDraft(event.target.value)}
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onCompositionEnd={() => {
+          composingRef.current = false;
+        }}
+        onKeyDown={(e) => {
+          if (isImeComposing(e, composingRef.current)) return;
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !e.altKey &&
+            (e.metaKey || e.ctrlKey)
+          ) {
+            e.preventDefault();
+            if (sending) return;
+            void onSendBatch();
+          }
+        }}
       />
       <div className="comment-popover-actions">
         {existing ? (
