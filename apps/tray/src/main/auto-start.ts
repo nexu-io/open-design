@@ -4,7 +4,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
-import { resolveAppIpcPath } from "@open-design/sidecar";
 
 const PRODUCT_NAME = "OpenDesign";
 const RUN_KEY = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`;
@@ -15,24 +14,15 @@ const RUN_KEY = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`;
 // When the tray runs under Electron (normal dev), argv[0] = electron.exe.
 // When Windows restores from registry on login, argv[0] = the same path.
 // We verify the path exists before writing it so stale paths are never stored.
-function buildRunCommand(): string {
+//
+// Must be called with the ACTUAL runtime namespace/ipc, not defaults, so
+// the recovered session on login uses the same IPC path as normal startup.
+function buildRunCommand(namespace: string, ipc: string): string {
   const electronExe = process.argv[0] ?? process.execPath;
 
   if (!existsSync(electronExe)) {
     throw new Error(`electron.exe not found at: ${electronExe} — cannot set auto-start`);
   }
-
-  // The namespace must exactly match the daemon's namespace so the IPC
-  // pipe path is identical.  "default" is tools-dev's default.
-  const namespace = "default";
-
-  // Resolve the IPC pipe path the same way bootstrapSidecarRuntime does,
-  // so the stamp is self-consistent and passes ipc-mismatch validation.
-  const ipc = resolveAppIpcPath({
-    app: APP_KEYS.TRAY,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    namespace,
-  });
 
   const stampArgs = [
     `--od-stamp-app=${APP_KEYS.TRAY}`,
@@ -45,11 +35,11 @@ function buildRunCommand(): string {
   // cmd /c "start "" /b <electron> <args>"
   // `start ""` (empty window title) is required — without it Windows interprets
   // the first token as the window title and the process never starts.
-  const args = ["/c", "start", "", "/b", electronExe, ...stampArgs]
-    .map((a) => `"${a}"`)
-    .join(" ");
+  // The electron exe path MUST be quoted when it contains spaces.
+  const args = ["/c", "start", "", "/b", `"${electronExe}"`, ...stampArgs];
 
-  return `"cmd.exe" ${args}`;
+  // Build a command that works even with spaces in paths.
+  return `cmd.exe ${args.join(" ")}`;
 }
 
 // ─── Registry helpers ─────────────────────────────────────────────────────
@@ -63,9 +53,9 @@ function execReg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   });
 }
 
-export async function enableAutoStart(_exePath: string): Promise<void> {
+export async function enableAutoStart(namespace: string, ipc: string): Promise<void> {
   if (process.platform !== "win32") return;
-  const command = buildRunCommand();
+  const command = buildRunCommand(namespace, ipc);
   await execReg([
     "add", RUN_KEY,
     "/v", PRODUCT_NAME,
