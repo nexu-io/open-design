@@ -104,6 +104,9 @@ type MediaContext = {
   /** Video output resolution (e.g. '480p' | '720p' | '1080p'); provider-
    *  validated. Undefined falls back to the provider's default. */
   resolution: string | undefined;
+  /** Explicit image output size (e.g. '2048x1152'); provider-validated against
+   *  the model's documented size list. Undefined maps `aspect` to a size. */
+  size: string | undefined;
   voice: string;
   audioKind: AudioKind | undefined;
   language: string;
@@ -288,6 +291,7 @@ export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   resolution?: string;
+  size?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; onProgress?: ProgressFn;
   // When false, the stub fallback is disabled even if OD_MEDIA_ALLOW_STUBS is
@@ -310,6 +314,7 @@ export async function generateMedia(args: {
     duration,
     voice,
     resolution,
+    size,
     audioKind,
     language,
     loop,
@@ -413,6 +418,7 @@ export async function generateMedia(args: {
     length: clampedLength,
     duration: clampedDuration,
     resolution: typeof resolution === 'string' && resolution.trim() ? resolution.trim() : undefined,
+    size: typeof size === 'string' && size.trim() ? size.trim() : undefined,
     voice: voice || '',
     audioKind: resolvedAudioKind,
     language: language || '',
@@ -2297,15 +2303,31 @@ const SENSEAUDIO_IMAGE_PROMPT_LIMIT = 2000;
 // per-model list of accepted sizes and pick the one whose width/height ratio
 // is closest to the requested aspect, so any catalogue model + any aspect
 // resolves to a size the gateway will accept.
+// Full per-model size catalogue per the SenseAudio image docs
+// (https://docs.senseaudio.cn/api-reference/endpoint/image/async). Kept in
+// sync with apps/web/src/media/models.ts SENSEAUDIO_IMAGE_SIZES so the
+// composer's Size dropdown and this validator accept the same values.
 const SENSEAUDIO_IMAGE_SIZES: Record<string, string[]> = {
   'senseaudio-image-2.0-260319': [
-    '1024x1024', '1536x864', '864x1536', '2048x1152', '1152x2048',
+    '1024x1024', '1536x864', '864x1536', '2016x864', '864x2016',
+    '2048x1024', '1024x2048', '2048x1152', '1152x2048', '2688x1152',
+    '1152x2688', '2688x1344', '1344x2688', '3840x1648', '1648x3840',
+    '3840x1920', '1920x3840', '3840x2160', '2160x3840',
   ],
   'senseaudio-image-1.0-260319': [
-    '1328x1328', '1664x928', '928x1664', '1472x1140', '1140x1472',
+    '1664x928', '928x1664', '1584x1056', '1056x1584', '1472x1140',
+    '1140x1472', '1328x1328',
   ],
   'doubao-seedream-5-0-260128': [
-    '2048x2048', '2848x1600', '1600x2848', '2304x1728', '1728x2304',
+    '2304x1728', '1728x2304', '2496x1664', '1664x2496', '2048x2048',
+    '3136x1344', '2848x1600', '1600x2848', '3456x2592', '2592x3456',
+    '2496x3744', '3744x2496', '4096x2304', '2304x4096', '3072x3072',
+    '4704x2016',
+  ],
+  'sensenova-u1-fast': [
+    '1664x2496', '2496x1664', '1760x2368', '2368x1760', '1824x2272',
+    '2272x1824', '2048x2048', '2752x1536', '1536x2752', '3072x1376',
+    '1344x3136',
   ],
 };
 const SENSEAUDIO_IMAGE_DEFAULT_SIZES = SENSEAUDIO_IMAGE_SIZES['senseaudio-image-2.0-260319']!;
@@ -2317,8 +2339,12 @@ const ASPECT_RATIO_VALUE: Record<string, number> = {
   '3:4': 3 / 4,
 };
 
-function senseAudioImageSize(model: string, aspect?: string): string {
+function senseAudioImageSize(model: string, aspect?: string, explicit?: string): string {
   const sizes = SENSEAUDIO_IMAGE_SIZES[model] ?? SENSEAUDIO_IMAGE_DEFAULT_SIZES;
+  // An explicit, documented size (from the composer's Size dropdown / project
+  // metadata.imageSize) is authoritative; otherwise map the requested aspect
+  // to the closest supported size.
+  if (explicit && sizes.includes(explicit)) return explicit;
   const target = ASPECT_RATIO_VALUE[aspect ?? '1:1'] ?? 1;
   let best = sizes[0]!;
   let bestDiff = Infinity;
@@ -2351,7 +2377,7 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
     promptRaw.length > SENSEAUDIO_IMAGE_PROMPT_LIMIT
       ? promptRaw.slice(0, SENSEAUDIO_IMAGE_PROMPT_LIMIT)
       : promptRaw;
-  const size = senseAudioImageSize(ctx.wireModel, ctx.aspect);
+  const size = senseAudioImageSize(ctx.wireModel, ctx.aspect, ctx.size);
   const reference = ctx.imageRef?.dataUrl;
 
   const body: Record<string, unknown> = {

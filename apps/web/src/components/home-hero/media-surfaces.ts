@@ -6,10 +6,14 @@ import {
   DEFAULT_AUDIO_MODEL,
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
+  DEFAULT_VIDEO_RESOLUTION,
   IMAGE_MODELS,
+  imageSizesForModel,
   MEDIA_ASPECTS,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
+  videoDurationsForModel,
+  videoResolutionsForModel,
 } from '../../media/models';
 
 export type HomeComposerMediaSurface = 'image' | 'video' | 'hyperframes' | 'audio';
@@ -28,12 +32,6 @@ export interface HomeMediaComposerState {
 export const HOME_MEDIA_CHIP_IDS = ['image', 'video', 'hyperframes', 'audio'] as const;
 const NO_TEMPLATE_PLACEHOLDER = 'No template';
 const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
-const MEDIA_RESOLUTIONS = ['2k', '4k'] as const;
-const MEDIA_RESOLUTION_LABELS: Record<(typeof MEDIA_RESOLUTIONS)[number], string> = {
-  '2k': '2K',
-  '4k': '4K',
-};
-const DEFAULT_MEDIA_RESOLUTION = '2k';
 
 export function homeMediaSurfaceForChipId(chipId: string): HomeComposerMediaSurface | null {
   if (chipId === 'image') return 'image';
@@ -80,20 +78,37 @@ export function normalizeHomeMediaInputs(
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
+    const model = validOption(stringValue(raw.model), IMAGE_MODELS.map((m) => m.id), DEFAULT_IMAGE_MODEL);
+    const sizes = imageSizesForModel(model);
     return {
       mediaKind: 'image',
       subject: stringValue(raw.subject) || 'a premium product concept',
       style: stringValue(raw.style) || 'premium product-studio, elegant composition, refined lighting, restrained color',
-      aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), IMAGE_MODELS.map((m) => m.id), DEFAULT_IMAGE_MODEL),
-      ratio,
-      resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
+      model,
+      // Discrete-size models (SenseAudio image): the pixel size is the sole
+      // dimension control and already encodes the aspect, so carry `size` and
+      // omit aspect/ratio — otherwise a stale default ratio (16:9) leaks into
+      // the brief/inputs and the agent reports a contradictory aspect. The
+      // default size tracks the chosen ratio only as a seed. Free-ratio models
+      // carry aspect/ratio instead.
+      ...(sizes.length
+        ? { size: validOption(stringValue(raw.size), sizes, closestSizeForRatio(sizes, ratio)) }
+        : { aspect: ratio, ratio }),
     };
   }
   if (surface === 'video') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
+    const model = validOption(
+      stringValue(raw.model),
+      VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id),
+      DEFAULT_VIDEO_MODEL === 'hyperframes-html'
+        ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
+        : DEFAULT_VIDEO_MODEL,
+    );
+    const durations = videoDurationsForModel(model);
+    const resolutions = videoResolutionsForModel(model);
     return {
       mediaKind: 'video',
       subject: stringValue(raw.subject) || 'a premium product launch moment',
@@ -101,16 +116,14 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(
-        stringValue(raw.model),
-        VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id),
-        DEFAULT_VIDEO_MODEL === 'hyperframes-html'
-          ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
-          : DEFAULT_VIDEO_MODEL,
-      ),
+      model,
       ratio,
-      duration: validNumber(raw.duration, VIDEO_LENGTHS_SEC, 5),
-      resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
+      duration: validNumber(raw.duration, durations, durations.includes(5) ? 5 : durations[0]!),
+      // Only models with a real resolution control (SenseAudio/Seedance) expose
+      // 480p/720p/1080p; others omit it so we never inject a bogus value.
+      ...(resolutions.length
+        ? { resolution: validOption(stringValue(raw.resolution), resolutions, DEFAULT_VIDEO_RESOLUTION) }
+        : {}),
     };
   }
   if (surface === 'hyperframes') {
@@ -175,19 +188,26 @@ export function metadataForHomeMediaComposer(
     : undefined;
 
   if (surface === 'image') {
+    const imageSize = stringValue(inputs.size);
     return {
       kind: 'image',
       imageModel: stringValue(inputs.model) || DEFAULT_IMAGE_MODEL,
-      imageAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect,
+      // Size already encodes the aspect for discrete-size models, so set one OR
+      // the other — never a Size alongside a contradictory imageAspect.
+      ...(imageSize
+        ? { imageSize }
+        : { imageAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect }),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
   if (surface === 'video' || surface === 'hyperframes') {
+    const videoModel = surface === 'hyperframes' ? 'hyperframes-html' : stringValue(inputs.model) || DEFAULT_VIDEO_MODEL;
     return {
       kind: 'video',
-      videoModel: surface === 'hyperframes' ? 'hyperframes-html' : stringValue(inputs.model) || DEFAULT_VIDEO_MODEL,
+      videoModel,
       videoAspect: (stringValue(inputs.ratio) || '16:9') as MediaAspect,
-      videoLength: validNumber(inputs.duration, VIDEO_LENGTHS_SEC, surface === 'hyperframes' ? 10 : 5),
+      videoLength: validNumber(inputs.duration, videoDurationsForModel(videoModel), surface === 'hyperframes' ? 10 : 5),
+      ...(stringValue(inputs.resolution) ? { videoResolution: stringValue(inputs.resolution) } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
@@ -231,20 +251,28 @@ function fieldsForSurface(
   options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean },
 ): InputFieldSpec[] {
   if (surface === 'image') {
+    const imageSizes = imageSizesForModel(stringValue(inputs.model));
+    // A discrete pixel size already encodes the aspect ratio, so discrete-size
+    // models (SenseAudio image) show ONLY Size; free-ratio models show Ratio.
+    // Never both — that's the redundant pair we want to avoid.
     return [
       stringField('designSystem', 'Design system', 'Design system'),
       selectField('model', 'Model', IMAGE_MODELS.map((m) => m.id), modelLabels(IMAGE_MODELS)),
-      selectField('ratio', 'Ratio', MEDIA_ASPECTS),
-      selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
+      ...(imageSizes.length
+        ? [selectField('size', 'Size', imageSizes)]
+        : [selectField('ratio', 'Ratio', MEDIA_ASPECTS)]),
     ];
   }
   if (surface === 'video') {
+    const videoModel = stringValue(inputs.model);
+    const durations = videoDurationsForModel(videoModel);
+    const resolutions = videoResolutionsForModel(videoModel);
     return [
       stringField('designSystem', 'Design system', 'Design system'),
       selectField('model', 'Model', VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id), modelLabels(VIDEO_MODELS)),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
-      selectField('duration', 'Duration', VIDEO_LENGTHS_SEC.map(String), secondsLabels(VIDEO_LENGTHS_SEC)),
-      selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
+      selectField('duration', 'Duration', durations.map(String), secondsLabels(durations)),
+      ...(resolutions.length ? [selectField('resolution', 'Resolution', resolutions)] : []),
     ];
   }
   if (surface === 'hyperframes') {
@@ -284,10 +312,12 @@ function fieldsForSurface(
 
 function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Record<string, unknown>): string {
   if (surface === 'image') {
-    return 'Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish. Render with {{model}} at {{ratio}} in {{resolution}} resolution.';
+    const dimensionClause = stringValue(inputs.size) ? 'at exact size {{size}} px' : 'at {{ratio}}';
+    return `Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish. Render with {{model}} ${dimensionClause}.`;
   }
   if (surface === 'video') {
-    return 'Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel. Render with {{model}} at {{ratio}} for {{duration}} seconds in {{resolution}} resolution.';
+    const resolutionClause = stringValue(inputs.resolution) ? ' at {{resolution}}' : '';
+    return `Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel. Render with {{model}} at {{ratio}} for {{duration}} seconds${resolutionClause}.`;
   }
   if (surface === 'hyperframes') {
     return 'Create a premium product-studio HyperFrames video at {{ratio}} for {{duration}} seconds: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
@@ -305,12 +335,12 @@ function defaultInputsForSurface(
   promptTemplates: PromptTemplateSummary[],
 ): Record<string, unknown> {
   if (surface === 'image') {
+    // size/resolution are filled model-aware by normalizeHomeMediaInputs.
     return {
       template: firstTemplateId(surface, promptTemplates),
       designSystem: 'the active project design system',
       model: DEFAULT_IMAGE_MODEL,
       ratio: '16:9',
-      resolution: DEFAULT_MEDIA_RESOLUTION,
     };
   }
   if (surface === 'video') {
@@ -322,7 +352,6 @@ function defaultInputsForSurface(
         : DEFAULT_VIDEO_MODEL,
       ratio: '16:9',
       duration: 5,
-      resolution: DEFAULT_MEDIA_RESOLUTION,
     };
   }
   if (surface === 'hyperframes') {
@@ -453,6 +482,32 @@ function normalizedElevenLabsVoice(
   if (voices.length === 0) return rawVoice || ELEVENLABS_DEFAULT_VOICE_ID;
   if (voices.some((voice) => voice.voiceId === rawVoice)) return rawVoice;
   return voices[0]?.voiceId ?? ELEVENLABS_DEFAULT_VOICE_ID;
+}
+
+const ASPECT_RATIO_VALUE: Record<string, number> = {
+  '1:1': 1,
+  '16:9': 16 / 9,
+  '9:16': 9 / 16,
+  '4:3': 4 / 3,
+  '3:4': 3 / 4,
+};
+
+/** Pick the documented size whose width/height ratio is closest to the chosen
+ *  aspect, so the default Size selection lines up with the Ratio picker. */
+function closestSizeForRatio(sizes: string[], ratio: string): string {
+  const target = ASPECT_RATIO_VALUE[ratio] ?? 1;
+  let best = sizes[0]!;
+  let bestDiff = Infinity;
+  for (const size of sizes) {
+    const [w, h] = size.split('x').map(Number);
+    if (!w || !h) continue;
+    const diff = Math.abs(w / h - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = size;
+    }
+  }
+  return best;
 }
 
 function validOption<T extends string>(

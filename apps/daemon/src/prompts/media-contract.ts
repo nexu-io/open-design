@@ -83,7 +83,9 @@ Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
   --output <filename> \\
   --prompt "<full prompt>" \\
   [--aspect 1:1|16:9|9:16|4:3|3:4] \\
+  [--size <WxH>]                    # image only; SenseAudio image takes a discrete pixel size (e.g. 2048x1152) — overrides --aspect
   [--length <seconds>]              # video only
+  [--resolution 480p|720p|1080p]    # video only; SenseAudio/Seedance video output resolution (default 720p)
   [--duration <seconds>]            # audio only
   [--prompt-influence <0-1>]        # audio:sfx only; higher follows the prompt more closely
   [--loop]                          # audio:sfx only; request a seamless loop
@@ -252,6 +254,20 @@ showed it crashed).
   daemon reads the file from the project, base64-encodes it, and
   forwards it as the model's \`image_url\` input. Path traversal
   outside the project is rejected.
+- **SenseAudio image** models (\`senseaudio-image-2.0-260319\`,
+  \`senseaudio-image-1.0-260319\`, \`doubao-seedream-5-0-260128\`,
+  \`sensenova-u1-fast\`) take a discrete output **size** (e.g.
+  \`2048x1152\`), NOT a free aspect ratio. The "Project metadata" \`size\`
+  field is the pre-selected value — pass it verbatim via \`--size\`. To
+  use a different size, pick one the model documents; an unsupported
+  \`--size\` is ignored and the daemon falls back to \`--aspect\`. The size
+  already encodes the aspect, so never also pass \`--aspect\`, and never
+  describe the output by an approximated ratio (e.g. calling
+  \`2048x1024\` "16:9").
+- **SenseAudio / Seedance video** (\`senseaudio-video-2.0-260128\`) takes
+  \`--resolution 480p|720p|1080p\` (default 720p), \`--length\` 4–15s
+  (integer seconds), and \`--aspect\` from the five ratios. Resolution,
+  aspect, and length are independent — pass all three.
 - **audio · music**:  ${AUDIO_MUSIC_IDS}
 - **audio · speech**: ${AUDIO_SPEECH_IDS}
 - **audio · sfx**:    ${AUDIO_SFX_IDS}

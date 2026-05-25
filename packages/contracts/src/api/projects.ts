@@ -133,10 +133,18 @@ export interface ProjectMetadata {
   userWorkingDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;
+  /** Explicit output pixel size (e.g. '2048x1152'). Provider-specific; used by
+   *  models like SenseAudio image that take a discrete `size` rather than a
+   *  free aspect ratio. When set, it pins the exact dimensions; otherwise the
+   *  renderer maps `imageAspect` to the closest supported size. */
+  imageSize?: string;
   imageStyle?: string;
   videoModel?: string;
   videoLength?: number;
   videoAspect?: MediaAspect;
+  /** Video output resolution tier (e.g. '480p' | '720p' | '1080p'). Provider-
+   *  validated; undefined falls back to the provider default (720p). */
+  videoResolution?: string;
   audioKind?: AudioKind;
   audioModel?: string;
   audioDuration?: number;

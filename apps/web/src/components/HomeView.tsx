@@ -1523,7 +1523,7 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
 function footerInputNamesForChip(chipId: string | null): string[] {
   if (chipId === 'prototype') return ['designSystem', 'fidelity'];
   if (chipId === 'deck') return ['designSystem', 'slideCount', 'speakerNotes'];
-  if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
+  if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'size'];
   if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
   if (chipId === 'audio') return ['audioType', 'model', 'duration'];
   if (chipId === 'hyperframes') return ['ratio', 'duration'];

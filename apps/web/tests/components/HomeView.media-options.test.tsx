@@ -68,7 +68,10 @@ describe('HomeView media composer options', () => {
     expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
     expect(screen.getByTestId('home-hero-footer-option-ratio')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-footer-option-resolution')).toBeTruthy();
+    // The default image model (gpt-image-2) uses free aspect ratios, so there
+    // is no discrete Size pill; only SenseAudio-style models expose one.
+    expect(screen.queryByTestId('home-hero-footer-option-size')).toBeNull();
+    expect(screen.queryByTestId('home-hero-footer-option-resolution')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-duration')).toBeNull();
 
     await clickHomeRailChip('video');
@@ -77,7 +80,9 @@ describe('HomeView media composer options', () => {
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
     expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy();
     expect(screen.getByTestId('home-hero-footer-option-ratio')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-footer-option-resolution')).toBeTruthy();
+    // The default video model is volcengine Seedance, which has no resolution
+    // control in this composer; the Resolution pill is SenseAudio-video-only.
+    expect(screen.queryByTestId('home-hero-footer-option-resolution')).toBeNull();
 
     await clickHomeRailChip('hyperframes');
     await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
@@ -93,6 +98,35 @@ describe('HomeView media composer options', () => {
     expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy();
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-voice')).toBeNull();
+  });
+
+  it('reveals SenseAudio image Size and video Resolution options matching the docs', async () => {
+    stubFetch();
+    renderHome();
+
+    // Image: picking a SenseAudio image model exposes a discrete Size dropdown
+    // populated from the model's documented pixel sizes (not generic 2K/4K).
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
+    expect(screen.queryByTestId('home-hero-footer-option-size')).toBeNull();
+    await chooseOption('model', 'senseaudio-image-2.0-260319', 'senseaudio-image-2.0');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-size')).toBeTruthy());
+    // Size encodes the aspect, so the Ratio pill is replaced — never shown alongside Size.
+    expect(screen.queryByTestId('home-hero-footer-option-ratio')).toBeNull();
+    await openOption('size');
+    const sizeOptions = optionTexts(screen.getByTestId('home-hero-footer-option-size-menu'));
+    expect(sizeOptions).toContain('2048x1152');
+    expect(sizeOptions).not.toContain('2K');
+
+    // Video: SenseAudio video exposes 480p/720p/1080p and caps duration to 4–15s.
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    await chooseOption('model', 'senseaudio-video-2.0-260128', 'senseaudio-video-2.0');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-resolution')).toBeTruthy());
+    await openOption('resolution');
+    expect(optionTexts(screen.getByTestId('home-hero-footer-option-resolution-menu'))).toEqual(['480p', '720p', '1080p']);
+    await openOption('duration');
+    expect(optionTexts(screen.getByTestId('home-hero-footer-option-duration-menu'))).toEqual(['4s', '5s', '8s', '10s', '15s']);
   });
 
   it('includes only published user-created design systems in the Home style picker', async () => {

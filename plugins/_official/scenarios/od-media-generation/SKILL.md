@@ -47,9 +47,13 @@ Every media atom takes the same kernel of inputs and returns a media
 artifact reference that `live-artifact` can wrap:
 
 - `prompt` — the rendered `useCase.query` after input substitution.
-- `aspect` — one of `1:1` / `16:9` / `9:16` / `4:3` / `3:4`. Default
-  `16:9`. The contracts `MediaAspect` union enumerates the legal
-  values.
+- `size` — for image models that expose discrete output sizes (e.g.
+  SenseAudio image such as `2048x1152`), pass the exact size from the
+  project settings (`metadata.imageSize`). It already encodes the aspect,
+  so do NOT also pass or restate an aspect ratio.
+- `aspect` — free-ratio models only, one of `1:1` / `16:9` / `9:16` /
+  `4:3` / `3:4` (the contracts `MediaAspect` union). Ignore it entirely
+  when `size` is set; never invent a ratio that contradicts the size.
 - `provider` — left blank by default so the daemon picks the user's
   configured provider for this media kind (see Settings → Media). Only
   set this when the user names a provider explicitly.

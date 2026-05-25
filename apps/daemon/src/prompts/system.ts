@@ -130,10 +130,12 @@ type ProjectMetadata = {
   skipDiscoveryBrief?: boolean | null;
   imageModel?: string | null;
   imageAspect?: string | null;
+  imageSize?: string | null;
   imageStyle?: string | null;
   videoModel?: string | null;
   videoLength?: number | null;
   videoAspect?: string | null;
+  videoResolution?: string | null;
   audioKind?: string | null;
   audioModel?: string | null;
   audioDuration?: number | null;
@@ -904,9 +906,13 @@ function renderMetadataBlock(
     lines.push(
       `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model to use)'}`,
     );
-    lines.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
-    );
+    if (metadata.imageSize) {
+      lines.push(`- **size**: ${metadata.imageSize} (exact documented pixel size; pass it verbatim via --size; it already encodes the aspect — do NOT also state a separate aspect ratio)`);
+    } else {
+      lines.push(
+        `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
+      );
+    }
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
     }
@@ -918,9 +924,17 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
+    const imageDispatchArgs = metadata.imageSize
+      ? '--surface image --model <imageModel> --size <size>'
+      : '--surface image --model <imageModel> --aspect <ratio>';
     lines.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
+      `This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using \`"$OD_NODE_BIN" "$OD_BIN" media generate ${imageDispatchArgs}\`. Do NOT emit \`<artifact>\` HTML for media surfaces.`,
     );
+    if (metadata.imageSize) {
+      lines.push(
+        `When you describe this request back to the user (e.g. an opening summary), refer to the output ONLY by its exact pixel size \`${metadata.imageSize}\`. Do NOT mention, compute, label, or approximate any aspect ratio such as "16:9" — for a discrete size the pixel dimensions are the only correct description, and an approximated ratio (e.g. calling ${metadata.imageSize} "16:9") is wrong and confuses the user.`,
+      );
+    }
   }
   if (metadata.kind === 'video') {
     lines.push(
@@ -932,6 +946,9 @@ function renderMetadataBlock(
     lines.push(
       `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown — ask: 16:9, 9:16, 1:1)'}`,
     );
+    if (metadata.videoResolution) {
+      lines.push(`- **resolution**: ${metadata.videoResolution}`);
+    }
     if (
       metadata.promptTemplate?.title &&
       typeof metadata.promptTemplate.prompt === 'string' &&
@@ -940,8 +957,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
+    const videoResolutionFlag = metadata.videoResolution
+      ? `\`--resolution ${metadata.videoResolution}\``
+      : '(optionally `--resolution 480p|720p|1080p`, default 720p)';
     lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>` (optionally `--resolution 480p|720p|1080p`, default 720p). Do NOT emit `<artifact>` HTML.',
+      `This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>\` ${videoResolutionFlag}. Do NOT emit \`<artifact>\` HTML.`,
     );
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(

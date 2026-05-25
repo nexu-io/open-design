@@ -183,6 +183,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             : undefined,
         resolution:
           typeof req.body?.resolution === 'string' ? req.body.resolution : undefined,
+        size: typeof req.body?.size === 'string' ? req.body.size : undefined,
         voice: req.body?.voice,
         audioKind: req.body?.audioKind,
         language: typeof req.body?.language === 'string' ? req.body.language : undefined,

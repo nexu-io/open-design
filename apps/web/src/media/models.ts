@@ -578,6 +578,58 @@ export const MEDIA_ASPECTS: MediaAspect[] = ['1:1', '16:9', '9:16', '4:3', '3:4'
 export const VIDEO_LENGTHS_SEC: number[] = [3, 5, 8, 10, 15, 30];
 export const AUDIO_DURATIONS_SEC: number[] = [5, 10, 15, 30, 60, 120];
 
+// SenseAudio image models take a discrete `size` (model-specific pixel
+// dimensions) rather than a free aspect ratio. Values are the exact sizes the
+// gateway accepts per the docs, so the composer's Size dropdown matches them
+// 1:1: https://docs.senseaudio.cn/api-reference/endpoint/image/async
+export const SENSEAUDIO_IMAGE_SIZES: Record<string, string[]> = {
+  'senseaudio-image-2.0-260319': [
+    '1024x1024', '1536x864', '864x1536', '2016x864', '864x2016',
+    '2048x1024', '1024x2048', '2048x1152', '1152x2048', '2688x1152',
+    '1152x2688', '2688x1344', '1344x2688', '3840x1648', '1648x3840',
+    '3840x1920', '1920x3840', '3840x2160', '2160x3840',
+  ],
+  'senseaudio-image-1.0-260319': [
+    '1664x928', '928x1664', '1584x1056', '1056x1584', '1472x1140',
+    '1140x1472', '1328x1328',
+  ],
+  'doubao-seedream-5-0-260128': [
+    '2304x1728', '1728x2304', '2496x1664', '1664x2496', '2048x2048',
+    '3136x1344', '2848x1600', '1600x2848', '3456x2592', '2592x3456',
+    '2496x3744', '3744x2496', '4096x2304', '2304x4096', '3072x3072',
+    '4704x2016',
+  ],
+};
+
+/** Discrete output sizes a model exposes, or [] when it uses free aspect ratios
+ *  instead — the composer then shows the Ratio picker, not a Size one. */
+export function imageSizesForModel(modelId: string): string[] {
+  return SENSEAUDIO_IMAGE_SIZES[modelId] ?? [];
+}
+
+// SenseAudio (Seedance) video resolution tiers + duration bounds per
+// https://docs.senseaudio.cn/api-reference/endpoint/video/create
+// (480p/720p/1080p; integer duration 4–15s).
+export const VIDEO_RESOLUTIONS = ['480p', '720p', '1080p'] as const;
+export const DEFAULT_VIDEO_RESOLUTION = '720p';
+const SENSEAUDIO_VIDEO_DURATIONS_SEC = [4, 5, 8, 10, 15];
+
+function isSenseAudioVideoModel(modelId: string): boolean {
+  return VIDEO_MODELS.some((m) => m.id === modelId && m.provider === 'senseaudio');
+}
+
+/** Resolution tiers a video model exposes, or [] when it has no resolution
+ *  control — the composer then omits the Resolution picker. */
+export function videoResolutionsForModel(modelId: string): string[] {
+  return isSenseAudioVideoModel(modelId) ? [...VIDEO_RESOLUTIONS] : [];
+}
+
+/** Duration options valid for the model. SenseAudio video is bounded to 4–15s
+ *  per the gateway; other models keep the broad default list. */
+export function videoDurationsForModel(modelId: string): number[] {
+  return isSenseAudioVideoModel(modelId) ? [...SENSEAUDIO_VIDEO_DURATIONS_SEC] : VIDEO_LENGTHS_SEC;
+}
+
 export const DEFAULT_IMAGE_MODEL =
   IMAGE_MODELS.find((m) => m.default)?.id ?? IMAGE_MODELS[0]!.id;
 export const DEFAULT_VIDEO_MODEL =

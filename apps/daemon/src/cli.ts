@@ -46,6 +46,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'length',
   'duration',
   'resolution',
+  'size',
   'prompt-influence',
   'voice',
   'audio-kind',
@@ -514,6 +515,7 @@ async function runMediaGenerate(rawArgs) {
     output: flags.output,
     aspect: flags.aspect,
     resolution: flags.resolution,
+    size: flags.size,
     voice: flags.voice,
     audioKind: flags['audio-kind'],
     compositionDir: flags['composition-dir'],
@@ -786,6 +788,8 @@ Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
+  --size <WxH>              Exact image output size (e.g. 2048x1152). Provider-validated against the
+                            model's documented sizes (SenseAudio image); falls back to --aspect.
   --length <seconds>        Video length.
   --resolution 480p|720p|1080p
                             Video output resolution (SenseAudio/Seedance video; defaults to 720p).
