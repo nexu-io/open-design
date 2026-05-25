@@ -151,15 +151,15 @@ export async function enableAutoStartMac(exePath: string): Promise<void> {
   const appId = resolveAppId();
   const plistDir = join(homedir(), "Library", "LaunchAgents");
   await mkdir(plistDir, { recursive: true });
-  await writeFile(join(plistDir, `ai.open-design.${appId}.plist`), generatePlist(exePath, appId), "utf8");
+  const plistPath = join(plistDir, `ai.open-design.${appId}.plist`);
+  await writeFile(plistPath, generatePlist(exePath, appId), "utf8");
 }
 
 export async function disableAutoStartMac(): Promise<void> {
   if (process.platform !== "darwin") return;
+  const { unlink } = await import("node:fs/promises");
   try {
-    await import("node:fs/promises").then(({ unlink }) =>
-      unlink(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${resolveAppId()}.plist`)),
-    );
+    await unlink(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${resolveAppId()}.plist`));
   } catch {
     // ignore
   }
@@ -167,14 +167,31 @@ export async function disableAutoStartMac(): Promise<void> {
 
 export async function isAutoStartEnabledMac(): Promise<boolean> {
   if (process.platform !== "darwin") return false;
+  const { readFile } = await import("node:fs/promises");
   try {
-    await import("node:fs/promises").then(({ readFile }) =>
-      readFile(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${resolveAppId()}.plist`)),
-    );
+    await readFile(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${resolveAppId()}.plist`));
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Escape a string for safe inclusion in an XML plist element.
+ * Without this, values containing < > & would break the XML structure
+ * or enable injection of arbitrary plist keys.
+ */
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(/[<>&'"]/g, (ch) => {
+    switch (ch) {
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case "&": return "&amp;";
+      case "'": return "&apos;";
+      case '"': return "&quot;";
+    }
+    return ch;
+  });
 }
 
 function generatePlist(exePath: string, appId: string): string {
@@ -187,7 +204,7 @@ function generatePlist(exePath: string, appId: string): string {
     `<string>ai.open-design.${appId}</string>`,
     `<key>ProgramArguments</key>`,
     `<array>`,
-    `<string>${exePath}</string>`,
+    `<string>${escapeXml(exePath)}</string>`,
     `<string>--od-stamp-app=${APP_KEYS.TRAY}</string>`,
     `<string>--od-stamp-mode=dev</string>`,
     `<string>--od-stamp-source=startup</string>`,
