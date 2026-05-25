@@ -1304,13 +1304,20 @@ function DesignSystemProjectPanel({
       sectionStatus,
       sectionStatusLabel,
     } = item;
-    // A section marked "Looks good" is validated, so collapse it by default to
-    // show it is done. The user can still re-expand it with the chevron
-    // (expandedSections[instanceId]), and an active agent run forces it open.
-    const reviewedGood = (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
+    const needsAttention = designSystemReviewNeedsAttention(item);
+    // A section the user marked "Looks good" is validated, so collapse it by
+    // default to show it is done. Gate that on the current status, not just the
+    // stored decision: when a section is regenerated after approval its status
+    // moves back to needs-attention, and it has to reopen so the "review again"
+    // notice and the review buttons (both rendered only while expanded) stay
+    // visible. Without the needsAttention guard a stale "looks-good" decision
+    // keeps the regenerated section collapsed and the change is easy to miss.
+    // The user can still re-expand with the chevron (expandedSections[instanceId]),
+    // and an active agent run forces it open.
+    const reviewedGood =
+      !needsAttention && (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
     const expanded =
       (expandedSections[instanceId] ?? (defaultExpanded && !reviewedGood)) || sectionActivity.running;
-    const needsAttention = designSystemReviewNeedsAttention(item);
     return (
       <section
         key={instanceId}

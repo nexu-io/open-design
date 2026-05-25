@@ -422,4 +422,41 @@ describe('FileWorkspace design-system project surface', () => {
     // An unreviewed section stays expanded for review.
     expect(unreviewed?.classList.contains('is-expanded')).toBe(true);
   });
+
+  it('reopens a looks-good section after it is regenerated so the review-again prompt stays visible', () => {
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md'), workspaceFile('preview/colors.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        designSystemReview={{
+          colors: { decision: 'looks-good', updatedAt: '2026-05-14T00:00:00.000Z' },
+        }}
+        designSystemActivityEvents={[
+          toolUse('Write', { file_path: '/project/preview/colors.html' }, 'write-preview'),
+          toolOk('write-preview'),
+        ]}
+      />,
+    );
+
+    const items = Array.from(container.querySelectorAll('.ds-project-review-item'));
+    const titleOf = (el: Element) =>
+      el.querySelector('.ds-project-section-title strong')?.textContent ?? '';
+    const colors = items.find((el) => titleOf(el) === 'colors');
+
+    // The stored decision is still "looks-good", but the regenerated files moved
+    // the section back to "updated". It has to reopen instead of staying collapsed
+    // behind the stale decision, so the review-again notice and the review buttons
+    // are visible again.
+    expect(colors?.classList.contains('is-expanded')).toBe(true);
+    expect(colors?.classList.contains('is-collapsed')).toBe(false);
+    expect(colors?.querySelector('.ds-project-review-actions')).toBeTruthy();
+    expect(colors?.textContent).toContain('before publishing');
+  });
 });
