@@ -31,7 +31,7 @@ interface RunRecord {
   child: ChildProcess | null;
   acpSession: AcpSession | null;
   exitCode: number | null;
-  signal: string | null;
+  signal: NodeJS.Signals | null;
   error: string | null;
   errorCode: string | null;
   cancelRequested: boolean;
@@ -83,7 +83,7 @@ interface RunStatusBody {
   createdAt: number;
   updatedAt: number;
   exitCode: number | null;
-  signal: string | null;
+  signal: NodeJS.Signals | null;
   error: string | null;
   errorCode: string | null;
 }
@@ -92,7 +92,7 @@ interface ChatRunService {
   create(meta?: RunMeta): RunRecord;
   start(run: RunRecord, starter: (run: RunRecord) => Promise<void>): RunRecord;
   get(id: string): RunRecord | null;
-  list(filter?: { projectId?: string; conversationId?: string; status?: string }): RunRecord[];
+  list(filter?: { projectId?: unknown; conversationId?: unknown; status?: unknown }): RunRecord[];
   stream(run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, unknown> }, res: unknown): void;
   cancel(run: RunRecord): void;
   shutdownActive(opts?: { graceMs?: number }): Promise<void>;
@@ -200,7 +200,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
   });
 
-  const finish = (run: RunRecord, status: string, code: number | null = null, signal: string | null = null): void => {
+  const finish = (run: RunRecord, status: string, code: number | null = null, signal: NodeJS.Signals | null = null): void => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     run.status = status;
     run.exitCode = code;
@@ -246,9 +246,9 @@ export function createChatRunService({
   };
 
   const list = ({ projectId, conversationId, status }: {
-    projectId?: string;
-    conversationId?: string;
-    status?: string;
+    projectId?: unknown;
+    conversationId?: unknown;
+    status?: unknown;
   } = {}): RunRecord[] => Array.from(runs.values()).filter((run) => {
     if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
     if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
