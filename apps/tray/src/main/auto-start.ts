@@ -5,8 +5,16 @@ import { join } from "node:path";
 
 import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 
-const PRODUCT_NAME = "OpenDesign";
 const RUN_KEY = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`;
+
+// App name for the registry Run key.
+// Packaged releases set OD_APP_NAME to distinguish channels:
+//   stable  → OpenDesign       (matches existing key)
+//   beta    → OpenDesignBeta
+//   preview → OpenDesignPreview
+function resolveProductName(): string {
+  return process.env.OD_APP_NAME ?? "OpenDesign";
+}
 
 // Build the command written to the Windows Run registry key.
 //
@@ -58,7 +66,7 @@ export async function enableAutoStart(namespace: string, ipc: string): Promise<v
   const command = buildRunCommand(namespace, ipc);
   await execReg([
     "add", RUN_KEY,
-    "/v", PRODUCT_NAME,
+    "/v", resolveProductName(),
     "/t", "REG_SZ",
     "/d", command,
     "/f",
@@ -68,7 +76,7 @@ export async function enableAutoStart(namespace: string, ipc: string): Promise<v
 export async function disableAutoStart(): Promise<void> {
   if (process.platform !== "win32") return;
   try {
-    await execReg(["delete", RUN_KEY, "/v", PRODUCT_NAME, "/f"]);
+    await execReg(["delete", RUN_KEY, "/v", resolveProductName(), "/f"]);
   } catch {
     // ignore — key may not exist
   }
@@ -78,7 +86,7 @@ export async function isAutoStartEnabled(): Promise<boolean> {
   if (process.platform !== "win32") return false;
   try {
     const { stdout } = await execReg(["query", RUN_KEY]);
-    return stdout.includes(PRODUCT_NAME);
+    return stdout.includes(resolveProductName());
   } catch {
     return false;
   }
@@ -89,17 +97,19 @@ export async function isAutoStartEnabled(): Promise<boolean> {
 export async function enableAutoStartMac(exePath: string): Promise<void> {
   if (process.platform !== "darwin") return;
   const { mkdir, writeFile } = await import("node:fs/promises");
+  const appName = resolveProductName().toLowerCase().replace(/\s+/g, "-");
   const plistDir = join(homedir(), "Library", "LaunchAgents");
-  const plistPath = join(plistDir, "ai.open-design.tray.plist");
+  const plistPath = join(plistDir, `ai.open-design.${appName}.plist`);
   await mkdir(plistDir, { recursive: true });
-  await writeFile(plistPath, generatePlist(exePath), "utf8");
+  await writeFile(plistPath, generatePlist(exePath, appName), "utf8");
 }
 
 export async function disableAutoStartMac(): Promise<void> {
   if (process.platform !== "darwin") return;
   try {
     const { unlink } = await import("node:fs/promises");
-    await unlink(join(homedir(), "Library", "LaunchAgents", "ai.open-design.tray.plist"));
+    const appName = resolveProductName().toLowerCase().replace(/\s+/g, "-");
+    await unlink(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${appName}.plist`));
   } catch {
     // ignore
   }
@@ -109,20 +119,21 @@ export async function isAutoStartEnabledMac(): Promise<boolean> {
   if (process.platform !== "darwin") return false;
   try {
     const { readFile } = await import("node:fs/promises");
-    await readFile(join(homedir(), "Library", "LaunchAgents", "ai.open-design.tray.plist"));
+    const appName = resolveProductName().toLowerCase().replace(/\s+/g, "-");
+    await readFile(join(homedir(), "Library", "LaunchAgents", `ai.open-design.${appName}.plist`));
     return true;
   } catch {
     return false;
   }
 }
 
-function generatePlist(exePath: string): string {
+function generatePlist(exePath: string, appName: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>ai.open-design.tray</string>
+  <string>ai.open-design.${appName}</string>
   <key>ProgramArguments</key>
   <array>
     <string>${exePath}</string>
