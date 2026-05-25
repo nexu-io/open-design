@@ -2587,10 +2587,10 @@ function DropZone({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileDialogPendingRef = useRef(false);
   const fileDialogCanShowLoadingRef = useRef(false);
-  const fileDialogLoadingFinishRef = useRef<(() => void) | undefined>();
-  const fileDialogFocusDelayRef = useRef<number | undefined>();
-  const fileDialogWarmupRef = useRef<number | undefined>();
-  const fileDialogStaleRef = useRef<number | undefined>();
+  const fileDialogLoadingFinishRef = useRef<(() => void) | undefined>(undefined);
+  const fileDialogFocusDelayRef = useRef<number | undefined>(undefined);
+  const fileDialogWarmupRef = useRef<number | undefined>(undefined);
+  const fileDialogStaleRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!directory || !onProcessingStart) return undefined;

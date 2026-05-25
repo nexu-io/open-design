@@ -43,7 +43,7 @@ export function SketchEditor({
   const drawingRef = useRef<SketchItem | null>(null);
   const [, force] = useState(0);
   const [showSaved, setShowSaved] = useState(false);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     return () => clearTimeout(savedTimerRef.current);
