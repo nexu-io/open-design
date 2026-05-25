@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -92,11 +93,11 @@ for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.
       return;
     }
     if (entry.flow === 'uploaded-image-renders-in-preview') {
-      await runUploadedImageRendersInPreviewFlow(page);
+      await runUploadedImageRendersInPreviewFlow(page, entry);
       return;
     }
     if (entry.flow === 'python-source-preview') {
-      await runPythonSourcePreviewFlow(page);
+      await runPythonSourcePreviewFlow(page, entry);
     }
   });
 }
@@ -118,7 +119,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -205,26 +206,97 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
   expect(resp.ok()).toBeTruthy();
 }
 
+async function listProjectFilesFromApi(
+  page: Page,
+  projectId: string,
+): Promise<Array<{ name: string; kind: string }>> {
+  const response = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(response.ok()).toBeTruthy();
+  const { files } = (await response.json()) as { files: Array<{ name: string; kind: string }> };
+  return files;
+}
+
+async function expectProjectFileToContain(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  expected: string,
+) {
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+      if (!response.ok()) return '';
+      return response.text();
+    }, { timeout: 15_000 })
+    .toContain(expected);
+}
+
+async function expectScenarioFiles(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  if (!entry.expectedFiles?.length) return;
+  const files = await listProjectFilesFromApi(page, projectId);
+  for (const expectedFile of entry.expectedFiles) {
+    const actual = files.find((file) => file.name === expectedFile.name);
+    expect(actual, `missing expected file ${expectedFile.name}`).toBeDefined();
+    if (expectedFile.kind) {
+      expect(actual?.kind).toBe(expectedFile.kind);
+    }
+    if (expectedFile.previewText) {
+      await expectProjectFileToContain(page, projectId, expectedFile.name, expectedFile.previewText);
+    }
+  }
+}
+
+async function expectScenarioPreviewText(page: Page, entry: UiScenario) {
+  if (!entry.expectedPreviewText) return;
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByText(entry.expectedPreviewText, { exact: false })).toBeVisible();
+}
+
+async function expectScenarioProjectState(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  await expectScenarioFiles(page, entry, projectId);
+  await expectScenarioPreviewText(page, entry);
+}
+
+async function expectProjectFilesToIncludeSuffixes(
+  page: Page,
+  projectId: string,
+  suffixes: string[],
+) {
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
+      return suffixes.every((suffix) => names.some((name) => name.endsWith(suffix)));
+    })
+    .toBe(true);
+}
+
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
-  if (await preview.isVisible().catch(() => false)) return;
+  if (await preview.isVisible()) return;
 
-  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace('.', '\\.'), 'i') });
-  if (await fileTab.isVisible().catch(() => false)) {
+  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace(/\./g, '\\.'), 'i') });
+  if (await fileTab.isVisible()) {
     await fileTab.click();
     return;
   }
 
-  await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
+  await page.getByRole('button', { name: new RegExp(fileName.replace(/\./g, '\\.')) }).click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
-async function runUploadedImageRendersInPreviewFlow(page: Page) {
+async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
   const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
   await seedProjectFile(page, projectId, 'brand.png', pngBase64, 'base64');
@@ -242,9 +314,10 @@ async function runUploadedImageRendersInPreviewFlow(page: Page) {
   await expect
     .poll(async () => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
     .toBe(true);
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
-async function runPythonSourcePreviewFlow(page: Page) {
+async function runPythonSourcePreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(page, projectId, 'app.py', 'def greet():\n    return "hello from python"\n');
   await page.reload();
@@ -252,9 +325,11 @@ async function runPythonSourcePreviewFlow(page: Page) {
 
   await expect(page.locator('.code-viewer')).toContainText('def greet');
   await expect(page.locator('.code-viewer')).toContainText('hello from python');
+  await expectScenarioFiles(page, entry, projectId);
 }
 
 async function runDesignFilesUploadFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'moodboard.png',
     mimeType: 'image/png',
@@ -278,9 +353,11 @@ async function runDesignFilesUploadFlow(page: Page) {
 
   await nameBtn.dblclick();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['moodboard.png']);
 }
 
 async function runDesignFilesDeleteFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
   page.on('dialog', async (dialog) => {
     await dialog.accept();
   });
@@ -319,9 +396,20 @@ async function runDesignFilesDeleteFlow(page: Page) {
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
+      return (
+        names.length === 1 &&
+        names.some((name) => name.endsWith('keep-me.png')) &&
+        names.every((name) => !name.endsWith('trash-me.png'))
+      );
+    })
+    .toBe(true);
 }
 
 async function runDesignFilesTabPersistenceFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
   const pngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
     'base64',
@@ -368,6 +456,7 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   await expect(restoredSecondTab).toBeVisible();
   await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'true');
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'false');
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['first-tab.png', 'second-tab.png']);
 }
 
 function homeDesignCard(page: Page, name: string): Locator {

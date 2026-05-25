@@ -73,6 +73,30 @@ describe('listDesignSystems frontmatter parsing (issue #1857)', () => {
     expect(ds?.swatches).toEqual(['#fafafa', '#dddddd', '#111111', '#ff3366']);
   });
 
+  it('extracts swatches from a markdown color table (issue #2813)', async () => {
+    const root = fresh();
+    writeDesignMd(
+      root,
+      'table-colors',
+      [
+        '# Table Colors',
+        '',
+        '## Color',
+        '',
+        '| Role | Token | Hex | Notes |',
+        '| --- | --- | --- | --- |',
+        '| Window canvas | `--window-background` | `#1a1a1d` | base surface |',
+        '| Border | `--border` | `#2a2a2e` | rules |',
+        '| Primary text | `--fg` | `#f5f5f7` | |',
+        '| Accent | `--accent` | `#0a84ff` | brand |',
+      ].join('\n'),
+    );
+
+    const [ds] = await listDesignSystems(root);
+    // [background, border/support, text, accent] picked from the table rows.
+    expect(ds?.swatches).toEqual(['#1a1a1d', '#2a2a2e', '#f5f5f7', '#0a84ff']);
+  });
+
   it('returns identical summary shape for legacy Markdown-only DESIGN.md (no frontmatter, regression guard)', async () => {
     const root = fresh();
     writeDesignMd(

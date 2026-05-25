@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-glitch-title",
-  "title": "故障艺术标题帧",
+  "title": "Glitch Title Frame",
   "version": "0.1.0",
-  "description": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero",
+  "description": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -41,11 +41,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「故障艺术标题帧」模板把我的内容做成一段「数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Glitch Title Frame template to turn my content into a digital-glitch, chromatic-offset, data-corruption title frame for a video transition or cyberpunk hero. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「故障艺术标题帧」模板把我的内容做成一段「数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "故障艺术标题帧"
+          "title": "Glitch Title Frame",
+          "title_i18n": {
+            "en": "Glitch Title Frame",
+            "zh-CN": "故障艺术标题帧"
+          }
         }
       ]
     },
@@ -74,5 +81,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Glitch Title Frame",
+    "zh-CN": "故障艺术标题帧"
+  },
+  "description_i18n": {
+    "en": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
+    "zh-CN": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero"
   }
 }

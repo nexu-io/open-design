@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-deck-open-slide-canvas",
-  "title": "1920 画布自由 Deck",
+  "title": "Open-Slide 1920 Canvas Deck",
   "version": "0.1.0",
-  "description": "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板",
+  "description": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -42,11 +42,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Open-Slide 1920 Canvas Deck template to turn my content into a locked 1920x1080 free-composition deck with React component-level layout. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "1920 画布自由 Deck"
+          "title": "Open-Slide 1920 Canvas Deck",
+          "title_i18n": {
+            "en": "Open-Slide 1920 Canvas Deck",
+            "zh-CN": "1920 画布自由 Deck"
+          }
         }
       ]
     },
@@ -75,5 +82,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Open-Slide 1920 Canvas Deck",
+    "zh-CN": "1920 画布自由 Deck"
+  },
+  "description_i18n": {
+    "en": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
+    "zh-CN": "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板"
   }
 }

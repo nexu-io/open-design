@@ -115,7 +115,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      res.json(await orbitService.start('manual'));
+      const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
+      res.json(await orbitService.start('manual', { locale }));
     } catch (err: any) {
       res
         .status(500)

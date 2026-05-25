@@ -31,6 +31,7 @@ export type SrcdocOptions = {
   editBridge?: boolean;
   paletteBridge?: boolean;
   initialPalette?: string | null;
+  previewFocusGuard?: boolean;
 };
 
 export function buildSrcdoc(
@@ -53,7 +54,8 @@ export function buildSrcdoc(
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
-  const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
+  const withFocusGuard = options.previewFocusGuard ? injectPreviewFocusGuard(withShim) : withShim;
+  const withDeck = options.deck ? injectDeckBridge(withFocusGuard, options.initialSlideIndex) : withFocusGuard;
   // Comment + Inspect share an element-selection bridge: both pick a
   // [data-od-id] / [data-screen-label] node and route the host's reply
   // to either the comment popover (annotate) or the inspect panel
@@ -72,7 +74,12 @@ export function buildSrcdoc(
     ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
     : withSelection;
   const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withEdit));
+  // The tweaks bridge is always injected — it's a passive listener that
+  // toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
+  // it to a per-call option would force iframe srcdoc regeneration (and a
+  // visible flash) every time the host toggle flips.
+  const withTweaks = injectTweaksBridge(withEdit);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
 }
 
 /**
@@ -665,6 +672,49 @@ function injectSandboxShim(doc: string): string {
   if (/<body[^>]*>/i.test(doc))
     return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
   return shim + doc;
+}
+
+function injectPreviewFocusGuard(doc: string): string {
+  const script = `<script data-od-preview-focus-guard>(function(){
+  var lastTrustedInputAt = 0;
+  function userActivated(){
+    return Date.now() - lastTrustedInputAt < 1000;
+  }
+  function markTrustedInput(event){
+    if (event && event.isTrusted) lastTrustedInputAt = Date.now();
+  }
+  document.addEventListener('pointerdown', function(event){
+    markTrustedInput(event);
+  }, true);
+  document.addEventListener('keydown', function(event){
+    markTrustedInput(event);
+  }, true);
+  try {
+    var nativeWindowFocus = window.focus && window.focus.bind(window);
+    Object.defineProperty(window, 'focus', {
+      configurable: true,
+      writable: true,
+      value: function(){
+        if (userActivated() && nativeWindowFocus) return nativeWindowFocus();
+      }
+    });
+  } catch (_) {}
+  try {
+    var nativeElementFocus = HTMLElement.prototype.focus;
+    Object.defineProperty(HTMLElement.prototype, 'focus', {
+      configurable: true,
+      writable: true,
+      value: function(options){
+        if (userActivated()) return nativeElementFocus.call(this, options);
+      }
+    });
+  } catch (_) {}
+})();</script>`;
+  if (/<head[^>]*>/i.test(doc))
+    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
+  if (/<body[^>]*>/i.test(doc))
+    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
+  return script + doc;
 }
 
 // Selection bridge: shared substrate for Comment mode and Inspect mode.
@@ -1344,11 +1394,24 @@ html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 // the scaled canvas ends up offset toward the bottom-right of any
 // preview that's smaller than 1920x1080 — exactly what users see in the
 // sandbox iframe. `place-content: center` centers the track itself.
+//
+// Framework decks (apps/daemon/src/prompts/deck-framework.ts) opt out:
+// their `fit()` already centers a `transform-origin: top left` stage with
+// an explicit `translate(tx, ty)` that assumes the stage's natural layout
+// position is (0, 0). If we force `place-content: center` on their
+// `.deck-shell` grid, the implicit track gets re-centered to
+// ((sw-1920)/2, (sh-1080)/2) and `fit()`'s translate stacks on top, so
+// the scaled stage lands ~1000px off-screen and the user sees a mostly-
+// black preview with a sliver of slide content in the top-left. Skip the
+// override whenever the framework's marker id is present.
 function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
-  const styleFix = `<style data-od-deck-fix>
+  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const styleFix = isFrameworkDeck
+    ? ''
+    : `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){
@@ -1618,4 +1681,123 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   observeSlides();
 })();</script>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
+}
+
+// The tweaks bridge lets the host toolbar toggle the visibility of the artifact's
+// native tweaks panel. Bidirectional: host posts `od:tweaks-panel-visible` to
+// drive panel visibility; bridge posts `od:tweaks-panel-state` back whenever the
+// artifact's own `× close` button or `T` shortcut flips the `.tw-hidden` class,
+// so the toolbar toggle stays in sync. Also reports `od:tweaks-available` so the
+// host can disable the toggle on artifacts without a `.tw-panel`.
+function injectTweaksBridge(doc: string): string {
+  // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
+  // opacity) so the CSS transition plays in both directions. `.tw-restore` is
+  // kept permanently hidden — the host toolbar is the only entry point.
+  const style = `<style data-od-tweaks-bridge-style>
+[data-od-tweaks-hidden] .tw-panel {
+  transform: translateX(calc(100% + 32px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.tw-restore { display: none !important; }
+</style>`;
+  const script = `<script data-od-tweaks-bridge>(function(){
+  // Synchronously hide BEFORE the artifact body parses so the panel never
+  // flashes on initial paint. The host removes the attribute via postMessage
+  // once it knows the desired state.
+  document.documentElement.setAttribute('data-od-tweaks-hidden', '');
+
+  var suppressEcho = false;
+  var observer = null;
+
+  function panelEl(){ return document.querySelector('.tw-panel'); }
+
+  function applyClassesToPanel(visible){
+    var panel = panelEl();
+    if (panel) panel.classList.toggle('tw-hidden', !visible);
+  }
+
+  function setPanelVisible(visible){
+    suppressEcho = true;
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !visible);
+    applyClassesToPanel(visible);
+    // Clear flag after the MutationObserver has had a chance to fire for this
+    // change so we don't echo our own host-driven toggles back to the host.
+    Promise.resolve().then(function(){ suppressEcho = false; });
+  }
+
+  function postState(){
+    var panel = panelEl();
+    if (!panel) return;
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-panel-state',
+        visible: !panel.classList.contains('tw-hidden'),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function postAvailability(){
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-available',
+        available: !!panelEl(),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function attachObserver(){
+    var panel = panelEl();
+    if (!panel || observer) return;
+    observer = new MutationObserver(function(){
+      if (suppressEcho) return;
+      postState();
+    });
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function onReady(){
+    // Capture the panel authored visibility BEFORE we apply the host hidden
+    // attribute. The bridge sets data-od-tweaks-hidden synchronously in head
+    // (before the body parses), so on entry to onReady the attribute is
+    // always present even though the artifact may have authored the panel
+    // as default-visible. Reading the panel class first is the only place
+    // we can still observe the author intent. Then drive the attribute,
+    // classes, and posted state from that captured value so a default
+    // visible tw-panel reports visible:true and the toolbar toggle starts
+    // ON. Issue surfaced in PR #1643 review.
+    var panel = panelEl();
+    var initialVisible = !!panel && !panel.classList.contains('tw-hidden');
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !initialVisible);
+    applyClassesToPanel(initialVisible);
+    attachObserver();
+    postAvailability();
+    // Post the captured initial visibility so the toolbar toggle reflects
+    // the default state on mount. Without this the toggle reads OFF while
+    // a default-visible tw-panel artifact clearly shows its panel and the
+    // user would have to click toggle-on then toggle-off to actually hide.
+    postState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onReady);
+  } else {
+    onReady();
+  }
+
+  window.addEventListener('message', function(ev){
+    if (!ev.data || ev.data.type !== 'od:tweaks-panel-visible') return;
+    setPanelVisible(!!ev.data.visible);
+  });
+})();</script>`;
+  const withStyle = /<\/head>/i.test(doc)
+    ? doc.replace(/<\/head>/i, style + '</head>')
+    : /<head[^>]*>/i.test(doc)
+      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
+      : style + doc;
+  // Inject the bridge as early as possible (inside <head>) so the synchronous
+  // attribute set runs before the artifact body parses.
+  if (/<\/head>/i.test(withStyle)) return withStyle.replace(/<\/head>/i, script + '</head>');
+  if (/<head[^>]*>/i.test(withStyle)) return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
+  return script + withStyle;
 }

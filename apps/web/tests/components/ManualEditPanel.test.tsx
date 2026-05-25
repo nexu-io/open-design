@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
+import { I18nProvider } from '../../src/i18n';
 import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normalizeManualEditStyles, type ManualEditDraft } from '../../src/components/ManualEditPanel';
 import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
@@ -52,12 +53,57 @@ describe('ManualEditPanel', () => {
     Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
   });
 
-  it('renders the style inspector without the advanced editor entry', () => {
+  it('restores manual edit tabs for content, HTML, and source edits', () => {
     renderPanel();
 
     expect(host.textContent).toContain('TYPOGRAPHY');
-    expect(host.textContent).not.toContain('Advanced');
-    expect(host.textContent).not.toContain('Content');
+    expect(host.textContent).toContain('Content');
+    expect(host.textContent).toContain('HTML');
+    expect(host.textContent).toContain('Source');
+  });
+
+  it('applies selected-element HTML from the manual edit panel', () => {
+    const onApplyPatch = vi.fn();
+    renderPanel({
+      onApplyPatch,
+      outerHtml: '<h1 data-od-id="hero-title">Updated</h1>',
+    });
+
+    clickTab('HTML');
+    const htmlArea = host.querySelector('.manual-edit-code.tall') as HTMLTextAreaElement | null;
+    if (!htmlArea) throw new Error('HTML editor not found');
+    expect(htmlArea.value).toBe('<h1 data-od-id="hero-title">Updated</h1>');
+    const apply = buttonByText('Apply HTML');
+    act(() => {
+      apply.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onApplyPatch).toHaveBeenCalledWith(
+      { id: 'hero-title', kind: 'set-outer-html', html: '<h1 data-od-id="hero-title">Updated</h1>' },
+      'HTML: Hero Title',
+    );
+  });
+
+  it('applies full source edits from the manual edit panel', () => {
+    const onApplyPatch = vi.fn();
+    renderPanel({
+      onApplyPatch,
+      fullSource: '<html><body><h1>Updated source</h1></body></html>',
+    });
+
+    clickTab('Source');
+    const sourceArea = host.querySelector('.manual-edit-code.tall') as HTMLTextAreaElement | null;
+    if (!sourceArea) throw new Error('Source editor not found');
+    expect(sourceArea.value).toBe('<html><body><h1>Updated source</h1></body></html>');
+    const apply = buttonByText('Apply Source');
+    act(() => {
+      apply.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onApplyPatch).toHaveBeenCalledWith(
+      { kind: 'set-full-source', source: '<html><body><h1>Updated source</h1></body></html>' },
+      'Full source',
+    );
   });
 
   it('allows returning from an element inspector to the page inspector', () => {
@@ -72,6 +118,55 @@ describe('ManualEditPanel', () => {
     });
 
     expect(onClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists hidden targets so they can be selected outside the canvas', () => {
+    const onSelectTarget = vi.fn();
+    const hiddenTarget: ManualEditTarget = {
+      ...target,
+      id: 'authors',
+      label: 'Authors',
+      tagName: 'section',
+      kind: 'container',
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+      isHidden: true,
+    };
+    renderPanel({ targets: [target, hiddenTarget], selectedTarget: null, onSelectTarget });
+
+    const hiddenRow = Array.from(host.querySelectorAll('.manual-edit-layer-row'))
+      .find((row) => row.textContent?.includes('Authors')) as HTMLButtonElement | undefined;
+    if (!hiddenRow) throw new Error('Hidden target row not found');
+    expect(hiddenRow.textContent).toContain('Hidden');
+
+    act(() => {
+      hiddenRow.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSelectTarget).toHaveBeenCalledWith(hiddenTarget);
+  });
+
+  it('renders layer panel labels from the active locale', () => {
+    const hiddenTarget: ManualEditTarget = {
+      ...target,
+      id: 'authors',
+      label: 'Authors',
+      tagName: 'section',
+      kind: 'container',
+      isHidden: true,
+    };
+    renderPanel({ targets: [hiddenTarget], selectedTarget: null, locale: 'fr' });
+
+    expect(host.textContent).toContain('Calques');
+    expect(host.textContent).toContain('Masqué');
+    expect(host.textContent).not.toContain('Layers');
+    expect(host.textContent).not.toContain('Hidden');
+  });
+
+  it('renders the empty layers message from the active locale', () => {
+    renderPanel({ targets: [], selectedTarget: null, locale: 'fr' });
+
+    expect(host.textContent).toContain('Aucun calque modifiable trouvé.');
+    expect(host.textContent).not.toContain('No editable layers found.');
   });
 
   it('normalizes font stacks and writes a usable font-family value', () => {
@@ -419,6 +514,48 @@ describe('ManualEditPanel', () => {
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { flexDirection: 'column' }, 'Style: Hero Title');
   });
 
+  it('keeps layout controls enabled for hidden layout containers', () => {
+    const onStyleChange = vi.fn();
+    const hiddenLayoutTarget: ManualEditTarget = {
+      ...target,
+      id: 'hidden-section',
+      label: 'Hidden Section',
+      tagName: 'section',
+      kind: 'container',
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+      isHidden: true,
+      isLayoutContainer: true,
+    };
+    renderPanel({
+      onStyleChange,
+      targets: [hiddenLayoutTarget],
+      selectedTarget: hiddenLayoutTarget,
+      styles: {
+        ...emptyManualEditStyles(),
+        gap: '12px',
+        flexDirection: 'row',
+      },
+    });
+
+    const layoutSection = sectionByTitle('LAYOUT');
+    expect(layoutSection.classList.contains('cc-section-inactive')).toBe(false);
+    expect(layoutSection.textContent).not.toContain('Select a container or group to edit layout.');
+    const gapIncrease = layoutSection.querySelector('button[aria-label="Gap increase"]') as HTMLButtonElement | null;
+    const directionSelect = layoutSection.querySelector('select') as HTMLSelectElement | null;
+    if (!gapIncrease || !directionSelect) throw new Error('Layout controls not found');
+    expect(gapIncrease.disabled).toBe(false);
+    expect(directionSelect.disabled).toBe(false);
+
+    act(() => {
+      gapIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      directionSelect.value = 'column';
+      directionSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+
+    expect(onStyleChange).toHaveBeenCalledWith('hidden-section', { gap: '13px' }, 'Style: Hidden Section');
+    expect(onStyleChange).toHaveBeenCalledWith('hidden-section', { flexDirection: 'column' }, 'Style: Hidden Section');
+  });
+
   it('summarizes full-source history entries without rendering the full file', () => {
     const source = '<html><body>' + 'x'.repeat(10_000) + '</body></html>';
 
@@ -435,6 +572,20 @@ describe('ManualEditPanel', () => {
     return section;
   }
 
+  function buttonByText(text: string): HTMLButtonElement {
+    const button = Array.from(host.querySelectorAll('button'))
+      .find((candidate) => candidate.textContent === text) as HTMLButtonElement | undefined;
+    if (!button) throw new Error(`${text} button not found`);
+    return button;
+  }
+
+  function clickTab(text: string) {
+    const button = buttonByText(text);
+    act(() => {
+      button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+  }
+
   function renderPanel({
     onDraftChange = vi.fn<OnDraftChange>(),
     onApplyPatch = vi.fn<OnApplyPatch>(),
@@ -442,10 +593,15 @@ describe('ManualEditPanel', () => {
     onStyleChange = vi.fn<OnStyleChange>(),
     onInvalidStyle = vi.fn<OnInvalidStyle>(),
     onClearSelection = vi.fn<OnClearSelection>(),
+    onSelectTarget = vi.fn<(target: ManualEditTarget) => void>(),
     attributesText = '{}',
+    targets = [target],
     selectedTarget = target,
     styles = emptyManualEditStyles(),
     pageStylesEnabled = true,
+    outerHtml = target.outerHtml,
+    fullSource = '<html></html>',
+    locale,
   }: {
     onDraftChange?: OnDraftChange;
     onApplyPatch?: OnApplyPatch;
@@ -453,22 +609,27 @@ describe('ManualEditPanel', () => {
     onStyleChange?: OnStyleChange;
     onInvalidStyle?: OnInvalidStyle;
     onClearSelection?: OnClearSelection;
+    onSelectTarget?: (target: ManualEditTarget) => void;
     attributesText?: string;
+    targets?: ManualEditTarget[];
     selectedTarget?: ManualEditTarget | null;
     styles?: ReturnType<typeof emptyManualEditStyles>;
     pageStylesEnabled?: boolean;
+    outerHtml?: string;
+    fullSource?: string;
+    locale?: 'en' | 'fr';
   } = {}) {
     const draft = {
-      ...emptyManualEditDraft('<html></html>'),
+      ...emptyManualEditDraft(fullSource),
       text: 'Updated copy',
       attributesText,
       styles,
-      outerHtml: target.outerHtml,
+      outerHtml,
     };
     act(() => {
-      root.render(
+      const panel = (
         <ManualEditPanel
-          targets={[target]}
+          targets={targets}
           selectedTarget={selectedTarget}
           draft={draft}
           history={[]}
@@ -476,7 +637,7 @@ describe('ManualEditPanel', () => {
           canUndo={false}
           canRedo={false}
           pageStylesEnabled={pageStylesEnabled}
-          onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
+          onSelectTarget={onSelectTarget}
           onDraftChange={onDraftChange}
           onStyleChange={onStyleChange}
           onInvalidStyle={onInvalidStyle}
@@ -486,7 +647,10 @@ describe('ManualEditPanel', () => {
           onCancelDraft={vi.fn<() => void>()}
           onUndo={vi.fn<() => void>()}
           onRedo={vi.fn<() => void>()}
-        />,
+        />
+      );
+      root.render(
+        locale ? <I18nProvider initial={locale}>{panel}</I18nProvider> : panel,
       );
     });
   }

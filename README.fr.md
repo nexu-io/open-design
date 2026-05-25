@@ -1,15 +1,15 @@
-# Open Design
+# Open Design — l’alternative open source officielle à [Claude Design][cd]
+
+> **Open Design est l’alternative open source et local-first à [Claude Design][cd].** Déployable sur le web, BYOK à chaque couche : vos CLI de coding agents détectées automatiquement dans le `PATH` deviennent le design engine, piloté par les catalogues de **Skills** et de **Design Systems** du repo. Aucune CLI ? Le proxy BYOK multi-provider exécute la même boucle, sans spawn local.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` est là. L'ancien monde du design s'arrête ici.
 >
-> Une alternative open source et agent-native à Claude Design / Figma — 40k étoiles en deux semaines nous ont menés jusqu'ici. **Nous avons besoin de toi pour faire le reste du chemin.**
+> Une alternative open source à Claude Design / Figma — 40k étoiles en deux semaines nous ont menés jusqu'ici. **Nous avons besoin de toi pour faire le reste du chemin.**
 >
 > **Itération rapide sur `main`** — 0.8.0 est la prochaine phase d'Open Design. Envoie une PR, balance une idée folle, signale un bug — ce que tu apportes, c'est ce que ce mouvement devient.
 >
 > → [**Lire l'annonce · télécharger l'installateur · rejoindre le mouvement**](https://github.com/nexu-io/open-design/discussions/1727) · s'installe à côté de votre 0.7 actuel.
-
-> **L’alternative open source à [Claude Design][cd].** Local-first, déployable sur le web, BYOK à chaque couche : vos CLI de coding agents détectées automatiquement dans le `PATH` deviennent le design engine, piloté par les catalogues de **Skills** et de **Design Systems** du repo. Aucune CLI ? Le proxy BYOK multi-provider exécute la même boucle, sans spawn local.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design : couverture éditoriale, design avec l’agent sur votre laptop" width="100%" />
@@ -733,7 +733,7 @@ Guide complet, critères de merge, style de code et refus fréquents → [`CONTR
 Merci à toutes les personnes qui font avancer Open Design : code, docs, retours, nouveaux Skills, nouveaux Design Systems ou issues bien ciblées. Chaque vraie contribution compte.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Contributeurs Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-24" alt="Contributeurs Open Design" />
 </a>
 
 Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) est le point d’entrée.
@@ -750,9 +750,9 @@ Le SVG ci-dessus est régénéré chaque jour par [`.github/workflows/metrics.ym
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
-    <img alt="Historique des stars Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-24" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-24" />
+    <img alt="Historique des stars Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-24" />
   </picture>
 </a>
 

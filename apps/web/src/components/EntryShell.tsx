@@ -10,21 +10,38 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type ConnectorDetail,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
-import {
-  isOpenDesignHostAvailable,
-  pickAndImportHostProject,
-  type OpenDesignHostProjectImportSuccess,
-} from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
   trackHomeToolbarClick,
+  trackOnboardingClick,
+  trackOnboardingCompleteResult,
+  trackOnboardingRuntimeScanResult,
+  trackPageView,
 } from '../analytics/events';
-import { LOCALE_LABEL, LOCALES, useI18n, useT, type Locale } from '../i18n';
+import {
+  clearOnboardingSessionId,
+  getOrCreateOnboardingSessionId,
+} from '../analytics/onboarding-session';
+import type {
+  TrackingOnboardingArea,
+  TrackingOnboardingStepIndex,
+  TrackingOnboardingStepName,
+  TrackingOnboardingClickElement,
+  TrackingOnboardingClickAction,
+  TrackingOnboardingRuntimeType,
+  TrackingOnboardingCompletionResult,
+  TrackingOnboardingCompletionType,
+  TrackingCliProviderId,
+} from '@open-design/contracts/analytics';
+import { agentIdToTracking } from '@open-design/contracts/analytics';
+import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
   AgentInfo,
@@ -43,15 +60,13 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { apiProtocolLabel } from '../utils/apiProtocol';
-import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
+import { UpdaterPopup } from './UpdaterPopup';
 import { GithubStarBadge } from './GithubStarBadge';
-import { formatStars, GITHUB_REPO_URL, useGithubStars } from './useGithubStars';
 import { HomeView } from './HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -72,7 +87,6 @@ import type {
   PluginShareProjectOutcome,
 } from '../state/projects';
 import { TasksView } from './TasksView';
-import { Toast } from './Toast';
 import {
   API_KEY_PLACEHOLDERS,
   API_PROTOCOL_TABS,
@@ -90,27 +104,69 @@ import { fetchProviderModels } from '../providers/provider-models';
 // markup — both surfaces are always present, and CSS toggles
 // `display` based on `--compact-topbar` breakpoint (900px).
 
-// Default scenario plugin for each project kind. The mapping lives in
-// `@open-design/contracts` so the daemon's `/api/projects` and
-// `/api/runs` fallbacks resolve to the same plugin id when no
+// Default scenario plugin for each project kind/intent. The mapping
+// lives in `@open-design/contracts` so the daemon's `/api/projects`
+// and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-function defaultPluginIdForKind(metadata: ProjectMetadata): string | null {
-  return defaultScenarioPluginIdForKind(metadata.kind);
+function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
+  return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
 
 function defaultPluginInputsForCreate(
   input: CreateInput,
   pluginId: string | null,
 ): Record<string, unknown> | null {
-  if (pluginId !== 'od-media-generation') return null;
   const kind = input.metadata.kind;
+  const projectName = input.name.trim();
+
+  if (pluginId === 'example-web-prototype') {
+    return {
+      artifactKind: input.metadata.includeLandingPage
+        ? 'landing page'
+        : 'web prototype',
+      fidelity: input.metadata.fidelity ?? 'high-fidelity',
+      audience: 'product evaluators',
+      designSystem: 'the active project design system',
+      template: input.metadata.templateLabel ?? 'the bundled web prototype seed',
+    };
+  }
+
+  if (pluginId === 'example-simple-deck') {
+    return {
+      deckType: 'pitch deck',
+      topic: projectName || 'the user brief',
+      audience: 'decision makers',
+      slideCount: '10-15 pages',
+      speakerNotes: input.metadata.speakerNotes
+        ? 'include speaker notes'
+        : 'no speaker notes',
+      designSystem: 'the active project design system',
+    };
+  }
+
+  if (pluginId === 'od-new-generation') {
+    const templateLabel = input.metadata.templateLabel?.trim();
+    const artifactKind =
+      kind === 'template'
+        ? 'artifact based on a saved template'
+        : kind === 'other'
+          ? 'custom design artifact'
+          : `${kind} artifact`;
+    return {
+      artifactKind,
+      audience: 'product and design reviewers',
+      topic: templateLabel || projectName || 'the user brief',
+    };
+  }
+
+  if (pluginId !== 'od-media-generation') return null;
   if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return null;
 
   const promptTemplate = input.metadata.promptTemplate;
   const subject =
     promptTemplate?.prompt?.trim()
-    || input.name.trim()
+    || projectName
     || promptTemplate?.title?.trim()
     || `${kind} concept`;
   const style =
@@ -132,68 +188,6 @@ function defaultPluginInputsForCreate(
 }
 
 // Theme options exposed in the avatar-popover appearance submenu.
-// Mirrors the segmented control in `SettingsDialog` so the same three
-// choices (System / Light / Dark) are available from both surfaces.
-type AppearanceThemeLabel =
-  | 'settings.themeSystem'
-  | 'settings.themeLight'
-  | 'settings.themeDark';
-
-const APPEARANCE_THEMES: ReadonlyArray<{
-  value: AppTheme;
-  labelKey: AppearanceThemeLabel;
-}> = [
-  { value: 'system', labelKey: 'settings.themeSystem' },
-  { value: 'light', labelKey: 'settings.themeLight' },
-  { value: 'dark', labelKey: 'settings.themeDark' },
-];
-
-const APPEARANCE_LABEL: Record<AppTheme, AppearanceThemeLabel> = {
-  system: 'settings.themeSystem',
-  light: 'settings.themeLight',
-  dark: 'settings.themeDark',
-};
-
-type Translator = ReturnType<typeof useT>;
-
-// Mirrors the chip text the InlineModelSwitcher renders, so the
-// collapsed menu item inside the settings dropdown can advertise
-// the same active mode/agent/model without duplicating the
-// labelling logic. Returned as a structured tuple so the menu can
-// style the primary text and meta independently.
-function describeModelChip(
-  config: AppConfig,
-  agents: AgentInfo[],
-  t: Translator,
-): { mode: string; primary: string; model: string } {
-  const currentAgent = agents.find((a) => a.id === config.agentId) ?? null;
-  const currentChoice =
-    (config.agentId && config.agentModels?.[config.agentId]) || {};
-  const currentModelId =
-    currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
-  const currentModelLabel =
-    currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
-
-  if (config.mode === 'daemon') {
-    return {
-      mode: t('inlineSwitcher.chipCli'),
-      primary: currentAgent?.name ?? t('inlineSwitcher.noAgent'),
-      model:
-        currentModelLabel && currentModelId !== 'default'
-          ? currentModelLabel
-          : t('inlineSwitcher.modelDefault'),
-    };
-  }
-  const apiProtocol = config.apiProtocol ?? 'anthropic';
-  // KNOWN_PROVIDERS is consulted indirectly via apiProtocolLabel —
-  // looking it up here for the menu meta would diverge from the
-  // chip, so we keep the surface identical to InlineModelSwitcher.
-  return {
-    mode: t('inlineSwitcher.chipByok'),
-    primary: apiProtocolLabel(apiProtocol),
-    model: config.model.trim() || t('inlineSwitcher.modelDefault'),
-  };
-}
 
 interface Props {
   skills: SkillSummary[];
@@ -240,7 +234,7 @@ interface Props {
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
-  ) => void;
+  ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -251,11 +245,22 @@ interface Props {
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
-  onDeleteProject: (id: string) => void;
+  onDeleteProject: (id: string) => Promise<boolean | void> | boolean | void;
   onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
-  renderDesignSystemCreation?: (onBack: () => void) => ReactNode;
+  renderDesignSystemCreation?: (
+    onBack: () => void,
+    hooks?: {
+      onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
+      onGenerateSettled?: (
+        snapshot: DesignSystemGenerateSnapshot,
+        outcome:
+          | { result: 'success' }
+          | { result: 'failed'; errorCode: string },
+      ) => void;
+    },
+  ) => ReactNode;
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
@@ -357,7 +362,6 @@ export function EntryShell({
   onCompleteOnboarding,
 }: Props) {
   const t = useT();
-  const { locale, setLocale } = useI18n();
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
   // to /design-systems lands on that section. We derive the active
@@ -365,32 +369,12 @@ export function EntryShell({
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const [languageExpanded, setLanguageExpanded] = useState(false);
-  const [appearanceExpanded, setAppearanceExpanded] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
-  const [folderImportError, setFolderImportError] = useState<{
-    message: string;
-    details?: string;
-  } | null>(null);
-  const [chipImporting, setChipImporting] = useState(false);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const analytics = useAnalytics();
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
-  // Star count + active-model summary are kept in render scope so
-  // the dropdown's collapsed rows can mirror what the chips show
-  // when CSS unhides them on narrow viewports. Both surfaces are
-  // always rendered; only `display` flips per the media query.
-  const starCount = useGithubStars();
-  const modelSummary = useMemo(
-    () => describeModelChip(config, agents, t),
-    [config, agents, t],
-  );
-
-
   function changeView(next: EntryViewKind) {
     const navElement = navElementForView(next);
     if (navElement) {
@@ -447,9 +431,9 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
-    const pluginId = defaultPluginIdForKind(input.metadata);
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
-    onCreateProject({
+    return onCreateProject({
       ...input,
       ...(pluginId ? { pluginId } : {}),
       ...(pluginInputs ? { pluginInputs } : {}),
@@ -491,11 +475,12 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
+      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
     };
     onCreateProject({
       name,
       skillId: payload.skillId ?? null,
-      designSystemId: null,
+      designSystemId: payload.designSystemId ?? null,
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
@@ -510,301 +495,23 @@ export function EntryShell({
     });
   }
 
-  // Stage B of plugin-driven-flow-plan: the rail's "From folder" chip
-  // dispatcher. Prefers the Electron-native folder picker when
-  // available so a single click lands the user in an imported
-  // project. Browser-only shells fall back to the existing modal
-  // path so the user can paste a baseDir.
-  async function handleChipFolderImport() {
-    if (chipImporting) return;
-    // PR #974 trust boundary: the renderer cannot pick a folder directly
-    // anymore — the host exposes `pickAndImport` instead (atomic pick +
-    // HMAC-gated import). On the web, fall back to opening the New
-    // Project modal so the user can paste a baseDir manually.
-    if (
-      isOpenDesignHostAvailable() &&
-      onImportFolderResponse
-    ) {
-      setChipImporting(true);
-      try {
-        const result = await pickAndImportHostProject();
-        if (!result || ('canceled' in result && result.canceled === true)) return;
-        if (result.ok === true) {
-          await onImportFolderResponse(result);
-          return;
-        }
-        setFolderImportError(formatPickAndImportFailure(result));
-      } finally {
-        setChipImporting(false);
-      }
-      return;
-    }
-    openNewProject('prototype');
-  }
-
   function finishOnboarding() {
     onCompleteOnboarding();
     changeView('home');
   }
 
-  // Dismiss the avatar dropdown on outside-click / Escape so it
-  // behaves like the project-view AvatarMenu (which uses the same
-  // shell CSS). Collapse the inline language list whenever the
-  // dropdown is closed, so the next open starts compact again.
-  useEffect(() => {
-    if (!avatarMenuOpen) {
-      setLanguageExpanded(false);
-      setAppearanceExpanded(false);
-      return;
-    }
-    const onClick = (e: MouseEvent) => {
-      if (!avatarMenuRef.current) return;
-      if (!avatarMenuRef.current.contains(e.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
-
   const avatarMenu = (
-    <div className="avatar-menu" ref={avatarMenuRef}>
-      <button
-        type="button"
-        className="settings-icon-btn"
-        onClick={() => setAvatarMenuOpen((v) => !v)}
-        title={t('entry.openSettingsTitle')}
-        aria-label={t('entry.openSettingsAria')}
-        aria-haspopup="menu"
-        aria-expanded={avatarMenuOpen}
-      >
-        <Icon name="settings" size={17} />
-      </button>
-      {avatarMenuOpen ? (
-        <div className="avatar-popover" role="menu">
-          {/* Collapsed-topbar rows. Always rendered so SSR and the
-              client agree on the markup; CSS @media (max-width: 900px)
-              flips their `display` so they only show when the
-              matching topbar chips are themselves hidden. */}
-          <a
-            className="avatar-item avatar-item--compact-only"
-            href={GITHUB_REPO_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={() => setAvatarMenuOpen(false)}
-            data-testid="entry-avatar-github"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="github" size={14} />
-            </span>
-            <span>{t('entry.githubStarLabel')}</span>
-            <span className="avatar-item-meta">
-              {starCount === null ? '—' : formatStars(starCount)}
-            </span>
-          </a>
-          <button
-            type="button"
-            className="avatar-item avatar-item--compact-only"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              onOpenSettings('execution');
-            }}
-            data-testid="entry-avatar-model"
-            title={t('inlineSwitcher.chipTitle')}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="sparkles" size={14} />
-            </span>
-            <span className="avatar-item-stack">
-              <span className="avatar-item-stack__top">
-                {modelSummary.mode} · {modelSummary.primary}
-              </span>
-              <span className="avatar-item-stack__sub">
-                {modelSummary.model}
-              </span>
-            </span>
-          </button>
-          <div
-            className="avatar-popover__divider avatar-popover__divider--compact-only"
-            aria-hidden
-          />
-          <a
-            className="avatar-item"
-            href="https://x.com/nexudotio"
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={() => setAvatarMenuOpen(false)}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="external-link" size={14} />
-            </span>
-            <span>Follow @nexudotio on X</span>
-          </a>
-          <a
-            className="avatar-item"
-            href="https://discord.gg/BYShPgWpq"
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={() => setAvatarMenuOpen(false)}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="external-link" size={14} />
-            </span>
-            <span>Join Discord</span>
-          </a>
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            aria-haspopup="menu"
-            aria-expanded={languageExpanded}
-            onClick={() => setLanguageExpanded((v) => !v)}
-            data-testid="entry-avatar-language"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="languages" size={14} />
-            </span>
-            <span>{t('settings.language')}</span>
-            <span className="avatar-item-meta">{LOCALE_LABEL[locale]}</span>
-            <Icon
-              name={languageExpanded ? 'chevron-down' : 'chevron-right'}
-              size={11}
-              className="avatar-item-chevron"
-            />
-          </button>
-          {languageExpanded ? (
-            <div className="avatar-language-list" role="group" aria-label={t('settings.language')}>
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`avatar-item avatar-item--lang${active ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setLocale(code as Locale);
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span className="avatar-item-icon" aria-hidden>
-                      {active ? <Icon name="check" size={14} /> : null}
-                    </span>
-                    <span>{LOCALE_LABEL[code]}</span>
-                    <span className="avatar-item-meta">{code}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          {/* Appearance — system / light / dark. Mirrors the language
-              picker: a toggle row that expands a nested radio group so
-              the dropdown can host quick theme switching without
-              opening the full Settings dialog. The active theme is
-              echoed in the meta slot so the row reads as status when
-              collapsed. */}
-          <button
-            type="button"
-            className="avatar-item"
-            aria-haspopup="menu"
-            aria-expanded={appearanceExpanded}
-            onClick={() => setAppearanceExpanded((v) => !v)}
-            data-testid="entry-avatar-appearance"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="sun-moon" size={14} />
-            </span>
-            <span>{t('settings.appearance')}</span>
-            <span className="avatar-item-meta">
-              {t(APPEARANCE_LABEL[config.theme ?? 'system'])}
-            </span>
-            <Icon
-              name={appearanceExpanded ? 'chevron-down' : 'chevron-right'}
-              size={11}
-              className="avatar-item-chevron"
-            />
-          </button>
-          {appearanceExpanded ? (
-            <div
-              className="avatar-language-list"
-              role="group"
-              aria-label={t('settings.appearance')}
-            >
-              {APPEARANCE_THEMES.map(({ value, labelKey }) => {
-                const active = (config.theme ?? 'system') === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`avatar-item avatar-item--lang${active ? ' is-active' : ''}`}
-                    onClick={() => {
-                      onThemeChange(value);
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span className="avatar-item-icon" aria-hidden>
-                      {active ? <Icon name="check" size={14} /> : null}
-                    </span>
-                    <span>{t(labelKey)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              openIntegrationTab('use-everywhere');
-            }}
-            data-testid="entry-avatar-use-everywhere"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="hammer" size={14} />
-            </span>
-            <span>{t('entry.useEverywhereTitle')}</span>
-          </button>
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              // Toolbar→settings telemetry (CSV row "home_toolbar_click /
-              // element=settings") fires here rather than on the avatar
-              // icon: that icon now toggles the popover (a navigation
-              // step), and the Settings dialog only opens from this row.
-              // Co-locating the event with the dialog-opening side effect
-              // keeps the funnel honest against the prior single-click
-              // behavior.
-              trackHomeToolbarClick(analytics.track, {
-                page_name: 'home',
-                area: 'toolbar',
-                element: 'settings',
-              });
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="settings" size={14} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      className="settings-icon-btn"
+      onClick={() => onOpenSettings()}
+      title={t('entry.openSettingsTitle')}
+      aria-label={t('entry.openSettingsAria')}
+    >
+      <Icon name="settings" size={17} />
+    </button>
   );
+
 
   if (view === 'onboarding') {
     return (
@@ -841,6 +548,16 @@ export function EntryShell({
           <div className="entry-main__topbar">
             <div className="entry-main__topbar-chips">
               <GithubStarBadge />
+              <a
+                className="entry-discord-badge"
+                href="https://discord.gg/mHAjSMV6gz"
+                aria-label="Join the Open Design Discord"
+                title="Join the Open Design Discord"
+                data-testid="entry-discord-badge"
+              >
+                <Icon name="discord" size={14} className="entry-discord-badge__icon" />
+                <span className="entry-discord-badge__label">Join Discord</span>
+              </a>
               <InlineModelSwitcher
                 config={config}
                 agents={agents}
@@ -875,6 +592,7 @@ export function EntryShell({
                 </span>
               </button>
             </div>
+            <UpdaterPopup />
             {avatarMenu}
           </div>
           <div
@@ -886,11 +604,12 @@ export function EntryShell({
               <HomeView
                 projects={projects}
                 projectsLoading={projectsLoading}
+                designSystems={designSystems}
+                defaultDesignSystemId={defaultDesignSystemId}
                 onSubmit={handlePluginLoopSubmit}
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
                 onBrowseRegistry={() => changeView('plugins')}
-                onImportFolder={handleChipFolderImport}
                 onOpenNewProject={(tab) => {
                   // Stage B of plugin-driven-flow-plan: the rail's
                   // "From template" chip wires through here so the
@@ -951,6 +670,7 @@ export function EntryShell({
                   </header>
                   <DesignSystemsTab
                     systems={designSystems}
+                    templates={templates}
                     selectedId={defaultDesignSystemId}
                     onSelect={onChangeDefaultDesignSystem}
                     onCreate={onCreateDesignSystem}
@@ -987,26 +707,20 @@ export function EntryShell({
         templates={templates}
         {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
         promptTemplates={promptTemplates}
+        mediaProviders={config.mediaProviders}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
         loading={skillsLoading}
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
         {...(onImportFolder ? { onImportFolder } : {})}
+        {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
         onOpenConnectorsTab={() => {
           setNewProjectOpen(false);
           openIntegrationTab('connectors');
         }}
         onClose={() => setNewProjectOpen(false)}
       />
-      {folderImportError ? (
-        <Toast
-          message={folderImportError.message}
-          details={folderImportError.details ?? null}
-          role="alert"
-          onDismiss={() => setFolderImportError(null)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -1038,10 +752,22 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  renderDesignSystemCreation?: (onBack: () => void) => ReactNode;
+  renderDesignSystemCreation?: (
+    onBack: () => void,
+    hooks?: {
+      onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
+      onGenerateSettled?: (
+        snapshot: DesignSystemGenerateSnapshot,
+        outcome:
+          | { result: 'success' }
+          | { result: 'failed'; errorCode: string },
+      ) => void;
+    },
+  ) => ReactNode;
   onFinish: () => void;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'local' | 'byok' | null>(null);
   const [designSource, setDesignSource] = useState<'github' | 'upload' | 'prompt' | null>(null);
@@ -1067,6 +793,18 @@ function OnboardingView({
     useCase: [] as string[],
     source: '',
   });
+  // Live mirror of `profile` so closures that fire faster than React
+  // commits (rapid dropdown picks, the Finish-setup click after the
+  // last onChange) read the latest selection instead of the value the
+  // closure captured at render-time. Multi-select use_case in
+  // particular needed this: two quick adds within one commit cycle
+  // both read `previous = new Set(profile.useCase = stale [])` and
+  // emitted on both — fine — but reading any cumulative summary off
+  // `profile` directly missed the second pick until the next commit.
+  const profileRef = useRef(profile);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
   const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const cliScanTokenRef = useRef(0);
   const apiProtocol = config.apiProtocol ?? 'anthropic';
@@ -1121,10 +859,178 @@ function OnboardingView({
     };
   }, []);
 
+  // Onboarding step exposure. Design-system intake used to live here
+  // as step 3, but it is temporarily removed from first-run
+  // onboarding and remains available from the app surfaces.
+  //
+  // We do NOT clear on unmount: route changes can remount the shell
+  // during first-run setup. Skip / Back / last-step Continue clear
+  // inline in their respective handlers below; abandoned sessions clear
+  // on sessionStorage tab close.
+  const onboardingSessionIdRef = useRef<string>('');
+  if (!onboardingSessionIdRef.current) {
+    onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
+  }
+  useEffect(() => {
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    let area: TrackingOnboardingArea;
+    let stepIndex: TrackingOnboardingStepIndex;
+    let stepName: TrackingOnboardingStepName;
+    if (step === 0) {
+      area = 'runtime';
+      stepIndex = '1';
+      stepName = 'connect';
+    } else if (step === 1) {
+      area = 'about_you';
+      stepIndex = '2';
+      stepName = 'about_you';
+    } else {
+      area = 'design_system';
+      stepIndex = '3';
+      stepName = 'design_system';
+    }
+    trackPageView(analytics.track, {
+      page_name: 'onboarding',
+      area,
+      step_index: stepIndex,
+      step_name: stepName,
+      onboarding_session_id: onboardingSessionId,
+    });
+  }, [analytics.track, step]);
+
+  // Onboarding analytics helpers. Wall-clock start so the lifecycle
+  // result event can carry `duration_ms`; `runtime` state is the user's
+  // current pick at click time so `runtime_type` rides along on every
+  // click. The `_lifecycleReportedRef` guards against double-firing the
+  // completion event when the user fires both Skip and unmount in the
+  // same tick (the unmount path also clears the session id; see the
+  // PR #2453 follow-up).
+  const onboardingStartedAtRef = useRef<number>(Date.now());
+  const lifecycleReportedRef = useRef(false);
+  function currentRuntimeType(): TrackingOnboardingRuntimeType {
+    if (runtime === 'local') return 'local_cli';
+    if (runtime === 'byok') return 'byok';
+    return 'none';
+  }
+  function stepInfo(stepIdx: number): {
+    area: TrackingOnboardingArea;
+    stepIndex: TrackingOnboardingStepIndex;
+    stepName: TrackingOnboardingStepName;
+  } {
+    if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
+    if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
+    return { area: 'design_system', stepIndex: '3', stepName: 'design_system' };
+  }
+  // Pure mapping from `DesignSystemGenerateSnapshot` to the v2
+  // `TrackingOnboardingSourceType` enum. Single-source batches collapse
+  // to that source's literal; mixed batches go to `'mixed'`; the empty
+  // batch falls back to `'text'` when the user typed a brand
+  // description (prompt-only path, which the v2 contract reserves the
+  // `'text'` literal for) and `'none'` otherwise. The pre-fix version
+  // shipped `'none'` for prompt-only too, losing the prompt-only vs
+  // truly-empty distinction the dashboard needs.
+  function deriveOnboardingSourceType(
+    snapshot: DesignSystemGenerateSnapshot,
+  ): import('@open-design/contracts/analytics').TrackingOnboardingSourceType {
+    if (snapshot.sourceCount === 0) {
+      return snapshot.hasBrandDescription ? 'text' : 'none';
+    }
+    if (snapshot.githubRepoCount === snapshot.sourceCount) return 'github_repo';
+    if (snapshot.localFolderCount === snapshot.sourceCount) return 'local_code';
+    if (snapshot.figFileCount === snapshot.sourceCount) return 'fig';
+    if (snapshot.assetFileCount === snapshot.sourceCount) return 'assets';
+    return 'mixed';
+  }
+  function emitOnboardingClick(
+    element: TrackingOnboardingClickElement,
+    action: TrackingOnboardingClickAction,
+    extra: Partial<Omit<
+      Parameters<typeof trackOnboardingClick>[1],
+      'page_name' | 'area' | 'element' | 'action' | 'step_index' | 'step_name' | 'onboarding_session_id'
+    >> = {},
+  ): void {
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    const info = stepInfo(step);
+    trackOnboardingClick(analytics.track, {
+      page_name: 'onboarding',
+      area: info.area,
+      element,
+      action,
+      step_index: info.stepIndex,
+      step_name: info.stepName,
+      onboarding_session_id: onboardingSessionId,
+      ...extra,
+    });
+  }
+  function emitOnboardingComplete(
+    result: TrackingOnboardingCompletionResult,
+    completionType: TrackingOnboardingCompletionType,
+    extra: {
+      errorCode?: string;
+      // Generate-path callers pass the embedded DS creation flow's
+      // snapshot so the wire row reflects the actual source-count
+      // and brand-description the user typed, not the (always-null)
+      // `designSource` card-pick state. E2E (2026-05-21) showed the
+      // user can click Generate without first clicking one of the
+      // three source-type cards — they go straight to typing a
+      // brand prompt — so reading `designSource` alone yielded
+      // `has_design_system_request: false` despite a real request.
+      sourceSnapshot?: DesignSystemGenerateSnapshot;
+    } = {},
+  ): void {
+    if (lifecycleReportedRef.current) return;
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    lifecycleReportedRef.current = true;
+    const info = stepInfo(step);
+    const snapshot = extra.sourceSnapshot;
+    const hasRequest = snapshot
+      ? snapshot.sourceCount > 0 || snapshot.hasBrandDescription
+      : Boolean(designSource);
+    const sourceCount = snapshot ? snapshot.sourceCount : 0;
+    // Read from `profileRef` for the same reason `emitAboutYouSubmit`
+    // does: a Finish-setup click may fire before React commits the
+    // latest dropdown pick, leaving `profile` (closure-captured at
+    // render time) one tick behind.
+    const liveProfile = profileRef.current;
+    const hasAboutYou = Boolean(
+      liveProfile.role
+        || liveProfile.orgSize
+        || liveProfile.useCase.length > 0
+        || liveProfile.source,
+    );
+    trackOnboardingCompleteResult(analytics.track, {
+      page_name: 'onboarding',
+      area: 'onboarding',
+      result,
+      exit_step_name: info.stepName,
+      completion_type: completionType,
+      runtime_type: currentRuntimeType(),
+      has_about_you: hasAboutYou,
+      has_design_system_request: hasRequest,
+      source_count: sourceCount,
+      ...(extra.errorCode ? { error_code: extra.errorCode } : {}),
+      duration_ms: Math.max(0, Date.now() - onboardingStartedAtRef.current),
+      onboarding_session_id: onboardingSessionId,
+      // Survey-snapshot mirror of `about_you_submit` so the funnel has
+      // a second carrier for the user's picks. Only attached when the
+      // user actually touched the About-you step.
+      ...(hasAboutYou ? {
+        role: liveProfile.role || 'unknown',
+        organization_size: liveProfile.orgSize || 'unknown',
+        use_cases: liveProfile.useCase.length > 0
+          ? liveProfile.useCase
+          : ['unknown'],
+        discovery_source: liveProfile.source || 'unknown',
+      } : {}),
+    });
+  }
+
   const steps = [
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
-    t('settings.onboardingStepDesignSystem'),
   ];
   const isLastStep = step === steps.length - 1;
 
@@ -1141,6 +1047,9 @@ function OnboardingView({
       title: t('settings.onboardingLocalTitle'),
       body: t('settings.onboardingLocalBody'),
       onSelect: () => {
+        emitOnboardingClick('local_coding_agent', 'select_runtime', {
+          runtime_type: 'local_cli',
+        });
         void scanCliAgents();
       },
     },
@@ -1150,6 +1059,7 @@ function OnboardingView({
       title: t('settings.onboardingByokTitle'),
       body: t('settings.onboardingByokBody'),
       onSelect: () => {
+        emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
         setRuntime('byok');
         onModeChange('api');
       },
@@ -1168,21 +1078,36 @@ function OnboardingView({
       icon: 'github',
       title: t('settings.onboardingGithubTitle'),
       body: t('settings.onboardingGithubBody'),
-      onSelect: () => setDesignSource('github'),
+      onSelect: () => {
+        emitOnboardingClick('github_repo', 'add_source', {
+          source_type: 'github_repo',
+        });
+        setDesignSource('github');
+      },
     },
     {
       id: 'upload',
       icon: 'upload',
       title: t('settings.onboardingUploadTitle'),
       body: t('settings.onboardingUploadBody'),
-      onSelect: () => setDesignSource('upload'),
+      onSelect: () => {
+        emitOnboardingClick('local_code', 'upload_source', {
+          source_type: 'local_code',
+        });
+        setDesignSource('upload');
+      },
     },
     {
       id: 'prompt',
       icon: 'sparkles',
       title: t('settings.onboardingPromptTitle'),
       body: t('settings.onboardingPromptBody'),
-      onSelect: () => setDesignSource('prompt'),
+      onSelect: () => {
+        emitOnboardingClick('fig_upload', 'upload_source', {
+          source_type: 'fig',
+        });
+        setDesignSource('prompt');
+      },
     },
   ];
   const roleOptions = [
@@ -1285,12 +1210,64 @@ function OnboardingView({
     agentRevealTimersRef.current = [];
   }
 
+  function handleSkipWithTracking(): void {
+    emitOnboardingClick('skip', 'skip');
+    emitOnboardingComplete('skipped', 'skipped');
+    clearOnboardingSessionId();
+    onFinish();
+  }
+  function handleBackWithTracking(): void {
+    if (step === 0) {
+      // Step 0 "Back" semantically maps to Skip — there's nowhere
+      // earlier to go. Match the Skip telemetry shape rather than
+      // emit a back-without-prior-step row.
+      handleSkipWithTracking();
+      return;
+    }
+    emitOnboardingClick('back', 'back');
+    setStep((current) => current - 1);
+  }
   function handlePrimaryAction() {
     if (isLastStep) {
+      // Emit the About-you survey snapshot FIRST, before the
+      // continue/complete pair. This is the bombproof carrier for the
+      // user's role / org size / use case / discovery source picks:
+      // per-dropdown clicks are racy on a fast Finish-setup (the user
+      // can pick all four dropdowns and click Finish inside one ~3s
+      // window, and PostHog's posthog-js client may not flush the
+      // individual rows before the route change unmounts the analytics
+      // provider). The snapshot click + the survey fields on
+      // `onboarding_complete_result` give the funnel two independent
+      // paths for the same data.
+      emitAboutYouSubmit();
+      emitOnboardingClick('continue', 'continue');
+      // Last-step Continue without a DS generation = "completed
+      // without design system". The Generate path inside the
+      // embedded DesignSystemCreationFlow takes a different route
+      // (navigation to project) and emits its own completion.
+      emitOnboardingComplete('completed', 'completed_without_design_system');
+      clearOnboardingSessionId();
       onFinish();
       return;
     }
+    emitOnboardingClick('continue', 'continue');
     setStep((current) => current + 1);
+  }
+
+  // Survey snapshot. Reads `profileRef.current` rather than `profile`
+  // because Finish-setup may fire within the same render commit as the
+  // user's last dropdown pick, before React has rebound the closure to
+  // the latest state. `'unknown'` covers an untouched field on the
+  // About-you step (the spec keeps the wire type open-string so a new
+  // role / use-case option doesn't force a contract bump).
+  function emitAboutYouSubmit(): void {
+    const snapshot = profileRef.current;
+    emitOnboardingClick('about_you_submit', 'continue', {
+      role: snapshot.role || 'unknown',
+      organization_size: snapshot.orgSize || 'unknown',
+      use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
+      discovery_source: snapshot.source || 'unknown',
+    });
   }
 
   async function scanCliAgents() {
@@ -1301,14 +1278,58 @@ function OnboardingView({
     onModeChange('daemon');
     setCliScanStatus('scanning');
     setVisibleAgentIds([]);
+    const scanStartedAt = Date.now();
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    const emitScanResult = (
+      args: {
+        result: 'success' | 'failed';
+        detected: number;
+        available: number;
+        selectedCliId?: TrackingCliProviderId;
+        errorCode?: string;
+      },
+    ): void => {
+      if (!onboardingSessionId) return;
+      trackOnboardingRuntimeScanResult(analytics.track, {
+        page_name: 'onboarding',
+        area: 'runtime',
+        runtime_type: 'local_cli',
+        result: args.result,
+        detected_cli_count: args.detected,
+        available_cli_count: args.available,
+        ...(args.selectedCliId ? { selected_cli_id: args.selectedCliId } : {}),
+        ...(args.errorCode ? { error_code: args.errorCode } : {}),
+        duration_ms: Math.max(0, Date.now() - scanStartedAt),
+        onboarding_session_id: onboardingSessionId,
+      });
+    };
     try {
       const nextAgents = await onRefreshAgents();
       if (cliScanTokenRef.current !== scanToken) return;
       const availableAgents = nextAgents.filter((agent) => agent.available);
+      // Scan-result semantics: zero available CLIs is a `failed` outcome
+      // because the user's runtime path is blocked, even though the
+      // detect call itself returned successfully. `detected_cli_count`
+      // separately reports the raw catalog so the dashboard can split
+      // "user has no CLI installed" from "detect crashed".
       if (availableAgents.length === 0) {
         setCliScanStatus('done');
+        emitScanResult({
+          result: 'failed',
+          detected: nextAgents.length,
+          available: 0,
+          errorCode: 'NO_AVAILABLE_CLI',
+        });
         return;
       }
+      emitScanResult({
+        result: 'success',
+        detected: nextAgents.length,
+        available: availableAgents.length,
+        ...(availableAgents[0]
+          ? { selectedCliId: agentIdToTracking(availableAgents[0].id) }
+          : {}),
+      });
       availableAgents.forEach((agent, index) => {
         const timer = setTimeout(() => {
           if (cliScanTokenRef.current !== scanToken) return;
@@ -1321,9 +1342,15 @@ function OnboardingView({
         }, 110 * (index + 1));
         agentRevealTimersRef.current.push(timer);
       });
-    } catch {
+    } catch (err) {
       if (cliScanTokenRef.current === scanToken) {
         setCliScanStatus('done');
+        emitScanResult({
+          result: 'failed',
+          detected: 0,
+          available: 0,
+          errorCode: err instanceof Error ? err.message : 'AGENT_REFRESH_THREW',
+        });
       }
     }
   }
@@ -1524,14 +1551,28 @@ function OnboardingView({
                   placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.role}
                   options={roleOptions}
-                  onChange={(value) => setProfile((current) => ({ ...current, role: value }))}
+                  onChange={(value) => {
+                    if (typeof value === 'string' && value) {
+                      emitOnboardingClick('role', 'select_option', {
+                        role: value,
+                      });
+                    }
+                    setProfile((current) => ({ ...current, role: value }));
+                  }}
                 />
                 <OnboardingDropdown
                   label={t('settings.onboardingOrgSizeLabel')}
                   placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.orgSize}
                   options={orgSizeOptions}
-                  onChange={(value) => setProfile((current) => ({ ...current, orgSize: value }))}
+                  onChange={(value) => {
+                    if (typeof value === 'string' && value) {
+                      emitOnboardingClick('organization_size', 'select_option', {
+                        organization_size: value,
+                      });
+                    }
+                    setProfile((current) => ({ ...current, orgSize: value }));
+                  }}
                 />
                 <OnboardingDropdown
                   label={t('settings.onboardingUseCaseLabel')}
@@ -1541,6 +1582,21 @@ function OnboardingView({
                   multiple
                   onChange={(value) => {
                     if (!Array.isArray(value)) return;
+                    // Multi-select: emit one click per newly added
+                    // value (delta), not per render of the whole
+                    // selection. The dashboard then sees one row per
+                    // use_case chosen. Compare against `profileRef`
+                    // not `profile` — rapid picks can fire onChange
+                    // before React commits the previous pick, so a
+                    // closure-captured `profile.useCase` is one tick
+                    // behind and re-emits the prior pick on every
+                    // subsequent change.
+                    const previousSet = new Set(profileRef.current.useCase);
+                    for (const v of value) {
+                      if (!previousSet.has(v)) {
+                        emitOnboardingClick('use_case', 'select_option', { use_case: v });
+                      }
+                    }
                     setProfile((current) => ({ ...current, useCase: value }));
                   }}
                 />
@@ -1549,7 +1605,14 @@ function OnboardingView({
                   placeholder={t('settings.onboardingSelectPlaceholder')}
                   value={profile.source}
                   options={sourceOptions}
-                  onChange={(value) => setProfile((current) => ({ ...current, source: value }))}
+                  onChange={(value) => {
+                    if (typeof value === 'string' && value) {
+                      emitOnboardingClick('hear_about_us', 'select_option', {
+                        discovery_source: value,
+                      });
+                    }
+                    setProfile((current) => ({ ...current, source: value }));
+                  }}
                 />
               </div>
             </div>
@@ -1572,11 +1635,65 @@ function OnboardingView({
                     <span>{t('settings.onboardingDesignIntroReuseBody')}</span>
                   </div>
                 </div>
-                <button type="button" className="onboarding-view__ds-skip" onClick={onFinish}>
+                <button type="button" className="onboarding-view__ds-skip" onClick={handleSkipWithTracking}>
                   {t('settings.onboardingSkip')}
                 </button>
               </div>
-              {renderDesignSystemCreation(() => setStep(1))}
+              {renderDesignSystemCreation(() => setStep(1), {
+                onBeforeGenerate: (snapshot) => {
+                  // INTENT signal — fires before async DS-draft create
+                  // / workspace-open work runs. Use it ONLY for the
+                  // `generate` click row so the dashboard captures
+                  // user intent even when generation later errors.
+                  // The lifecycle `onboarding_complete_result` row
+                  // moved to `onGenerateSettled` below so a draft
+                  // create failure no longer ships as
+                  // `completion_type=completed_with_design_system`.
+                  emitOnboardingClick('generate', 'generate', {
+                    source_type: deriveOnboardingSourceType(snapshot),
+                    source_count: snapshot.sourceCount,
+                    has_brand_description: snapshot.hasBrandDescription,
+                  });
+                },
+                onGenerateSettled: (snapshot, outcome) => {
+                  // OUTCOME signal — fires from `DesignSystemCreationFlow`
+                  // *after* the create/workspace branch settles.
+                  // Success → emit lifecycle complete row with
+                  //   `completion_type=completed_with_design_system`.
+                  //   Generation hand-off navigates away from this
+                  //   tab; the post-Generate `chat_panel` page_view
+                  //   in ProjectView fires the 4th-step
+                  //   `area=generation_progress` row and clears the
+                  //   session id. Don't clear here.
+                  // Failure → emit lifecycle complete with
+                  //   `result=failed`, the daemon's failure code, and
+                  //   `completed_without_design_system` so we don't
+                  //   overstate completed-with-DS funnel. Then re-arm
+                  //   the lifecycle guard (don't clear the session
+                  //   id) so the user's retry attempt — which
+                  //   DesignSystemCreationFlow leaves them in by
+                  //   bouncing back to its setup step — emits a
+                  //   second complete row under the SAME
+                  //   onboarding_session_id, and any eventual
+                  //   success can still navigate to ProjectView with
+                  //   the id intact for step 4. Tracked by mrcfps
+                  //   review on PR #2590 (2026-05-21 14:45).
+                  if (outcome.result === 'success') {
+                    emitOnboardingComplete(
+                      'completed',
+                      'completed_with_design_system',
+                      { sourceSnapshot: snapshot },
+                    );
+                    return;
+                  }
+                  emitOnboardingComplete(
+                    'failed',
+                    'completed_without_design_system',
+                    { sourceSnapshot: snapshot, errorCode: outcome.errorCode },
+                  );
+                  lifecycleReportedRef.current = false;
+                },
+              })}
             </div>
           ) : null}
 
@@ -1606,7 +1723,7 @@ function OnboardingView({
               <button
                 type="button"
                 className="onboarding-view__secondary"
-                onClick={() => (step === 0 ? onFinish() : setStep((current) => current - 1))}
+                onClick={handleBackWithTracking}
               >
                 {step === 0 ? t('settings.onboardingSkip') : t('settings.onboardingBack')}
               </button>

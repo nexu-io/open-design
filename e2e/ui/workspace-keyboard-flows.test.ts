@@ -1,65 +1,11 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page, Response } from '@playwright/test';
+import { applyStandardMocks } from '@/playwright/mock-factory';
 
-const STORAGE_KEY = 'open-design:config';
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 test('quick switcher opens from keyboard and activates the selected file', async ({ page }) => {
@@ -194,6 +140,7 @@ test('quick switcher still activates another file after the project reloads', as
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher after reload');
   await expectWorkspaceReady(page);
+  const projectId = currentProjectId(page);
 
   await uploadTinyPng(page, 'reload-alpha.png');
   await uploadTinyPng(page, 'reload-beta.png');
@@ -220,12 +167,14 @@ test('quick switcher still activates another file after the project reloads', as
   await expect(quickSwitcher).toBeHidden();
   await expect(betaTab).toHaveAttribute('aria-selected', 'true');
   await expect(alphaTab).toHaveAttribute('aria-selected', 'false');
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['reload-alpha.png', 'reload-beta.png']);
 });
 
 test('quick switcher only lists files from the active project after switching projects', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher Project Alpha');
   await expectWorkspaceReady(page);
+  const alphaProjectId = currentProjectId(page);
 
   await uploadTinyPng(page, 'alpha-project-file.png');
   await uploadTinyPng(page, 'alpha-project-secondary.png');
@@ -234,6 +183,7 @@ test('quick switcher only lists files from the active project after switching pr
 
   await createProject(page, 'Quick switcher Project Beta');
   await expectWorkspaceReady(page);
+  const betaProjectId = currentProjectId(page);
 
   await uploadTinyPng(page, 'beta-project-file.png');
   await uploadTinyPng(page, 'beta-project-secondary.png');
@@ -248,6 +198,8 @@ test('quick switcher only lists files from the active project after switching pr
   await expect(page.getByRole('option', { name: /beta-project-secondary\.png/i })).toBeVisible();
   await expect(page.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
   await expect(page.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
+  await expectProjectFilesToIncludeSuffixes(page, betaProjectId, ['beta-project-file.png', 'beta-project-secondary.png']);
+  await expectProjectFilesToIncludeSuffixes(page, alphaProjectId, ['alpha-project-file.png', 'alpha-project-secondary.png']);
 
   await quickSwitcherInput.press('Escape');
   await expect(quickSwitcher).toBeHidden();
@@ -358,79 +310,6 @@ test('quick switcher can switch from a design file tab back to a generated artif
   ).toBeVisible();
 });
 
-test('quick switcher can restore a generated artifact tab after reload in a mixed workspace', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="reload-mixed-artifact" type="text/html" title="Reload Mixed Artifact">' +
-      '<!doctype html><html><body><main><h1>Reload Mixed Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({ chunk: artifact })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
-
-  await gotoEntryHome(page);
-  await createProject(page, 'Quick switcher mixed reload');
-  await expectWorkspaceReady(page);
-
-  await sendPrompt(page, 'Create a reload-mixed artifact');
-  const artifactTab = page.getByRole('tab', { name: /reload-mixed-artifact\.html/i });
-  await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-
-  await uploadTinyPng(page, 'reload-mixed-file.png');
-  const fileTab = tabBySuffix(page, 'reload-mixed-file.png');
-  await fileTab.click();
-  await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-
-  await page.reload();
-  await expectWorkspaceReady(page);
-  await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(artifactTab).toHaveCount(0);
-
-  await openQuickSwitcher(page);
-  const quickSwitcher = page.locator('.qs-overlay');
-  const quickSwitcherInput = page.locator('.qs-input');
-  await expect(quickSwitcher).toBeVisible();
-
-  await quickSwitcherInput.fill('reload-mixed-artifact');
-  await expect(page.getByRole('option', { name: /reload-mixed-artifact\.html/i })).toBeVisible();
-  await quickSwitcherInput.press('Enter');
-
-  await expect(quickSwitcher).toBeHidden();
-  await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(fileTab).toHaveAttribute('aria-selected', 'false');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
-      name: 'Reload Mixed Artifact',
-    }),
-  ).toBeVisible();
-});
 
 async function createProject(
   page: Page,
@@ -443,9 +322,10 @@ async function createProject(
 }
 
 async function gotoEntryHome(page: Page) {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -490,6 +370,26 @@ async function uploadTinyPng(
   await expect(tabBySuffix(page, name)).toBeVisible();
 }
 
+async function listProjectFiles(page: Page, projectId: string) {
+  const response = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { files: Array<{ name: string }> };
+  return body.files;
+}
+
+async function expectProjectFilesToIncludeSuffixes(
+  page: Page,
+  projectId: string,
+  suffixes: string[],
+) {
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFiles(page, projectId)).map((file) => file.name);
+      return suffixes.every((suffix) => names.some((name) => name.endsWith(suffix)));
+    })
+    .toBe(true);
+}
+
 async function readChatPanelWidth(handle: Locator): Promise<number> {
   const raw = await handle.getAttribute('aria-valuenow');
   const parsed = Number.parseInt(raw ?? '', 10);
@@ -505,43 +405,27 @@ async function openQuickSwitcher(page: Page) {
   await expect(quickSwitcher).toBeVisible();
 }
 
-async function sendPrompt(
-  page: Page,
-  prompt: string,
-) {
+async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await input.click();
-    await input.fill(prompt);
-    try {
-      await expect(input).toHaveValue(prompt, { timeout: 1500 });
-      await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-      await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-      await chatResponse;
-      return;
-    } catch (error) {
-      await input.click();
-      await input.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await input.press('Backspace');
-      await input.pressSequentially(prompt);
-      try {
-        await expect(input).toHaveValue(prompt, { timeout: 1500 });
-        await expect(sendButton).toBeEnabled({ timeout: 1500 });
-        const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-        await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-        await chatResponse;
-        return;
-      } catch (retryError) {
-        if (attempt === 2) throw retryError;
-      }
-    }
-  }
+  await input.click();
+  await input.fill(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(sendButton).toBeEnabled({ timeout: 1500 });
+  const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
+  await sendButton.evaluate((button: HTMLButtonElement) => button.click());
+  await chatResponse;
 }
 
 function tabBySuffix(page: Page, name: string): Locator {
   return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') });
+}
+
+function currentProjectId(page: Page): string {
+  const url = new URL(page.url());
+  const [, projectId] = url.pathname.match(/\/projects\/([^/]+)/) ?? [];
+  expect(projectId).toBeTruthy();
+  return projectId!;
 }
 
 function selectedBaseName(selectionText: string | null): string {

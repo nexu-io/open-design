@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-social-reddit-card",
-  "title": "Reddit 帖子卡",
+  "title": "Reddit Post Card",
   "version": "0.1.0",
-  "description": "拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享",
+  "description": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -43,11 +43,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Reddit 帖子卡」模板把我的内容做成一份「拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Reddit Post Card template to turn my content into a realistic Reddit post card with vote rail and comment count for a video overlay or story share. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Reddit 帖子卡」模板把我的内容做成一份「拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Reddit 帖子卡"
+          "title": "Reddit Post Card",
+          "title_i18n": {
+            "en": "Reddit Post Card",
+            "zh-CN": "Reddit 帖子卡"
+          }
         }
       ]
     },
@@ -76,5 +83,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Reddit Post Card",
+    "zh-CN": "Reddit 帖子卡"
+  },
+  "description_i18n": {
+    "en": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
+    "zh-CN": "拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享"
   }
 }

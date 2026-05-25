@@ -97,6 +97,8 @@ export type DesktopUpdateMode = (typeof DESKTOP_UPDATE_MODES)[keyof typeof DESKT
 
 export const DESKTOP_UPDATE_CHANNELS = Object.freeze({
   BETA: "beta",
+  NIGHTLY: "nightly",
+  PREVIEW: "preview",
   STABLE: "stable",
 } as const);
 
@@ -138,6 +140,7 @@ export type ServiceRuntimeState = "idle" | "running" | "starting" | "stopped" | 
 export type DaemonStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  trustedWebOriginPort?: number | null;
   updatedAt?: string;
   url: string | null;
   /**

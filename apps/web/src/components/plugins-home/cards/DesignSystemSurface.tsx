@@ -6,31 +6,53 @@
 // website thumbnails rather than synthetic color swatches. The iframe
 // uses native lazy loading so off-screen cards do not eagerly render.
 
+import { useEffect, useState } from 'react';
 import type { DesignPreviewSpec } from '../preview';
 
 interface Props {
   preview: DesignPreviewSpec;
+  inView: boolean;
 }
 
-export function DesignSystemSurface({ preview }: Props) {
+export function DesignSystemSurface({ preview, inView }: Props) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!preview.designSystemId) return;
+    if (!inView) {
+      setReady(false);
+      return;
+    }
+    const id = window.setTimeout(() => setReady(true), 520);
+    return () => window.clearTimeout(id);
+  }, [inView, preview.designSystemId]);
+
   if (preview.designSystemId) {
     return (
       <div className="plugins-home__design plugins-home__design--showcase">
         <div className="plugins-home__design-showcase">
-          <iframe
-            title={`${preview.brand} showcase preview`}
-            src={`/api/design-systems/${encodeURIComponent(preview.designSystemId)}/showcase`}
-            sandbox="allow-scripts"
-            loading="lazy"
-            tabIndex={-1}
-            aria-hidden
-            className="plugins-home__design-iframe"
-          />
+          {ready ? (
+            <iframe
+              title={`${preview.brand} showcase preview`}
+              src={`/api/design-systems/${encodeURIComponent(preview.designSystemId)}/showcase`}
+              sandbox="allow-scripts"
+              loading="lazy"
+              tabIndex={-1}
+              aria-hidden
+              className="plugins-home__design-iframe"
+            />
+          ) : (
+            <DesignPatch preview={preview} />
+          )}
         </div>
       </div>
     );
   }
 
+  return <DesignPatch preview={preview} />;
+}
+
+function DesignPatch({ preview }: { preview: DesignPreviewSpec }) {
   const [primary, secondary, ink] = preview.swatches;
   return (
     <div

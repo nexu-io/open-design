@@ -18,6 +18,7 @@ import {
   trackSettingsLanguageClick,
   trackSettingsLocalCliClick,
   trackSettingsExecutionModeTabClick,
+  trackSettingsMediaProvidersClick,
   trackSettingsNotificationsClick,
   trackSettingsPrivacyClick,
   trackSettingsView,
@@ -74,7 +75,11 @@ import type {
 } from '../types';
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
-import { fetchConnectors, fetchDesignTemplates } from '../providers/registry';
+import {
+  fetchConnectors,
+  fetchDesignTemplates,
+  fetchLatestGithubReleaseInfo,
+} from '../providers/registry';
 import { IMAGE_MODELS, MEDIA_PROVIDERS } from '../media/models';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
@@ -800,6 +805,9 @@ export function SettingsDialog({
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
   const [cfg, setCfg] = useState<AppConfig>(initial);
+  const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const lastSavedAppearanceRef = useRef({
     theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
@@ -896,16 +904,11 @@ export function SettingsDialog({
     if (versionChecking || !appVersionInfo) return;
     setVersionChecking(true);
     try {
-      const res = await fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
-        headers: { Accept: 'application/vnd.github+json' },
-      });
-      if (res.ok) {
-        const data = await res.json() as { tag_name?: string; html_url?: string };
-        const latestTag = (data.tag_name ?? '').replace(/^v/, '');
-        if (latestTag && latestTag === appVersionInfo.version) {
-          setAboutToast(t('settings.alreadyLatest'));
-          return;
-        }
+      const release = await fetchLatestGithubReleaseInfo();
+      const latestTag = (release?.tagName ?? '').replace(/^v/, '');
+      if (release?.stale !== true && latestTag && latestTag === appVersionInfo.version) {
+        setAboutToast(t('settings.alreadyLatest'));
+        return;
       }
     } catch {
       // network error — fall through to open releases page
@@ -933,7 +936,7 @@ export function SettingsDialog({
     // tagged onto every view now lives in the configure-state global
     // properties (registered once and inherited by every event).
     trackSettingsView(analytics.track, {
-      page: 'settings',
+      page_name: 'settings',
       area: settingsSectionToTracking(activeSection),
     });
   }, [activeSection, analytics.track]);
@@ -1031,7 +1034,7 @@ export function SettingsDialog({
       const modeAfter = executionModeToTracking(mode);
       if (modeBefore !== modeAfter) {
         trackSettingsExecutionModeTabClick(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'configure_execution_mode',
           element: 'execution_mode_tab',
           action: 'switch_execution_mode',
@@ -1124,7 +1127,7 @@ export function SettingsDialog({
       }
       setAgentTestState({ status: 'done', result });
       trackSettingsCliTestResult(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'configure_execution_mode',
         cli_provider_id: cliProviderId,
         result: result.ok ? 'success' : 'failed',
@@ -1148,7 +1151,7 @@ export function SettingsDialog({
         },
       });
       trackSettingsCliTestResult(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'configure_execution_mode',
         cli_provider_id: cliProviderId,
         result: 'failed',
@@ -1179,7 +1182,7 @@ export function SettingsDialog({
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
         trackSettingsByokTestResult(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: 'not_ready',
@@ -1221,7 +1224,7 @@ export function SettingsDialog({
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
         trackSettingsByokTestResult(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: result.ok ? 'success' : 'failed',
@@ -1248,7 +1251,7 @@ export function SettingsDialog({
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
         trackSettingsByokTestResult(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: 'failed',
@@ -1615,15 +1618,16 @@ export function SettingsDialog({
             theme: snapshot.theme ?? 'system',
             accentColor: resolveAccentColor(snapshot.accentColor),
           };
-          if (persistOptions.forceMediaProviderSync) {
-            lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
-          }
           // If a newer edit landed while the request was in flight,
           // leave the status as 'pending' so the next debounce tick
           // owns the indicator instead of flashing "Saved".
           if (autosaveLatestRef.current !== snapshot) {
             setAutosaveStatus('pending');
             return;
+          }
+          if (persistOptions.forceMediaProviderSync) {
+            lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
+            setPendingMediaProviderEditIds(new Set());
           }
           setAutosaveStatus('saved');
           autosaveSavedTimerRef.current = window.setTimeout(() => {
@@ -1840,7 +1844,7 @@ export function SettingsDialog({
             const byokProviderId = byokProtocolToTracking(apiProtocol);
             if (byokProviderId) {
               trackSettingsByokFieldClick(analytics.track, {
-                page: 'settings',
+                page_name: 'settings',
                 area: 'configure_execution_mode_byok',
                 element: 'base_url',
                 provider_id: byokProviderId,
@@ -1911,8 +1915,8 @@ export function SettingsDialog({
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
     routines: {
-      title: 'Automations',
-      subtitle: 'Scheduled automations that run unattended.',
+      title: t('routines.title'),
+      subtitle: t('routines.subtitle'),
     },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
@@ -2257,7 +2261,7 @@ export function SettingsDialog({
                         const byokProviderId = byokProtocolToTracking(tab.id);
                         if (byokProviderId) {
                           trackSettingsByokProviderOptionClick(analytics.track, {
-                            page: 'settings',
+                            page_name: 'settings',
                             area: 'configure_execution_mode_byok',
                             element: 'byok_provider_option',
                             action: 'select_byok_provider',
@@ -2362,7 +2366,7 @@ export function SettingsDialog({
                                 className="agent-card-select"
                                 onClick={() => {
                                   trackSettingsLocalCliClick(analytics.track, {
-                                    page: 'settings',
+                                    page_name: 'settings',
                                     area: 'configure_execution_mode_local_cli',
                                     element: 'cli_provider',
                                     cli_provider_id: agentIdToTracking(a.id),
@@ -2993,7 +2997,7 @@ export function SettingsDialog({
                       const byokProviderId = byokProtocolToTracking(apiProtocol);
                       if (byokProviderId) {
                         trackSettingsByokFieldClick(analytics.track, {
-                          page: 'settings',
+                          page_name: 'settings',
                           area: 'configure_execution_mode_byok',
                           element: 'api_key',
                           provider_id: byokProviderId,
@@ -3097,7 +3101,7 @@ export function SettingsDialog({
                     const byokProviderId = byokProtocolToTracking(apiProtocol);
                     if (byokProviderId) {
                       trackSettingsByokFieldClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'configure_execution_mode_byok',
                         element: 'model',
                         provider_id: byokProviderId,
@@ -3229,8 +3233,15 @@ export function SettingsDialog({
               setCfg={setCfg}
               mediaProvidersNotice={mediaProvidersNotice}
               onReloadMediaProviders={onReloadMediaProviders}
-              onChange={() => {
+              pendingLocalProviderIds={pendingMediaProviderEditIds}
+              onChange={(providerId) => {
                 mediaProvidersChangeVersionRef.current += 1;
+                setPendingMediaProviderEditIds((current) => {
+                  if (current.has(providerId)) return current;
+                  const next = new Set(current);
+                  next.add(providerId);
+                  return next;
+                });
               }}
             />
           ) : null}
@@ -3246,7 +3257,7 @@ export function SettingsDialog({
               onPersistComposioKey={onPersistComposioKey}
               onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
                 trackSettingsConnectorAuthResult(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'connectors',
                   connector_id: connectorId,
                   action,
@@ -3297,7 +3308,7 @@ export function SettingsDialog({
                       // that was picked, regardless of whether it differs
                       // from the current one (user clicked = signal).
                       trackSettingsLanguageClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'language',
                         element: code,
                       });
@@ -3943,6 +3954,7 @@ export async function persistConfigAndRunOrbit(
   options?: {
     daemonProviders?: AppConfig['mediaProviders'] | null;
     syncMediaProviders?: boolean;
+    locale?: string | null;
   },
 ): Promise<OrbitRunStartResponse> {
   if (options?.syncMediaProviders !== false) {
@@ -3951,7 +3963,11 @@ export async function persistConfigAndRunOrbit(
     });
   }
   await syncConfigToDaemon(config, { throwOnError: true });
-  const response = await fetch('/api/orbit/run', { method: 'POST' });
+  const response = await fetch('/api/orbit/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locale: options?.locale ?? null }),
+  });
   if (!response.ok) throw new Error('Orbit run failed');
   return await response.json() as OrbitRunStartResponse;
 }
@@ -4015,7 +4031,7 @@ function OrbitSection({
    *  parent dialog can persist any unsaved Orbit edits and close itself. */
   onLeaveForOrbitProject: (runConfig: AppConfig) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const orbit = cfg.orbit ?? DEFAULT_ORBIT;
   const [status, setStatus] = useState<OrbitStatusResponse | null>(null);
   const [running, setRunning] = useState(false);
@@ -4170,6 +4186,7 @@ function OrbitSection({
         const payload = await persistConfigAndRunOrbit(runConfig, {
           daemonProviders: daemonMediaProviders,
           syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
+          locale,
         });
         if (!payload.projectId) throw new Error('Orbit run did not return a project');
 
@@ -4793,15 +4810,18 @@ function MediaProvidersSection({
   setCfg,
   mediaProvidersNotice,
   onReloadMediaProviders,
+  pendingLocalProviderIds,
   onChange,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
-  onChange: () => void;
+  pendingLocalProviderIds: ReadonlySet<string>;
+  onChange: (providerId: string) => void;
 }) {
   const { t } = useI18n();
+  const analytics = useAnalytics();
   const [reloadRunning, setReloadRunning] = useState(false);
   const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
@@ -4853,7 +4873,7 @@ function MediaProvidersSection({
       apiKeyTail?: string;
     },
   ) => {
-    onChange();
+    onChange(provider.id);
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
@@ -4876,7 +4896,9 @@ function MediaProvidersSection({
         setReloadNotice({ kind: 'error', message: t('settings.mediaProviderReloadError') });
         return;
       }
-      setCfg((curr) => mergeDaemonMediaProviders(curr, next));
+      setCfg((curr) => mergeDaemonMediaProviders(curr, next, {
+        preserveLocalProviderIds: pendingLocalProviderIds,
+      }));
       setReloadNotice({ kind: 'success', message: t('settings.mediaProviderReloadSuccess') });
     } finally {
       setReloadRunning(false);
@@ -4933,7 +4955,14 @@ function MediaProvidersSection({
             className={`ghost media-provider-reload-btn${
               reloadNotice?.kind === 'success' ? ' is-success-flash' : ''
             }`}
-            onClick={() => void handleReload()}
+            onClick={() => {
+              trackSettingsMediaProvidersClick(analytics.track, {
+                page_name: 'settings',
+                area: 'media_providers',
+                element: 'reload',
+              });
+              void handleReload();
+            }}
             disabled={reloadRunning}
             aria-live="polite"
           >
@@ -5014,6 +5043,15 @@ function MediaProvidersSection({
                     placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
                     aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                     disabled={disabled}
+                    onFocus={() => {
+                      trackSettingsMediaProvidersClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'media_providers',
+                        element: 'key_input',
+                        providers_id: provider.id,
+                        is_configured: clearable,
+                      });
+                    }}
                     onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
                   />
                   <button
@@ -5036,6 +5074,15 @@ function MediaProvidersSection({
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
                   aria-label={`${provider.label} ${t('settings.mediaProviderBaseUrl')}`}
                   disabled={disabled}
+                  onFocus={() => {
+                    trackSettingsMediaProvidersClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'media_providers',
+                      element: 'url_input',
+                      providers_id: provider.id,
+                      is_configured: clearable,
+                    });
+                  }}
                   onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
                 />
                 {supportsCustomModel ? (
@@ -5052,6 +5099,17 @@ function MediaProvidersSection({
                   className="ghost"
                   disabled={!clearable}
                   onClick={() => {
+                    trackSettingsMediaProvidersClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'media_providers',
+                      element: 'clear',
+                      providers_id: provider.id,
+                      // The click reports the state at the moment the
+                      // user pressed Clear; the actual clear only lands
+                      // after they confirm the dialog below, but the
+                      // dashboard cares about the intent signal.
+                      is_configured: clearable,
+                    });
                     // Match the existing window.confirm guard the rest of
                     // the app uses for destructive actions (conversation
                     // delete, design delete, file delete in FileWorkspace).
@@ -5093,15 +5151,14 @@ function MediaProvidersSection({
         <details className="library-group media-provider-coming-soon">
           <summary className="memory-details-summary">
             <span className="memory-details-title">
-              Coming soon
+              {t('tasks.comingSoon')}
             </span>
             <span className="filter-pill-count">
               {comingSoonProviders.length}
             </span>
           </summary>
           <p className="hint" style={{ marginTop: 4, marginBottom: 8 }}>
-            We track these for the roadmap; the daemon doesn’t ship a
-            client yet, so there’s nothing to configure.
+            {t('settings.mediaProviderComingSoonHint')}
           </p>
           <ul className="media-provider-coming-soon-list">
             {comingSoonProviders.map((provider) => {
@@ -5126,7 +5183,7 @@ function MediaProvidersSection({
                       rel="noopener noreferrer"
                       className="ghost-link"
                     >
-                      Docs
+                      {t('settings.agentInstall.docs')}
                       <Icon name="external-link" size={11} />
                     </a>
                   ) : null}
@@ -5720,7 +5777,7 @@ function AppearanceSection({
               // use `accent_color` with the swatch hex below.
               if (value === 'system' || value === 'light' || value === 'dark') {
                 trackSettingsAppearanceClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'appearance',
                   element: value,
                 });
@@ -5749,7 +5806,7 @@ function AppearanceSection({
                 role="radio"
                 onClick={() => {
                   trackSettingsAppearanceClick(analytics.track, {
-                    page: 'settings',
+                    page_name: 'settings',
                     area: 'appearance',
                     element: 'accent_color',
                     color,
@@ -5910,7 +5967,7 @@ function NotificationsSection({
     // emits the post-click state on `completion_sound_status` so a single
     // event captures intent + outcome.
     trackSettingsNotificationsClick(analytics.track, {
-      page: 'settings',
+      page_name: 'settings',
       area: 'notifications',
       element: 'completion_sound',
       completion_sound_status: next ? 'on' : 'off',
@@ -5925,7 +5982,7 @@ function NotificationsSection({
   const toggleDesktop = async () => {
     if (notif.desktopEnabled) {
       trackSettingsNotificationsClick(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'notifications',
         element: 'desktop_notification',
         desktop_notification_status: 'off',
@@ -5937,7 +5994,7 @@ function NotificationsSection({
     setPermission(result);
     if (result === 'granted') {
       trackSettingsNotificationsClick(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'notifications',
         element: 'desktop_notification',
         desktop_notification_status: 'on',
@@ -5945,7 +6002,7 @@ function NotificationsSection({
       updateNotif({ desktopEnabled: true });
     } else {
       trackSettingsNotificationsClick(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'notifications',
         element: 'desktop_notification',
         desktop_notification_status: 'off',
@@ -6000,7 +6057,7 @@ function NotificationsSection({
                     onClick={() => {
                       const trackingSoundId = soundIdToTracking(sound.id);
                       trackSettingsNotificationsClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'notifications',
                         element: 'success_sound',
                         ...(trackingSoundId ? { sound_id: trackingSoundId } : {}),
@@ -6027,7 +6084,7 @@ function NotificationsSection({
                     onClick={() => {
                       const trackingSoundId = soundIdToTracking(sound.id);
                       trackSettingsNotificationsClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'notifications',
                         element: 'failure_sound',
                         ...(trackingSoundId ? { sound_id: trackingSoundId } : {}),
@@ -6075,7 +6132,7 @@ function NotificationsSection({
           <>
             <button type="button" className="ghost" onClick={() => {
               trackSettingsNotificationsClick(analytics.track, {
-                page: 'settings',
+                page_name: 'settings',
                 area: 'notifications',
                 element: 'send_test',
               });

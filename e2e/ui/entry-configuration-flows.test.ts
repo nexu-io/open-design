@@ -283,6 +283,7 @@ test('saving a Composio key from Integrations unlocks the connectors gate immedi
     apiKeyConfigured: true,
     apiKeyTail: '1234',
   });
+  expect(savedConfig?.composio?.apiKey).toBe('');
 });
 
 test('typing a draft replacement Composio key does not trigger global autosave', async ({ page }) => {
@@ -331,6 +332,12 @@ test('typing a draft replacement Composio key does not trigger global autosave',
 
   await page.waitForTimeout(900);
   expect(appConfigPersistBodies).toHaveLength(appConfigPersistCountBeforeDraftEdit);
+  const savedConfig = await readSavedConfig(page);
+  expect(savedConfig?.composio).toMatchObject({
+    apiKey: '',
+    apiKeyConfigured: true,
+    apiKeyTail: '1234',
+  });
 });
 
 async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {

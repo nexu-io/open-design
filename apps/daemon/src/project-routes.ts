@@ -1,17 +1,20 @@
 import type { Express } from 'express';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
 } from '@open-design/contracts';
 import { createProjectArtifactFile } from './artifact-create.js';
+import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems } from './design-systems.js';
 import {
   FIRST_PARTY_ATOMS,
+  buildConnectorProbe,
   getInstalledPlugin,
   listInstalledPlugins,
   resolvePluginSnapshot,
 } from './plugins/index.js';
+import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
@@ -226,9 +229,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
       if (!resolveBody) {
-        const fallbackPluginId = defaultScenarioPluginIdForKind(
-          projectMetadata?.kind,
-        );
+        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
         if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
           resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
         }
@@ -246,6 +247,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
               ? { id: normalizedDesignSystemId }
               : undefined,
+          connectorProbe: buildConnectorProbe(connectorService),
         });
         if (resolved && !resolved.ok) {
           if (!explicitPlugin) {
@@ -1112,6 +1114,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               priorSize: err.priorSize,
               priorName: err.priorName,
             },
+          });
+        }
+        if (err instanceof ArtifactPublicationBlockedError) {
+          return sendApiError(res, 422, 'ARTIFACT_PUBLICATION_BLOCKED', err.message, {
+            details: { placeholders: err.placeholders },
           });
         }
         if (err?.code === 'EEXIST') {

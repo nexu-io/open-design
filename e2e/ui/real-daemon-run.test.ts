@@ -5,15 +5,16 @@ import {
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
 import type { FakeAgentId } from '@/playwright/fake-agents';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';
 const CHUNKED_FILE = 'chunked-daemon-smoke.html';
 const CHUNKED_HEADING = 'Chunked Daemon Smoke';
-const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 const DELAYED_FILE = 'delayed-daemon-smoke.html';
 const DELAYED_HEADING = 'Delayed Daemon Smoke';
+const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
 test.describe.configure({ mode: 'serial' });
@@ -28,7 +29,7 @@ test.beforeEach(async ({ page }) => {
   await resetDaemonAppConfig(page);
 
   await page.addInitScript(({ key, codexEnv }) => {
-    if (window.localStorage.getItem(key) != null) return;
+    if (window.localStorage.getItem(key)) return;
     window.localStorage.setItem(
       key,
       JSON.stringify({
@@ -60,12 +61,12 @@ test('real daemon run streams, persists, and previews an artifact', async ({ pag
 
   await sendPrompt(page, 'Create a deterministic smoke artifact');
 
-  await expect(page.getByText(GENERATED_FILE, { exact: true })).toBeVisible({ timeout: 15_000 });
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
 
-  const { projectId } = currentProject(page);
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
@@ -76,11 +77,11 @@ test('real daemon run persists an artifact streamed across multiple chunks', asy
 
   await sendPrompt(page, 'Create a chunked deterministic smoke artifact');
 
-  await expect(page.getByText(CHUNKED_FILE, { exact: true })).toBeVisible({ timeout: 15_000 });
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [CHUNKED_FILE]);
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: CHUNKED_HEADING })).toBeVisible();
 
-  const { projectId } = currentProject(page);
   await expectProjectFileToContain(page, projectId, CHUNKED_FILE, CHUNKED_HEADING);
 });
 
@@ -101,12 +102,12 @@ test('real daemon run supports a follow-up turn in the same project', async ({ p
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a deterministic smoke artifact');
-  await expect(page.getByText(GENERATED_FILE, { exact: true })).toBeVisible({ timeout: 15_000 });
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
 
   await sendPrompt(page, 'Create a follow-up deterministic smoke artifact');
-  await expect(page.getByText(FOLLOW_UP_FILE, { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE, FOLLOW_UP_FILE]);
 
-  const { projectId } = currentProject(page);
   const response = await page.request.get(`/api/projects/${projectId}/files`);
   expect(response.ok()).toBeTruthy();
   const { files } = (await response.json()) as { files: Array<{ name: string }> };
@@ -158,12 +159,75 @@ test('real daemon run survives reload before the create response reaches the bro
     requireRunId: true,
   });
 });
-test('real daemon run previews an artifact from a fake OpenCode runtime', async ({ page }) => {
+
+test('empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
   await page.goto('/');
+  await createProject(page, 'Empty daemon failure smoke');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Return an empty daemon smoke response');
+
+  const expectedError = 'Agent completed without producing any output.';
+  await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.status-pill', { hasText: expectedError })).toBeVisible();
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
+  }, { timeout: 15_000 }).toBe('failed');
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
+  await expect(page.locator('.status-pill', { hasText: expectedError })).toBeVisible();
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+});
+
+test('separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Real daemon isolation alpha');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Create a deterministic smoke artifact');
+  const alpha = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, alpha.projectId, [GENERATED_FILE]);
+
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
+
+  await createProject(page, 'Real daemon isolation beta');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Create a follow-up deterministic smoke artifact');
+  const beta = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, beta.projectId, [FOLLOW_UP_FILE]);
+  expect(beta.projectId).not.toBe(alpha.projectId);
+
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  const recentStrip = page.getByTestId('recent-projects-strip');
+  await expect(recentStrip.locator(`[data-project-id="${alpha.projectId}"]`)).toBeVisible();
+  await expect(recentStrip.locator(`[data-project-id="${beta.projectId}"]`)).toBeVisible();
+
+  await recentStrip.locator(`[data-project-id="${alpha.projectId}"]`).click();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByText(GENERATED_FILE, { exact: true })).toBeVisible();
+  await expect(page.getByText(FOLLOW_UP_FILE, { exact: true })).toHaveCount(0);
+  expect((await listProjectFiles(page, alpha.projectId)).map((file) => file.name)).toEqual([GENERATED_FILE]);
+
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await recentStrip.locator(`[data-project-id="${beta.projectId}"]`).click();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByText(FOLLOW_UP_FILE, { exact: true })).toBeVisible();
+  await expect(page.getByText(GENERATED_FILE, { exact: true })).toHaveCount(0);
+  expect((await listProjectFiles(page, beta.projectId)).map((file) => file.name)).toEqual([FOLLOW_UP_FILE]);
+});
+
+test('real daemon run previews an artifact from a fake OpenCode runtime', async ({ page }) => {
   await createProject(page, 'Fake OpenCode runtime smoke', 'opencode');
   await expectWorkspaceReady(page);
 
-  await sendPrompt(page, 'Fake runtime smoke for opencode');
+  const runResponse = await sendPrompt(page, 'Fake runtime smoke for opencode');
+  expectCreateRunAgentId(runResponse, 'opencode');
 
   const fileName = 'fake-agent-runtime-opencode.html';
   const heading = 'Fake Agent Runtime opencode';
@@ -235,7 +299,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -267,6 +331,7 @@ async function sendPrompt(page: Page, prompt: string) {
     })(),
   ]);
   expect(response.ok()).toBeTruthy();
+  return response;
 }
 
 async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: string) {
@@ -303,17 +368,25 @@ async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: strin
   await page.unroute(runRoute).catch(() => {});
 }
 
+async function openNewProjectModal(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await dismissPrivacyDialog(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
 async function dismissPrivacyDialog(page: Page) {
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
@@ -556,6 +629,10 @@ async function listConversationMessages(
 function isCreateRunResponse(response: Response): boolean {
   const url = new URL(response.url());
   return url.pathname === '/api/runs' && response.request().method() === 'POST';
+}
+
+function expectCreateRunAgentId(response: Response, agentId: FakeAgentId) {
+  expect(response.request().postDataJSON()).toMatchObject({ agentId });
 }
 
 function currentProject(page: Page): { projectId: string } {

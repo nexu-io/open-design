@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-liquid-bg-hero",
-  "title": "流体背景 Hero 帧",
+  "title": "Liquid Background Hero",
   "version": "0.1.0",
-  "description": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报",
+  "description": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -40,11 +40,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Liquid Background Hero template to turn my content into a WebGL-style fluid displacement background with a quote overlay for a video intro, landing hero, or poster. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "流体背景 Hero 帧"
+          "title": "Liquid Background Hero",
+          "title_i18n": {
+            "en": "Liquid Background Hero",
+            "zh-CN": "流体背景 Hero 帧"
+          }
         }
       ]
     },
@@ -73,5 +80,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Liquid Background Hero",
+    "zh-CN": "流体背景 Hero 帧"
+  },
+  "description_i18n": {
+    "en": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
+    "zh-CN": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报"
   }
 }

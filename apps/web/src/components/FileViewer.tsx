@@ -7,6 +7,7 @@ import {
   type TrackingProjectKind,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
   trackArtifactHeaderClick,
@@ -32,6 +33,7 @@ import {
   fetchDeployConfig,
   fetchProjectDeployments,
   fetchProjectFilePreview,
+  fetchProjectFiles,
   fetchProjectFileText,
   uploadProjectFiles,
   liveArtifactPreviewUrl,
@@ -63,9 +65,12 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
+  htmlNeedsFocusGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -606,6 +611,10 @@ interface Props {
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
   onFileSaved?: () => Promise<void> | void;
+  // Open `openName` as a tab (focusing it) and close `closeName` in one
+  // atomic tab-state update. The React module pointer uses this to jump to the
+  // HTML entry that renders a module and drop the dead-end module tab.
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
 }
 
 export function FileViewer({
@@ -622,6 +631,7 @@ export function FileViewer({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onFileSaved,
+  onOpenFileReplacing,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -663,7 +673,13 @@ export function FileViewer({
     );
   }
   if (rendererMatch?.renderer.id === 'react-component') {
-    return <ReactComponentViewer projectId={projectId} file={file} />;
+    return (
+      <ReactComponentViewer
+        projectId={projectId}
+        file={file}
+        onOpenFileReplacing={onOpenFileReplacing}
+      />
+    );
   }
   if (rendererMatch?.renderer.id === 'markdown') {
     return <MarkdownViewer projectId={projectId} file={file} />;
@@ -867,6 +883,23 @@ export function LiveArtifactViewer({
     [projectId, liveArtifact.artifactId, reloadKey],
   );
   const previewScale = zoom / 100;
+  const previewActive = mode === 'preview';
+
+  // Instrument the live-artifact iframe so failed loads — usually a
+  // missing artifact file or a stuck `od://` resolver — surface in
+  // PostHog. iframe load errors don't propagate to window.error, so
+  // observability/install.ts cannot catch them globally.
+  useEffect(() => {
+    if (mode !== 'preview') return undefined;
+    const node = iframeRef.current;
+    if (!node) return undefined;
+    return trackIframeLoad({
+      iframe: node,
+      surface: 'live_artifact_preview',
+      artifactId: liveArtifact.artifactId,
+      projectId,
+    });
+  }, [mode, previewUrl, liveArtifact.artifactId, projectId]);
 
   function bumpZoom(delta: number) {
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
@@ -1007,15 +1040,15 @@ export function LiveArtifactViewer({
           </div>
           <div
             className="viewer-preview-controls"
-            data-active={mode === 'preview' ? 'true' : 'false'}
-            aria-hidden={mode === 'preview' ? undefined : true}
+            data-active={previewActive ? 'true' : 'false'}
+            aria-hidden={previewActive ? undefined : true}
           >
             <span className="viewer-divider" aria-hidden />
             <PreviewViewportControls
               viewport={previewViewport}
               onViewport={setPreviewViewport}
               t={t}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             />
             <span className="viewer-divider" aria-hidden />
             <button
@@ -1024,7 +1057,7 @@ export function LiveArtifactViewer({
               onClick={() => bumpZoom(-25)}
               title={t('fileViewer.zoomOut')}
               aria-label={t('fileViewer.zoomOut')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <Icon name="minus" size={14} />
             </button>
@@ -1033,7 +1066,7 @@ export function LiveArtifactViewer({
               className="viewer-action viewer-zoom-level"
               onClick={() => setZoom(100)}
               title={t('fileViewer.resetZoom')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
             </button>
@@ -1043,7 +1076,7 @@ export function LiveArtifactViewer({
               onClick={() => bumpZoom(25)}
               title={t('fileViewer.zoomIn')}
               aria-label={t('fileViewer.zoomIn')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <Icon name="plus" size={14} />
             </button>
@@ -1053,7 +1086,7 @@ export function LiveArtifactViewer({
               href={liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}
               target="_blank"
               rel="noreferrer noopener"
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               {t('fileViewer.open')}
             </a>
@@ -1106,26 +1139,27 @@ export function LiveArtifactViewer({
             action={t('liveArtifact.refresh.failureAction')}
           />
         ) : null}
-        {mode === 'preview' ? (
-          <div
-            className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
-          >
-            <div className="preview-frame-clip">
-              <div style={previewScaleShellStyle(previewViewport, previewScale)}>
-                <PreviewDrawOverlay>
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="live-artifact-preview-frame"
-                    title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups allow-downloads"
-                    src={previewUrl}
-                  />
-                </PreviewDrawOverlay>
-              </div>
+        <div
+          className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
+          data-active={previewActive ? 'true' : 'false'}
+          aria-hidden={previewActive ? undefined : true}
+          style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
+        >
+          <div className="preview-frame-clip">
+            <div style={previewScaleShellStyle(previewViewport, previewScale)}>
+              <PreviewDrawOverlay>
+                <iframe
+                  ref={iframeRef}
+                  data-testid="live-artifact-preview-frame"
+                  title={liveArtifact.title}
+                  sandbox="allow-scripts allow-popups allow-downloads"
+                  src={previewUrl}
+                />
+              </PreviewDrawOverlay>
             </div>
           </div>
-        ) : loading ? (
+        </div>
+        {previewActive ? null : loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'code' ? (
           <LiveArtifactCodePanel
@@ -3123,12 +3157,51 @@ function clampBridgeCoordinate(value: unknown): number {
   return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
+// Shown instead of the React runtime when a .jsx/.tsx is a module loaded by a
+// sibling HTML entry (issue #2744): such a file has no standalone component to
+// render, so point the user at the page(s) that do. Clicking an entry opens
+// (or focuses) that page and closes the now-useless module tab.
+function ReactModulePointer({
+  entries,
+  onOpenEntry,
+}: {
+  entries: string[];
+  onOpenEntry?: (name: string) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="viewer-module-pointer" role="note">
+      <Icon name="info" size={20} />
+      <h2 className="viewer-module-pointer__title">{t('fileViewer.jsxModuleTitle')}</h2>
+      <p className="viewer-module-pointer__body">{t('fileViewer.jsxModuleBody')}</p>
+      <p className="viewer-module-pointer__cta">{t('fileViewer.jsxModuleCta')}</p>
+      <ul className="viewer-module-pointer__entries">
+        {entries.map((name) => (
+          <li key={name}>
+            <button
+              type="button"
+              className="viewer-module-pointer__link"
+              onClick={() => onOpenEntry?.(name)}
+              disabled={!onOpenEntry}
+            >
+              <Icon name="external-link" size={14} />
+              <span>{name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ReactComponentViewer({
   projectId,
   file,
+  onOpenFileReplacing,
 }: {
   projectId: string;
   file: ProjectFile;
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -3137,6 +3210,11 @@ function ReactComponentViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  // HTML entries that load this file as a Babel module. `null` = still
+  // checking; `[]` = standalone artifact; non-empty = a module of a
+  // multi-file React prototype, which has no standalone preview. Issue #2744.
+  const [moduleEntries, setModuleEntries] = useState<string[] | null>(null);
+  const isModule = (moduleEntries?.length ?? 0) > 0;
 
   useEffect(() => {
     setSource(null);
@@ -3144,6 +3222,36 @@ function ReactComponentViewer({
     void fetchProjectFileText(projectId, file.name).then((text) => {
       if (!cancelled) setSource(text ?? '');
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.name, file.mtime, reloadKey]);
+
+  // Detect whether this .jsx/.tsx is a module loaded by a sibling HTML entry.
+  // Runs before any srcdoc is built so a module never flashes the raw
+  // "No React component export found" error from the React runtime.
+  useEffect(() => {
+    setModuleEntries(null);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const files = await fetchProjectFiles(projectId);
+        const htmlNames = files
+          .filter((entry) => /\.html?$/i.test(entry.name))
+          .map((entry) => entry.name);
+        const htmlSources = new Map<string, string>();
+        await Promise.all(
+          htmlNames.map(async (name) => {
+            const text = await fetchProjectFileText(projectId, name).catch(() => null);
+            if (text != null) htmlSources.set(name, text);
+          }),
+        );
+        if (cancelled) return;
+        setModuleEntries(findHtmlEntriesReferencing(file.name, htmlSources));
+      } catch {
+        if (!cancelled) setModuleEntries([]);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -3170,7 +3278,9 @@ function ReactComponentViewer({
   const sourceExtension = file.name.toLowerCase().endsWith('.tsx') ? '.tsx' : '.jsx';
 
   useEffect(() => {
-    if (source === null) {
+    if (source === null || moduleEntries === null || isModule) {
+      // No source yet, still checking module status, or this file is a module
+      // with no standalone preview — never build the React runtime srcdoc.
       setSrcDoc('');
       return;
     }
@@ -3194,7 +3304,7 @@ function ReactComponentViewer({
     return () => {
       cancelled = true;
     };
-  }, [source, exportTitle]);
+  }, [source, exportTitle, moduleEntries, isModule]);
 
   return (
     <div className="viewer react-component-viewer">
@@ -3292,7 +3402,15 @@ function ReactComponentViewer({
         </div>
       </div>
       <div className="viewer-body">
-        {source === null || (mode === 'preview' && !srcDoc) ? (
+        {isModule && mode === 'preview' ? (
+          // Module of a multi-file prototype: no standalone preview, so the
+          // Preview tab shows a pointer to the HTML entry. The Source tab still
+          // renders the raw code below. Issue #2744.
+          <ReactModulePointer
+            entries={moduleEntries ?? []}
+            onOpenEntry={(htmlName) => onOpenFileReplacing?.(htmlName, file.name)}
+          />
+        ) : source === null || (mode === 'preview' && !srcDoc) ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <PreviewDrawOverlay>
@@ -3606,6 +3724,13 @@ function HtmlViewer({
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const activatedSrcDocTransportHtmlRef = useRef<string | null>(null);
+  // Tracks the iframe DOM node whose dedupe ref was last reset by the
+  // srcDoc onLoad handler. We reset the dedupe exactly once per freshly
+  // mounted iframe (the first load is the shell HTML), and skip every
+  // subsequent load on the same node (those are our own
+  // document.open/write/close inside the shell). See onLoad below for
+  // the infinite-loop story (issue #2361).
+  const srcDocFrameDedupeResetForRef = useRef<HTMLIFrameElement | null>(null);
   const isActivePreviewIframeSource = useCallback((source: MessageEventSource | null) => {
     return !!source && source === iframeRef.current?.contentWindow;
   }, []);
@@ -3774,6 +3899,17 @@ function HtmlViewer({
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
+  const [tweaksMode, setTweaksMode] = useState(false);
+  const [tweaksAvailable, setTweaksAvailable] = useState(false);
+  // Tracks the `file.name` for which we've already mirrored the artifact's
+  // initial `__edit_mode_available` announcement into `tweaksMode`. Agent-
+  // generated `.twk-panel` artifacts mount their panel visible by default,
+  // so the toolbar toggle should also start ON — otherwise the user has to
+  // click toggle-on → toggle-off to actually hide the panel they're seeing.
+  // We only mirror ONCE per file: subsequent re-emissions (iframe remount
+  // when the user flips render mode by opening Themes, etc.) would otherwise
+  // re-toggle the user's choice.
+  const firstEditModeAvailableSeenForFileRef = useRef<string | null>(null);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
 
@@ -3984,6 +4120,10 @@ function HtmlViewer({
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
+  // Detect the class based tweaks template so we keep the srcDoc path on
+  // first load: the bridge that emits `od:tweaks-available` is only injected
+  // by buildSrcdoc, never on the URL load iframe.
+  const tweaksBridgeRequired = hasTweaksTemplate(source);
   // Auto-fall back to the srcDoc path when the artifact will crash under
   // the URL-load iframe's bare `sandbox="allow-scripts"` — Babel-standalone
   // React prototypes and any HTML that reads Web Storage at mount throw
@@ -3995,6 +4135,10 @@ function HtmlViewer({
     () => source != null && htmlNeedsSandboxShim(source),
     [source],
   );
+  const needsFocusGuard = useMemo(
+    () => source != null && htmlNeedsFocusGuard(source),
+    [source],
+  );
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
@@ -4004,7 +4148,9 @@ function HtmlViewer({
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
+    tweaksBridge: tweaksBridgeRequired,
     forceInline: forceInline || needsSandboxShim,
+    needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
@@ -4020,8 +4166,24 @@ function HtmlViewer({
   useEffect(() => {
     setPreviewSrcUrl(basePreviewSrcUrl);
   }, [basePreviewSrcUrl]);
+  // Keep `iframeRef.current` aligned with whichever iframe is currently
+  // visible so the existing postMessage send sites do not need to know that
+  // there are two iframes mounted. Plain `useEffect` (rather than layout)
+  // because all reads of `iframeRef.current` are in async user handlers or
+  // postMessage callbacks, never synchronous during render, and `useEffect`
+  // does not warn under `renderToStaticMarkup`.
   useEffect(() => {
     iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
+  }, [useUrlLoadPreview]);
+  // When the render mode flips, the now-active iframe has already loaded
+  // (its `onLoad` fired when it first mounted, often long before the user
+  // toggled), so we manually re-push the current bridge state instead of
+  // relying on the iframe's load event. `syncBridgeModes` is a closure over
+  // the latest state, so reading it through a ref keeps this effect's deps
+  // honest while still firing the up-to-date sync function.
+  const syncBridgeModesRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncBridgeModesRef.current();
   }, [useUrlLoadPreview]);
 
   useEffect(() => {
@@ -4059,6 +4221,7 @@ function HtmlViewer({
       editBridge: manualEditMode,
       paletteBridge: true,
       initialPalette: selectedPalette,
+      previewFocusGuard: true,
     }) : ''),
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette],
   );
@@ -4276,10 +4439,21 @@ function HtmlViewer({
     }, '*');
     win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
     postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null, target);
+    // Push the toolbar's current `tweaksMode` to both dialects so the artifact
+    // aligns to host state on every load (including render-mode swaps that
+    // expose a different iframe. e.g. opening the Themes popover). Without
+    // this, an artifact that defaults to `open=true` would re-open on every
+    // swap and visually contradict a toolbar that is currently off.
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
+    win.postMessage({ type: tweaksMode ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
     const palette = previewPalette ?? selectedPalette;
     win.postMessage({ type: 'od:palette', palette }, '*');
   }
+  // Keep the ref pointing at the latest `syncBridgeModes` closure so the
+  // render-mode-swap effect above (which can fire before this declaration in
+  // execution order) always calls the up-to-date function.
+  syncBridgeModesRef.current = syncBridgeModes;
 
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
@@ -4347,6 +4521,80 @@ function HtmlViewer({
   }, [inspectMode, boardMode, drawClickSelectionMode, file.name, isOurPreviewIframeSource]);
 
   useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    // Send all known dialects so the artifact can pick up whichever it speaks:
+    //  - `od:tweaks-panel-visible` is the bridge protocol used by class-based
+    //    panels emitted from the tweaks skill template (`.tw-panel`).
+    //  - `__activate_edit_mode` / `__deactivate_edit_mode` is the protocol
+    //    agent-generated artifacts use for their own React-mounted `.twk-panel`.
+    // Deps intentionally exclude `srcDoc`: on iframe remount, sync happens via
+    // `syncBridgeModes` (bridge) and the artifact's own
+    // `__edit_mode_available` announcement (postMessage panels).
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
+    win.postMessage({ type: tweaksMode ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
+  }, [tweaksMode]);
+
+  // Receive tweaks-side state from the iframe. Supports both bridge messages
+  // (`od:tweaks-*` for skill-template artifacts) and the artifact-native
+  // edit-mode protocol (`__edit_mode_*` for agent-generated artifacts). Either
+  // surface controls toolbar availability and mirrors local close into the
+  // toolbar toggle state.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; available?: boolean; visible?: boolean } | null;
+      if (!data?.type) return;
+      if (data.type === 'od:tweaks-available') {
+        // Scope this to the active iframe only. The hidden srcDoc iframe's
+        // tweaks bridge always evaluates `document.querySelector('.tw-panel')`
+        // and posts `available: false` for agent-protocol (`.twk-panel`)
+        // artifacts that ship no class based panel. Without this guard that
+        // `false` would land after `__edit_mode_available` had already set
+        // `tweaksAvailable = true` and silently disable the toolbar button.
+        // `__edit_mode_*` below stays accepted from either iframe — those
+        // signals carry real artifact intent and must survive render mode
+        // flips.
+        if (ev.source !== iframeRef.current?.contentWindow) return;
+        setTweaksAvailable(!!data.available);
+      } else if (data.type === 'od:tweaks-panel-state') {
+        setTweaksMode(!!data.visible);
+      } else if (data.type === '__edit_mode_available') {
+        setTweaksAvailable(true);
+        // Mirror the artifact's reported default visibility into `tweaksMode`
+        // exactly once per file. Per design-templates/tweaks/SKILL.md the
+        // artifact MAY emit `{ visible: boolean }` on the availability
+        // payload to declare a default-closed panel; if absent we treat it
+        // as default-open because the SDK pattern is `useState(true)` and
+        // omitting `visible` is the backward-compatible signal that the
+        // panel is already on screen. Without this mirror, the toolbar reads
+        // OFF while the panel is clearly visible and the user has to click
+        // toggle-on then toggle-off to actually hide it. Guarded by
+        // `firstEditModeAvailableSeenForFileRef` so a later iframe remount
+        // (Themes popover flipping render mode, etc.) doesn't snap a
+        // user-driven OFF back to ON. `syncBridgeModes` remains the source
+        // of truth on every subsequent load: it pushes the current
+        // `tweaksMode` into the artifact via `__activate_edit_mode` /
+        // `__deactivate_edit_mode` so the artifact tracks the toolbar.
+        if (firstEditModeAvailableSeenForFileRef.current !== file.name) {
+          firstEditModeAvailableSeenForFileRef.current = file.name;
+          setTweaksMode(data.visible !== false);
+        }
+      } else if (data.type === '__edit_mode_dismissed') {
+        setTweaksMode(false);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+    // `file.name` is in the dep list so the handler's `firstEditMode-
+    // AvailableSeenForFileRef.current !== file.name` guard compares against
+    // the currently-displayed file. Without this, the listener would close
+    // over the first-render `file.name`; switching to another `.twk-panel`
+    // artifact would never re-mirror the new artifact's default-open state
+    // because the stale closure's comparison kept matching. PR #1643 review.
+  }, [file.name]);
+
+  useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
@@ -4368,6 +4616,10 @@ function HtmlViewer({
     setManualEditError(null);
     manualEditPendingStyleRef.current = null;
     clearManualEditStyleTimer();
+    // Stale tweaks state can carry across files (especially toolbar "on" with
+    // no panel underneath). Reset both and let the iframe bridge re-announce.
+    setTweaksMode(false);
+    setTweaksAvailable(false);
   }, [file.name]);
 
   // Selecting a new file or turning inspect off resets the panel target.
@@ -4735,6 +4987,9 @@ function HtmlViewer({
       setSource(result.source);
       sourceRef.current = result.source;
       setInlinedSource(null);
+      if (patch.kind !== 'set-style') {
+        setManualEditFrozenSource(result.source);
+      }
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
@@ -4788,6 +5043,7 @@ function HtmlViewer({
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
       setInlinedSource(null);
+      setManualEditFrozenSource(latest.beforeSource);
       setManualEditHistory(rest);
       setManualEditUndone((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
@@ -4819,6 +5075,7 @@ function HtmlViewer({
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
       setInlinedSource(null);
+      setManualEditFrozenSource(latest.afterSource);
       setManualEditUndone(rest);
       setManualEditHistory((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
@@ -5623,6 +5880,19 @@ function HtmlViewer({
               </button>
             </span>
           ) : null}
+          <button
+            type="button"
+            className={`viewer-toggle${tweaksMode ? ' on' : ''}`}
+            title={tweaksAvailable ? t('fileViewer.tweaks') : t('fileViewer.tweaksUnavailable')}
+            aria-pressed={tweaksMode}
+            disabled={!tweaksAvailable}
+            data-coming-soon={!tweaksAvailable ? 'true' : undefined}
+            onClick={() => setTweaksMode((v) => !v)}
+          >
+            <Icon name="tweaks" size={13} />
+            <span>{t('fileViewer.tweaks')}</span>
+            <span className="switch" aria-hidden />
+          </button>
         </div>
         <div className="viewer-toolbar-actions">
           {showPreviewToolbarControls ? (
@@ -5632,7 +5902,7 @@ function HtmlViewer({
                   type="button"
                   className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
                   data-testid="palette-tweaks-toggle"
-                  title="Tweaks"
+                  title="Themes"
                   aria-haspopup="dialog"
                   aria-expanded={palettePopoverOpen}
                   onClick={() => {
@@ -5640,8 +5910,8 @@ function HtmlViewer({
                     setPalettePopoverOpen((v) => !v);
                   }}
                 >
-                  <Icon name="tweaks" size={13} />
-                  <span>Tweaks</span>
+                  <Icon name="paint-bucket" size={13} />
+                  <span>Themes</span>
                   {selectedPalette ? (
                     <span
                       className="palette-tweaks-badge"
@@ -6181,10 +6451,40 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
-                        // Belt-and-suspenders for the ready handshake: if the
-                        // postMessage racing the parent's listener registration
-                        // ever loses, the load event still tells us the shell
-                        // script ran to completion.
+                        // Reset the activation dedupe exactly ONCE per
+                        // freshly mounted iframe DOM node, never on the
+                        // subsequent load events that the same node
+                        // emits during normal srcDoc rendering.
+                        //
+                        // The iframe's load event fires twice for one
+                        // successful activation: once when the lazy
+                        // transport shell HTML loads, and again when
+                        // our own document.open/write/close inside the
+                        // shell finishes. PR #2699 reset the dedupe on
+                        // every load so that switching
+                        // preview -> source -> preview (which remounts
+                        // this iframe as a fresh DOM node) would
+                        // re-activate the new shell. But resetting on
+                        // every load also re-activated on the SECOND
+                        // load of a non-remounted frame, which
+                        // re-triggered document.open/write/close, which
+                        // re-fired the load event, ad infinitum. The
+                        // dedupe ref oscillated between null and the
+                        // current srcDoc thousands of times per render
+                        // and each iteration restarted every CSS
+                        // animation from its `from` keyframe. Designs
+                        // using `animation-fill-mode: both` with
+                        // `from { opacity: 0 }` stayed at opacity 0
+                        // forever and the preview read as blank.
+                        // That is issue #2361.
+                        //
+                        // Tracking the last frame we reset for lets us
+                        // keep PR #2699's "remount after Source toggle"
+                        // fix while breaking the loop on plain renders.
+                        if (frame && srcDocFrameDedupeResetForRef.current !== frame) {
+                          srcDocFrameDedupeResetForRef.current = frame;
+                          activatedSrcDocTransportHtmlRef.current = null;
+                        }
                         if (useLazySrcDocTransport) setSrcDocShellReady(true);
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();

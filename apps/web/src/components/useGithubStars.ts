@@ -1,15 +1,17 @@
-// Shared GitHub star-count hook backing both the topbar pill
-// (`GithubStarBadge`) and the collapsed menu item rendered inside
-// the settings dropdown on narrow viewports. The fetched value lives
-// in a module-scoped cache so navigating between subviews never
-// triggers a fresh API call, and rate-limit / offline failures fall
-// back silently — UI still renders a placeholder count.
+// Shared GitHub star-count hook backing the topbar pill
+// (`GithubStarBadge`). The browser talks only to the local daemon,
+// which caches GitHub metadata and can return stale-on-error values
+// when the upstream API flakes. This keeps Electron / nightly builds
+// out of the business of making unauthenticated GitHub requests from
+// the renderer.
 
 import { useEffect, useState } from 'react';
+import type { OpenDesignGithubRepoResponse } from '@open-design/contracts';
 
-const API = 'https://api.github.com/repos/nexu-io/open-design';
+const API = '/api/github/open-design';
 const REPO = 'https://github.com/nexu-io/open-design';
 const LS_KEY = 'open-design:gh-stars';
+export const GITHUB_STARS_FALLBACK_LABEL = '40K+';
 
 // One-hour soft cache — long enough to dodge GitHub's 60/hr
 // unauthenticated quota when the same user reopens the app several
@@ -74,11 +76,10 @@ export function useGithubStars(): number | null {
     (async () => {
       try {
         const res = await fetch(API, {
-          headers: { Accept: 'application/vnd.github+json' },
           signal: ctrl.signal,
         });
         if (!res.ok) return;
-        const data = (await res.json()) as { stargazers_count?: unknown };
+        const data = (await res.json()) as Partial<OpenDesignGithubRepoResponse>;
         if (typeof data.stargazers_count !== 'number') return;
         const next: CachedStars = {
           count: data.stargazers_count,

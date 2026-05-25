@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-card-xiaohongshu",
-  "title": "小红书图文卡片",
+  "title": "Xiaohongshu Card",
   "version": "0.1.0",
-  "description": "小红书风格知识卡片, 多张联排可滑动浏览",
+  "description": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -41,11 +41,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「小红书图文卡片」模板把我的内容做成一份「小红书风格知识卡片, 多张联排可滑动浏览」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Xiaohongshu Card template to turn my content into a Xiaohongshu-style swipeable knowledge-card carousel. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「小红书图文卡片」模板把我的内容做成一份「小红书风格知识卡片, 多张联排可滑动浏览」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "小红书图文卡片"
+          "title": "Xiaohongshu Card",
+          "title_i18n": {
+            "en": "Xiaohongshu Card",
+            "zh-CN": "小红书图文卡片"
+          }
         }
       ]
     },
@@ -74,5 +81,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Xiaohongshu Card",
+    "zh-CN": "小红书图文卡片"
+  },
+  "description_i18n": {
+    "en": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
+    "zh-CN": "小红书风格知识卡片, 多张联排可滑动浏览"
   }
 }

@@ -27,6 +27,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/agent-adapters.md',
     docsUrl: 'https://hermes-agent.nousresearch.com/docs/',
   },
+  'trae-cli': {
+    installUrl: 'https://www.volcengine.com/docs/86677/2227861?lang=zh',
+    docsUrl: 'https://www.volcengine.com/docs/86677/2227861?lang=zh',
+  },
   kimi: {
     installUrl: 'https://github.com/MoonshotAI/kimi-cli',
     docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html',

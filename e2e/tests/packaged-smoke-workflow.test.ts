@@ -8,7 +8,9 @@ const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
+const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
+const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
 
 describe("packaged smoke workflow", () => {
   it("keeps packaged smoke outside the main CI gate", async () => {
@@ -65,7 +67,66 @@ describe("packaged smoke workflow", () => {
     expectReleaseLinuxBuildPreservesEvidence(workflow, "Build release linux artifacts");
     expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow, "Smoke release linux AppImage runtime");
   });
+
+  it("keeps release namespaces aligned with release channels", async () => {
+    const [releaseStableWorkflow, releaseStableScript, releasePreviewWorkflow, releaseBetaWorkflow] = await Promise.all([
+      readFile(releaseStableWorkflowPath, "utf8"),
+      readFile(releaseStableScriptPath, "utf8"),
+      readFile(releasePreviewWorkflowPath, "utf8"),
+      readFile(releaseBetaWorkflowPath, "utf8"),
+    ]);
+
+    expect(releaseStableScript).toContain('const mac = channel === "nightly" ? "release-nightly" : "release-stable";');
+    expect(releaseStableScript).toContain('setOutput("namespace", namespaces.mac);');
+    expect(releaseStableScript).toContain('setOutput("mac_intel_namespace", namespaces.macIntel);');
+    expect(releaseStableScript).toContain('setOutput("win_namespace", namespaces.win);');
+    expect(releaseStableScript).toContain('setOutput("linux_namespace", namespaces.linux);');
+
+    expect(releaseStableWorkflow).toContain("namespace: ${{ steps.stable.outputs.namespace }}");
+    expect(releaseStableWorkflow).toContain("mac_intel_namespace: ${{ steps.stable.outputs.mac_intel_namespace }}");
+    expect(releaseStableWorkflow).toContain("win_namespace: ${{ steps.stable.outputs.win_namespace }}");
+    expect(releaseStableWorkflow).toContain("linux_namespace: ${{ steps.stable.outputs.linux_namespace }}");
+    expect(releaseStableWorkflow).toContain('--namespace "${{ needs.metadata.outputs.namespace }}"');
+    expect(releaseStableWorkflow).toContain("OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}");
+    expect(releaseStableWorkflow).toContain("TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.namespace }}");
+    expect(releaseStableWorkflow).toContain('"--namespace", "${{ needs.metadata.outputs.win_namespace }}",');
+    expect(releaseStableWorkflow).toContain('OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}');
+    expect(releaseStableWorkflow).toContain('TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}');
+    expect(releaseStableWorkflow).toContain('--namespace "${{ needs.metadata.outputs.linux_namespace }}"');
+    expect(releaseStableWorkflow).toContain('"namespace": "${{ needs.metadata.outputs.linux_namespace }}",');
+    expect(releaseStableWorkflow).not.toMatch(/--namespace release-stable(?:-intel|-win|-linux)?\b/);
+    expect(releaseStableWorkflow).not.toMatch(/OD_PACKAGED_E2E_NAMESPACE: release-stable(?:-win|-linux)?\b/);
+    expect(releaseStableWorkflow).not.toMatch(/TOOLS_PACK_NAMESPACE: release-stable(?:-intel|-win|-linux)?\b/);
+    expect(releaseStableWorkflow).not.toMatch(/namespaces\/release-stable(?:-intel|-win|-linux)?\b/);
+
+    expectChannelWorkflowNamespaces(releasePreviewWorkflow, "preview", { hasLinuxSmoke: false });
+    expectChannelWorkflowNamespaces(releaseBetaWorkflow, "beta", { hasLinuxSmoke: true });
+    expect(releaseBetaWorkflow).toContain("OD_PACKAGED_E2E_RELEASE_CHANNEL: beta");
+    expect(releaseBetaWorkflow).toContain("OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}");
+  });
 });
+
+function expectChannelWorkflowNamespaces(
+  workflow: string,
+  channel: "beta" | "preview",
+  options: { hasLinuxSmoke: boolean },
+): void {
+  const namespace = `release-${channel}`;
+  expect(workflow).toContain(`--namespace ${namespace}`);
+  expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}`);
+  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}`);
+  expect(workflow).toContain(`--namespace ${namespace}-intel`);
+  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}-intel`);
+  expect(workflow).toContain(`"--namespace", "${namespace}-win",`);
+  expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}-win`);
+  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}-win`);
+  expect(workflow).toContain(`--namespace ${namespace}-linux`);
+  expect(workflow).toContain(`TOOLS_PACK_NAMESPACE: ${namespace}-linux`);
+
+  if (options.hasLinuxSmoke) {
+    expect(workflow).toContain(`OD_PACKAGED_E2E_NAMESPACE: ${namespace}-linux`);
+  }
+}
 
 function expectReleaseLinuxBuildPreservesEvidence(workflow: string, stepName: string): void {
   const step = workflow.match(new RegExp(`- name: ${stepName}\\n(?:.+\\n)+?(?=\\n      - name: Smoke .+ linux AppImage runtime)`, "m"))?.[0];

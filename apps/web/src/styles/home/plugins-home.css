@@ -53,7 +53,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 220px;
+  width: 200px;
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -132,10 +132,15 @@
     align-items: stretch;
   }
   .plugins-home__head-tools {
-    justify-content: space-between;
+    justify-content: flex-end;
+  }
+  .plugins-home__facet-tools {
+    width: 100%;
+    justify-content: flex-start;
   }
   .plugins-home__search {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 }
 .plugins-home__empty {
@@ -154,22 +159,12 @@
 }
 
 /* ============================================================
-   Faceted filter — single curated workflow bar. The Featured chip
-   lives in a smaller mode strip above the row so it reads as
-   orthogonal to the category selection it overrides.
+   Faceted filter — a single combined bar. Saved / category
+   pills live on the left, the search field + result count +
+   clear-filters affordance live on the right. Folding the old
+   "mode strip + header search + category row" into one keeps the
+   eye on a single horizontal control surface.
    ============================================================ */
-.plugins-home__mode {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-bottom: 2px;
-}
-.plugins-home__mode-total {
-  font-size: 11.5px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
 .plugins-home__chip {
   appearance: none;
   display: inline-flex;
@@ -193,17 +188,17 @@
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
-.plugins-home__chip--featured {
+.plugins-home__chip--saved {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
   color: var(--accent);
   background: var(--accent-tint);
 }
-.plugins-home__chip--featured.is-active {
+.plugins-home__chip--saved.is-active {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
 }
-.plugins-home__chip--featured.is-active .plugins-home__chip-count {
+.plugins-home__chip--saved.is-active .plugins-home__chip-count {
   color: white;
   opacity: 0.85;
 }
@@ -248,29 +243,35 @@
 .plugins-home__facet-row--inline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 4px 0;
+}
+/* Right-aligned cluster paired with the chip strip on the same row.
+   Hosts the search input, the filtered-count, and a clear-filters
+   link when at least one facet is active. It can wrap under the
+   chip strip on constrained viewports instead of forcing a local
+   horizontal scrollbar. */
+.plugins-home__facet-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 240px;
+  margin-left: auto;
+  min-width: min(100%, 200px);
 }
 .plugins-home__facet-row--sub {
   padding-top: 0;
   opacity: 0.92;
 }
 .plugins-home__facet-row--inline .plugins-home__facet-pills {
-  flex: 1;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  /* Hide horizontal scrollbar on WebKit while keeping wheel/drag scroll. */
-  scrollbar-color: var(--border-strong) transparent;
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  overflow: visible;
 }
-.plugins-home__facet-row--inline .plugins-home__facet-pills::-webkit-scrollbar {
-  height: 0;
-}
-.plugins-home__facet-row--inline .plugins-home__pill {
+.plugins-home__facet-row--inline .plugins-home__pill,
+.plugins-home__facet-row--inline .plugins-home__chip {
   flex: 0 0 auto;
-  scroll-snap-align: start;
 }
 .plugins-home__facet-label {
   padding-top: 7px;
@@ -336,6 +337,31 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
 }
+/*
+ * Planned scene buckets stay visible even before the bundled catalog
+ * has examples for every bucket. Fade zero-count chips without adding
+ * synthetic placeholder cards to the starter grid.
+ */
+.plugins-home__pill[data-empty='true']:not(.is-active) {
+  opacity: 0.45;
+  border-style: dashed;
+}
+.plugins-home__pill[data-empty='true']:not(.is-active):hover {
+  opacity: 0.75;
+}
+.plugins-home__pill[data-empty='true']:not(.is-active) .plugins-home__pill-count {
+  color: var(--text-faint);
+}
+/*
+ * "All" pills always reflect the catalog's full size (or full lane
+ * size in the sub-row's case) and should not pick up the empty
+ * treatment even when an unrelated category happens to be zero.
+ */
+.plugins-home__pill--all[data-empty='true'],
+.plugins-home__pill--sub-all[data-empty='true'] {
+  opacity: 1;
+  border-style: solid;
+}
 
 .plugins-home__empty--filtered {
   border-style: solid;
@@ -366,6 +392,11 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
 }
+.plugins-home__load-more-sentinel {
+  height: 1px;
+  min-width: 1px;
+  pointer-events: none;
+}
 @media (min-width: 1100px) {
   .plugins-home__grid {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -388,52 +419,9 @@
   transition: border-color 120ms ease, box-shadow 160ms ease,
     transform 160ms ease;
   isolation: isolate;
-}
-
-.plugins-home__card--contribute {
-  min-height: 240px;
-  border: 1px dashed color-mix(in srgb, var(--accent) 42%, var(--border));
-  background:
-    radial-gradient(circle at 18% 18%, var(--accent-tint), transparent 36%),
-    var(--bg-panel);
-}
-.plugins-home__contribute-inner {
-  display: flex;
-  min-height: inherit;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px;
-}
-.plugins-home__contribute-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: white;
-}
-.plugins-home__contribute-inner h3 {
-  margin: 0 0 8px;
-  color: var(--text-strong);
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-.plugins-home__contribute-inner p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-.plugins-home__contribute-template {
-  margin-top: 10px !important;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) - 4px);
-  background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
-  color: var(--text) !important;
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: 280px 260px;
 }
 .plugins-home__card:hover {
   border-color: var(--border-strong);
@@ -483,7 +471,43 @@
   background:
     linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%) 0 0 / 200% 100%,
     var(--bg-subtle);
+}
+.plugins-home__media-skeleton.is-active {
   animation: plugins-home-shimmer 1.6s ease-in-out infinite;
+}
+.plugins-home__media-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 22% 18%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-tint) 64%, white), var(--bg-subtle));
+}
+.plugins-home__media-fallback-glyph {
+  color: color-mix(in srgb, var(--accent) 74%, var(--text));
+  font-family: var(--serif);
+  font-size: 56px;
+  font-weight: 650;
+  line-height: 1;
+  opacity: 0.86;
+}
+.plugins-home__media-fallback-icon {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel) 74%, transparent);
+  color: var(--accent);
+  box-shadow: var(--shadow-xs);
 }
 @keyframes plugins-home-shimmer {
   to {
@@ -544,6 +568,8 @@
   border-radius: 4px;
   background: linear-gradient(90deg, var(--bg-subtle), var(--border-soft), var(--bg-subtle));
   background-size: 200% 100%;
+}
+.plugins-home__html-skeleton.is-active span {
   animation: plugins-home-shimmer 1.6s ease-in-out infinite;
 }
 .plugins-home__html-skeleton span:nth-child(1) { width: 70%; }
@@ -823,10 +849,39 @@
   border-top: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
+.plugins-home__card-save {
+  position: relative;
+  z-index: 4;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+}
+.plugins-home__card-save:hover,
+.plugins-home__card-save:focus-visible {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+  outline: none;
+}
+.plugins-home__card-save.is-saved {
+  background: color-mix(in srgb, var(--accent) 16%, white);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--accent);
+}
 .plugins-home__card-title {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   font-weight: 600;
   color: var(--text-strong);
   font-size: 13px;
@@ -835,9 +890,10 @@
   white-space: nowrap;
   min-width: 0;
 }
-.plugins-home__card-featured-mark {
-  flex: 0 0 auto;
-  color: var(--accent);
+.plugins-home__card-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Card action buttons — overlay variant */
@@ -910,9 +966,10 @@
   font-size: 12px;
   cursor: pointer;
 }
-.plugins-home__use-menu-item:hover,
-.plugins-home__use-menu-item:focus-visible {
-  background: rgba(17, 17, 17, 0.08);
+button.plugins-home__use-menu-item:hover:not(:disabled),
+button.plugins-home__use-menu-item:focus-visible {
+  background: #f3f3f3;
+  color: #111;
   outline: none;
 }
 .plugins-home__action--primary {

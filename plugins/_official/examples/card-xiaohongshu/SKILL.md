@@ -3,7 +3,9 @@ name: card-xiaohongshu
 zh_name: "小红书图文卡片"
 en_name: "Xiaohongshu Card"
 emoji: "📱"
-description: "小红书风格知识卡片, 多张联排可滑动浏览"
+description: "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel."
+zh_description: "小红书风格知识卡片, 多张联排可滑动浏览"
+en_description: "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel."
 category: card
 scenario: marketing
 aspect_hint: "1080×1440 (3:4)"
@@ -19,7 +21,6 @@ od:
   surface: web
   platform: desktop
   scenario: marketing
-  featured: 24
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
     type: html
@@ -27,7 +28,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「小红书图文卡片」模板把我的内容做成一份「小红书风格知识卡片, 多张联排可滑动浏览」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Xiaohongshu Card template to turn my content into a Xiaohongshu-style swipeable knowledge-card carousel. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「小红书图文卡片」模板把我的内容做成一份「小红书风格知识卡片, 多张联排可滑动浏览」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 小红书图文卡片】

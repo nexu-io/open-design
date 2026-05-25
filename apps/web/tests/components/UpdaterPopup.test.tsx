@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OpenDesignHostUpdaterStatusListener, OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
@@ -47,18 +47,118 @@ describe('UpdaterPopup', () => {
     restoreHost = null;
   });
 
-  it('waits for host status and opens the installer from the popup', async () => {
-    let status = downloadedStatus();
-    const install = vi.fn(async () => {
-      status = downloadedStatus({
-        installResult: {
-          dryRun: true,
-          openedAt: '2026-05-19T00:00:00.000Z',
-          path: status.downloadPath ?? '/tmp/open-design-updater/Open Design Beta.dmg',
+  it('stays hidden for non-installable updater states', async () => {
+    for (const status of [
+      idleStatus(),
+      { ...idleStatus(), state: 'not-available' as const },
+      downloadedStatus({
+        progress: {
+          receivedBytes: 50,
+          totalBytes: 100,
+        },
+        state: 'downloading',
+      }),
+      downloadedStatus({
+        downloadPath: undefined,
+        error: {
+          code: 'update-store-invalid-shape',
+          message: 'update store contains unexpected root entries',
+        },
+        state: 'error',
+      }),
+    ]) {
+      restoreHost = installMockOpenDesignHost({
+        host: {
+          updater: {
+            status: vi.fn(async () => status),
+          },
         },
       });
-      return status;
+
+      const view = render(<UpdaterPopup />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.queryByTestId('entry-nav-updater')).toBeNull();
+      expect(screen.queryByTestId('updater-popup')).toBeNull();
+      view.unmount();
+      restoreHost?.();
+      restoreHost = null;
+    }
+  });
+
+  it('shows only the ready indicator until the user opens the install prompt', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
     });
+
+    render(<UpdaterPopup />);
+
+    const button = await screen.findByTestId('entry-nav-updater');
+    expect(button.getAttribute('data-tooltip')).toBe('Install update');
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+
+    fireEvent.click(button);
+
+    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    expect(screen.getByText('Open Design 1.2.3-beta.4 is ready. Open Design will close and open the installer.')).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
+  });
+
+  it('uses localized ready prompt copy from the app i18n provider', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <UpdaterPopup />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+
+    expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').textContent).toBe('安装更新');
+    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并打开安装器。')).toBeTruthy();
+  });
+
+  it('dismisses the confirmation prompt before installation starts', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+  });
+
+  it('keeps the prompt in handoff loading after opening the installer', async () => {
+    let status = downloadedStatus();
+    let resolveInstall: (status: OpenDesignHostUpdaterStatusSnapshot) => void = () => undefined;
+    const install = vi.fn(() => new Promise<OpenDesignHostUpdaterStatusSnapshot>((resolve) => {
+      resolveInstall = resolve;
+    }));
     const quit = vi.fn(async () => ({ ok: true as const }));
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -72,15 +172,118 @@ describe('UpdaterPopup', () => {
 
     render(<UpdaterPopup />);
 
-    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
     fireEvent.click(screen.getByTestId('updater-install-button'));
-    expect(await screen.findByRole('dialog', { name: 'Installer opened' })).toBeTruthy();
-    fireEvent.click(screen.getByTestId('updater-quit-button'));
-    expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-popup' } });
-    expect(quit).toHaveBeenCalledWith({ payload: { source: 'updater-popup' } });
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Opening installer...' }).getAttribute('disabled')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Later' }).getAttribute('disabled')).not.toBeNull();
+
+    await act(async () => {
+      status = downloadedStatus({
+        installResult: {
+          dryRun: true,
+          openedAt: '2026-05-19T00:00:00.000Z',
+          path: '/tmp/open-design-updater/Open Design Beta.dmg',
+        },
+      });
+      resolveInstall(status);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
+    await waitFor(() => expect(quit).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
+    expect(screen.getByTestId('entry-nav-updater')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Opening installer...' }).getAttribute('disabled')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Later' }).getAttribute('disabled')).not.toBeNull();
   });
 
-  it('reacts to updater subscription events without polling-only behavior', async () => {
+  it('recovers the handoff prompt if the app has not closed after the watchdog', async () => {
+    const install = vi.fn(async () => downloadedStatus({
+      installResult: {
+        dryRun: true,
+        openedAt: '2026-05-19T00:00:00.000Z',
+        path: '/tmp/open-design-updater/Open Design Beta.dmg',
+      },
+    }));
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByTestId('updater-install-button'));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole('button', { name: 'Opening installer...' }).getAttribute('disabled')).not.toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+
+      expect(screen.getByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+      expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
+      expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).toBeNull();
+      fireEvent.click(screen.getByTestId('updater-install-button'));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(install).toHaveBeenCalledTimes(2);
+      expect(quit).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps install failures internal and leaves the ready prompt usable', async () => {
+    const install = vi.fn(async () => downloadedStatus({
+      error: {
+        code: 'open-installer-failed',
+        message: 'fixture open failed',
+      },
+      state: 'error',
+    }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+    fireEvent.click(screen.getByTestId('updater-install-button'));
+
+    await waitFor(() => expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
+    expect(screen.queryByText('fixture open failed')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Update failed' })).toBeNull();
+    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).toBeNull();
+  });
+
+  it('reacts to updater subscription events by showing the ready indicator only', async () => {
     const listeners = new Set<OpenDesignHostUpdaterStatusListener>();
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -98,125 +301,13 @@ describe('UpdaterPopup', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.queryByTestId('updater-popup')).toBeNull();
+    expect(screen.queryByTestId('entry-nav-updater')).toBeNull();
 
     act(() => {
       for (const listener of listeners) listener(downloadedStatus());
     });
-    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
-    expect(screen.getByTestId('entry-nav-updater')).toBeTruthy();
-  });
 
-  it('uses localized updater copy from the app i18n provider', async () => {
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          status: vi.fn(async () => downloadedStatus()),
-        },
-      },
-    });
-
-    render(
-      <I18nProvider initial="zh-CN">
-        <UpdaterPopup />
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
-    expect(screen.getByTestId('updater-install-button').textContent).toBe('打开安装器');
-    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。')).toBeTruthy();
-  });
-
-  it('shows disabled left-rail progress while an update is downloading', async () => {
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          status: vi.fn(async () => downloadedStatus({
-            progress: {
-              receivedBytes: 50,
-              totalBytes: 100,
-            },
-            state: 'downloading',
-          })),
-        },
-      },
-    });
-
-    render(<UpdaterPopup />);
-
-    const trigger = await screen.findByTestId('entry-nav-updater');
-    expect(trigger.getAttribute('aria-disabled')).toBe('true');
+    expect(await screen.findByTestId('entry-nav-updater')).toBeTruthy();
     expect(screen.queryByTestId('updater-popup')).toBeNull();
-    const progress = screen.getByRole('progressbar', { name: 'Downloading update 50%' });
-    expect(progress.getAttribute('aria-valuenow')).toBe('50');
-    expect(progress.getAttribute('style')).toContain('--updater-progress: 50%');
-  });
-
-  it('starts indeterminate download progress at zero width', async () => {
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          status: vi.fn(async () => downloadedStatus({
-            state: 'downloading',
-          })),
-        },
-      },
-    });
-
-    render(<UpdaterPopup />);
-
-    const trigger = await screen.findByTestId('entry-nav-updater');
-    expect(trigger.getAttribute('aria-disabled')).toBe('true');
-    const progress = screen.getByRole('progressbar', { name: 'Downloading update' });
-    expect(progress.hasAttribute('aria-valuenow')).toBe(false);
-    expect(progress.getAttribute('style')).toContain('--updater-progress: 0%');
-  });
-
-  it('keeps the popup open when opening the installer returns an updater error state', async () => {
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          install: vi.fn(async () => downloadedStatus({
-            error: {
-              code: 'open-installer-failed',
-              message: 'fixture open failed',
-            },
-            state: 'error',
-          })),
-          status: vi.fn(async () => downloadedStatus()),
-        },
-      },
-    });
-
-    render(<UpdaterPopup />);
-    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
-    fireEvent.click(screen.getByTestId('updater-install-button'));
-    expect(await screen.findByRole('dialog', { name: 'Update failed' })).toBeTruthy();
-    expect(screen.getByText('fixture open failed')).toBeTruthy();
-  });
-
-  it('renders status errors as failed updates instead of a disabled ready action', async () => {
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          status: vi.fn(async () => downloadedStatus({
-            downloadPath: undefined,
-            error: {
-              code: 'update-store-invalid-shape',
-              message: 'update store contains unexpected root entries',
-            },
-            state: 'error',
-          })),
-        },
-      },
-    });
-
-    render(<UpdaterPopup />);
-
-    const trigger = await screen.findByTestId('entry-nav-updater');
-    fireEvent.click(trigger);
-    expect(await screen.findByRole('dialog', { name: 'Update failed' })).toBeTruthy();
-    expect(screen.getByText('update store contains unexpected root entries')).toBeTruthy();
-    expect(screen.queryByTestId('updater-install-button')).toBeNull();
   });
 });

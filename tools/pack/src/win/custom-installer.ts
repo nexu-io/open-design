@@ -338,18 +338,42 @@ FunctionEnd
 Function DetectRunningInstances
   Push $0
   Push $1
+  Push $2
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
+
+  ; Try pwsh.exe first (PowerShell 7)
+  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
+  Pop $0
+  Pop $1
+
+  \${If} $0 == "0"
+    ; pwsh.exe succeeded
+    StrCpy $RunningInstancesOutput $1
+    Goto done
+  \${EndIf}
+
+  ; pwsh.exe failed, try powershell.exe (Windows PowerShell 5.1)
+  Push "pwsh.exe failed exit=$0, trying powershell.exe"
+  Call LogInstallerEvent
+
   nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
+
   \${If} $0 == "0"
+    ; powershell.exe succeeded
     StrCpy $RunningInstancesOutput $1
-  \${Else}
-    StrCpy $RunningInstancesOutput "__detection_failed__"
-    Push "running instance detection failed exit=$0 output=$1"
-    Call LogInstallerEvent
+    Goto done
   \${EndIf}
+
+  ; Both failed
+  StrCpy $RunningInstancesOutput "__detection_failed__"
+  Push "running instance detection failed: both pwsh.exe and powershell.exe failed, last exit=$0 output=$1"
+  Call LogInstallerEvent
+
+done:
+  Pop $2
   Pop $1
   Pop $0
 FunctionEnd
@@ -357,13 +381,43 @@ FunctionEnd
 Function CloseRunningInstances
   Push $0
   Push $1
+  Push $2
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
+
+  ; Try pwsh.exe first (PowerShell 7)
+  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
+  Pop $0
+  Pop $1
+
+  \${If} $0 == "0"
+    ; pwsh.exe succeeded
+    Push "running instances close via pwsh.exe exit=$0 output=$1"
+    Call LogInstallerEvent
+    Goto done
+  \${EndIf}
+
+  ; pwsh.exe failed, try powershell.exe (Windows PowerShell 5.1)
+  Push "pwsh.exe failed exit=$0, trying powershell.exe"
+  Call LogInstallerEvent
+
   nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
-  Push "running instances close exit=$0 output=$1"
+
+  \${If} $0 == "0"
+    ; powershell.exe succeeded
+    Push "running instances close via powershell.exe exit=$0 output=$1"
+    Call LogInstallerEvent
+    Goto done
+  \${EndIf}
+
+  ; Both failed
+  Push "running instances close failed: both pwsh.exe and powershell.exe failed, last exit=$0 output=$1"
   Call LogInstallerEvent
+
+done:
+  Pop $2
   Pop $1
   Pop $0
 FunctionEnd
@@ -383,6 +437,9 @@ valid_existing_location:
 
   IfSilent silent_check no_existing_install
 silent_check:
+  IfFileExists "$INSTDIR\\${exeName}" 0 silent_detect_running_instances
+  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
+silent_detect_running_instances:
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput != ""
     Push "running instances detected before silent install: $RunningInstancesOutput"
@@ -598,7 +655,7 @@ skip_silent_desktop_shortcut:
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_before_create" "$SMPROGRAMS\\${shortcutName}"
   CreateShortCut "$SMPROGRAMS\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_after_create" "$SMPROGRAMS\\${shortcutName}"
-  WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName} \${APP_VERSION}"
+  WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"
   WriteRegStr HKCU "${registryKey}" "DisplayVersion" "\${APP_VERSION}"
   WriteRegStr HKCU "${registryKey}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${registryKey}" "UninstallString" '"$INSTDIR\\${uninstallerName}" /currentuser'

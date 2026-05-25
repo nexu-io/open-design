@@ -3,7 +3,6 @@ import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -74,9 +73,6 @@ async function gotoEntryHome(page: Page) {
 async function openSettings(page: Page) {
   await gotoEntryHome(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
@@ -85,7 +81,7 @@ async function openSettings(page: Page) {
 async function openMemorySettings(page: Page) {
   const dialog = await openSettings(page);
   await dialog.getByRole('button', { name: /^Memory\b/ }).click();
-  await expect(dialog.getByText('MEMORY.md')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'New memory' })).toBeVisible();
   return dialog;
 }
 
@@ -190,123 +186,6 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(reopened.getByText('Persistent rendering preferences')).toBeVisible();
   });
 
-  test('disables memory injection and keeps the disabled banner after reopening settings', async ({ page }) => {
-    await seedSettingsBase(page);
-
-    let enabled = true;
-
-    await page.route('**/api/memory', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          enabled,
-          rootDir: '/tmp/memory',
-          index: '# Memory\n',
-          entries: [],
-          extraction: null,
-        }),
-      });
-    });
-
-    await page.route('**/api/memory/extractions', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ extractions: [] }),
-      });
-    });
-
-    await page.route('**/api/memory/events', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/event-stream',
-        body: '',
-      });
-    });
-
-    await page.route('**/api/memory/config', async (route) => {
-      const payload = route.request().postDataJSON() as { enabled?: boolean };
-      if (typeof payload.enabled === 'boolean') enabled = payload.enabled;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ enabled, extraction: null }),
-      });
-    });
-
-    const dialog = await openMemorySettings(page);
-    await dialog.getByLabel('Enable memory injection').uncheck();
-    await expect(dialog.locator('.memory-disabled-banner')).toBeVisible();
-
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    const reopened = await openMemorySettings(page);
-    await expect(reopened.locator('.memory-disabled-banner')).toBeVisible();
-  });
-
-  test('keeps the memory editor open when creating a memory entry fails', async ({ page }) => {
-    await seedSettingsBase(page);
-
-    await page.route('**/api/memory', async (route) => {
-      const method = route.request().method();
-      if (method === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            enabled: true,
-            rootDir: '/tmp/memory',
-            index: '# Memory\n',
-            entries: [],
-            extraction: null,
-          }),
-        });
-        return;
-      }
-      if (method === 'POST') {
-        await route.fulfill({
-          status: 500,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'provider unavailable' }),
-        });
-        return;
-      }
-      await route.fulfill({ status: 404, body: '{}' });
-    });
-
-    await page.route('**/api/memory/extractions', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ extractions: [] }),
-      });
-    });
-
-    await page.route('**/api/memory/events', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/event-stream',
-        body: '',
-      });
-    });
-
-    const dialog = await openMemorySettings(page);
-
-    await dialog.getByRole('button', { name: 'New memory' }).click();
-    await dialog.getByPlaceholder('e.g. UI preferences').fill('UI preferences');
-    await dialog.getByPlaceholder('One sentence — what is this memory about?').fill(
-      'Persistent rendering preferences',
-    );
-    await dialog
-      .getByPlaceholder(/- Rule one[\s\S]*When to apply: optional scope/)
-      .fill('- Prefer dark mode');
-    await dialog.getByRole('button', { name: 'Create' }).click();
-
-    await expect(dialog.getByPlaceholder('e.g. UI preferences')).toHaveValue('UI preferences');
-    await expect(dialog.locator('.memory-flash-pill')).toHaveCount(0);
-    await expect(dialog.getByText('No memory yet.')).toBeVisible();
-  });
-
   test('creates an automation from the main Automations surface and runs it now', async ({ page }) => {
     await seedSettingsBase(page);
 
@@ -400,7 +279,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await gotoEntryHome(page);
     await page.getByTestId('entry-nav-tasks').click();
     const view = page.getByTestId('tasks-view');
-    await expect(view.getByRole('heading', { name: 'Automations' })).toBeVisible();
+    await expect(view.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
 
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');

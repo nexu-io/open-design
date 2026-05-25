@@ -4,7 +4,9 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 
 import {
+  checkForUpdaterUpdate,
   deriveUpdaterModel,
+  downloadUpdaterUpdate,
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
@@ -64,7 +66,7 @@ describe('web updater model', () => {
     expect(model.promptKey).toContain('1.2.3-beta.4');
   });
 
-  it('derives left-rail download progress from updater snapshots', () => {
+  it('keeps downloading progress internal without showing the updater control', () => {
     const model = deriveUpdaterModel(
       downloadedStatus({
         progress: {
@@ -76,7 +78,7 @@ describe('web updater model', () => {
       { hostAvailable: true },
     );
     expect(model.busy).toBe(true);
-    expect(model.shouldShowControl).toBe(true);
+    expect(model.shouldShowControl).toBe(false);
     expect(model.downloadProgress).toEqual({
       percent: 25,
       receivedBytes: 25,
@@ -84,7 +86,24 @@ describe('web updater model', () => {
     });
   });
 
-  it('keeps the downloaded installer visible while a newer incoming download reports progress', () => {
+  it('keeps current-version package launchers hidden from the updater UI', () => {
+    const model = deriveUpdaterModel(
+      downloadedStatus({
+        availableVersion: undefined,
+        downloadPath: undefined,
+        state: 'not-available',
+      }),
+      { hostAvailable: true },
+    );
+
+    expect(model.environment).toBe('desktop');
+    expect(model.shouldShowControl).toBe(false);
+    expect(model.shouldPrompt).toBe(false);
+    expect(model.upToDate).toBe(true);
+    expect(model.hasDownloadedInstaller).toBe(false);
+  });
+
+  it('keeps the downloaded installer visible without surfacing newer incoming progress', () => {
     const model = deriveUpdaterModel(
       downloadedStatus({
         incoming: {
@@ -112,11 +131,7 @@ describe('web updater model', () => {
     expect(model.busy).toBe(false);
     expect(model.hasDownloadedInstaller).toBe(true);
     expect(model.shouldPrompt).toBe(true);
-    expect(model.downloadProgress).toEqual({
-      percent: 25,
-      receivedBytes: 64,
-      totalBytes: 256,
-    });
+    expect(model.downloadProgress).toBeNull();
   });
 
   it('does not keep prompting after the installer has been opened', () => {
@@ -135,9 +150,15 @@ describe('web updater model', () => {
     expect(model.shouldPrompt).toBe(false);
   });
 
-  it('routes status, install, and quit requests through host helpers with flexible payloads', async () => {
+  it('routes status, check, download, install, and quit requests through host helpers with flexible payloads', async () => {
     const status = downloadedStatus();
     const statusFn = vi.fn(async () => status);
+    const check = vi.fn(async () => downloadedStatus({
+      availableVersion: undefined,
+      downloadPath: undefined,
+      state: 'not-available',
+    }));
+    const download = vi.fn(async () => status);
     const install = vi.fn(async () => downloadedStatus({
       installResult: {
         dryRun: true,
@@ -149,6 +170,8 @@ describe('web updater model', () => {
     restoreHost = installMockOpenDesignHost({
       host: {
         updater: {
+          check,
+          download,
           install,
           quit,
           status: statusFn,
@@ -157,6 +180,14 @@ describe('web updater model', () => {
     });
 
     await expect(readUpdaterStatus({ payload: { source: 'test-status' } })).resolves.toMatchObject({
+      ok: true,
+      model: { shouldPrompt: true },
+    });
+    await expect(checkForUpdaterUpdate({ payload: { source: 'test-check' } })).resolves.toMatchObject({
+      ok: true,
+      model: { upToDate: true },
+    });
+    await expect(downloadUpdaterUpdate({ payload: { source: 'test-download' } })).resolves.toMatchObject({
       ok: true,
       model: { shouldPrompt: true },
     });
@@ -169,6 +200,8 @@ describe('web updater model', () => {
     });
 
     expect(statusFn).toHaveBeenCalledWith({ payload: { source: 'test-status' } });
+    expect(check).toHaveBeenCalledWith({ payload: { source: 'test-check' } });
+    expect(download).toHaveBeenCalledWith({ payload: { source: 'test-download' } });
     expect(install).toHaveBeenCalledWith({ payload: { source: 'test-popup' } });
     expect(quit).toHaveBeenCalledWith({ payload: { source: 'test-quit' } });
   });

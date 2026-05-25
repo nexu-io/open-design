@@ -138,8 +138,12 @@ async function emitRun(promptText) {
     emitFailure();
     return;
   }
-  const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
+  if (promptText.includes('Return an empty daemon smoke response')) {
+    emitEmptySuccess();
+    return;
+  }
   const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
+  const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
   const isFollowUp = promptText.includes('Create a follow-up deterministic smoke artifact');
   const isDefaultSmoke = promptText.includes('Create a deterministic smoke artifact');
   const isOrbit = promptText.includes("Create today's Orbit daily digest as a Live Artifact.");
@@ -328,6 +332,21 @@ function emitFailure() {
       process.stderr.write('intentional fake ' + agentId + ' failure\\n');
       process.exitCode = 1;
       exitSoon(1);
+  }
+}
+
+function emitEmptySuccess() {
+  switch (agentId) {
+    case 'codex':
+      writeJson({ type: 'thread.started' });
+      writeJson({ type: 'turn.started' });
+      writeJson({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 0 } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    default:
+      process.exitCode = 0;
+      exitSoon(0);
   }
 }
 }

@@ -560,7 +560,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
               className={activeTab === 'builtIn' ? 'active' : ''}
               onClick={() => {
                 trackSettingsPetsClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'pets',
                   element: 'built_in',
                 });
@@ -576,7 +576,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
               className={activeTab === 'custom' ? 'active' : ''}
               onClick={() => {
                 trackSettingsPetsClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'pets',
                   element: 'custom',
                 });
@@ -592,7 +592,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
               className={activeTab === 'community' ? 'active' : ''}
               onClick={() => {
                 trackSettingsPetsClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'pets',
                   element: 'community',
                 });
@@ -608,7 +608,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
               className={`seg-btn small${pet.enabled ? ' active' : ''}`}
               onClick={() => {
                 trackSettingsPetsClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'pets',
                   element: 'tuck_away',
                 });
@@ -673,7 +673,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
             className={`seg-btn small${pet.adopted && pet.petId === CUSTOM_PET_ID ? ' active' : ''}`}
             onClick={() => {
               trackSettingsPetsClick(analytics.track, {
-                page: 'settings',
+                page_name: 'settings',
                 area: 'pets',
                 element: 'adopt',
                 pet_id: CUSTOM_PET_ID,

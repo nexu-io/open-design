@@ -32,6 +32,13 @@ env:
   # leave the user's machine, /api/analytics/config returns enabled=false).
   POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
   POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+  # PostHog Error tracking sourcemap upload. Personal API key (phx_...) and
+  # project ID let tools-pack's web-sourcemaps step ship browser sourcemaps
+  # to PostHog after `next build` and before the .map files are stripped
+  # from the packaged bundle. Missing in PR/fork builds → upload is skipped
+  # and the helper still strips .map to keep source out of the installer.
+  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
 
 jobs:
   metadata:
@@ -51,6 +58,9 @@ jobs:
       channel: ${{ steps.stable.outputs.channel }}
       commit: ${{ steps.stable.outputs.commit }}
       github_release_enabled: ${{ steps.stable.outputs.github_release_enabled }}
+      linux_namespace: ${{ steps.stable.outputs.linux_namespace }}
+      mac_intel_namespace: ${{ steps.stable.outputs.mac_intel_namespace }}
+      namespace: ${{ steps.stable.outputs.namespace }}
       nightly_number: ${{ steps.stable.outputs.nightly_number }}
       previous_stable: ${{ steps.stable.outputs.previous_stable }}
       release_name: ${{ steps.stable.outputs.release_name }}
@@ -58,6 +68,7 @@ jobs:
       stable_version: ${{ steps.stable.outputs.stable_version }}
       state_source: ${{ steps.stable.outputs.state_source }}
       version_tag: ${{ steps.stable.outputs.version_tag }}
+      win_namespace: ${{ steps.stable.outputs.win_namespace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -82,7 +93,7 @@ jobs:
           CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
-          R2_ACCESS_PROBE_NAME: release-stable
+          R2_ACCESS_PROBE_NAME: ${{ steps.stable.outputs.namespace }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
         run: bash .github/scripts/release/r2/check.sh
 
@@ -211,9 +222,9 @@ jobs:
           build_args=(
             exec tools-pack mac build
             --dir "$tools_pack_dir"
-            --namespace release-stable
+            --namespace "${{ needs.metadata.outputs.namespace }}"
             --portable
-            --app-version "${{ needs.metadata.outputs.stable_version }}"
+            --app-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
             --json
@@ -235,7 +246,11 @@ jobs:
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
           source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/builder/mac-arm64/Open Design.app/Contents/Frameworks/Electron Framework.framework"
+          app_name="Open Design.app"
+          if [ "${{ needs.metadata.outputs.channel }}" = "nightly" ]; then
+            app_name="Open Design Nightly.app"
+          fi
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/${{ needs.metadata.outputs.namespace }}/builder/mac-arm64/$app_name/Contents/Frameworks/Electron Framework.framework"
 
           dump_framework() {
             local label="$1"
@@ -308,7 +323,7 @@ jobs:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
           OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
           OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-stable
+          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
           OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
@@ -332,7 +347,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: release-stable
+          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
         run: bash .github/scripts/release/assets/mac.sh
 
       - name: Upload mac release bundle
@@ -340,6 +355,7 @@ jobs:
         with:
           name: open-design-release-mac-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   build_mac_intel:
     name: Build release mac intel x64
@@ -390,9 +406,9 @@ jobs:
           set -euo pipefail
           pnpm exec tools-pack mac build \
             --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace release-stable-intel \
+            --namespace "${{ needs.metadata.outputs.mac_intel_namespace }}" \
             --portable \
-            --app-version "${{ needs.metadata.outputs.stable_version }}" \
+            --app-version "${{ needs.metadata.outputs.release_version }}" \
             --mac-compression normal \
             --to all \
             --json \
@@ -403,7 +419,7 @@ jobs:
         env:
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: release-stable-intel
+          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.mac_intel_namespace }}
         run: bash .github/scripts/release/assets/mac-intel.sh
 
       - name: Upload mac intel release bundle
@@ -411,6 +427,7 @@ jobs:
         with:
           name: open-design-release-mac-intel-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   build_win:
     name: Build release win x64
@@ -483,9 +500,9 @@ jobs:
             "exec", "tools-pack", "win", "build",
             "--dir", $toolsPackDir,
             "--cache-dir", $cacheDir,
-            "--namespace", "release-stable-win",
+            "--namespace", "${{ needs.metadata.outputs.win_namespace }}",
             "--portable",
-            "--app-version", "${{ needs.metadata.outputs.stable_version }}",
+            "--app-version", "${{ needs.metadata.outputs.release_version }}",
             "--to", "nsis",
             "--json"
           )
@@ -501,9 +518,9 @@ jobs:
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
             $buildOutput = pnpm exec tools-pack win build `
               --dir $toolsPackDir `
-              --namespace release-stable-win `
+              --namespace "${{ needs.metadata.outputs.win_namespace }}" `
               --portable `
-              --app-version "${{ needs.metadata.outputs.stable_version }}" `
+              --app-version "${{ needs.metadata.outputs.release_version }}" `
               --to nsis `
               --json
             if ($LASTEXITCODE -ne 0) {
@@ -532,7 +549,7 @@ jobs:
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
           OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-stable-win
+          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
           OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
@@ -588,7 +605,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: release-stable-win
+          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.win_namespace }}
         run: ./.github/scripts/release/assets/win.ps1
 
       - name: Upload windows release bundle
@@ -596,6 +613,7 @@ jobs:
         with:
           name: open-design-release-win-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   build_linux:
     name: Build release linux x64
@@ -643,9 +661,9 @@ jobs:
           build_args=(
             exec tools-pack linux build
             --dir "$tools_pack_dir"
-            --namespace release-stable-linux
+            --namespace "${{ needs.metadata.outputs.linux_namespace }}"
             --portable
-            --app-version "${{ needs.metadata.outputs.stable_version }}"
+            --app-version "${{ needs.metadata.outputs.release_version }}"
             --to appimage
             --containerized
             --json
@@ -663,7 +681,7 @@ jobs:
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-stable-linux
+          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
           OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
@@ -676,7 +694,7 @@ jobs:
             "platform": "linux",
             "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
             "spec": "specs/linux.spec.ts",
-            "namespace": "release-stable-linux",
+            "namespace": "${{ needs.metadata.outputs.linux_namespace }}",
             "screenshot": "screenshots/open-design-linux-smoke.png",
             "githubRunId": "$GITHUB_RUN_ID",
             "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
@@ -698,7 +716,7 @@ jobs:
       - name: Prepare linux release assets
         env:
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_NAMESPACE: release-stable-linux
+          TOOLS_PACK_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
         run: bash .github/scripts/release/assets/linux.sh
 
       - name: Upload linux release bundle
@@ -706,6 +724,7 @@ jobs:
         with:
           name: open-design-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets
+          retention-days: 1
 
   publish:
     name: Publish ${{ needs.metadata.outputs.channel }} release
@@ -906,4 +925,26 @@ jobs:
 
       - name: Cleanup workflow artifacts
         if: ${{ success() }}
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh
+
+  cleanup_partial_release_assets:
+    name: Cleanup unpublished release asset artifacts
+    needs:
+      - build_mac
+      - build_mac_intel
+      - build_win
+      - build_linux
+      - publish
+    if: ${{ always() && needs.publish.result != 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Delete unpublished release asset artifacts
+        env:
+          ARTIFACT_CLEANUP_DESCRIPTION: intermediate release asset Actions artifacts from this unpublished run. Canonical manual downloads are only the R2 links in a successful publish summary
+          ARTIFACT_NAME_REGEX: "-release-assets$"
         run: bash .github/scripts/release/github/cleanup-artifacts.sh

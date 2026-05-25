@@ -44,14 +44,49 @@ interface Mover {
   previousCtr: number;
 }
 
+interface DimensionRow {
+  key: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+interface Opportunity {
+  label: string;
+  item: string;
+  evidence: string;
+  action: string;
+}
+
+interface OpportunityBuckets {
+  doorwayQueries: Opportunity[];
+  lowCtrQueries: Opportunity[];
+  lowCtrPages: Opportunity[];
+  deviceCtrGaps: Opportunity[];
+}
+
+interface OpportunityThresholds {
+  minImpressions: number;
+  lowCtr: number;
+  mobileDesktopCtrGap: number;
+}
+
 interface DailyReport {
   reportDate: string;
   comparisonDate: string;
+  rollingStartDate: string;
+  rollingEndDate: string;
   metrics: Metrics;
   delta: MetricDelta;
+  devices: DimensionRow[];
+  countries: DimensionRow[];
+  searchAppearances: DimensionRow[];
   pageRisers: Mover[];
   pageFallers: Mover[];
   queryRisers: Mover[];
+  opportunities: OpportunityBuckets;
+  thresholds: OpportunityThresholds;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -83,9 +118,24 @@ async function buildReport(args: Args): Promise<DailyReport> {
   const today = args.today ?? todayInShanghai();
   const reportDate = addDays(today, -args.delayDays);
   const comparisonDate = addDays(reportDate, -7);
+  const rollingStartDate = addDays(reportDate, -6);
+  const rollingEndDate = reportDate;
   const dataState = 'all';
+  const thresholds = readOpportunityThresholds();
 
-  const [currentTotals, previousTotals, currentPages, previousPages, currentQueries, previousQueries] =
+  const [
+    currentTotals,
+    previousTotals,
+    currentPages,
+    previousPages,
+    currentQueries,
+    previousQueries,
+    deviceRows,
+    countryRows,
+    searchAppearanceRows,
+    rollingQueries,
+    rollingPages,
+  ] =
     await Promise.all([
       querySearchAnalyticsRows({
         startDate: reportDate,
@@ -123,6 +173,38 @@ async function buildReport(args: Args): Promise<DailyReport> {
         dimensions: ['query'],
         dataState,
       }),
+      querySearchAnalyticsRows({
+        startDate: rollingStartDate,
+        endDate: rollingEndDate,
+        dimensions: ['device'],
+        dataState,
+      }),
+      querySearchAnalyticsRows({
+        startDate: rollingStartDate,
+        endDate: rollingEndDate,
+        dimensions: ['country'],
+        dataState,
+      }),
+      querySearchAnalyticsRows({
+        startDate: rollingStartDate,
+        endDate: rollingEndDate,
+        dimensions: ['searchAppearance'],
+        dataState,
+      }),
+      querySearchAnalyticsRows({
+        startDate: rollingStartDate,
+        endDate: rollingEndDate,
+        dimensions: ['query'],
+        rowLimit: 25_000,
+        dataState,
+      }),
+      querySearchAnalyticsRows({
+        startDate: rollingStartDate,
+        endDate: rollingEndDate,
+        dimensions: ['page'],
+        rowLimit: 25_000,
+        dataState,
+      }),
     ]);
   const rowCounts = {
     currentTotals: currentTotals.length,
@@ -131,9 +213,14 @@ async function buildReport(args: Args): Promise<DailyReport> {
     previousPages: previousPages.length,
     currentQueries: currentQueries.length,
     previousQueries: previousQueries.length,
+    devices: deviceRows.length,
+    countries: countryRows.length,
+    searchAppearances: searchAppearanceRows.length,
+    rollingQueries: rollingQueries.length,
+    rollingPages: rollingPages.length,
   };
   console.log(
-    `GSC rows for ${reportDate} vs ${comparisonDate} (${dataState}): ${JSON.stringify(rowCounts)}`,
+    `GSC rows for ${reportDate} vs ${comparisonDate}; rolling ${rollingStartDate}..${rollingEndDate} (${dataState}): ${JSON.stringify(rowCounts)}`,
   );
   if (Object.values(rowCounts).every((count) => count === 0)) {
     throw new Error(
@@ -149,6 +236,8 @@ async function buildReport(args: Args): Promise<DailyReport> {
   return {
     reportDate,
     comparisonDate,
+    rollingStartDate,
+    rollingEndDate,
     metrics,
     delta: {
       clicks: percentDelta(metrics.clicks, previousMetrics.clicks),
@@ -156,6 +245,9 @@ async function buildReport(args: Args): Promise<DailyReport> {
       ctrPoints: (metrics.ctr - previousMetrics.ctr) * 100,
       position: metrics.position - previousMetrics.position,
     },
+    devices: dimensionRows(deviceRows),
+    countries: dimensionRows(countryRows).slice(0, 5),
+    searchAppearances: dimensionRows(searchAppearanceRows),
     pageRisers: [...pageMovers]
       .sort((a, b) => b.clickDelta - a.clickDelta)
       .slice(0, 5),
@@ -163,6 +255,13 @@ async function buildReport(args: Args): Promise<DailyReport> {
     queryRisers: [...queryMovers]
       .sort((a, b) => b.clickDelta - a.clickDelta)
       .slice(0, 5),
+    opportunities: buildOpportunities({
+      queries: rollingQueries,
+      pages: rollingPages,
+      devices: deviceRows,
+      thresholds,
+    }),
+    thresholds,
   };
 }
 
@@ -206,6 +305,149 @@ function rowsByFirstKey(rows: SearchAnalyticsRow[]): Map<string, Metrics> {
   return map;
 }
 
+function dimensionRows(rows: SearchAnalyticsRow[]): DimensionRow[] {
+  return rows
+    .map((row) => ({
+      key: row.keys[0] ?? 'unknown',
+      clicks: row.clicks,
+      impressions: row.impressions,
+      ctr: row.ctr,
+      position: row.position,
+    }))
+    .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
+}
+
+function readOpportunityThresholds(): OpportunityThresholds {
+  return {
+    minImpressions: readNumberEnv('OPP_MIN_IMPRESSIONS', 30),
+    lowCtr: readNumberEnv('OPP_LOW_CTR', 0.01),
+    mobileDesktopCtrGap: readNumberEnv('OPP_MOBILE_DESKTOP_CTR_GAP', 0.3),
+  };
+}
+
+function readNumberEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) return fallback;
+  return value;
+}
+
+function buildOpportunities(input: {
+  queries: SearchAnalyticsRow[];
+  pages: SearchAnalyticsRow[];
+  devices: SearchAnalyticsRow[];
+  thresholds: OpportunityThresholds;
+}): OpportunityBuckets {
+  const { queries, pages, devices, thresholds } = input;
+  const minImpressions = thresholds.minImpressions;
+  const lowCtr = thresholds.lowCtr;
+
+  const doorwayQueries = queries
+    .filter(
+      (row) =>
+        row.impressions >= minImpressions &&
+        row.position >= 11 &&
+        row.position <= 20 &&
+        Boolean(row.keys[0]),
+    )
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 3)
+    .map((row) =>
+      opportunity(
+        '门口页 query',
+        row.keys[0] ?? '',
+        `曝光 ${number(row.impressions)} · 平均排名 ${row.position.toFixed(1)} · CTR ${percent(row.ctr)}`,
+        '补强匹配页面的标题、H1、FAQ 和内部链接，把 page 2 query 推进前 10。',
+      ),
+    );
+
+  const lowCtrQueries = queries
+    .filter(
+      (row) =>
+        row.impressions >= minImpressions &&
+        row.position <= 10 &&
+        row.ctr < lowCtr &&
+        Boolean(row.keys[0]),
+    )
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 3)
+    .map((row) =>
+      opportunity(
+        '高曝光低 CTR query',
+        row.keys[0] ?? '',
+        `曝光 ${number(row.impressions)} · 排名 ${row.position.toFixed(1)} · CTR ${percent(row.ctr)}`,
+        '重写目标页 title/meta description，让 snippet 更贴近搜索意图和差异化卖点。',
+      ),
+    );
+
+  const lowCtrPages = pages
+    .filter(
+      (row) =>
+        row.impressions >= minImpressions &&
+        row.position <= 10 &&
+        row.ctr < lowCtr &&
+        Boolean(row.keys[0]),
+    )
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 3)
+    .map((row) =>
+      opportunity(
+        '高排名低 CTR page',
+        row.keys[0] ?? '',
+        `曝光 ${number(row.impressions)} · 排名 ${row.position.toFixed(1)} · CTR ${percent(row.ctr)}`,
+        '优先检查 SERP 标题、描述和首屏承诺，避免排名有了但点击损失。',
+      ),
+    );
+
+  return {
+    doorwayQueries,
+    lowCtrQueries,
+    lowCtrPages,
+    deviceCtrGaps: deviceCtrGapOpportunities(devices, thresholds),
+  };
+}
+
+function deviceCtrGapOpportunities(
+  rows: SearchAnalyticsRow[],
+  thresholds: OpportunityThresholds,
+): Opportunity[] {
+  const byDevice = rowsByFirstKey(rows);
+  const mobile = byDevice.get('MOBILE') ?? byDevice.get('mobile');
+  const desktop = byDevice.get('DESKTOP') ?? byDevice.get('desktop');
+  if (!mobile || !desktop) return [];
+  if (
+    mobile.impressions < thresholds.minImpressions ||
+    desktop.impressions < thresholds.minImpressions
+  ) {
+    return [];
+  }
+
+  const betterCtr = Math.max(mobile.ctr, desktop.ctr);
+  if (betterCtr === 0) return [];
+  const relativeGap = Math.abs(mobile.ctr - desktop.ctr) / betterCtr;
+  if (relativeGap <= thresholds.mobileDesktopCtrGap) return [];
+
+  const worse = mobile.ctr < desktop.ctr ? 'mobile' : 'desktop';
+  return [
+    opportunity(
+      '设备 CTR 差距',
+      `${worse} CTR 落后`,
+      `mobile ${percent(mobile.ctr)} / desktop ${percent(desktop.ctr)} · 差距 ${(relativeGap * 100).toFixed(0)}%`,
+      `优先检查 ${worse} 搜索结果承诺与落地页体验，确认首屏、速度和 CTA 是否拖累点击。`,
+    ),
+  ];
+}
+
+function opportunity(
+  label: string,
+  item: string,
+  evidence: string,
+  action: string,
+): Opportunity {
+  return { label, item, evidence, action };
+}
+
 function buildFeishuCard(report: DailyReport) {
   return {
     config: { wide_screen_mode: true },
@@ -219,12 +461,20 @@ function buildFeishuCard(report: DailyReport) {
     elements: [
       markdown(summaryMarkdown(report)),
       { tag: 'hr' },
+      markdown(dimensionMarkdown('设备分布（近 7 天）', report.devices)),
+      markdown(dimensionMarkdown('国家/地区 Top 5（近 7 天）', report.countries)),
+      ...(report.searchAppearances.length > 0
+        ? [markdown(dimensionMarkdown('Search appearance（近 7 天）', report.searchAppearances))]
+        : []),
+      { tag: 'hr' },
       markdown(moversMarkdown('Top 5 页面增长', report.pageRisers)),
       markdown(moversMarkdown('Top 5 页面下滑', report.pageFallers)),
       markdown(moversMarkdown('Top 5 查询增长', report.queryRisers)),
       { tag: 'hr' },
+      markdown(opportunitiesMarkdown(report)),
+      { tag: 'hr' },
       markdown(
-        `数据口径: ${report.reportDate} vs ${report.comparisonDate} · ${GSC_SITE_URL} · GSC API`,
+        `数据口径: 单日 ${report.reportDate} vs ${report.comparisonDate}；维度/机会 ${report.rollingStartDate}..${report.rollingEndDate} · ${GSC_SITE_URL} · GSC API`,
       ),
     ],
   };
@@ -251,6 +501,48 @@ function moversMarkdown(title: string, movers: Mover[]): string {
     ...movers.map(
       (mover) =>
         `| ${formatKey(mover.key)} | ${number(mover.clicks)} | ${signedNumber(mover.clickDelta)} | ${number(mover.impressions)} |`,
+    ),
+  ].join('\n');
+}
+
+function dimensionMarkdown(title: string, rows: DimensionRow[]): string {
+  if (rows.length === 0) return `**${title}**\n\n暂无数据`;
+  return [
+    `**${title}**`,
+    '',
+    '| 维度 | 点击 | 曝光 | CTR |',
+    '| --- | ---: | ---: | ---: |',
+    ...rows.map(
+      (row) =>
+        `| ${formatDimensionKey(row.key)} | ${number(row.clicks)} | ${number(row.impressions)} | ${percent(row.ctr)} |`,
+    ),
+  ].join('\n');
+}
+
+function opportunitiesMarkdown(report: DailyReport): string {
+  const sections = [
+    opportunitySection('门口页 query', report.opportunities.doorwayQueries),
+    opportunitySection('高曝光低 CTR query', report.opportunities.lowCtrQueries),
+    opportunitySection('高排名低 CTR page', report.opportunities.lowCtrPages),
+    opportunitySection('设备 CTR 差距', report.opportunities.deviceCtrGaps),
+  ].filter(Boolean);
+
+  const thresholdLine = `阈值: 曝光 ≥ ${number(report.thresholds.minImpressions)} · 低 CTR < ${percent(report.thresholds.lowCtr)} · 设备 CTR 相对差距 > ${(report.thresholds.mobileDesktopCtrGap * 100).toFixed(0)}%`;
+
+  if (sections.length === 0) {
+    return `**优化机会（近 7 天）**\n\n近 7 天暂无明显优化候选。\n\n${thresholdLine}`;
+  }
+
+  return ['**优化机会（近 7 天）**', '', thresholdLine, '', ...sections].join('\n');
+}
+
+function opportunitySection(title: string, opportunities: Opportunity[]): string {
+  if (opportunities.length === 0) return '';
+  return [
+    `**${title}**`,
+    ...opportunities.map(
+      (item) =>
+        `- ${formatKey(item.item)} — ${item.evidence}；建议：${item.action}`,
     ),
   ].join('\n');
 }
@@ -349,6 +641,10 @@ function formatKey(key: string): string {
   } catch {
     return truncate(escaped, 64);
   }
+}
+
+function formatDimensionKey(key: string): string {
+  return truncate(escapeTableText(key.toLowerCase()), 48);
 }
 
 function truncate(value: string, maxLength: number): string {
