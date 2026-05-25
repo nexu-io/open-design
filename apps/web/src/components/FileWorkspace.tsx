@@ -1187,6 +1187,10 @@ function DesignSystemProjectPanel({
   const sections = buildDesignSystemReviewSections(allFileNames, fileByName);
   const published = status === 'published';
   const isDefault = published && defaultDesignSystemId === system.id;
+  // Strip a trailing "design system" from the title so the heading
+  // "Review <name> design system" does not read redundantly when a system is
+  // already named e.g. "Acme Design System".
+  const systemDisplayName = system.title.replace(/\s*design system$/i, '').trim() || system.title;
   const activityFileOps = useMemo(() => deriveFileOps(activityEvents), [activityEvents]);
   const activityTodos = useMemo(() => latestTodosFromEvents(activityEvents), [activityEvents]);
   const sectionReviews: DesignSystemProjectSectionReview[] = sections.map((section) => {
@@ -1300,8 +1304,20 @@ function DesignSystemProjectPanel({
       sectionStatus,
       sectionStatusLabel,
     } = item;
-    const expanded = (expandedSections[instanceId] ?? defaultExpanded) || sectionActivity.running;
     const needsAttention = designSystemReviewNeedsAttention(item);
+    // A section the user marked "Looks good" is validated, so collapse it by
+    // default to show it is done. Gate that on the current status, not just the
+    // stored decision: when a section is regenerated after approval its status
+    // moves back to needs-attention, and it has to reopen so the "review again"
+    // notice and the review buttons (both rendered only while expanded) stay
+    // visible. Without the needsAttention guard a stale "looks-good" decision
+    // keeps the regenerated section collapsed and the change is easy to miss.
+    // The user can still re-expand with the chevron (expandedSections[instanceId]),
+    // and an active agent run forces it open.
+    const reviewedGood =
+      !needsAttention && (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
+    const expanded =
+      (expandedSections[instanceId] ?? (defaultExpanded && !reviewedGood)) || sectionActivity.running;
     return (
       <section
         key={instanceId}
@@ -1312,25 +1328,50 @@ function DesignSystemProjectPanel({
         ].join(' ')}
       >
         <div className="ds-project-section-head">
+          {/* The trigger is a stretched button covering the whole head, so the
+              entire row toggles. It is a sibling of the review action buttons
+              (not a parent), so there are no nested interactive elements. The
+              title below is display-only (pointer-events: none) and lets clicks
+              fall through to this trigger. */}
           <button
             type="button"
-            className="ds-project-section-title"
+            className="ds-project-section-head-trigger"
             aria-expanded={expanded}
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${section.title}`}
             onClick={() => toggleSection(instanceId)}
-          >
+          />
+          <span className="ds-project-section-title">
             <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={13} />
             <span>
               <strong>{section.title}</strong>
               <small>{section.subtitle}</small>
             </span>
-          </button>
+            {!expanded ? (
+              <span
+                className={[
+                  'ds-project-section-state',
+                  'ds-project-section-dot',
+                  designSystemSectionStatusClass(sectionStatus),
+                ].join(' ')}
+                aria-label={sectionStatusLabel}
+                title={sectionStatusLabel}
+              >
+                {needsAttention ? 'Needs review' : 'Looks good'}
+              </span>
+            ) : null}
+          </span>
           {expanded ? (
             <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
               <button
                 type="button"
                 className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
                 data-testid={`design-system-review-good-${slugForTestId(section.title)}`}
-                onClick={() => markSectionReview(section.title, 'looks-good')}
+                onClick={() => {
+                  markSectionReview(section.title, 'looks-good');
+                  // Collapse on validate, overriding any manual expand so the
+                  // section always tidies away once it is marked good.
+                  setExpandedSections((current) => ({ ...current, [instanceId]: false }));
+                }}
               >
                 <Icon name="check" size={13} />
                 Looks good
@@ -1385,19 +1426,7 @@ function DesignSystemProjectPanel({
                 </form>
               ) : null}
             </div>
-          ) : (
-            <span
-              className={[
-                'ds-project-section-state',
-                'ds-project-section-dot',
-                designSystemSectionStatusClass(sectionStatus),
-              ].join(' ')}
-              aria-label={sectionStatusLabel}
-              title={sectionStatusLabel}
-            >
-              {needsAttention ? 'Needs review' : 'Looks good'}
-            </span>
-          )}
+          ) : null}
         </div>
         {expanded ? (
           <div className="ds-project-section-body">
@@ -1429,13 +1458,9 @@ function DesignSystemProjectPanel({
               </div>
             ) : null}
             {previewFile ? (
-              <button
-                type="button"
-                className="ds-project-inline-preview"
-                onClick={() => onOpenFile(previewFile.name)}
-              >
+              <div className="ds-project-inline-preview">
                 <DesignSystemInlinePreview projectId={projectId} file={previewFile} />
-              </button>
+              </div>
             ) : (
               <div className="ds-project-preview-placeholder">
                 <Icon name="sparkles" size={16} />
@@ -1476,26 +1501,37 @@ function DesignSystemProjectPanel({
     <div className="ds-project-panel">
       <div className="ds-project-main ds-project-main--review">
         <div className="ds-project-head ds-project-head--review">
-          <h1>{published ? 'Your design system is ready' : 'Review draft design system'}</h1>
-        </div>
-
-        <div className="ds-project-publish-card ds-project-publish-card--review">
-          <p>
+          <h1>
             {published
-              ? "Your team's new projects can use this design system as context by default."
-              : 'Your design system is ready, but your feedback will improve it. Publish it when it is ready to use in future projects.'}
-          </p>
+              ? `${systemDisplayName} design system`
+              : `Review ${systemDisplayName} design system`}
+          </h1>
           <div className="ds-project-publish-card__toggles">
-            <label>
-              <input
-                type="checkbox"
-                checked={published}
+            {/* The publish button is disabled until the GitHub import evidence is
+                ready, and a disabled button never fires the hover or focus that
+                surfaces a `title` tooltip. Keep the guidance on this wrapper,
+                which is never disabled, and let pointer events fall through the
+                disabled button to it (see .ds-project-publish-trigger) so the
+                explanation stays reachable exactly when publishing is blocked. */}
+            <span
+              className="ds-project-publish-trigger"
+              title={
+                !published && !githubEvidence.ready
+                  ? 'Finish importing your GitHub repo before you can publish.'
+                  : undefined
+              }
+            >
+              <button
+                type="button"
+                className={published ? 'ghost compact' : 'primary'}
+                data-testid="design-system-publish"
                 disabled={statusBusy || (!published && !githubEvidence.ready)}
-                title={!githubEvidence.ready ? 'GitHub connector evidence is required before publishing.' : undefined}
-                onChange={(event) => void togglePublished(event.target.checked)}
-              />
-              Published
-            </label>
+                onClick={() => void togglePublished(!published)}
+              >
+                {published ? <Icon name="check" size={14} /> : null}
+                {published ? 'Published' : 'Publish'}
+              </button>
+            </span>
             {published ? (
               <label>
                 <input
@@ -1510,6 +1546,14 @@ function DesignSystemProjectPanel({
               </label>
             ) : null}
           </div>
+        </div>
+
+        <div className="ds-project-publish-card ds-project-publish-card--review">
+          <p>
+            {published
+              ? "Your team's new projects can use this design system as context by default."
+              : 'Your design system is ready, but your feedback will improve it. Publish it when it is ready to use in future projects.'}
+          </p>
           {published ? (
             <div className="ds-project-use-row">
               <span>Use this system</span>

@@ -21,6 +21,7 @@ import {
 
 import { parseFrontmatter } from './frontmatter.js';
 import type { FrontmatterObject, FrontmatterValue } from './frontmatter.js';
+import { extractSwiftColors } from './swift-colors.js';
 
 export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
 export type DesignSystemSource = 'built-in' | 'installed' | 'user';
@@ -2840,6 +2841,11 @@ function extractSwatches(raw: string): string[] {
     );
     push(nameCell ?? '', hex);
   }
+  // Form D: SwiftUI Color(...) declarations (HSB / RGB / white), converted to
+  // hex. Swift repos define palette tokens in source rather than CSS, so a
+  // captured ColorSystem.swift or a DESIGN.md that quotes it would otherwise
+  // yield no swatches. Inline hex forms above still win in pickSwatchRow.
+  for (const token of extractSwiftColors(raw)) push(token.name, token.hex);
   if (colors.length === 0) return [];
   return pickSwatchRow(colors).values;
 }
