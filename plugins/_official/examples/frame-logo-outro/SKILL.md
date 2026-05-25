@@ -3,7 +3,9 @@ name: frame-logo-outro
 zh_name: "品牌 Logo 收尾帧"
 en_name: "Logo Outro Frame"
 emoji: "🎬"
-description: "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕"
+description: "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames."
+zh_description: "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕"
+en_description: "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames."
 category: video
 scenario: video
 aspect_hint: "1920×1080 (16:9)"
@@ -29,7 +31,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「品牌 Logo 收尾帧」模板把我的内容做成一段「Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Logo Outro Frame template to turn my content into a video outro or brand closing frame with segmented logo assembly, glow bloom, and tagline reveal. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「品牌 Logo 收尾帧」模板把我的内容做成一段「Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: Logo 收尾帧 (Logo Outro)】

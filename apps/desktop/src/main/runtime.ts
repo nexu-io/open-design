@@ -1,9 +1,10 @@
 import { createHmac, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, shell } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -306,6 +307,13 @@ export type DesktopRuntimeOptions = {
    * and the runtime falls back to `discoverUrl` for API calls too.
   */
   discoverDaemonUrl?: () => Promise<string | null>;
+  /**
+   * BCP-47 locale string read from the OS by main process, forwarded
+   * to the preload via `webPreferences.additionalArguments` so the
+   * renderer can mirror it onto `__od__.client.osLocale`. Optional;
+   * when omitted the renderer falls back to navigator/localStorage.
+   */
+  osLocale?: string;
   preloadPath?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
@@ -634,6 +642,7 @@ const MAC_WINDOW_CHROME_CSS = `
 `;
 
 function createPendingHtml(): string {
+  const logoDataUrl = getDesktopIconDataUrl();
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
   <head>
@@ -650,21 +659,49 @@ function createPendingHtml(): string {
         margin: 0;
       }
       main {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 24px;
-        padding: 32px;
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        text-align: center;
       }
+      img {
+        border-radius: 34%;
+        display: block;
+        height: 72px;
+        object-fit: cover;
+        width: 72px;
+      }
+      h1 { margin: 18px 0 0; }
       p { color: #aeb7d5; margin: 12px 0 0; }
     </style>
   </head>
   <body>
     <main>
+      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="" />` : ""}
       <h1>Open Design</h1>
       <p>Waiting for the web runtime URL…</p>
     </main>
   </body>
 </html>`)}`;
+}
+
+function resolveDesktopIconPath(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/app-icon.png");
+}
+
+function applyDockIcon(): void {
+  if (process.platform !== "darwin" || !app.dock) return;
+  const icon = nativeImage.createFromPath(resolveDesktopIconPath());
+  if (icon.isEmpty()) return;
+  app.dock.setIcon(icon);
+}
+
+function getDesktopIconDataUrl(): string | null {
+  try {
+    return `data:image/png;base64,${readFileSync(resolveDesktopIconPath()).toString("base64")}`;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeScreenshotPath(filePath: string): string {
@@ -755,7 +792,14 @@ function desktopPetUrl(baseUrl: string): string {
   return url.toString();
 }
 
-function createDesktopPetWindow(preloadPath: string): BrowserWindow {
+// Encode the OS locale before stuffing it into a Chromium argv value
+// — BCP-47 region tags shouldn't contain `;` or `=`, but the renderer's
+// `process.argv` parser is happier if we never have to worry about it.
+function osLocaleAdditionalArguments(osLocale: string | undefined): string[] | undefined {
+  return osLocale ? [`--od-os-locale=${encodeURIComponent(osLocale)}`] : undefined;
+}
+
+function createDesktopPetWindow(preloadPath: string, osLocale: string | undefined): BrowserWindow {
   const { workArea } = screen.getPrimaryDisplay();
   const petWindow = new BrowserWindow({
     width: DESKTOP_PET_WINDOW_WIDTH,
@@ -772,6 +816,7 @@ function createDesktopPetWindow(preloadPath: string): BrowserWindow {
     hasShadow: false,
     focusable: false,
     webPreferences: {
+      additionalArguments: osLocaleAdditionalArguments(osLocale),
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,
@@ -779,7 +824,23 @@ function createDesktopPetWindow(preloadPath: string): BrowserWindow {
     },
   });
   petWindow.setAlwaysOnTop(true, "floating");
-  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // `skipTransformProcessType: true` is load-bearing, not an
+  // optimization. By default Electron's macOS `setVisibleOnAllWorkspaces`
+  // transforms the whole *process* type between `UIElementApplication`
+  // and `ForegroundApplication` to apply the all-Spaces behavior — the
+  // Electron docs note this "will hide the window and dock for a short
+  // time". That round-trip races during the launch burst (the pet
+  // window is created alongside the main window) and on Electron 41 /
+  // macOS 26 the process can stay stuck as an accessory app: no Dock
+  // icon, no menu bar, even though the windows render fine (issue
+  // #2394). The desktop pet is a cosmetic companion window; it must
+  // never decide the app's Dock identity — the main window does.
+  // Skipping the transform keeps the app a regular Dock app; the pet
+  // still floats on every Space via its `alwaysOnTop` floating level.
+  petWindow.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  });
   petWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isHttpUrl(url)) void shell.openExternal(url);
     return { action: "deny" };
@@ -828,6 +889,23 @@ export type WindowFullscreenSurface = {
   setSimpleFullScreen: (flag: boolean) => void;
   once: (event: 'enter-full-screen' | 'leave-full-screen', listener: () => void) => unknown;
 };
+
+export type MainWindowCloseSurface = {
+  on: (event: 'closed', listener: () => void) => unknown;
+};
+
+export function attachNonDarwinMainWindowCloseShutdown(
+  window: MainWindowCloseSurface,
+  options: {
+    isStopped: () => boolean;
+    requestQuit?: () => void;
+  },
+): void {
+  window.on("closed", () => {
+    if (options.isStopped()) return;
+    options.requestQuit?.();
+  });
+}
 
 /**
  * Hide the window, first leaving any active fullscreen so macOS doesn't
@@ -925,8 +1003,39 @@ function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | un
   return { autoDownload: payload.autoDownload };
 }
 
+async function reportRendererCrash(
+  options: DesktopRuntimeOptions,
+  properties: { reason: string; exit_code: number | null },
+): Promise<void> {
+  try {
+    // discoverDaemonUrl returns the real http://127.0.0.1:<port> URL the
+    // sidecar daemon listens on. In tools-dev callers omit it and fall back
+    // to discoverUrl (which is also http in dev). In packaged builds it's
+    // mandatory because the renderer-only `od://app/` scheme isn't
+    // reachable from main-process Node fetch.
+    const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
+    if (!baseUrl) return;
+    const url = new URL("/api/observability/event", baseUrl).toString();
+    await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        event: "desktop_renderer_crash",
+        properties: {
+          reason: properties.reason,
+          exit_code: properties.exit_code,
+        },
+      }),
+    });
+  } catch {
+    // Best-effort. The user is already in a degraded state — failing to
+    // report the crash must not cascade into another failure path.
+  }
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+  applyDockIcon();
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -1096,9 +1205,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
-  const petWindow = createDesktopPetWindow(preloadPath);
+  const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
   const window = new BrowserWindow({
     height: 900,
+    icon: resolveDesktopIconPath(),
     // Below this size the project page's left/right split (chat
     // composer + designs panel + preview pane) overlaps and the top
     // navigation clips, so prevent Electron from honoring user drags
@@ -1109,6 +1219,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     title: "Open Design",
     ...MAC_WINDOW_CHROME,
     webPreferences: {
+      additionalArguments: osLocaleAdditionalArguments(options.osLocale),
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,
@@ -1119,6 +1230,20 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+
+  // Renderer-process crashes are completely invisible to the web bundle's
+  // own analytics surface (the renderer is dead — no JS can run, no
+  // window.error fires). The main process is the last layer that can
+  // observe them, so we forward the event to the daemon's safety-event
+  // bridge (`POST /api/observability/event`), which posts directly to
+  // PostHog with `device_id = installationId`. Best-effort: a failure to
+  // reach the daemon must not block the crash recovery flow.
+  window.webContents.on("render-process-gone", (_event, details) => {
+    void reportRendererCrash(options, {
+      reason: details.reason,
+      exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
+    });
+  });
 
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
     if (window.isDestroyed()) return;
@@ -1261,6 +1386,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
             ? window.once('enter-full-screen', listener)
             : window.once('leave-full-screen', listener),
       });
+    });
+  } else {
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => stopped,
+      requestQuit: options.requestQuit,
     });
   }
 

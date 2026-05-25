@@ -67,10 +67,28 @@ async function probe(url: string): Promise<'ok' | 'unreachable'> {
 
 export function HtmlSurface({ preview, pluginId, pluginTitle, inView }: Props) {
   const [armed, setArmed] = useState(false);
+  const [shouldProbe, setShouldProbe] = useState(false);
   const [probeState, setProbeState] = useState<ProbeState>(() => {
     const cached = probeCache.get(preview.src);
     return cached ?? 'idle';
   });
+
+  useEffect(() => {
+    setArmed(false);
+    setShouldProbe(false);
+    const cached = probeCache.get(preview.src);
+    setProbeState(cached ?? 'idle');
+  }, [preview.src]);
+
+  useEffect(() => {
+    if (!inView) return;
+    if (probeCache.has(preview.src)) {
+      setShouldProbe(true);
+      return;
+    }
+    const id = window.setTimeout(() => setShouldProbe(true), 520);
+    return () => window.clearTimeout(id);
+  }, [inView, preview.src]);
 
   // Kick off the probe on first in-view. We deliberately keep this
   // effect's deps narrow (just `inView` + `preview.src`) so the
@@ -78,7 +96,7 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView }: Props) {
   // promise via a re-run cleanup. The module-level cache also makes
   // the probe a no-op if another tile already resolved the same URL.
   useEffect(() => {
-    if (!inView) return;
+    if (!shouldProbe) return;
     if (probeCache.has(preview.src)) {
       setProbeState(probeCache.get(preview.src)!);
       return;
@@ -91,16 +109,18 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [inView, preview.src]);
+  }, [preview.src, shouldProbe]);
 
   // Arm the iframe after a short visibility window so the user can
   // scroll past tiles without paying for an iframe per tile, but tiles
   // that linger get the live preview without requiring hover.
   useEffect(() => {
     if (probeState !== 'ok') return;
-    const id = window.setTimeout(() => setArmed(true), 280);
+    const id = window.setTimeout(() => {
+      if (inView) setArmed(true);
+    }, 720);
     return () => window.clearTimeout(id);
-  }, [probeState]);
+  }, [inView, probeState]);
 
   if (probeState === 'unreachable') {
     return <UnreachableFallback pluginId={pluginId} pluginTitle={pluginTitle} preview={preview} />;
@@ -111,6 +131,7 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView }: Props) {
       className="plugins-home__html"
       data-plugin-id={pluginId}
       onMouseEnter={() => {
+        setShouldProbe(true);
         if (probeState === 'ok') setArmed(true);
       }}
     >
@@ -126,7 +147,10 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView }: Props) {
             className="plugins-home__html-iframe"
           />
         ) : (
-          <div className="plugins-home__html-skeleton" aria-hidden>
+          <div
+            className={`plugins-home__html-skeleton${inView ? ' is-active' : ''}`}
+            aria-hidden
+          >
             <span />
             <span />
             <span />

@@ -32,7 +32,14 @@ interface Props {
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
+}
+
+interface ActionNotice {
+  message: string;
+  url?: string;
 }
 
 type DesignFilesGroupMode = 'kind' | 'modified';
@@ -67,6 +74,35 @@ const MODIFIED_SECTION_LABEL_KEY: Record<ModifiedSection, keyof Dict> = {
   older: 'designFiles.modifiedOlder',
 };
 
+function buildActionNotice(message: string, url?: string): ActionNotice {
+  const trimmedMessage = message.trim();
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl) return { message: trimmedMessage };
+  const normalizedMessage = trimmedMessage.replace(new RegExp(`\\s*${escapeRegExp(trimmedUrl)}\\s*$`), '');
+  return { message: normalizedMessage.trim() || trimmedUrl, url: trimmedUrl };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
+  if (!notice) return null;
+  return (
+    <>
+      <span>{notice.message}</span>
+      {notice.url ? (
+        <>
+          {' '}
+          <a href={notice.url} target="_blank" rel="noreferrer">
+            {notice.url}
+          </a>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
  * Claude Design's "Design Files" surface: grouped sections, hover-revealed
@@ -90,6 +126,8 @@ export function DesignFilesPanel({
   uploadError = null,
   onClearUploadError,
   onPluginFolderAgentAction,
+  activePluginActionPaths = new Set(),
+  hiddenPluginActionPaths = new Set(),
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -108,7 +146,7 @@ export function DesignFilesPanel({
   const [deleting, setDeleting] = useState(false);
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
-  const [installNotice, setInstallNotice] = useState<string | null>(null);
+  const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [groupMode, setGroupMode] = useState<DesignFilesGroupMode>('kind');
   const [collapsedModifiedSections, setCollapsedModifiedSections] = useState<
     Set<ModifiedSection>
@@ -794,8 +832,16 @@ export function DesignFilesPanel({
       setSharingFolder(`${action}:${relativePath}`);
     }
     try {
-      await onPluginFolderAgentAction(relativePath, action);
-      setInstallNotice('Sent to the agent. The CLI run will continue in chat.');
+      const outcome = await onPluginFolderAgentAction(relativePath, action);
+      const url = outcome && typeof outcome === 'object' && typeof outcome.url === 'string'
+        ? outcome.url
+        : '';
+      const message = outcome && typeof outcome === 'object' && typeof outcome.message === 'string'
+        ? outcome.message
+        : '';
+      if (message || url) setInstallNotice(buildActionNotice(message || url, url));
+    } catch (err) {
+      setInstallNotice({ message: err instanceof Error ? err.message : String(err) });
     } finally {
       setInstallingFolder(null);
       setSharingFolder(null);
@@ -1087,9 +1133,13 @@ export function DesignFilesPanel({
                     <span className="df-section-count">{pluginFolders.length}</span>
                   </div>
                   {installNotice ? (
-                    <div className="df-inline-notice" role="status">{installNotice}</div>
+                    <div className="df-inline-notice" role="status">
+                      <ActionNoticeView notice={installNotice} />
+                    </div>
                   ) : null}
-                  {pluginFolders.map((folder) => (
+                  {pluginFolders.filter((folder) => !hiddenPluginActionPaths.has(folder.path)).map((folder) => {
+                    const actionBusy = activePluginActionPaths.has(folder.path);
+                    return (
                     <div
                       key={folder.path}
                       className="df-row df-row-plugin-folder"
@@ -1117,7 +1167,7 @@ export function DesignFilesPanel({
                             type="button"
                             className="df-plugin-install"
                             data-testid={`design-plugin-folder-install-${folder.path}`}
-                            disabled={installingFolder !== null || sharingFolder !== null}
+                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
                             onClick={() =>
                               void handlePluginFolderAgentAction(folder.path, 'install')
                             }
@@ -1128,7 +1178,7 @@ export function DesignFilesPanel({
                             type="button"
                             className="df-plugin-install"
                             data-testid={`design-plugin-folder-publish-${folder.path}`}
-                            disabled={installingFolder !== null || sharingFolder !== null}
+                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
                             onClick={() =>
                               void handlePluginFolderAgentAction(folder.path, 'publish')
                             }
@@ -1139,7 +1189,7 @@ export function DesignFilesPanel({
                             type="button"
                             className="df-plugin-install"
                             data-testid={`design-plugin-folder-contribute-${folder.path}`}
-                            disabled={installingFolder !== null || sharingFolder !== null}
+                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
                             onClick={() =>
                               void handlePluginFolderAgentAction(folder.path, 'contribute')
                             }
@@ -1149,7 +1199,7 @@ export function DesignFilesPanel({
                         </div>
                       ) : null}
                     </div>
-                  ))}
+                  )})}
                 </div>
               ) : null}
               {(sortedFiles.length > 0 || dirsAtCurrentDir.length > 0) ? (

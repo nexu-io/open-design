@@ -619,7 +619,7 @@
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-subtle);
+  background-color: var(--bg-subtle);
   color: var(--text);
   font: 12.5px/1.4 var(--font, system-ui);
 }
@@ -1724,10 +1724,6 @@
 }
 
 @media (max-width: 960px) {
-  .automation-ingest-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .automations-templates__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1751,12 +1747,6 @@
 
   .automations-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .automation-ingest-controls,
-  .automation-ingest-fields,
-  .automation-ingest-footer {
-    grid-template-columns: 1fr;
   }
 
   .automations-templates__grid {

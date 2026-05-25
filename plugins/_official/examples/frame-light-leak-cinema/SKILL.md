@@ -3,7 +3,9 @@ name: frame-light-leak-cinema
 zh_name: "胶片漏光电影帧"
 en_name: "Light-Leak Cinematic Frame"
 emoji: "🎞️"
-description: "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡"
+description: "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards."
+zh_description: "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡"
+en_description: "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards."
 category: video
 scenario: video
 aspect_hint: "2.39:1 letterbox (1920×800) 或 16:9 (1920×1080)"
@@ -20,7 +22,6 @@ od:
   mode: video
   surface: video
   scenario: video
-  featured: 36
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
     type: html
@@ -28,7 +29,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「胶片漏光电影帧」模板把我的内容做成一段「胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Light-Leak Cinematic Frame template to turn my content into a cinematic opening or chapter card with film light leaks, grain, letterbox framing, and large serif type. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「胶片漏光电影帧」模板把我的内容做成一段「胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 胶片漏光电影帧】

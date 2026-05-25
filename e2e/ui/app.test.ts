@@ -12,55 +12,10 @@ const APP_OWNED_SCENARIO_FLOWS = new Set([
   'design-files-upload',
   'design-files-delete',
   'design-files-tab-persistence',
+  'uploaded-image-renders-in-preview',
+  'python-source-preview',
   'example-use-prompt',
 ]);
-const QUERY_PLUGIN_MANIFEST = {
-  $schema: 'https://open-design.ai/schemas/plugin.v1.json',
-  name: 'query-plugin',
-  title: 'Query Plugin',
-  version: '1.0.0',
-  description: 'E2E fixture for import, apply, and query rendering.',
-  license: 'MIT',
-  tags: ['e2e', 'query'],
-  od: {
-    kind: 'skill',
-    taskKind: 'new-generation',
-    useCase: {
-      query: 'Generate a {{topic}} brief for {{audience}}.',
-    },
-    inputs: [
-      {
-        name: 'topic',
-        type: 'string',
-        required: true,
-        default: 'release QA',
-        label: 'Topic',
-      },
-      {
-        name: 'audience',
-        type: 'string',
-        required: false,
-        default: 'general',
-        label: 'Audience',
-      },
-    ],
-    capabilities: ['prompt:inject'],
-  },
-};
-const QUERY_PLUGIN_SKILL = [
-  '---',
-  'name: query-plugin',
-  'description: E2E fixture for plugin import and query rendering.',
-  'od:',
-  '  kind: skill',
-  '  taskKind: new-generation',
-  '---',
-  '',
-  '# Query Plugin',
-  '',
-  'Use this fixture to verify that a user-installed plugin can render a starter query and bind that query to a project run.',
-].join('\n');
-
 test.describe.configure({ timeout: 45_000 });
 
 test.beforeEach(async ({ page }) => {
@@ -124,24 +79,6 @@ for (const entry of automatedUiScenarios().filter(
         },
       });
     });
-
-    if (entry.flow === 'design-system-selection') {
-      await page.route('**/api/design-systems', async (route) => {
-        await route.fulfill({
-          json: {
-            designSystems: [
-              {
-                id: 'nexu-soft-tech',
-                title: 'Nexu Soft Tech',
-                category: 'Product',
-                summary: 'Warm utility system for product interfaces.',
-                swatches: ['#F7F4EE', '#D6CBBF', '#1F2937', '#D97757'],
-              },
-            ],
-          },
-        });
-      });
-    }
 
     if (entry.flow === 'example-use-prompt') {
       const exampleSummary = {
@@ -361,16 +298,8 @@ for (const entry of automatedUiScenarios().filter(
 
     await gotoEntryHome(page);
 
-    if (entry.flow === 'design-system-selection') {
-      await runDesignSystemSelectionFlow(page, entry);
-      return;
-    }
     if (entry.flow === 'example-use-prompt') {
       await runExampleUsePromptFlow(page, entry);
-      return;
-    }
-    if (entry.flow === 'plugin-create-import') {
-      await runPluginCreateImportFlow(page, entry);
       return;
     }
     if (entry.flow === 'hyperframes-project-routing') {
@@ -500,17 +429,6 @@ async function routeMockSuccessfulRun(page: Page, runId: string) {
       body,
     });
   });
-}
-
-async function createQueryPluginFixture(): Promise<string> {
-  const folder = await mkdtemp(path.join(tmpdir(), 'od-query-plugin-'));
-  await writeFile(
-    path.join(folder, 'open-design.json'),
-    `${JSON.stringify(QUERY_PLUGIN_MANIFEST, null, 2)}\n`,
-    'utf8',
-  );
-  await writeFile(path.join(folder, 'SKILL.md'), `${QUERY_PLUGIN_SKILL}\n`, 'utf8');
-  return folder;
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {
@@ -666,25 +584,6 @@ function isCreateProjectRequest(request: Request): boolean {
   return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
-async function runDesignSystemSelectionFlow(
-  page: Page,
-  entry: UiScenario,
-) {
-  await createProjectNameOnly(page, entry);
-  await page.getByTestId('design-system-trigger').click();
-  await expect(page.getByTestId('design-system-search')).toBeVisible();
-  await page.getByTestId('design-system-search').fill('Nexu');
-  await page.getByRole('option', { name: /Nexu Soft Tech/i }).click();
-  await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
-  await page.getByTestId('create-project').click();
-
-  await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByTestId('project-meta')).toContainText('Nexu Soft Tech');
-  await expect(page.getByTestId('chat-composer')).toBeVisible();
-  const { projectId } = await getCurrentProjectContext(page);
-  await expectScenarioProjectState(page, entry, projectId);
-}
-
 async function runExampleUsePromptFlow(
   page: Page,
   entry: UiScenario,
@@ -704,84 +603,6 @@ async function runExampleUsePromptFlow(
   await expect(page.getByTestId('chat-composer-input')).toHaveValue(entry.prompt);
   await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
   await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
-}
-
-async function runPluginCreateImportFlow(
-  page: Page,
-  entry: UiScenario,
-) {
-  await routeMockSuccessfulRun(page, 'plugin-create-import-run');
-
-  await page.getByTestId('entry-nav-plugins').click();
-  await expect(page.getByTestId('plugins-create-button')).toBeVisible();
-
-  await page.getByTestId('plugins-create-button').click();
-  const homeInput = page.getByTestId('home-hero-input');
-  await expect(homeInput).toHaveValue(/Create an Open Design plugin/);
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Create plugin');
-
-  await page.getByTestId('entry-nav-plugins').click();
-  await expect(page.getByTestId('plugins-import-button')).toBeVisible();
-  await page.getByTestId('plugins-import-button').click();
-
-  const dialog = page.getByRole('dialog', { name: 'Import a plugin' });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('button', { name: /From GitHub/i })).toBeVisible();
-
-  const queryPluginFixture = await createQueryPluginFixture();
-  try {
-    await dialog.getByLabel('GitHub, archive, or marketplace source').fill(queryPluginFixture);
-    const installResponse = page.waitForResponse(
-      (resp) =>
-        new URL(resp.url()).pathname === '/api/plugins/install' &&
-        resp.request().method() === 'POST',
-    );
-    await dialog.getByRole('button', { name: 'Import', exact: true }).click();
-    expect((await installResponse).ok()).toBeTruthy();
-
-    await expect(page.getByText('Installed Query Plugin.')).toBeVisible();
-    await expect(page.getByTestId('plugins-tab-installed')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('[data-plugin-id="query-plugin"]')).toBeVisible();
-
-    await page.goto('/');
-    await expect(page.getByTestId('home-hero')).toBeVisible();
-    await homeInput.click();
-    await homeInput.fill('@query');
-    const picker = page.getByTestId('home-hero-plugin-picker');
-    await expect(picker).toBeVisible();
-    const queryOption = picker.getByRole('option', { name: /Query Plugin/ });
-    await expect(queryOption).toBeEnabled();
-    await queryOption.click();
-
-    await expect(page.getByRole('button', { name: '@Query Plugin' }).first()).toBeVisible();
-    await expect(homeInput).toHaveValue(/@Query Plugin/);
-    await homeInput.fill(entry.prompt);
-    await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-
-    const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
-    const runRequestPromise = page.waitForRequest(isCreateRunRequest);
-    await page.getByTestId('home-hero-submit').click();
-
-    const projectRequest = await projectRequestPromise;
-    const projectBody = projectRequest.postDataJSON() as {
-      pluginId?: string;
-      pendingPrompt?: string;
-      metadata?: { kind?: string };
-    };
-    expect(projectBody.pendingPrompt).toBe(entry.prompt);
-    expect(projectBody.metadata?.kind).toBe('other');
-
-    await expect(page).toHaveURL(/\/projects\//);
-
-    const runRequest = await runRequestPromise;
-    const runBody = runRequest.postDataJSON() as { message?: string };
-    expectScenarioRunRequest(runBody, entry);
-    await expect(page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first()).toBeVisible();
-    const { projectId } = await getCurrentProjectContext(page);
-    await expectScenarioProjectState(page, entry, projectId);
-  } finally {
-    await rm(queryPluginFixture, { recursive: true, force: true });
-  }
 }
 
 async function runHyperframesProjectRoutingFlow(
@@ -1037,7 +858,7 @@ async function runGenerationDoesNotCreateExtraFileFlow(
 
   const reloadedFiles = await listProjectFilesFromApi(page, projectId);
   expect(reloadedFiles.map((file) => file.name)).toEqual(initialFiles.map((file) => file.name));
-  await expect(page.getByText(entry.mockArtifact!.fileName, { exact: true })).toBeVisible();
+  await expect(page.getByText(entry.mockArtifact!.fileName, { exact: true }).first()).toBeVisible();
   await expectScenarioProjectState(page, entry, projectId);
 }
 

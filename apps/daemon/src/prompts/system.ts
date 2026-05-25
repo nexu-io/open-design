@@ -118,6 +118,7 @@ type ProjectMetadata = {
   intent?: string | null;
   fidelity?: string | null;
   speakerNotes?: boolean | null;
+  slideCount?: string | null;
   animations?: boolean | null;
   includeLandingPage?: boolean | null;
   includeOsWidgets?: boolean | null;
@@ -884,6 +885,9 @@ function renderMetadataBlock(
     );
   }
   if (metadata.kind === 'deck') {
+    lines.push(
+      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+    );
     lines.push(
       `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
     );

@@ -2,6 +2,11 @@ import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
 import {
+  buildMaxCompletionTokensParam,
+  buildOpenAIChatTokenParam,
+  isUnsupportedMaxTokensError,
+} from './openai-chat-token-params.js';
+import {
   BYOK_MEDIA_TOOLS,
   defaultMediaModelsForProvider,
   executeGenerateImage,
@@ -18,8 +23,27 @@ import {
 import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { validateBaseUrlResolved } from './connectionTest.js';
+import { googleStreamGenerateContentUrl } from './google-models.js';
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths'> {}
+// Allowlist for the `/feedback` route. Mirrors the
+// ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
+// Kept inline (not imported as a runtime value, since the contract type is
+// type-only) so a stale client can't poison Langfuse with unknown categories.
+const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
+  'matched_request',
+  'strong_visual',
+  'useful_structure',
+  'easy_to_continue',
+  'followed_design_system',
+  'missed_request',
+  'weak_visual',
+  'incomplete_output',
+  'hard_to_use',
+  'missed_design_system',
+  'other',
+]);
+
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
@@ -127,6 +151,74 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return sendApiError(res, 500, 'INTERNAL', `tool result write failed: ${reason}`);
     }
     res.json({ ok: true });
+  });
+
+  // Receives the user's thumbs-up/down (+ reason codes) for an assistant
+  // turn and forwards it to Langfuse as a `score-create`. Web persists the
+  // feedback itself via PUT /messages/:id; this endpoint exists only as a
+  // telemetry side channel — the daemon is the single network egress for
+  // Langfuse and gates on `telemetry.metrics + telemetry.content` consent.
+  //
+  // The consent + sink decision is fast (awaits a small file read, no
+  // network); we await it so the response status honestly reflects whether
+  // the score was enqueued, skipped for consent, or skipped because no
+  // Langfuse sink is configured. The actual Langfuse network call happens
+  // as a detached promise inside the bridge.
+  app.post('/api/runs/:id/feedback', async (req, res) => {
+    const runId = req.params.id;
+    const body = (req.body ?? {}) as Partial<{
+      projectId: string;
+      conversationId: string;
+      assistantMessageId: string;
+      rating: 'positive' | 'negative';
+      reasonCodes: string[];
+      hasCustomReason: boolean;
+      customReason: string;
+    }>;
+    if (!runId) {
+      return sendApiError(res, 400, 'INVALID_RUN_ID', 'runId missing');
+    }
+    if (body.rating !== 'positive' && body.rating !== 'negative') {
+      return sendApiError(res, 400, 'INVALID_RATING', 'rating must be positive or negative');
+    }
+    // Drop anything outside the contract-side reason allowlist and
+    // deduplicate; otherwise a malformed or replayed client payload could
+    // create unknown Langfuse categories or duplicate score ids in the
+    // same batch.
+    const reasonCodes = Array.isArray(body.reasonCodes)
+      ? Array.from(
+          new Set(
+            body.reasonCodes.filter(
+              (c): c is string =>
+                typeof c === 'string' && FEEDBACK_REASON_ALLOWLIST.has(c),
+            ),
+          ),
+        )
+      : [];
+    const customReason = typeof body.customReason === 'string' ? body.customReason : '';
+    const reportFeedback = ctx.telemetry?.reportFeedback;
+    if (!reportFeedback) {
+      res.status(202).json({ status: 'skipped_no_sink' });
+      return;
+    }
+    // Build score metadata bag that lands in the Langfuse score body.
+    // Mirrors the PostHog event so analysts can cross-reference.
+    const scoreMetadata: Record<string, unknown> = {
+      projectId: body.projectId,
+      conversationId: body.conversationId,
+      assistantMessageId: body.assistantMessageId,
+      hasCustomReason: body.hasCustomReason === true,
+      customReason,
+    };
+    const outcome = await reportFeedback({
+      runId,
+      rating: body.rating,
+      reasonCodes,
+      hasCustomReason: body.hasCustomReason === true,
+      customReason,
+      scoreMetadata,
+    });
+    res.status(202).json(outcome);
   });
 
   app.post('/api/chat', (req, res) => {
@@ -828,8 +920,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
 
-    const clean = effectiveBaseUrl.replace(/\/+$/, '');
-    const url = `${clean}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+    const url = googleStreamGenerateContentUrl(effectiveBaseUrl, model);
     console.log(
       `[proxy:google] ${req.method} ${validated.parsed!.hostname} model=${model}`,
     );
@@ -1093,33 +1184,56 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       messagesForTurn: any[],
       signal: AbortSignal,
     ): Promise<TurnResult> => {
-      const payload: any = {
+      const effectiveMaxTokens =
+        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
+      const buildPayload = (
+        tokenParam: { max_tokens: number } | { max_completion_tokens: number },
+      ): any => ({
         ...(includeModel ? { model } : {}),
         messages: messagesForTurn,
-        max_tokens:
-          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        ...tokenParam,
         stream: true,
         ...(mediaEnabled ? { tools: BYOK_MEDIA_TOOLS, tool_choice: 'auto' } : {}),
-      };
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-        signal,
       });
+      const fetchUpstream = (body: any): Promise<Response> =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify(body),
+          redirect: 'error',
+          signal,
+        });
+
+      // Newer OpenAI/Azure chat models (GPT-5/o-series) reject max_tokens and
+      // require max_completion_tokens. buildOpenAIChatTokenParam switches the
+      // known families up front; the 400 retry below covers the rest (e.g.
+      // Azure deployment aliases that hide the underlying model family).
+      let response = await fetchUpstream(
+        buildPayload(buildOpenAIChatTokenParam(model, effectiveMaxTokens)),
+      );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:${providerTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return { kind: 'error' };
+        let errorText = await response.text();
+        if (response.status === 400 && isUnsupportedMaxTokensError(errorText)) {
+          console.warn(
+            `[proxy:${providerTag}] retrying request with max_completion_tokens model=${model}`,
+          );
+          response = await fetchUpstream(
+            buildPayload(buildMaxCompletionTokensParam(effectiveMaxTokens)),
+          );
+          if (!response.ok) errorText = await response.text();
+        }
+        if (!response.ok) {
+          console.error(
+            `[proxy:${providerTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return { kind: 'error' };
+        }
       }
 
       const accum: Record<number, AccumulatedToolCall> = {};

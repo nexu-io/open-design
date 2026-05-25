@@ -258,8 +258,8 @@ const jsonLd = {
             <iframe
               src={
                 template.origin === 'live-artifact'
-                  ? `/templates/${template.slug}/preview.html/`
-                  : `/skills/${template.slug}/example.html/`
+                  ? `/templates/${template.slug}/preview.html`
+                  : `/skills/${template.slug}/example.html`
               }
               title={`${template.name} interactive preview`}
               loading="lazy"
@@ -270,8 +270,8 @@ const jsonLd = {
               class="detail-preview-popout"
               href={
                 template.origin === 'live-artifact'
-                  ? `/templates/${template.slug}/preview.html/`
-                  : `/skills/${template.slug}/example.html/`
+                  ? `/templates/${template.slug}/preview.html`
+                  : `/skills/${template.slug}/example.html`
               }
               target="_blank"
               rel="noopener"

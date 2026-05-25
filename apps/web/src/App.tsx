@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { useAnalytics } from './analytics/provider';
-import { trackProjectCreateResult } from './analytics/events';
+import {
+  trackFileUploadResult,
+  trackProjectCreateResult,
+} from './analytics/events';
+import { deriveUploadCohort } from './analytics/upload-tracking';
 import { detectClientType } from './analytics/identity';
 import {
   deriveConfigureGlobals,
@@ -169,6 +173,18 @@ export function resolveSettingsCloseConfig(
 export function App() {
   const { t } = useI18n();
   const clientType = useMemo(() => detectClientType(), []);
+  // Observability marker. `apps/web/src/observability/white-screen.ts`
+  // keys its "app actually mounted" success condition on this attribute
+  // because the dynamic-import loading shell (`<div class="od-loading-shell">
+  // Loading Open Design…</div>`) is itself >MIN_VISIBLE_TEXT and would
+  // otherwise be mistaken for a real mount. Survives subsequent render
+  // crashes — once App has mounted at least once, it's no longer a white
+  // screen (subsequent failures show up as `$exception`).
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-od-app-mounted', '1');
+    }
+  }, []);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -319,8 +335,21 @@ export function App() {
   // {active:false} if this hasn't run.
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
   const activeFileName = route.kind === 'project' ? route.fileName : null;
+  // Gate the privacy banner on three things:
+  //   1. Daemon config has hydrated (privacyDecisionAt is daemon-owned).
+  //   2. The user has not yet made a privacy decision.
+  //   3. Onboarding is complete (Skip and design-system creation both flip
+  //      onboardingCompleted to true; see handleCompleteOnboarding wiring).
+  // Once onboarding is done the banner is allowed on any route — including
+  // the project view the design-system finish path drops the user into, so
+  // they can read and acknowledge the disclosure while the first generation
+  // is running. Settings is irrelevant to visibility; the banner sits above
+  // the modal-backdrop layer in index.css so opening Settings does not hide
+  // it.
   const showPrivacyConsent =
-    daemonConfigLoaded && config.privacyDecisionAt == null && !settingsOpen;
+    daemonConfigLoaded &&
+    config.privacyDecisionAt == null &&
+    config.onboardingCompleted === true;
   useEffect(() => {
     const body = activeProjectId
       ? { projectId: activeProjectId, fileName: activeFileName }
@@ -443,43 +472,53 @@ export function App() {
             ? t('settings.mediaProviderLoadError')
             : null,
         );
-        setConfig((prev) => {
-          const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
-            prev.mediaProviders,
-            daemonMediaProvidersLoaded,
-          );
-          const next = mergeDaemonMediaProviders(
-            mergeDaemonConfig(prev, daemonConfig),
-            daemonMediaProvidersLoaded,
-          );
-          const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
-          if (!hasLocalComposioKey && daemonComposioConfig) {
-            next.composio = daemonComposioConfig;
-          }
-          saveConfig(next);
-          if (
-            daemonMediaProvidersResult.status === 'ok' &&
-            migratedLocalMediaProviders &&
-            hasAnyConfiguredProvider(next.mediaProviders)
-          ) {
-            void syncMediaProvidersToDaemon(next.mediaProviders, {
-              daemonProviders: daemonMediaProvidersLoaded,
-            });
-          }
-          // Migrate localStorage prefs to daemon on first boot with the new
-          // endpoint. If daemon already had values the merge above used them;
-          // writing back is idempotent and keeps both sides in sync.
-          void syncConfigToDaemon(next);
-          void syncComposioConfigToDaemon(next.composio);
+        // Compute the next config outside the setConfig updater so we can
+        // both (a) call navigate() after setConfig returns — calling it
+        // inside the updater would trigger a Router setState during React's
+        // render phase — and (b) read next.onboardingCompleted synchronously,
+        // since React batches setConfig and the updater doesn't run until
+        // the next render. latestPersistedConfigRef is kept in sync with
+        // the rendered config and is safe to read here.
+        const baseConfig = latestPersistedConfigRef.current;
+        const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
+          baseConfig.mediaProviders,
+          daemonMediaProvidersLoaded,
+        );
+        const next = mergeDaemonMediaProviders(
+          mergeDaemonConfig(baseConfig, daemonConfig),
+          daemonMediaProvidersLoaded,
+        );
+        const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
+        if (!hasLocalComposioKey && daemonComposioConfig) {
+          next.composio = daemonComposioConfig;
+        }
+        saveConfig(next);
+        if (
+          daemonMediaProvidersResult.status === 'ok' &&
+          migratedLocalMediaProviders &&
+          hasAnyConfiguredProvider(next.mediaProviders)
+        ) {
+          void syncMediaProvidersToDaemon(next.mediaProviders, {
+            daemonProviders: daemonMediaProvidersLoaded,
+          });
+        }
+        // Migrate localStorage prefs to daemon on first boot with the new
+        // endpoint. If daemon already had values the merge above used them;
+        // writing back is idempotent and keeps both sides in sync.
+        void syncConfigToDaemon(next);
+        void syncComposioConfigToDaemon(next.composio);
+        latestPersistedConfigRef.current = next;
+        setConfig(next);
 
-          // Route first-run users through the global onboarding panel after
-          // privacy is resolved. The panel owns completion; Settings stays a
-          // configuration surface rather than the product onboarding path.
-          if (!next.onboardingCompleted && next.privacyDecisionAt != null) {
-            navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
-          }
-          return next;
-        });
+        // Route first-run users through the global onboarding panel.
+        // The onboarding panel and the privacy banner have independent
+        // lifecycles: onboarding keys off `onboardingCompleted`, the
+        // banner keys off `privacyDecisionAt`. They may coexist on the
+        // first launch; the banner sits above the modal layer so it
+        // stays actionable regardless of the active view.
+        if (!next.onboardingCompleted) {
+          navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+        }
         setDaemonConfigLoaded(true);
         // Composio key hydration is part of this same daemon-config
         // fetch — by the time we land here the daemon has either
@@ -817,11 +856,28 @@ export function App() {
         : [];
       let firstMessageAttachments: ChatAttachment[] = [];
       if (pendingFiles.length > 0) {
+        // Home composer attaches stay client-side until submit lands a
+        // project; the actual upload happens here. v2 doc wants one
+        // file_upload_result per surface — `page_name='home'` /
+        // `area='chat_composer'` so it's distinguishable from the
+        // file_manager Upload button and the chat_panel composer.
+        const cohort = deriveUploadCohort(pendingFiles);
         const uploadResult = await uploadProjectFiles(result.project.id, pendingFiles);
         firstMessageAttachments = uploadResult.uploaded;
-        if (uploadResult.failed.length > 0) {
+        const partial = uploadResult.failed.length > 0;
+        if (partial) {
           console.warn('Some Home attachments failed to upload', uploadResult.failed);
         }
+        trackFileUploadResult(analytics.track, {
+          page_name: 'home',
+          area: 'chat_composer',
+          project_id: result.project.id,
+          ...cohort,
+          result: partial ? 'failed' : 'success',
+          ...(partial && uploadResult.error
+            ? { error_code: uploadResult.error }
+            : {}),
+        });
       }
       trackProjectCreateResult(
         analytics.track,
@@ -1359,7 +1415,7 @@ export function App() {
         onRenameProject={handleRenameProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
-        renderDesignSystemCreation={(onBack) => (
+        renderDesignSystemCreation={(onBack, hooks) => (
           <DesignSystemCreationFlow
             chrome="embedded"
             onBack={onBack}
@@ -1370,6 +1426,13 @@ export function App() {
                   ...curr.filter((p) => p.id !== project.id),
                 ]);
               }
+              // Creating a design system from the onboarding step 2 panel
+              // counts as completing onboarding, even though the user is
+              // about to leave the entry shell for the project view. The
+              // Skip path already marks completion via finishOnboarding;
+              // mirror that here so the first-run privacy banner can
+              // surface when the user later returns to home.
+              handleCompleteOnboarding();
               navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
             }}
             onProjectPrepared={(project) => {
@@ -1381,6 +1444,8 @@ export function App() {
             onSystemsRefresh={refreshDesignSystems}
             config={config}
             onOpenConnectorsTab={() => openSettings('composio')}
+            {...(hooks?.onBeforeGenerate ? { onBeforeGenerate: hooks.onBeforeGenerate } : {})}
+            {...(hooks?.onGenerateSettled ? { onGenerateSettled: hooks.onGenerateSettled } : {})}
           />
         )}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
@@ -1446,8 +1511,11 @@ export function App() {
       <MemoryToast onOpenMemory={() => openSettings('memory')} />
       {/* First-run privacy consent banner. It waits for daemon config
           hydration because privacyDecisionAt is daemon-owned and stripped
-          from localStorage. It also yields while Settings is open so the
-          floating banner never intercepts modal interactions. */}
+          from localStorage. It waits for `onboardingCompleted` so first-run
+          users see the welcome panel before the disclosure (Skip and
+          finish both flip the flag). Independent of Settings: z-index in
+          index.css sits above modal backdrops so opening Settings does
+          not hide the banner. */}
       {showPrivacyConsent ? (
         <PrivacyConsentModal
           onAccept={() => {
@@ -1455,6 +1523,9 @@ export function App() {
             // surface the previous two-button "Share usage data" path opted
             // into. The banner footer + PrivacySection give the user a
             // one-click path to flip everything off later.
+            // The banner owns only the privacy decision; it does not drive
+            // navigation. Onboarding is gated by `onboardingCompleted` on
+            // its own and runs in parallel.
             const installationId = generateInstallationIdSafe();
             void handleConfigPersist({
               ...latestPersistedConfigRef.current,
@@ -1462,9 +1533,6 @@ export function App() {
               privacyDecisionAt: Date.now(),
               telemetry: { metrics: true, content: true, artifactManifest: false },
             });
-            if (!latestPersistedConfigRef.current.onboardingCompleted) {
-              navigate({ kind: 'home', view: 'onboarding' });
-            }
           }}
         />
       ) : null}

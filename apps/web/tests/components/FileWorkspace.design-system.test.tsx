@@ -274,7 +274,7 @@ describe('FileWorkspace design-system project surface', () => {
       '.ds-project-publish-card input[type="checkbox"]',
     );
 
-    expect(container.textContent).toContain('Waiting for GitHub connector evidence');
+    expect(container.textContent).toContain('Connect your repo to pull aspects of your design system');
     expect(publishToggle?.disabled).toBe(true);
 
     await act(async () => {
@@ -283,5 +283,108 @@ describe('FileWorkspace design-system project surface', () => {
     });
 
     expect(registryMocks.updateDesignSystemDraft).not.toHaveBeenCalled();
+  });
+
+  it('offers a Connect GitHub action that routes to Connectors when repo evidence is missing', async () => {
+    const onConnectRepo = vi.fn();
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md'), workspaceFile('preview/colors.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem({
+          provenance: {
+            companyBlurb: 'Acme analytics workspace',
+            githubUrls: ['https://github.com/acme/product'],
+          },
+        })}
+        onConnectRepo={onConnectRepo}
+        githubConnected={false}
+      />,
+    );
+
+    const connectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Connect GitHub'),
+    );
+    expect(connectButton).toBeTruthy();
+
+    await act(async () => {
+      connectButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onConnectRepo).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the Connect GitHub action when evidence notes exist but file snapshots are still missing', () => {
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('context/github/acme-product.md'),
+          workspaceFile('preview/colors.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem({
+          provenance: {
+            companyBlurb: 'Acme analytics workspace',
+            githubUrls: ['https://github.com/acme/product'],
+          },
+        })}
+        onConnectRepo={vi.fn()}
+        githubConnected={false}
+      />,
+    );
+
+    expect(container.textContent).toContain('Connect your repo to pull aspects of your design system');
+    const connectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Connect GitHub'),
+    );
+    expect(connectButton).toBeTruthy();
+  });
+
+  it('shows re-import guidance instead of Connect when GitHub is already connected', () => {
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('context/github/acme-product.md'),
+          workspaceFile('preview/colors.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem({
+          provenance: {
+            companyBlurb: 'Acme analytics workspace',
+            githubUrls: ['https://github.com/acme/product'],
+          },
+        })}
+        onConnectRepo={vi.fn()}
+        githubConnected
+      />,
+    );
+
+    expect(container.textContent).toContain('GitHub is connected');
+    expect(container.textContent).not.toContain('Connect your repo to pull aspects of your design system');
+    const importButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Import repo'),
+    );
+    expect(importButton).toBeTruthy();
   });
 });

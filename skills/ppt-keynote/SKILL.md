@@ -3,7 +3,9 @@ name: ppt-keynote
 zh_name: "Keynote 风格 PPT"
 en_name: "Keynote-style Slides"
 emoji: "🎬"
-description: "苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换"
+description: "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation."
+zh_description: "苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换"
+en_description: "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation."
 category: slides
 scenario: marketing
 aspect_hint: "16:9 (1280×720)"
@@ -25,7 +27,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「Keynote 风格 PPT」模板把我的内容做成一套「苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Keynote-style Slides template to turn my content into Apple Keynote-quality slides with one card per screen and keyboard left/right navigation. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「Keynote 风格 PPT」模板把我的内容做成一套「苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: Keynote 风格 PPT】

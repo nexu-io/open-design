@@ -41,8 +41,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a premium product-studio {{slideCount}}-slide {{deckType}} for {{audience}} about {{topic}}: a crisp narrative arc, executive-grade pacing, refined typography, strong visual hierarchy, and spacious investor-ready polish. Speaker notes: {{speakerNotes}}. Use {{designSystem}} as the design-system direction. Build a single-file horizontal-swipe HTML deck by copying `assets/template.html` and pasting slide layouts from `references/layouts.md`.",
-        "zh-CN": "用高端产品工作室的完成度，为 {{audience}} 做一套 {{slideCount}} 页的 {{deckType}}，主题是 {{topic}}：叙事线清晰、节奏高级、排版克制、视觉层级强，像可以直接拿去高管汇报或投资人会议的成品。演讲者备注：{{speakerNotes}}。设计系统方向使用 {{designSystem}}。复制 `assets/template.html` 并从 `references/layouts.md` 粘贴版面，构建单文件横向滑动 HTML deck。"
+        "en": "Create a premium product-studio {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}: a crisp narrative arc, executive-grade pacing, refined typography, strong visual hierarchy, and spacious investor-ready polish. Speaker notes: {{speakerNotes}}. Use {{designSystem}} as the design-system direction. Build a single-file horizontal-swipe HTML deck by copying `assets/template.html` and pasting slide layouts from `references/layouts.md`.",
+        "zh-CN": "用高端产品工作室的完成度，为 {{audience}} 做一套 {{deckType}}，主题是 {{topic}}，页数为 {{slideCount}}：叙事线清晰、节奏高级、排版克制、视觉层级强，像可以直接拿去高管汇报或投资人会议的成品。演讲者备注：{{speakerNotes}}。设计系统方向使用 {{designSystem}}。复制 `assets/template.html` 并从 `references/layouts.md` 粘贴版面，构建单文件横向滑动 HTML deck。"
       },
       "exampleOutputs": [
         {
@@ -84,10 +84,17 @@
       },
       {
         "name": "slideCount",
-        "label": "Slide count",
-        "type": "number",
+        "label": "Pages",
+        "type": "select",
         "required": true,
-        "default": 10
+        "options": [
+          "5-10 pages",
+          "10-15 pages",
+          "15-20 pages",
+          "20-25 pages",
+          "25-30 pages"
+        ],
+        "default": "10-15 pages"
       },
       {
         "name": "speakerNotes",

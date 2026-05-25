@@ -33,9 +33,15 @@ type JsonRecord = Record<string, unknown>;
 
 interface SkillFrontmatter extends JsonRecord {
   name?: unknown;
+  zh_name?: unknown;
+  en_name?: unknown;
   description?: unknown;
+  zh_description?: unknown;
+  en_description?: unknown;
   triggers?: unknown;
   od?: JsonRecord & {
+    example_prompt?: unknown;
+    example_prompt_i18n?: unknown;
     craft?: JsonRecord;
     preview?: JsonRecord;
     design_system?: JsonRecord;
@@ -53,7 +59,9 @@ export type SkillSource = "user" | "built-in";
 export interface SkillInfo {
   id: string;
   name: string;
+  displayName?: Record<string, string>;
   description: string;
+  descriptionI18n?: Record<string, string>;
   triggers: unknown[];
   mode: SkillMode;
   surface: SkillSurface;
@@ -76,6 +84,7 @@ export interface SkillInfo {
   speakerNotes: boolean | null;
   animations: boolean | null;
   examplePrompt: string;
+  examplePromptI18n?: Record<string, string>;
   aggregatesExamples: boolean;
   /**
    * Per-skill Critique Theater override declared via `od.critique.policy`
@@ -195,6 +204,12 @@ export async function listSkills(
             : "html";
         const description =
           typeof data.description === "string" ? data.description : "";
+        const displayName = localizedMapFromFields(data.en_name, data.zh_name);
+        const descriptionI18n = localizedMapFromFields(
+          data.en_description,
+          data.zh_description,
+        );
+        const examplePromptI18n = localizedMapFromRecord(data.od?.example_prompt_i18n);
         const parentBody = hasAttachments
           ? withSkillRootPreamble(body, dir)
           : body;
@@ -209,7 +224,9 @@ export async function listSkills(
         out.push({
           id: parentId,
           name: parentId,
+          ...(displayName ? { displayName } : {}),
           description,
+          ...(descriptionI18n ? { descriptionI18n } : {}),
           triggers: Array.isArray(data.triggers) ? data.triggers : [],
           mode,
           surface,
@@ -231,6 +248,7 @@ export async function listSkills(
           speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
           animations: normalizeBoolHint(data.od?.animations),
           examplePrompt: derivePrompt(data),
+          ...(examplePromptI18n ? { examplePromptI18n } : {}),
           aggregatesExamples,
           critiquePolicy: normalizeCritiquePolicy(data.od?.critique?.policy),
           body: parentBody,
@@ -254,6 +272,7 @@ export async function listSkills(
             id: derivedId,
             name: humanizeExampleName(example.key),
             description,
+            ...(descriptionI18n ? { descriptionI18n } : {}),
             triggers: Array.isArray(data.triggers) ? data.triggers : [],
             mode,
             surface,
@@ -271,6 +290,7 @@ export async function listSkills(
             speakerNotes: normalizeBoolHint(data.od?.speaker_notes),
             animations: normalizeBoolHint(data.od?.animations),
             examplePrompt: derivePrompt(data),
+            ...(examplePromptI18n ? { examplePromptI18n } : {}),
             aggregatesExamples: false,
             // Derived cards inherit the parent's critique policy so a
             // single SKILL.md that opts in (or out) applies the same
@@ -499,6 +519,26 @@ function normalizeBoolHint(value: unknown): boolean | null {
     if (v === "false" || v === "no" || v === "0") return false;
   }
   return null;
+}
+
+function localizedMapFromFields(
+  enValue: unknown,
+  zhValue: unknown,
+): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  if (typeof enValue === "string" && enValue.trim()) out.en = enValue.trim();
+  if (typeof zhValue === "string" && zhValue.trim()) out["zh-CN"] = zhValue.trim();
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function localizedMapFromRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    out[key] = raw.trim();
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

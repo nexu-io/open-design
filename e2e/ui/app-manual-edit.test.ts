@@ -144,7 +144,7 @@ test('manual edit inspector previews and persists page and selected element styl
     window as Window & typeof globalThis & { __manualEditSmokeMarker?: string }
   ).__manualEditSmokeMarker)).toBe('stable-frame');
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
+  await page.getByRole('button', { name: /^Export$/ }).click();
   await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
 });
 
@@ -172,7 +172,7 @@ test('manual edit mode preserves preview actions after style edits', async ({ pa
   await frame.getByRole('heading', { name: 'Original Hero' }).click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
+  await page.getByRole('button', { name: /^Export$/ }).click();
   await expect(page.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
 });
 

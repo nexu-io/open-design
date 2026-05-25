@@ -326,10 +326,16 @@ select {
 select::-ms-expand { display: none; }
 [data-theme='dark'] select {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) select {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
   }
 }
 textarea { resize: vertical; font-family: inherit; }
@@ -1522,6 +1528,10 @@ code {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+[dir="rtl"] .avatar-popover {
+  right: auto;
+  left: 0;
 }
 .avatar-popover-head {
   padding: 10px 10px 8px;
@@ -2734,6 +2744,17 @@ a.avatar-item:visited {
 [dir='rtl'] .entry-updater-menu .updater-popup {
   left: auto;
   right: calc(100% + 12px);
+}
+
+.entry-main__topbar .entry-updater-menu .updater-popup {
+  top: calc(100% + 10px);
+  right: 0;
+  left: auto;
+}
+
+[dir='rtl'] .entry-main__topbar .entry-updater-menu .updater-popup {
+  right: auto;
+  left: 0;
 }
 
 .updater-popup__icon {
@@ -9094,6 +9115,9 @@ button.connector-action.is-loading {
 .design-card-status-failed {
   color: var(--red);
 }
+.design-card-status-published {
+  color: var(--green);
+}
 .design-card-close {
   position: absolute;
   top: 8px;
@@ -10679,6 +10703,13 @@ button.connector-action.is-loading {
   color: var(--text-muted);
   font-size: 12px;
 }
+.df-inline-notice a,
+.plugin-action-card__notice a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
 .df-row:hover { background: var(--bg-subtle); }
 .df-row.active { background: var(--blue-bg); color: var(--text); }
 .df-row.active .df-row-name { color: var(--text-strong); }
@@ -11105,11 +11136,11 @@ button.connector-action.is-loading {
   font-size: 12.5px;
   color: var(--text-muted);
   gap: 8px;
-  height: 44px;
+  min-height: 44px;
   flex-shrink: 0;
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
-.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
+.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; }
 .viewer-toolbar .icon-only,
 .viewer-toolbar-actions .icon-only {
   width: 28px;
@@ -12846,6 +12877,71 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/* Shown when a .jsx/.tsx module (loaded by a sibling HTML entry) is opened on
+   its own — it has no standalone preview, so we point at the page(s) that
+   render it. Issue #2744. */
+.viewer-module-pointer {
+  max-width: 460px;
+  margin: 64px auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.viewer-module-pointer__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.viewer-module-pointer__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.viewer-module-pointer__cta {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.viewer-module-pointer__entries {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  align-items: center;
+}
+.viewer-module-pointer__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.viewer-module-pointer__link:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+.viewer-module-pointer__link:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
 /* Compact horizontal variant for the upload-failure banner: the message
    sits inline next to a dismiss button so the user can clear the stale
    notice without changing tabs. Issue #786. */
@@ -13253,6 +13349,59 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   }
 }
 
+/* Connect-your-repo CTA in the empty chat state. Shares the example cards'
+   sizing and accent system but stands apart with a tinted fill so it reads as
+   guidance rather than another starter prompt. */
+.chat-connect-repo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  padding: 14px 16px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  animation: chat-example-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 220ms forwards;
+}
+.chat-connect-repo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+}
+.chat-connect-repo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-connect-repo-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.chat-connect-repo-text {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.chat-connect-repo button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .assistant-header {
   display: flex;
   align-items: center;
@@ -13420,8 +13569,10 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .status-pill {
   display: inline-flex;
   align-self: flex-start;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
+  max-width: 100%;
   padding: 3px 12px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
@@ -13430,7 +13581,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text-muted);
 }
 .status-label { letter-spacing: 0.02em; }
-.status-detail { color: var(--text); }
+.status-detail {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
 
 /* Grouped tool / action card — the collapsible pill from screenshot 9 */
 .action-card {
@@ -14982,8 +15137,9 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .op-waiting {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  max-width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -15005,12 +15161,16 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text);
 }
 .op-waiting-detail {
+  min-width: 0;
+  max-width: 100%;
   font-family: var(--mono);
   font-size: 11px;
   background: var(--bg-panel);
   padding: 1px 6px;
   border-radius: 4px;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .op-waiting-hint {
   flex-basis: 100%;
@@ -15647,6 +15807,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: 8px 0 0 8px;
 }
 .ds-modal-stage-handle.is-collapse {
+  position: sticky;
   left: 0;
   border-left: none;
   border-radius: 0 8px 8px 0;
@@ -20104,6 +20265,39 @@ body.desktop-pet-shell .pet-task-item {
   margin-top: 1px;
 }
 
+/* Hover-reveal pencil to rename an editable (user-created) design system in
+   Settings. Sits inline after the title; only rendered for editable cards, so
+   built-in cards are unchanged. Issue #2811. */
+.library-ds-edit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.library-ds-card-content:hover .library-ds-edit,
+.library-ds-edit:focus-visible {
+  opacity: 1;
+}
+.library-ds-edit:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
 .library-preview {
   width: 100%;
   padding: 12px;
@@ -21895,16 +22089,17 @@ body.desktop-pet-shell .pet-task-item {
 /* Manual edit mode */
 .manual-edit-workspace {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 280px;
+  grid-template-columns: 240px minmax(420px, 1fr) 280px;
   gap: 10px;
   height: 100%;
   min-height: 0;
   padding: 10px;
   background: var(--bg);
 }
-.manual-edit-workspace > .manual-edit-canvas { grid-column: 1; grid-row: 1; }
+.manual-edit-workspace > .manual-edit-canvas { grid-column: 2; grid-row: 1; }
+.manual-edit-workspace > .manual-edit-layers { grid-column: 1; grid-row: 1; }
 .manual-edit-workspace > .manual-edit-right {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   height: 100%;
   min-height: 0;
@@ -22462,8 +22657,11 @@ body.desktop-pet-shell .pet-task-item {
   position: fixed;
   right: 16px;
   bottom: 16px;
-  /* Below modal backdrops; App.tsx hides the banner while Settings is open. */
-  z-index: 90;
+  /* Above modal backdrops (z-index 100) so the banner remains visible and
+     actionable even while Settings or any other modal is open. The banner
+     uses pointer-events:none on the card itself with opt-in on interactive
+     children, so it never intercepts clicks meant for the layer below. */
+  z-index: 110;
   width: 380px;
   max-width: calc(100vw - 32px);
   display: flex;
@@ -26637,6 +26835,27 @@ body.desktop-pet-shell .pet-task-item {
 .app .chat-example-cta {
   width: 22px;
   height: 22px;
+}
+.app .chat-connect-repo {
+  max-width: none;
+  padding: 10px 12px;
+  gap: 10px;
+  border-radius: 10px;
+  box-shadow: none;
+  animation: none;
+  opacity: 1;
+}
+.app .chat-connect-repo-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.app .chat-connect-repo-title {
+  font-size: 12.8px;
+}
+.app .chat-connect-repo-text {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .app .composer {

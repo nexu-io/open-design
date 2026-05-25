@@ -26,6 +26,8 @@ import {
 } from './ChatComposer';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon } from './Icon';
+import { repoConnectCopy } from './design-system-github-evidence';
+import type { SettingsSection } from './SettingsDialog';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -247,7 +249,10 @@ interface Props {
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
+  forceStreamingMessageIds?: Set<string>;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
@@ -257,10 +262,6 @@ interface Props {
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   newConversationDisabled?: boolean;
-  // Header "resume" button — synthesizes a handoff prompt from the
-  // current transcript and opens a fresh conversation seeded with it.
-  onResumeConversation?: () => void;
-  resumeConversationDisabled?: boolean;
   // Conversation list that used to live in the topbar. The chat tab now
   // owns the list so users can browse + switch conversations without
   // leaving the pane.
@@ -271,10 +272,24 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
-  onOpenSettings?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
   onOpenMcpSettings?: () => void;
+  // True when this project is a GitHub-backed design system whose repository
+  // evidence has not fully landed. Surfaces a "Connect your repo" CTA in the
+  // empty chat state alongside the starter examples.
+  connectRepoNeeded?: boolean;
+  // Live GitHub connector status, used only to pick the connect-repo CTA copy
+  // (connect vs re-import). Undefined until the status fetch resolves.
+  githubConnected?: boolean;
+  // Fires when the connect-repo CTA button is clicked. The parent decides what
+  // it does based on connector status (open Connectors, or prefill the composer
+  // with the import instruction).
+  onConnectRepo?: () => void;
+  // Bumped by the parent to push a draft into the composer (used by the
+  // "Import repo" CTA). The nonce lets the same text fire more than once.
+  composerDraftSignal?: { text: string; nonce: number };
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -339,14 +354,15 @@ export function ChatPane({
   onStop,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
+  activePluginActionPaths,
+  hiddenPluginActionPaths,
+  forceStreamingMessageIds,
   initialDraft,
   onSubmitForm,
   onContinueRemainingTasks,
   onAssistantFeedback,
   onNewConversation,
   newConversationDisabled = false,
-  onResumeConversation,
-  resumeConversationDisabled = false,
   conversations,
   activeConversationId,
   onSelectConversation,
@@ -354,6 +370,10 @@ export function ChatPane({
   onRenameConversation,
   onOpenSettings,
   onOpenMcpSettings,
+  connectRepoNeeded,
+  githubConnected,
+  onConnectRepo,
+  composerDraftSignal,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -453,6 +473,17 @@ export function ChatPane({
       composerRef.current?.setDraft('');
     }
   }, [initialDraft]);
+
+  // Parent-driven composer prefill (the "Import repo" CTA). Reuse the same
+  // imperative setDraft the starter cards use; the nonce guards against
+  // re-applying the same signal on unrelated re-renders.
+  const lastDraftSignalNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!composerDraftSignal) return;
+    if (lastDraftSignalNonceRef.current === composerDraftSignal.nonce) return;
+    lastDraftSignalNonceRef.current = composerDraftSignal.nonce;
+    composerRef.current?.setDraft(composerDraftSignal.text);
+  }, [composerDraftSignal]);
 
   useEffect(() => {
     const el = logRef.current;
@@ -921,19 +952,6 @@ export function ChatPane({
           >
             <Icon name="plus" size={16} />
           </button>
-          {onResumeConversation ? (
-            <button
-              type="button"
-              className="icon-only"
-              data-testid="resume-conversation"
-              title={t('chat.resumeConversation')}
-              aria-label={t('chat.resumeConversation')}
-              onClick={onResumeConversation}
-              disabled={resumeConversationDisabled}
-            >
-              <Icon name="reload" size={16} />
-            </button>
-          ) : null}
           {onCollapse ? (
             <button
               type="button"
@@ -1000,6 +1018,30 @@ export function ChatPane({
                       </button>
                     ))}
                   </div>
+                  {connectRepoNeeded ? (
+                    <div className="chat-connect-repo" role="note">
+                      <span className="chat-connect-repo-icon" aria-hidden>
+                        <Icon name="github" size={18} />
+                      </span>
+                      <span className="chat-connect-repo-body">
+                        <span className="chat-connect-repo-title">
+                          {repoConnectCopy(githubConnected).cardTitle}
+                        </span>
+                        <span className="chat-connect-repo-text">
+                          {repoConnectCopy(githubConnected).cardBody}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="primary-ghost"
+                        disabled={githubConnected === undefined}
+                        onClick={() => onConnectRepo?.()}
+                      >
+                        <Icon name="github" size={13} />
+                        {repoConnectCopy(githubConnected).buttonLabel}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {messages.map((m, i) => {
@@ -1008,6 +1050,7 @@ export function ChatPane({
                   m,
                   streaming,
                   lastAssistantId,
+                  forceStreamingMessageIds,
                 );
                 return (
                   <Fragment key={m.id}>
@@ -1041,6 +1084,8 @@ export function ChatPane({
                         projectFileNames={projectFileNames}
                         onRequestOpenFile={onRequestOpenFile}
                         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
+                        activePluginActionPaths={activePluginActionPaths}
+                        hiddenPluginActionPaths={hiddenPluginActionPaths}
                         isLast={m.id === lastAssistantId}
                         nextUserContent={nextUserContentByAssistantId.get(m.id)}
                         suppressDirectionForms={hasActiveDesignSystem}
@@ -1342,8 +1387,10 @@ export function isAssistantMessageStreaming(
   message: ChatMessage,
   paneStreaming: boolean,
   lastAssistantId: string | null | undefined,
+  forceStreamingMessageIds?: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
+  if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;

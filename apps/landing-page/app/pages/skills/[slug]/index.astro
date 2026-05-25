@@ -257,7 +257,7 @@ const jsonLd = [
           Click-to-expand interactive preview. The thumb itself is the
           summary of a `<details>` element — clicking the image opens
           the live iframe, replacing the thumb with the canonical
-          `<slug>/example.html/` rendered inside a sandboxed frame. A
+          `<slug>/example.html` rendered inside a sandboxed frame. A
           hover overlay on the thumb hints "Click for live preview ↗"
           so the affordance is discoverable. The iframe loads lazily,
           only fetching once the user actually expands.
@@ -275,7 +275,7 @@ const jsonLd = [
           </summary>
           <div class="detail-preview-frame-wrap">
             <iframe
-              src={`/skills/${skill.slug}/example.html/`}
+              src={`/skills/${skill.slug}/example.html`}
               title={`${skill.name} interactive preview`}
               loading="lazy"
               sandbox="allow-scripts allow-same-origin"
@@ -283,7 +283,7 @@ const jsonLd = [
             />
             <a
               class="detail-preview-popout"
-              href={`/skills/${skill.slug}/example.html/`}
+              href={`/skills/${skill.slug}/example.html`}
               target="_blank"
               rel="noopener"
               aria-label="Open preview in new tab"

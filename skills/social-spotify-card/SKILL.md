@@ -3,7 +3,9 @@ name: social-spotify-card
 zh_name: "Spotify 正在播放卡"
 en_name: "Spotify Now-Playing Card"
 emoji: "🎵"
-description: "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页"
+description: "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages."
+zh_description: "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页"
+en_description: "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages."
 category: card
 scenario: personal
 aspect_hint: "1280×720 或 600×200"
@@ -28,7 +30,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「Spotify 正在播放卡」模板把我的内容做成一份「Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Spotify Now-Playing Card template to turn my content into a Spotify Now Playing-style card with album art, progress bar, and playback controls for a video overlay or personal homepage. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「Spotify 正在播放卡」模板把我的内容做成一份「Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: Spotify Now-Playing 卡】

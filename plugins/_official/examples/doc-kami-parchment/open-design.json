@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-doc-kami-parchment",
-  "title": "Kami 羊皮纸文档",
+  "title": "Kami Parchment Document",
   "version": "0.1.0",
-  "description": "暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印",
+  "description": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -46,11 +46,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Kami 羊皮纸文档」模板把我的内容做成一份「暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Kami Parchment Document template to turn my content into a warm parchment document with monochrome ink-blue accents, one serif family, and editorial-grade typography. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Kami 羊皮纸文档」模板把我的内容做成一份「暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Kami 羊皮纸文档"
+          "title": "Kami Parchment Document",
+          "title_i18n": {
+            "en": "Kami Parchment Document",
+            "zh-CN": "Kami 羊皮纸文档"
+          }
         }
       ]
     },
@@ -79,5 +86,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Kami Parchment Document",
+    "zh-CN": "Kami 羊皮纸文档"
+  },
+  "description_i18n": {
+    "en": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
+    "zh-CN": "暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印"
   }
 }

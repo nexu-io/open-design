@@ -30,7 +30,7 @@ export function GithubStarBadge() {
       title={t('entry.githubStarTitle')}
       data-testid="entry-star-badge"
     >
-      <Icon name="github" size={13} className="entry-star-badge__icon" />
+      <Icon name="github-filled" size={16} className="entry-star-badge__icon" />
       <span className="entry-star-badge__label">{t('entry.githubStarLabel')}</span>
       <span className="entry-star-badge__sep" aria-hidden>
         ·
