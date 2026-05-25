@@ -422,9 +422,9 @@ describe('FileViewer SVG artifacts', () => {
     expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
     expect(srcDocFrame?.getAttribute('data-od-active')).toBe('false');
     expect(srcDocFrame?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-    expect(srcDocFrame?.srcdoc).not.toContain('__odArtifactBootCount');
 
     const postMessageSpy = vi.spyOn(srcDocFrame!.contentWindow!, 'postMessage');
+    expect(srcDocActivationMessages(postMessageSpy.mock.calls)).toHaveLength(0);
     fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
 
     const urlFrameAfter = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
@@ -436,7 +436,6 @@ describe('FileViewer SVG artifacts', () => {
     expect(urlFrameAfter?.getAttribute('src')).toBe('about:blank');
     expect(srcDocFrameAfter?.getAttribute('data-od-active')).toBe('true');
     expect(srcDocFrameAfter?.srcdoc).toContain('data-od-lazy-srcdoc-transport');
-    expect(srcDocFrameAfter?.srcdoc).not.toContain('__odArtifactBootCount');
 
     await waitFor(() => {
       const activations = srcDocActivationMessages(postMessageSpy.mock.calls);
