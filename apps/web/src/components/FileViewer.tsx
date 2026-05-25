@@ -131,6 +131,21 @@ type ManualEditPendingContentSave = {
   patch: ManualEditPatch;
   label: string;
 };
+function patchTargetIdForPendingContent(patch: ManualEditPatch): string | null {
+  return 'id' in patch && typeof patch.id === 'string' && patch.id.length > 0 ? patch.id : null;
+}
+export function enqueueManualEditPendingContent(
+  current: ManualEditPendingContentSave[],
+  next: ManualEditPendingContentSave,
+): ManualEditPendingContentSave[] {
+  const nextTargetId = patchTargetIdForPendingContent(next.patch);
+  if (!nextTargetId) return [...current, next];
+  const existingIndex = current.findIndex((entry) => patchTargetIdForPendingContent(entry.patch) === nextTargetId);
+  if (existingIndex < 0) return [...current, next];
+  const updated = current.slice();
+  updated[existingIndex] = next;
+  return updated;
+}
 type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
 type PreviewCanvasSize = { width: number; height: number };
 type PreviewViewportPreset = {
@@ -3856,7 +3871,7 @@ function HtmlViewer({
   const manualEditSavingRef = useRef(false);
   const manualEditPendingStyleRef = useRef<ManualEditPendingStyleSave | null>(null);
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const manualEditPendingContentRef = useRef<ManualEditPendingContentSave | null>(null);
+  const manualEditPendingContentRef = useRef<ManualEditPendingContentSave[]>([]);
   const [manualEditPendingContentLabel, setManualEditPendingContentLabel] = useState<string | null>(null);
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
@@ -4862,7 +4877,7 @@ function HtmlViewer({
         clearTimeout(manualEditStyleTimerRef.current);
         manualEditStyleTimerRef.current = null;
       }
-      manualEditPendingContentRef.current = null;
+      manualEditPendingContentRef.current = [];
       setManualEditPendingContentLabel(null);
       return;
     }
@@ -4996,22 +5011,35 @@ function HtmlViewer({
   }
 
   function queueManualEditContentSave(patch: ManualEditPatch, label: string) {
-    manualEditPendingContentRef.current = { patch, label };
-    setManualEditPendingContentLabel(label);
+    const nextQueue = enqueueManualEditPendingContent(manualEditPendingContentRef.current, { patch, label });
+    manualEditPendingContentRef.current = nextQueue;
+    setManualEditPendingContentLabel(nextQueue.length > 1 ? `${nextQueue.length} pending text edits` : label);
     logManualEditDebug('host:content-save-queued', { patch, label });
   }
 
   async function flushManualEditContentSave(): Promise<boolean> {
     const pending = manualEditPendingContentRef.current;
-    if (!pending) return true;
+    if (pending.length === 0) return true;
     if (manualEditSavingRef.current) {
       logManualEditDebug('host:content-save-waiting', { pending });
       return false;
     }
-    manualEditPendingContentRef.current = null;
+    manualEditPendingContentRef.current = [];
     setManualEditPendingContentLabel(null);
-    logManualEditDebug('host:content-save-flush', { pending });
-    return applyManualEdit(pending.patch, pending.label);
+    logManualEditDebug('host:content-save-flush', { pendingCount: pending.length });
+    for (let index = 0; index < pending.length; index += 1) {
+      const entry = pending[index];
+      const ok = await applyManualEdit(entry.patch, entry.label);
+      if (!ok) {
+        const remaining = pending.slice(index);
+        manualEditPendingContentRef.current = remaining;
+        setManualEditPendingContentLabel(
+          remaining.length > 1 ? `${remaining.length} pending text edits` : remaining[0]?.label ?? null,
+        );
+        return false;
+      }
+    }
+    return true;
   }
 
   function cancelManualEditPendingStyles(id: string, keys: Array<keyof ManualEditStyles>) {
@@ -5164,7 +5192,7 @@ function HtmlViewer({
     setManualEditHistory([]);
     setManualEditUndone([]);
     manualEditPendingStyleRef.current = null;
-    manualEditPendingContentRef.current = null;
+    manualEditPendingContentRef.current = [];
     setManualEditPendingContentLabel(null);
     setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
     setManualEditError(message);

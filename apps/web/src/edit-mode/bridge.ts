@@ -108,7 +108,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   }
   function isDirectTextEditable(el){
     var kind = inferKind(el);
-    return kind === 'text' || kind === 'link';
+    return (kind === 'text' || kind === 'link') && !hasElementChildren(el);
   }
   function labelFor(el, id, kind){
     var explicit = el.getAttribute('data-od-label');

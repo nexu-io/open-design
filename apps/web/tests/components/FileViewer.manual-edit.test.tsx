@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FileViewer,
   cancelManualEditPendingStyleSnapshot,
+  enqueueManualEditPendingContent,
 } from '../../src/components/FileViewer';
 import type { ProjectFile } from '../../src/types';
 
@@ -139,6 +140,26 @@ describe('FileViewer manual edit regressions', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps multiple pending inline content edits and coalesces latest per target', () => {
+    const queue = enqueueManualEditPendingContent([], {
+      patch: { id: 'hero', kind: 'set-text', value: 'Hero v1' },
+      label: 'Content: Hero',
+    });
+    const queue2 = enqueueManualEditPendingContent(queue, {
+      patch: { id: 'cta', kind: 'set-text', value: 'CTA v1' },
+      label: 'Content: CTA',
+    });
+    const queue3 = enqueueManualEditPendingContent(queue2, {
+      patch: { id: 'hero', kind: 'set-text', value: 'Hero v2' },
+      label: 'Content: Hero',
+    });
+
+    expect(queue3).toEqual([
+      { patch: { id: 'hero', kind: 'set-text', value: 'Hero v2' }, label: 'Content: Hero' },
+      { patch: { id: 'cta', kind: 'set-text', value: 'CTA v1' }, label: 'Content: CTA' },
+    ]);
   });
 });
 
