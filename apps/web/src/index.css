@@ -22148,8 +22148,8 @@ body.desktop-pet-shell .pet-task-item {
   background: var(--surface-2, #f6f6f7);
   border: 1px solid var(--border, #e4e4e7);
   border-radius: 4px;
-  height: 26px; padding: 0 8px;
-  font-size: 12px; min-width: 0;
+  height: 26px; padding: 0 4px;
+  font-size: 10px; min-width: 0;
 }
 .cc-row:focus-within { border-color: var(--accent, #2563eb); }
 .cc-label {
@@ -22159,7 +22159,7 @@ body.desktop-pet-shell .pet-task-item {
 }
 .cc-value {
   flex: 1 1 auto; display: flex; align-items: center; justify-content: flex-end;
-  gap: 2px; min-width: 0;
+  gap: 1px; min-width: 0;
 }
 .cc-step {
   flex: 0 0 14px;
