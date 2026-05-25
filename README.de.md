@@ -1,6 +1,6 @@
 # Open Design — die offizielle Open-Source-Alternative zu [Claude Design][cd]
 
-> **Open Design ist die Open-Source- und Local-first-Alternative zu [Claude Design][cd].** Web-deploybar, BYOK auf jeder Ebene: **16 coding-agent CLIs** werden automatisch in Ihrem `PATH` erkannt (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) und werden zur Design-Engine, gesteuert von **31 kombinierbaren Skills** und **72 brandreifen Design Systems**. Keine CLI? Ein OpenAI-kompatibler BYOK-Proxy ist dieselbe Schleife ohne Spawn.
+> **Open Design ist die Open-Source- und Local-first-Alternative zu [Claude Design][cd].** Web-deploybar, BYOK auf jeder Ebene: **16 coding-agent CLIs** werden automatisch in Ihrem `PATH` erkannt (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) und werden zur Design-Engine, gesteuert von **64 kombinierbaren Skills** und **139 brandreifen Design Systems**. Keine CLI? Ein OpenAI-kompatibler BYOK-Proxy ist dieselbe Schleife ohne Spawn.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` ist da. Hier endet die alte Welt des Designs.
@@ -63,8 +63,8 @@ OD steht auf den Schultern von vier Open-Source-Projekten:
 |---|---|
 | **Code-Agent-CLIs (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — automatisch im `PATH` erkannt, mit einem Klick wechselbar |
 | **BYOK-Fallback** | OpenAI-kompatibler Proxy unter `/api/proxy/stream` — fügen Sie `baseUrl` + `apiKey` + `model` ein und jeder Anbieter (Anthropic-via-OpenAI, DeepSeek, Groq, MiMo, OpenRouter, Ihr selbst gehostetes vLLM oder jeder andere OpenAI-kompatible Provider) wird zur Engine. Internal-IP/SSRF wird am daemon-Rand blockiert. |
-| **Design Systems integriert** | **72** — 2 handgeschriebene Starter + 70 Produktsysteme (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …), importiert aus [`awesome-design-md`][acd2] |
-| **Skills integriert** | **31** — 27 im `prototype` mode (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 im `deck` mode (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Im Picker nach `scenario` gruppiert: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **Design Systems integriert** | **139** — 2 handgeschriebene Starter + 70 Produktsysteme (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …), importiert aus [`awesome-design-md`][acd2] |
+| **Skills integriert** | **64** — 27 im `prototype` mode (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 im `deck` mode (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Im Picker nach `scenario` gruppiert: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Medienerzeugung** | Image-, Video- und Audio-Surfaces laufen neben dem Design-Loop. **gpt-image-2** (Azure / OpenAI) für Poster, Avatare, Infografiken, illustrierte Karten · **Seedance 2.0** (ByteDance) für 15s-cinematic text-to-video und image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) für HTML→MP4 Motion Graphics (Produkt-Reveals, kinetische Typografie, Datendiagramme, Social Overlays, Logo-Outros). **93** sofort reproduzierbare Prompts — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — unter [`prompt-templates/`](prompt-templates/), mit Vorschau-Thumbnails und Quellenangabe. Gleiche Chat-Oberfläche wie Code; gibt einen echten `.mp4` / `.png` Chip in den Projekt-Workspace aus. |
 | **Visuelle Richtungen** | 5 kuratierte Schulen (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental), jeweils mit deterministischer OKLch-Palette + Font Stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixelgenau, skillübergreifend unter [`assets/frames/`](assets/frames/) geteilt |
@@ -107,8 +107,8 @@ OD steht auf den Schultern von vier Open-Source-Projekten:
 <sub><b>Sandboxed preview</b> — jedes <code>&lt;artifact&gt;</code> rendert in einem sauberen srcdoc iframe. Direkt im File Workspace editierbar; als HTML, PDF oder ZIP herunterladbar.</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72-system library" /><br/>
-<sub><b>72-system library</b> — jedes Produktsystem zeigt seine 4-Farben-Signatur. Klicken Sie für das vollständige <code>DESIGN.md</code>, Swatch Grid und Live Showcase.</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 139-system library" /><br/>
+<sub><b>139-system library</b> — jedes Produktsystem zeigt seine 4-Farben-Signatur. Klicken Sie für das vollständige <code>DESIGN.md</code>, Swatch Grid und Live Showcase.</sub>
 </td>
 </tr>
 <tr>
@@ -125,7 +125,7 @@ OD steht auf den Schultern von vier Open-Source-Projekten:
 
 ## Skills
 
-**31 Skills werden direkt mitgeliefert.** Jeder ist ein Ordner unter [`skills/`](skills/), folgt der Claude Code [`SKILL.md`][skill] Konvention und erweitert sie um ein `od:` Frontmatter, das der daemon unverändert parst: `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**64 Skills werden direkt mitgeliefert.** Jeder ist ein Ordner unter [`skills/`](skills/), folgt der Claude Code [`SKILL.md`][skill] Konvention und erweitert sie um ein `od:` Frontmatter, das der daemon unverändert parst: `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
 Zwei oberste **Modes** tragen den Katalog: **`prototype`** (27 Skills, alles, was als einseitiges Artefakt rendert, von Magazin-Landing bis Phone Screen bis PM Spec Doc) und **`deck`** (4 Skills, horizontale Swipe-Präsentationen mit Deck-Framework-Chrome). Das Feld **`scenario`** gruppiert sie im Picker: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
@@ -236,7 +236,7 @@ Nach Claude Codes [`SKILL.md` Konvention](https://docs.anthropic.com/en/docs/cla
 
 ### 3 · Design Systems sind portables Markdown, kein Theme JSON.
 
-Das 9-Section `DESIGN.md` Schema aus [`VoltAgent/awesome-design-md`][acd2]: color, typography, spacing, layout, components, motion, voice, brand, anti-patterns. Jedes Artefakt liest aus dem aktiven System. System wechseln → das nächste Render nutzt die neuen Tokens. Das Dropdown bringt **Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Apple, Anthropic, Cursor, Supabase, Figma, Resend, Raycast, Lovable, Cohere, Mistral, ElevenLabs, X.AI, Spotify, Webflow, Sanity, PostHog, Sentry, MongoDB, ClickHouse, Cal, Replicate, Clay, Composio, Xiaohongshu…** mit, insgesamt 72.
+Das 9-Section `DESIGN.md` Schema aus [`VoltAgent/awesome-design-md`][acd2]: color, typography, spacing, layout, components, motion, voice, brand, anti-patterns. Jedes Artefakt liest aus dem aktiven System. System wechseln → das nächste Render nutzt die neuen Tokens. Das Dropdown bringt **Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Apple, Anthropic, Cursor, Supabase, Figma, Resend, Raycast, Lovable, Cohere, Mistral, ElevenLabs, X.AI, Spotify, Webflow, Sanity, PostHog, Sentry, MongoDB, ClickHouse, Cal, Replicate, Clay, Composio, Xiaohongshu…** mit, insgesamt 139.
 
 ### 4 · Das interaktive Fragenformular verhindert 80% der Redirects.
 
@@ -255,8 +255,8 @@ Was beim Senden zusammengesetzt wird, ist nicht "system + user". Es ist:
 ```
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
+  + active DESIGN.md   (139 systems available)
+  + active SKILL.md    (64 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -337,7 +337,7 @@ Für Desktop-/Background-Start, Fixed-Port-Restarts und Media-Generation-Dispatc
 Der erste Load:
 
 1. erkennt, welche Agent-CLIs Sie im `PATH` haben, und wählt automatisch eine aus.
-2. lädt 31 Skills + 72 Design Systems.
+2. lädt 64 Skills + 139 Design Systems.
 3. öffnet den Welcome Dialog, damit Sie einen Anthropic Key einfügen können (nur für den BYOK-Fallback-Pfad nötig).
 4. **erstellt automatisch `./.od/`** — den lokalen Runtime-Ordner für die SQLite Project DB, per-project artifacts und saved renders. Es gibt keinen `od init` Schritt; der daemon `mkdir`t beim Boot alles, was er braucht.
 
@@ -408,7 +408,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
+├── skills/                        ← 64 SKILL.md skill bundles (27 prototype + 4 deck)
 │   ├── web-prototype/             ← default for prototype mode
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -423,7 +423,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 DESIGN.md systems
+├── design-systems/                ← 139 DESIGN.md systems
 │   ├── default/                   ← Neutral Modern (starter)
 │   ├── warm-editorial/            ← Warm Editorial (starter)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -463,10 +463,10 @@ open-design/
 ## Designsysteme
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="The 72 design systems library — style guide spread" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="The 139 design systems library — style guide spread" width="100%" />
 </p>
 
-72 Systeme direkt mitgeliefert, jedes als ein einzelnes [`DESIGN.md`](design-systems/README.md):
+139 Systeme direkt mitgeliefert, jedes als ein einzelnes [`DESIGN.md`](design-systems/README.md):
 
 <details>
 <summary><b>Vollständiger Katalog</b> (zum Aufklappen klicken)</summary>
@@ -586,7 +586,7 @@ Der Chat-/Artifact-Loop steht im Rampenlicht, aber einige weniger sichtbare Fäh
 
 - **Claude Design ZIP import.** Ziehen Sie einen Export von claude.ai in den Welcome Dialog. `POST /api/import/claude-design` extrahiert ihn in ein echtes `.od/projects/<id>/`, öffnet die Entry-Datei als Tab und bereitet einen Continue-where-Anthropic-left-off Prompt für Ihren lokalen Agent vor. Kein erneutes Prompting, kein "ask the model to re-create what we just had". ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
 - **OpenAI-kompatibler BYOK proxy.** `POST /api/proxy/stream` nimmt `{ baseUrl, apiKey, model, messages }`, normalisiert den Pfad (`…/v1/chat/completions`), leitet SSE-Chunks an den Browser zurück und lehnt loopback / link-local / RFC1918 Ziele ab, um SSRF zu verhindern. Alles, was das OpenAI Chat Schema spricht, funktioniert: Anthropic-via-OpenAI shim, DeepSeek, Groq, MiMo, OpenRouter, Ihr selbst gehostetes vLLM. MiMo bekommt automatisch `tool_choice: 'none'`, weil sein Tool Schema bei freier Generierung Probleme macht.
-- **User-saved templates.** Wenn Ihnen ein Render gefällt, snapshottet `POST /api/templates` HTML + Metadata in die SQLite `templates` Tabelle. Das nächste Projekt wählt es aus einer "your templates" Zeile im Picker: dieselbe Oberfläche wie die mitgelieferten 31, aber Ihre eigene.
+- **User-saved templates.** Wenn Ihnen ein Render gefällt, snapshottet `POST /api/templates` HTML + Metadata in die SQLite `templates` Tabelle. Das nächste Projekt wählt es aus einer "your templates" Zeile im Picker: dieselbe Oberfläche wie die mitgelieferten 64, aber Ihre eigene.
 - **Tab persistence.** Jedes Projekt merkt sich offene Dateien und aktiven Tab in der `tabs` Tabelle. Öffnen Sie das Projekt morgen wieder, und der Workspace sieht genau so aus, wie Sie ihn verlassen haben.
 - **Artifact lint API.** `POST /api/artifacts/lint` führt strukturelle Checks auf einem generierten Artifact aus (kaputtes `<artifact>` Framing, fehlende Side Files, stale palette tokens) und gibt Findings zurück, die der Agent in seinen nächsten Turn einlesen kann. Die fünfdimensionale Self-Critique nutzt das, um ihren Score auf echte Evidenz statt Vibes zu stützen.
 - **Sidecar protocol + desktop automation.** Daemon-, Web- und Desktop-Prozesse tragen typisierte Five-Field-Stamps (`app · mode · namespace · ipc · source`) und expose'n einen JSON-RPC IPC Channel unter `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` steuert diesen Channel, sodass Headless-E2E gegen eine echte Electron Shell funktioniert, ohne bespoke Harnesses ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
@@ -612,8 +612,8 @@ Die gesamte Maschinerie unten ist das [`huashu-design`](https://github.com/alcha
 | Formfaktor | Web (claude.ai) | Desktop (Electron) | **Web-App + lokaler Daemon** |
 | Auf Vercel deploybar | ❌ | ❌ | **✅** |
 | Agent-Runtime | Gebündelt (Opus 4.7) | Gebündelt ([`pi-ai`][piai]) | **Delegiert an die vorhandene CLI des Nutzers** |
-| Skills | Proprietär | 12 Custom-TS-Module + `SKILL.md` | **31 dateibasierte [`SKILL.md`][skill] Bundles, einfach ablegbar** |
-| Designsystem | Proprietär | `DESIGN.md` (v0.2 Roadmap) | **`DESIGN.md` × 72 ausgelieferte Systeme** |
+| Skills | Proprietär | 12 Custom-TS-Module + `SKILL.md` | **64 dateibasierte [`SKILL.md`][skill] Bundles, einfach ablegbar** |
+| Designsystem | Proprietär | `DESIGN.md` (v0.2 Roadmap) | **`DESIGN.md` × 139 ausgelieferte Systeme** |
 | Provider-Flexibilität | Nur Anthropic | 7+ über [`pi-ai`][piai] | **16 CLI-Adapter + OpenAI-kompatibler BYOK-Proxy** |
 | Initiales Fragenformular | ❌ | ❌ | **✅ Harte Regel, Turn 1** |
 | Richtungswahl | ❌ | ❌ | **✅ 5 deterministische Richtungen** |
@@ -684,7 +684,7 @@ Der ausführliche Provenienztext, was wir jeweils übernehmen und was bewusst ni
 
 - [x] Daemon + agent detection (16 CLI adapters) + skill registry + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 31 skills + 72 design systems + 5 visual directions + 5 device frames
+- [x] 64 skills + 139 design systems + 5 visual directions + 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] OpenAI-compatible BYOK proxy (`/api/proxy/stream`) with SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)

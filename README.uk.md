@@ -1,6 +1,6 @@
 # Open Design — офіційна open-source альтернатива [Claude Design][cd]
 
-> **Open Design — це альтернатива з відкритим кодом і локально-перший варіант [Claude Design][cd].** Розгортується в web, BYOK на кожному рівні — **16 CLI агентів для кодування** автоматично виявляються у вашому `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) стають механізмом дизайну, керуються **31 компонуваною навичкою** та **72 системами дизайну комерційного класу**. Немає CLI? OpenAI-сумісний BYOK проксі — це той же цикл без spawn.
+> **Open Design — це альтернатива з відкритим кодом і локально-перший варіант [Claude Design][cd].** Розгортується в web, BYOK на кожному рівні — **16 CLI агентів для кодування** автоматично виявляються у вашому `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) стають механізмом дизайну, керуються **64 компонуваною навичкою** та **139 системами дизайну комерційного класу**. Немає CLI? OpenAI-сумісний BYOK проксі — це той же цикл без spawn.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` уже тут. Старий світ дизайну закінчується тут.
@@ -64,7 +64,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 | **CLI агентів для кодування (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — автоматично виявляються на `PATH`, одночисельний swap |
 | **BYOK fallback** | Специфічний для протоколу API проксі за адресою `/api/proxy/{anthropic,openai,azure,google}/stream` — вставте `baseUrl` + `apiKey` + `model`, виберіть Anthropic / OpenAI / Azure OpenAI / Google Gemini, і демон нормалізує SSE назад у той самий потік чату. Внутрішні IP/SSRF заблоковані на краю демона. |
 | **Системи дизайну вбудовані** | **129** — 2 hand-authored starter + 70 систем продукту (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) з [`awesome-design-md`][acd2], плюс 57 навичок дизайну з [`awesome-design-skills`][ads] додано безпосередньо під `design-systems/` |
-| **Навички вбудовані** | **31** — 27 у режимі `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 у режимі `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Згруповані у picker за `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **Навички вбудовані** | **64** — 27 у режимі `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 у режимі `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Згруповані у picker за `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Медіа генерація** | Поверхні Image · video · audio поставляються разом з циклом дизайну. **gpt-image-2** (Azure / OpenAI) для плакатів, аватарів, інфографіки, ілюстрованих карт · **Seedance 2.0** (ByteDance) для кінематографічних 15-секундних text-to-video та image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) для HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). **93** готових до репліки підказки — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — під [`prompt-templates/`](prompt-templates/), з preview thumbnails та атрибуцією джерела. Той же chat surface як код; виходить реальний `.mp4` / `.png` chip у робочий простір проекту. |
 | **Візуальні напрями** | 5 курованих шкіл (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — кожна поставляється детермінованою палітрою OKLch + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Кадри пристроїв** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — пікселем точні, спільні під [`assets/frames/`](assets/frames/) |
@@ -108,8 +108,8 @@ OD стоїть на плечах чотирьох проектів з відк�
 <sub><b>Попередній перегляд в пісочниці</b> — кожен `<artifact>` рендериться в чистому srcdoc iframe. Редаговується на місці через файловий workspace; завантажується як HTML, PDF, ZIP.</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72-system library" /><br/>
-<sub><b>72-система бібліотека</b> — кожна система продукту показує своїм 4-колірна підпис. Натисніть для повного `DESIGN.md`, сітки зразків та live showcase.</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 139-system library" /><br/>
+<sub><b>139-система бібліотека</b> — кожна система продукту показує своїм 4-колірна підпис. Натисніть для повного `DESIGN.md`, сітки зразків та live showcase.</sub>
 </td>
 </tr>
 <tr>
@@ -126,7 +126,7 @@ OD стоїть на плечах чотирьох проектів з відк�
 
 ## Навички
 
-**31 навичка входить до комплекту.** Кожна — це папка під [`skills/`](skills/), яка слідує конвенції Claude Code [`SKILL.md`][skill] з розширеним `od:` frontmatter, який демон розбирає дослівно — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**64 навичка входить до комплекту.** Кожна — це папка під [`skills/`](skills/), яка слідує конвенції Claude Code [`SKILL.md`][skill] з розширеним `od:` frontmatter, який демон розбирає дослівно — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
 Два основні **режими** (modes) формують каталог: **`prototype`** (27 навичок — все, що рендериться як артефакт однієї сторінки, від журнального landing до екрана телефону чи специфікації PM) та **`deck`** (4 навички — horizontal-swipe presentations з deck-framework chrome). Поле **`scenario`** — це те, як вибір групує їх: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
@@ -256,8 +256,8 @@ OD стоїть на плечах чотирьох проектів з відк�
 ```
 DISCOVERY directives  (форма 1-го ходу, бранч бренду 2-го ходу, TodoWrite, 5-вимірна критика)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 системи доступні)
-  + active SKILL.md    (31 навичка доступна)
+  + active DESIGN.md   (139 системи доступні)
+  + active SKILL.md    (64 навичка доступна)
   + project metadata   (тип, точність, нотатки доповідача, анімації, inspiration ids)
   + skill side files   (автоматично введені: read assets/template.html + references/*.md)
   + (тип deck, без skill seed) DECK_FRAMEWORK_DIRECTIVE   (навігація / лічильник / прокрутка / друк)
@@ -338,7 +338,7 @@ pnpm tools-dev run web
 Перше завантаження:
 
 1. Виявляє, які CLI агенти ви маєте в `PATH`, і автоматично вибирає один.
-2. Завантажує 31 навичку + 72 системи дизайну.
+2. Завантажує 64 навичку + 139 системи дизайну.
 3. Виводить вітальне діалогове вікно, щоб ви могли вставити ключ Anthropic (потрібен лише для резервного шляху BYOK).
 4. **Автоматично створює `./.od/`** — локальну папку для бази даних SQLite, артефактів для кожного проекту та збережених рендерів. Крок `od init` не потрібен; демон створює все, що йому потрібно при запуску.
 
@@ -409,7 +409,7 @@ open-design/
 │   ├── sidecar/                   ← загальні примітиви sidecar рантайму
 │   └── platform/                  ← загальні примітиви процесів/платформи
 │
-├── skills/                        ← 31 комплект навичок SKILL.md (27 prototype + 4 deck)
+├── skills/                        ← 64 комплект навичок SKILL.md (27 prototype + 4 deck)
 │   ├── web-prototype/             ← типовий для режиму prototype
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -424,7 +424,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 системи DESIGN.md
+├── design-systems/                ← 139 системи DESIGN.md
 │   ├── default/                   ← Neutral Modern (стартер)
 │   ├── warm-editorial/            ← Warm Editorial (стартер)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -465,10 +465,10 @@ open-design/
 ## Системи дизайну
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="Бібліотека 72 систем дизайну — стиль-гайд розворот" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="Бібліотека 139 систем дизайну — стиль-гайд розворот" width="100%" />
 </p>
 
-72 системи з коробки, кожна як один [`DESIGN.md`](design-systems/README.md):
+139 системи з коробки, кожна як один [`DESIGN.md`](design-systems/README.md):
 
 <details>
 <summary><b>Повний каталог</b> (натисніть, щоб розгорнути)</summary>
@@ -588,7 +588,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 
 - **Імпорт Claude Design ZIP.** Перетягніть експорт з claude.ai на вітальне діалогове вікно. `POST /api/import/claude-design` розпакує його у реальну `.od/projects/<id>/`, відкриє вхідний файл як вкладку та підготує промпт «продовжити там, де Anthropic зупинився» для вашого локального агента. Без перепромпту, без «попросіть модель відтворити те, що ми щойно мали». ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
 - **Багатопровайдерний BYOK проксі.** `POST /api/proxy/{anthropic,openai,azure,google}/stream` приймає `{ baseUrl, apiKey, model, messages }`, будує специфічний для провайдера запит, нормалізує SSE-фрагменти у `delta/end/error` та відхиляє loopback / link-local / RFC1918 адресати для захисту від SSRF. OpenAI-сумісний покриває OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter та self-hosted vLLM; Azure OpenAI додає deployment URL + `api-version`; Google використовує Gemini `:streamGenerateContent`.
-- **Збережені користувачем шаблони.** Коли рендер вам подобається, `POST /api/templates` створює знімок HTML + метаданих у таблиці `templates` SQLite. Наступний проект вибере його з ряду «ваші шаблони» у пікері — та ж поверхня, що й 31 вбудована, але ваша.
+- **Збережені користувачем шаблони.** Коли рендер вам подобається, `POST /api/templates` створює знімок HTML + метаданих у таблиці `templates` SQLite. Наступний проект вибере його з ряду «ваші шаблони» у пікері — та ж поверхня, що й 64 вбудована, але ваша.
 - **Збереження вкладок.** Кожен проект запам'ятовує свої відкриті файли та активну вкладку у таблиці `tabs`. Відкрийте проект завтра, і робочий простір виглядатиме саме так, як ви його залишили.
 - **API лінтингу артефактів.** `POST /api/artifacts/lint` запускає структурні перевірки згенерованого артефакту (пошкоджене `<artifact>` обрамлення, відсутні необхідні side-файли, застарілі токени палітри) та повертає знахідки, які агент може прочитати у свій наступний хід. П'ятивимірна self-critique використовує це для обґрунтування оцінки реальними доказами, а не враженнями.
 - **Протокол sidecar + автоматизація desktop.** Процеси демона, вебу та desktop несуть типізовані п'ятипольні штампи (`app · mode · namespace · ipc · source`) та надають JSON-RPC IPC канал за адресою `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status | eval | screenshot` керує цим каналом, тому headless E2E працює проти реальної Electron shell без спеціальних харнесів ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
@@ -614,7 +614,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 | Форм-фактор | Веб (claude.ai) | Desktop (Electron) | **Веб-додаток + локальний демон** |
 | Розгортання на Vercel | ❌ | ❌ | **✅** |
 | Рантайм агента | Вбудований (Opus 4.7) | Вбудований ([`pi-ai`][piai]) | **Делеговано наявному CLI користувача** |
-| Навички | Пропрієтарні | 12 кастомних TS-модулів + `SKILL.md` | **31 файлових [`SKILL.md`][skill] комплектів, що додаються перетягуванням** |
+| Навички | Пропрієтарні | 12 кастомних TS-модулів + `SKILL.md` | **64 файлових [`SKILL.md`][skill] комплектів, що додаються перетягуванням** |
 | Система дизайну | Пропрієтарна | `DESIGN.md` (дорожня карта v0.2) | **`DESIGN.md` × 129 систем поставлено** |
 | Гнучкість провайдерів | Лише Anthropic | 7+ через [`pi-ai`][piai] | **16 CLI-адаптерів + OpenAI-сумісний BYOK проксі** |
 | Початкова форма запитань | ❌ | ❌ | **✅ Жорстке правило, хід 1** |
@@ -687,7 +687,7 @@ OD не зупиняється на коді. Та сама поверхня ч�
 
 - [x] Демон + виявлення агентів (16 CLI-адаптерів) + реєстр навичок + каталог систем дизайну
 - [x] Веб-додаток + чат + форма запитань + вибір з 5 напрямків + прогрес todo + прев'ю в пісочниці
-- [x] 31 навичка + 72 системи дизайну + 5 візуальних напрямків + 5 кадрів пристроїв
+- [x] 64 навичка + 139 системи дизайну + 5 візуальних напрямків + 5 кадрів пристроїв
 - [x] Проекти · розмови · повідомлення · вкладки · шаблони на SQLite
 - [x] Багатопровайдерний BYOK проксі (`/api/proxy/{anthropic,openai,azure,google}/stream`) з захистом SSRF
 - [x] Імпорт Claude Design ZIP (`/api/import/claude-design`)
@@ -756,7 +756,7 @@ SVG вище перегенерується щодня [`.github/workflows/metri
 
 ## Кредити
 
-Сімейство навичок HTML PPT Studio — майстер-навичка [`skills/html-ppt/`](skills/html-ppt/) та обгортки для кожного шаблону під [`skills/html-ppt-*/`](skills/) (15 шаблонів повних колод, 36 тем, 31 односторінковий макет, 27 CSS-анімацій + 20 canvas FX, клавіатурний рантайм та режим презентації з магнітними картками) — інтегровані з проекту з відкритим кодом [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) (MIT). Вихідна ЛІЦЕНЗІЯ поставляється in-tree у [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE), авторство належить [@lewislulu](https://github.com/lewislulu). Кожна картка прикладу для шаблону (`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post`, …) делегує авторські вказівки майстер-навичці, щоб поведінка промпт → вихід зберігалася наскрізь при натисканні **Використати цей промпт**.
+Сімейство навичок HTML PPT Studio — майстер-навичка [`skills/html-ppt/`](skills/html-ppt/) та обгортки для кожного шаблону під [`skills/html-ppt-*/`](skills/) (15 шаблонів повних колод, 36 тем, 64 односторінковий макет, 27 CSS-анімацій + 20 canvas FX, клавіатурний рантайм та режим презентації з магнітними картками) — інтегровані з проекту з відкритим кодом [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) (MIT). Вихідна ЛІЦЕНЗІЯ поставляється in-tree у [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE), авторство належить [@lewislulu](https://github.com/lewislulu). Кожна картка прикладу для шаблону (`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post`, …) делегує авторські вказівки майстер-навичці, щоб поведінка промпт → вихід зберігалася наскрізь при натисканні **Використати цей промпт**.
 
 Потік журнал / горизонтального гортання під [`skills/guizang-ppt/`](skills/guizang-ppt/) інтегрований з [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) (MIT). Авторство належить [@op7418](https://github.com/op7418).
 

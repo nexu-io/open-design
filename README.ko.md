@@ -1,6 +1,6 @@
 # Open Design — [Claude Design][cd]의 공식 오픈소스 대안
 
-> **Open Design은 [Claude Design][cd]의 오픈소스, 로컬 우선 대안입니다.** 웹 배포 가능, 모든 레이어에서 BYOK — `PATH`에서 자동 감지되는 **16개의 코딩 에이전트 CLI**(Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI)가 **31가지 조합 가능한 Skill**과 **72가지 브랜드급 디자인 시스템**으로 구동되는 디자인 엔진이 됩니다. CLI가 하나도 없다? OpenAI 호환 BYOK 프록시가 spawn만 빠진 동일한 루프를 돌립니다.
+> **Open Design은 [Claude Design][cd]의 오픈소스, 로컬 우선 대안입니다.** 웹 배포 가능, 모든 레이어에서 BYOK — `PATH`에서 자동 감지되는 **16개의 코딩 에이전트 CLI**(Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI)가 **64가지 조합 가능한 Skill**과 **139가지 브랜드급 디자인 시스템**으로 구동되는 디자인 엔진이 됩니다. CLI가 하나도 없다? OpenAI 호환 BYOK 프록시가 spawn만 빠진 동일한 루프를 돌립니다.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview`가 도착했습니다. 디자인의 옛 시대는 여기서 끝납니다.
@@ -9,7 +9,7 @@
 >
 > **`main`에서 빠르게 이터레이션 중** — 0.8.0은 Open Design의 다음 단계입니다. PR을 보내고, 거친 아이디어를 던지고, 버그를 신고하세요 — 당신이 가져오는 것이 곧 이 무브먼트가 됩니다.
 >
-> → [**공지 읽기 · 인스톨러 다운로드 · 무브먼트에 합류**](https://github.com/nexu-io/open-design/discussions/1727) · 현재 사용 중인 0.7과 나란히 설치됩니다.
+> → [**공지 읽기 · 인스톨러 다운로드 · 무브먼트에 합류**](https://github.com/nexu-io/open-design/discussions/11397) · 현재 사용 중인 0.7과 나란히 설치됩니다.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — 노트북 위의 에이전트와 함께 설계하는 표지" width="100%" />
@@ -63,8 +63,8 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 |---|---|
 | **코딩 에이전트 CLI(16개)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH`에서 자동 감지, 한 번의 클릭으로 전환 |
 | **BYOK 폴백** | OpenAI 호환 프록시 `/api/proxy/stream` — `baseUrl` + `apiKey` + `model`만 붙여 넣으면 어떤 벤더(Anthropic-via-OpenAI 어댑터, DeepSeek, Groq, MiMo, OpenRouter, 자체 호스팅 vLLM, 또는 OpenAI 호환 프로바이더 무엇이든)든 엔진이 됩니다. daemon 경계에서 내부 IP / SSRF를 차단합니다. |
-| **내장 디자인 시스템** | **72개** — 2개의 수작업 스타터 + [`awesome-design-md`][acd2]에서 가져온 70개의 제품 시스템(Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu …) |
-| **내장 Skill** | **31개** — `prototype` 모드 27개(web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs …) + `deck` 모드 4개(`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). picker에서 `scenario`로 그룹화: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **내장 디자인 시스템** | **139개** — 2개의 수작업 스타터 + [`awesome-design-md`][acd2]에서 가져온 70개의 제품 시스템(Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu …) |
+| **내장 Skill** | **64개** — `prototype` 모드 27개(web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs …) + `deck` 모드 4개(`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). picker에서 `scenario`로 그룹화: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **미디어 생성** | 이미지 · 비디오 · 오디오 surface가 디자인 루프와 함께 작동합니다. **gpt-image-2**(Azure / OpenAI)로 포스터, 아바타, 인포그래픽, 일러스트 도시 지도 · **Seedance 2.0**(ByteDance)로 15초 시네마틱 text-to-video / image-to-video · **HyperFrames**([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes))로 HTML→MP4 모션 그래픽(제품 리빌, 키네틱 타이포그래피, 데이터 차트, 소셜 오버레이, 로고 아웃트로). **93개**의 즉시 복제 가능한 prompt 갤러리 — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — 모두 [`prompt-templates/`](prompt-templates/) 아래에 미리보기 썸네일과 출처 표기와 함께 배치. 채팅 입구는 코드와 동일; 실제 `.mp4` / `.png`이 프로젝트 워크스페이스에 chip으로 떨어집니다. |
 | **시각적 방향** | 5가지 엄선된 학파(Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — 각각 결정론적 OKLch 팔레트 + 폰트 스택 제공([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **기기 프레임** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — 픽셀 정확도, skill 간 공유, [`assets/frames/`](assets/frames/)에 통합 |
@@ -107,8 +107,8 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 <sub><b>샌드박스 미리보기</b> — 모든 <code>&lt;artifact&gt;</code>가 깨끗한 srcdoc iframe에서 렌더링됩니다. 파일 워크스페이스에서 바로 편집 가능; HTML, PDF, ZIP으로 다운로드 가능.</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72개 시스템 라이브러리" /><br/>
-<sub><b>72개 시스템 라이브러리</b> — 모든 제품 시스템이 4색 시그니처를 표시합니다. 클릭하면 전체 <code>DESIGN.md</code>, 색상 견본 그리드, 라이브 쇼케이스를 볼 수 있습니다.</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 139개 시스템 라이브러리" /><br/>
+<sub><b>139개 시스템 라이브러리</b> — 모든 제품 시스템이 4색 시그니처를 표시합니다. 클릭하면 전체 <code>DESIGN.md</code>, 색상 견본 그리드, 라이브 쇼케이스를 볼 수 있습니다.</sub>
 </td>
 </tr>
 <tr>
@@ -125,7 +125,7 @@ OD는 네 개의 오픈소스 프로젝트의 어깨 위에 서 있습니다:
 
 ## 내장 Skills
 
-**31개의 skill이 기본 제공됩니다.** 각각은 Claude Code의 [`SKILL.md`][skill] 규약을 따르는 [`skills/`](skills/) 아래의 폴더이며, daemon이 그대로 파싱하는 확장된 `od:` 프론트매터를 포함합니다 — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt`([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**64개의 skill이 기본 제공됩니다.** 각각은 Claude Code의 [`SKILL.md`][skill] 규약을 따르는 [`skills/`](skills/) 아래의 폴더이며, daemon이 그대로 파싱하는 확장된 `od:` 프론트매터를 포함합니다 — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt`([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
 두 가지 최상위 **mode**가 카탈로그를 떠받칩니다: **`prototype`**(27개 — 매거진 랜딩부터 폰 화면, PM 스펙 문서까지 단일 페이지 아티팩트로 렌더링되는 모든 것) 그리고 **`deck`**(4개 — 덱 프레임워크 크롬을 입은 수평 스와이프 프레젠테이션). picker가 그룹화에 사용하는 필드는 **`scenario`**: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
@@ -228,7 +228,7 @@ skill 추가는 폴더 하나면 됩니다. [`docs/skills-protocol.md`](docs/ski
 
 ### 1 · 에이전트를 제공하지 않습니다. 여러분의 것으로 충분합니다.
 
-Daemon은 시작 시 `PATH`에서 [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)를 스캔합니다. 찾은 것들 모두가 후보 디자인 엔진이 됩니다 — stdio를 통해 구동되며 CLI당 하나의 어댑터, 모델 picker에서 즉시 전환 가능. [`multica`](https://github.com/multica-ai/multica)와 [`cc-switch`](https://github.com/farion1231/cc-switch)에서 영감을 받았습니다. CLI가 하나도 설치되어 있지 않다면? `POST /api/proxy/stream`이 spawn만 없는 동일한 파이프라인입니다 — 임의의 OpenAI 호환 `baseUrl` + `apiKey`만 붙여 넣으면 daemon이 SSE 청크를 브라우저로 그대로 전달하며, loopback / link-local / RFC1918 목적지는 경계에서 거부됩니다.
+Daemon은 시작 시 `PATH`에서 [`claude`](https://docs.anthropic.com/en/docs/claude-code), [`codex`](https://github.com/openai/codex), [`cursor-agent`](https://www.cursor.com/cli), [`gemini`](https://github.com/google-gemini/gemini-cli), [`opencode`](https://opencode.ai/), [`qwen`](https://github.com/QwenLM/qwen-code), `qodercli`, [`copilot`](https://github.com/features/copilot/cli), `hermes`, `kimi`, [`pi`](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)를 스캔합니다. 찾은 것들 모두가 후보 디자인 엔진이 됩니다 — stdio를 통해 구동되며 CLI당 하나의 어댑터, 모델 picker에서 즉시 전환 가능. [`multica`](https://github.com/multica-ai/multica)와 [`cc-switch`](https://github.com/farion1264/cc-switch)에서 영감을 받았습니다. CLI가 하나도 설치되어 있지 않다면? `POST /api/proxy/stream`이 spawn만 없는 동일한 파이프라인입니다 — 임의의 OpenAI 호환 `baseUrl` + `apiKey`만 붙여 넣으면 daemon이 SSE 청크를 브라우저로 그대로 전달하며, loopback / link-local / RFC1918 목적지는 경계에서 거부됩니다.
 
 ### 2 · Skill은 파일이지 플러그인이 아닙니다.
 
@@ -236,7 +236,7 @@ Claude Code의 [`SKILL.md` 규약](https://docs.anthropic.com/en/docs/claude-cod
 
 ### 3 · 디자인 시스템은 테마 JSON이 아닌 이식 가능한 Markdown입니다.
 
-[`VoltAgent/awesome-design-md`][acd2]의 9섹션 `DESIGN.md` 스키마 — color, typography, spacing, layout, components, motion, voice, brand, anti-patterns. 모든 아티팩트가 활성 시스템에서 읽습니다. 시스템 전환 → 다음 렌더에 새 토큰 사용. 드롭다운에는 **Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Apple, Anthropic, Cursor, Supabase, Figma, Resend, Raycast, Lovable, Cohere, Mistral, ElevenLabs, X.AI, Spotify, Webflow, Sanity, PostHog, Sentry, MongoDB, ClickHouse, Cal, Replicate, Clay, Composio, Xiaohongshu …** 총 72개가 있습니다.
+[`VoltAgent/awesome-design-md`][acd2]의 9섹션 `DESIGN.md` 스키마 — color, typography, spacing, layout, components, motion, voice, brand, anti-patterns. 모든 아티팩트가 활성 시스템에서 읽습니다. 시스템 전환 → 다음 렌더에 새 토큰 사용. 드롭다운에는 **Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Apple, Anthropic, Cursor, Supabase, Figma, Resend, Raycast, Lovable, Cohere, Mistral, ElevenLabs, X.AI, Spotify, Webflow, Sanity, PostHog, Sentry, MongoDB, ClickHouse, Cal, Replicate, Clay, Composio, Xiaohongshu …** 총 139개가 있습니다.
 
 ### 4 · 초기화 질문 폼이 수정 작업의 80%를 막아줍니다.
 
@@ -255,8 +255,8 @@ Daemon은 프로젝트의 아티팩트 폴더 `.od/projects/<id>/`로 `cwd`를 �
 ```
 DISCOVERY 지시문    (turn-1 폼, turn-2 브랜드 분기, TodoWrite, 5차원 검토)
   + 신원 헌장        (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + 활성 DESIGN.md   (72개 시스템 사용 가능)
-  + 활성 SKILL.md    (31개 skill 사용 가능)
+  + 활성 DESIGN.md   (139개 시스템 사용 가능)
+  + 활성 SKILL.md    (64개 skill 사용 가능)
   + 프로젝트 메타데이터 (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill 사이드 파일 (pre-flight 자동 주입: assets/template.html + references/*.md 읽기)
   + (덱 kind, skill seed 없음) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -337,7 +337,7 @@ Windows 사용자는 네이티브 설치 경로와 작은 더블 클릭 런처�
 첫 번째 로드 시:
 
 1. `PATH`에 어떤 에이전트 CLI가 있는지 감지하고 자동으로 하나를 선택합니다.
-2. 31개의 skill + 72개의 디자인 시스템을 로드합니다.
+2. 64개의 skill + 139개의 디자인 시스템을 로드합니다.
 3. Anthropic 키를 붙여넣을 수 있는 환영 다이얼로그를 표시합니다(BYOK 폴백 경로에만 필요).
 4. **`./.od/`를 자동 생성합니다** — SQLite 프로젝트 DB, 프로젝트별 아티팩트, 저장된 렌더를 위한 로컬 런타임 폴더. `od init` 단계는 없습니다; daemon이 부팅 시 필요한 모든 것을 `mkdir`합니다.
 
@@ -408,7 +408,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31개 SKILL.md skill 번들(27 prototype + 4 deck)
+├── skills/                        ← 64개 SKILL.md skill 번들(27 prototype + 4 deck)
 │   ├── web-prototype/             ← prototype 기본
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -423,7 +423,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72개 DESIGN.md 시스템
+├── design-systems/                ← 139개 DESIGN.md 시스템
 │   ├── default/                   ← Neutral Modern(스타터)
 │   ├── warm-editorial/            ← Warm Editorial(스타터)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -463,10 +463,10 @@ open-design/
 ## 디자인 시스템
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="72개 디자인 시스템 라이브러리 — 에디토리얼 스프레드" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="139개 디자인 시스템 라이브러리 — 에디토리얼 스프레드" width="100%" />
 </p>
 
-기본 제공 72개 시스템, 각각 단일 [`DESIGN.md`](design-systems/README.md)로:
+기본 제공 139개 시스템, 각각 단일 [`DESIGN.md`](design-systems/README.md)로:
 
 <details>
 <summary><b>전체 카탈로그</b> (클릭하여 펼치기)</summary>
@@ -527,9 +527,9 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 <tr>
 <td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D Stone Staircase Evolution" /><br/><sub><b>3D Stone Staircase Evolution Infographic</b><br/>3단계 석재 풍 인포그래픽</sub></td>
 <td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Illustrated City Food Map" /><br/><sub><b>Illustrated City Food Map</b><br/>편집급 손그림 여행 포스터</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>편집급 패션 단일 프레임</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>프로필 아바타 — 네온 페이스 텍스트</sub></td>
-<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>편집급 스튜디오 초상</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777456449026_gd2k50_HHCSvymboAAVscc.jpg" alt="Cinematic Elevator Scene" /><br/><sub><b>Cinematic Elevator Scene</b><br/>편집급 패션 단일 프레임</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777456464993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Cyberpunk Anime Portrait" /><br/><sub><b>Cyberpunk Anime Portrait</b><br/>프로필 아바타 — 네온 페이스 텍스트</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777456484257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Glamorous Woman in Black" /><br/><sub><b>Glamorous Woman in Black Portrait</b><br/>편집급 스튜디오 초상</sub></td>
 </tr>
 </table>
 
@@ -542,8 +542,8 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 <td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/c4515f4f328539e1ded2cc32f4ce63e7/thumbnails/thumbnail.jpg" alt="Music Podcast Guitar" /></a><br/><sub><b>Music Podcast & Guitar Technique</b><br/>4K 시네마틱 스튜디오 영상</sub></td>
 <td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/4a47ba646e7cedd79363c861864b8714/thumbnails/thumbnail.jpg" alt="Emotional Face" /></a><br/><sub><b>Emotional Face Close-up</b><br/>시네마틱 미세 표정 연구</sub></td>
 <td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7e8983364a95fe333f0f88bd1085a0e8/thumbnails/thumbnail.jpg" alt="Luxury Supercar" /></a><br/><sub><b>Luxury Supercar Cinematic</b><br/>내러티브 제품 영상</sub></td>
-<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a7273d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>스타일라이즈드 풍자 쇼트</sub></td>
-<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad253175a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15초 Seedance 2.0 내러티브</sub></td>
+<td width="20%" valign="top"><a href="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a13973d89/downloads/default.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/0279a674ce138ab5a0a6f020a13973d89/thumbnails/thumbnail.jpg" alt="Forbidden City Cat" /></a><br/><sub><b>Forbidden City Cat Satire</b><br/>스타일라이즈드 풍자 쇼트</sub></td>
+<td width="20%" valign="top"><a href="https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/1402.mp4"><img src="https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/7f63ad256475a9ad1dac53de490efac8/thumbnails/thumbnail.jpg" alt="Japanese Romance" /></a><br/><sub><b>Japanese Romance Short Film</b><br/>15초 Seedance 2.0 내러티브</sub></td>
 </tr>
 </table>
 
@@ -586,7 +586,7 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 
 - **Claude Design ZIP 임포트.** claude.ai에서 익스포트한 ZIP을 환영 다이얼로그에 드롭하세요. `POST /api/import/claude-design`이 그것을 진짜 `.od/projects/<id>/`로 풀어주고, 엔트리 파일을 탭으로 열고, 로컬 에이전트에게 "Anthropic이 멈춘 곳에서 그대로 이어서 편집해" 프롬프트를 미리 박아둡니다. 다시 묻지 않아도 됩니다, "방금 만든 것을 다시 만들어줘"도 안 합니다. ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
 - **OpenAI 호환 BYOK 프록시.** `POST /api/proxy/stream`은 `{ baseUrl, apiKey, model, messages }`를 받아 경로를 정규화(`…/v1/chat/completions`)하고, SSE 청크를 브라우저로 전달하며, SSRF를 막기 위해 loopback / link-local / RFC1918 목적지를 거부합니다. OpenAI chat 스키마를 말하는 모든 것이 작동합니다 — Anthropic-via-OpenAI 어댑터, DeepSeek, Groq, MiMo, OpenRouter, 자체 호스팅 vLLM. MiMo는 자유 생성에서 tool 스키마가 잘 동작하지 않아 자동으로 `tool_choice: 'none'`이 적용됩니다.
-- **사용자 저장 templates.** 마음에 든 렌더가 있으면 `POST /api/templates`가 HTML + 메타데이터를 SQLite `templates` 테이블에 스냅샷으로 저장합니다. 다음 프로젝트의 picker에는 "내 템플릿" 행이 추가됩니다 — 기본 31개와 동일한 표면, 그러나 당신의 것.
+- **사용자 저장 templates.** 마음에 든 렌더가 있으면 `POST /api/templates`가 HTML + 메타데이터를 SQLite `templates` 테이블에 스냅샷으로 저장합니다. 다음 프로젝트의 picker에는 "내 템플릿" 행이 추가됩니다 — 기본 64개와 동일한 표면, 그러나 당신의 것.
 - **탭 영속성.** 모든 프로젝트는 `tabs` 테이블에 자기가 연 파일들과 활성 탭을 기억합니다. 내일 다시 열어도 워크스페이스는 어제 떠난 그 모습 그대로.
 - **Artifact lint API.** `POST /api/artifacts/lint`는 생성된 아티팩트에 대해 구조 검사(파괴된 `<artifact>` 프레임, 누락된 필수 사이드 파일, 오래된 팔레트 토큰)를 실행하고, 에이전트가 다음 턴에 다시 읽어들일 수 있는 findings를 반환합니다. 5차원 자기 검토는 이걸로 점수를 vibe가 아닌 실제 증거에 묶어둡니다.
 - **Sidecar 프로토콜 + 데스크탑 자동화.** Daemon, web, desktop 프로세스 모두 타입화된 5필드 스탬프(`app · mode · namespace · ipc · source`)를 들고 다니며, JSON-RPC IPC 채널을 `/tmp/open-design/ipc/<namespace>/<app>.sock`에 노출합니다. `tools-dev inspect desktop status \| eval \| screenshot`이 그 채널 위에서 동작하므로, 헤드리스 E2E가 진짜 Electron 셸을 상대로 자체 하네스 없이 동작합니다([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
@@ -612,8 +612,8 @@ OD는 코드에서 끝나지 않습니다. `<artifact>` HTML을 만드는 동일
 | 폼 팩터 | 웹(claude.ai) | 데스크탑(Electron) | **웹앱 + 로컬 daemon** |
 | Vercel 배포 가능 | ❌ | ❌ | **✅** |
 | 에이전트 런타임 | 번들됨(Opus 4.7) | 번들됨([`pi-ai`][piai]) | **사용자 기존 CLI에 위임** |
-| Skill | 독점 | 12개 커스텀 TS 모듈 + `SKILL.md` | **31개 파일 기반 [`SKILL.md`][skill] 번들, 드롭 가능** |
-| 디자인 시스템 | 독점 | `DESIGN.md`(v0.2 로드맵) | **`DESIGN.md` × 72개 시스템 기본 제공** |
+| Skill | 독점 | 12개 커스텀 TS 모듈 + `SKILL.md` | **64개 파일 기반 [`SKILL.md`][skill] 번들, 드롭 가능** |
+| 디자인 시스템 | 독점 | `DESIGN.md`(v0.2 로드맵) | **`DESIGN.md` × 139개 시스템 기본 제공** |
 | 프로바이더 유연성 | Anthropic 전용 | [`pi-ai`][piai]를 통해 7+ | **16개 CLI 어댑터 + OpenAI 호환 BYOK 프록시** |
 | 초기화 질문 폼 | ❌ | ❌ | **✅ 하드 규칙, turn 1** |
 | 방향 선택기 | ❌ | ❌ | **✅ 5가지 결정론적 방향** |
@@ -675,7 +675,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + 어댑터 아키텍처. PATH 스캔 에이전트 감지, 단일 특권 프로세스로서의 로컬 daemon, 에이전트-동료 세계관. 모델을 채용했지만 코드는 vendor하지 않습니다. |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 최초의 오픈소스 Claude-Design 대안이자 가장 가까운 동류. 채택된 UX 패턴: 스트리밍 아티팩트 루프, 샌드박스 iframe 미리보기(React 18 + Babel 내장), 실시간 에이전트 패널(todos + tool calls + 중단 가능), 5가지 내보내기 형식(HTML/PDF/PPTX/ZIP/Markdown), 로컬 우선 designs 허브, `SKILL.md` 취향 주입. 로드맵의 UX 패턴: 코멘트 모드 수술적 편집, AI 제안 트윅 패널. **[`pi-ai`][piai]는 의도적으로 vendor하지 않습니다** — open-codesign은 이를 에이전트 런타임으로 번들링하지만 우리는 사용자가 이미 가진 CLI에 위임합니다. |
 | [`VoltAgent/awesome-claude-design`][acd] / [`awesome-design-md`][acd2] | 9섹션 `DESIGN.md` 스키마의 출처이자 [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts)를 통해 가져온 69개 제품 시스템. |
-| [`farion1231/cc-switch`](https://github.com/farion1231/cc-switch) | 여러 에이전트 CLI에 걸친 심링크 기반 skill 배포의 영감. |
+| [`farion1264/cc-switch`](https://github.com/farion1264/cc-switch) | 여러 에이전트 CLI에 걸친 심링크 기반 skill 배포의 영감. |
 | [Claude Code skills][skill] | 원본 그대로 채택된 `SKILL.md` 규약 — 모든 Claude Code skill이 `skills/`에 드롭되면 daemon이 감지합니다. |
 
 각각에서 무엇을 채용하고 의도적으로 채용하지 않았는지에 대한 장문의 계보 작성 → [`docs/references.md`](docs/references.md).
@@ -684,7 +684,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 
 - [x] Daemon + 에이전트 감지(16개 CLI 어댑터) + skill 레지스트리 + 디자인 시스템 카탈로그
 - [x] 웹앱 + 채팅 + 질문 폼 + 5가지 방향 선택기 + 할 일 진행 + 샌드박스 미리보기
-- [x] 31개 skill + 72개 디자인 시스템 + 5가지 시각적 방향 + 5개 기기 프레임
+- [x] 64개 skill + 139개 디자인 시스템 + 5가지 시각적 방향 + 5개 기기 프레임
 - [x] SQLite 기반 projects · conversations · messages · tabs · templates
 - [x] OpenAI 호환 BYOK 프록시(`/api/proxy/stream`) + SSRF 차단
 - [x] Claude Design ZIP 임포트(`/api/import/claude-design`)
@@ -753,7 +753,7 @@ Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다
 
 ## 크레딧 / Credits
 
-마스터 [`skills/html-ppt/`](skills/html-ppt/) skill과 [`skills/html-ppt-*/`](skills/) 아래의 15개 per-template wrapper(15개 full-deck 템플릿, 36개 테마, 31개 single-page 레이아웃, 27개 CSS 애니메이션 + 20개 canvas FX, 키보드 runtime, 자석식 카드 presenter mode 포함)는 오픈소스 프로젝트 [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill)(MIT)에서 통합되었습니다. 원본 LICENSE는 [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE)에 보존되어 있고 저작권 표시는 [@lewislulu](https://github.com/lewislulu)에게 있습니다. 각 per-template Examples 카드(`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post` …)는 authoring 가이드를 마스터 skill에 위임하므로, **Use this prompt** 클릭 시 업스트림과 동일한 prompt → 출력 동작이 그대로 보존됩니다.
+마스터 [`skills/html-ppt/`](skills/html-ppt/) skill과 [`skills/html-ppt-*/`](skills/) 아래의 15개 per-template wrapper(15개 full-deck 템플릿, 36개 테마, 64개 single-page 레이아웃, 27개 CSS 애니메이션 + 20개 canvas FX, 키보드 runtime, 자석식 카드 presenter mode 포함)는 오픈소스 프로젝트 [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill)(MIT)에서 통합되었습니다. 원본 LICENSE는 [`skills/html-ppt/LICENSE`](skills/html-ppt/LICENSE)에 보존되어 있고 저작권 표시는 [@lewislulu](https://github.com/lewislulu)에게 있습니다. 각 per-template Examples 카드(`html-ppt-pitch-deck`, `html-ppt-tech-sharing`, `html-ppt-presenter-mode`, `html-ppt-xhs-post` …)는 authoring 가이드를 마스터 skill에 위임하므로, **Use this prompt** 클릭 시 업스트림과 동일한 prompt → 출력 동작이 그대로 보존됩니다.
 
 [`skills/guizang-ppt/`](skills/guizang-ppt/) 매거진/가로 스와이프 deck flow는 [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill)(MIT)에서 통합되었으며, 저작권 표시는 [@op7418](https://github.com/op7418)에게 있습니다.
 
