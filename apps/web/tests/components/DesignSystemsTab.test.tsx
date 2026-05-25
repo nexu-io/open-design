@@ -79,6 +79,9 @@ describe('DesignSystemsTab', () => {
 
     expect(screen.getByText('Create')).toBeTruthy();
     expect(screen.getByText('Acme Design System')).toBeTruthy();
+    expect(screen.queryByText('Linear')).toBeNull();
+
+    openOfficialPresets();
     expect(screen.getByText('Linear')).toBeTruthy();
   });
 
@@ -119,6 +122,7 @@ describe('DesignSystemsTab', () => {
 
     expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
 
+    openOfficialPresets();
     fireEvent.click(screen.getByTestId('design-system-preview-linear'));
 
     expect(onPreview).toHaveBeenCalledWith('linear');
@@ -163,6 +167,10 @@ function renderTab(items: DesignSystemSummary[] = librarySystems) {
   );
 }
 
+function openOfficialPresets() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Official presets' }));
+}
+
 // The surface pill renders its label and a `.filter-pill-count` span; read
 // the count back by the visible label so assertions describe the UI.
 function surfacePillCount(label: string): string | null {
@@ -187,6 +195,7 @@ describe('DesignSystemsTab surface filtering', () => {
     // describe the filtered result set, otherwise "All 149 / Web 149" is a
     // lie about what the user is looking at.
     renderTab();
+    openOfficialPresets();
 
     expect(surfacePillCount('All')).toBe('5');
     expect(surfacePillCount('Web')).toBe('3');
@@ -205,6 +214,7 @@ describe('DesignSystemsTab surface filtering', () => {
     // refining inside it. The category survives when it still has matches
     // for the chosen surface.
     renderTab();
+    openOfficialPresets();
     selectCategory('Retro');
 
     fireEvent.click(screen.getByRole('tab', { name: /^Web/ }));
@@ -228,6 +238,7 @@ describe('DesignSystemsTab surface filtering', () => {
       ds({ id: 'retro-img-1', title: 'Retro Image One', category: 'Retro', surface: 'image' }),
     ];
     renderTab(webOnlyCategory);
+    openOfficialPresets();
     expect(screen.queryByRole('tab', { name: /^Image/ })).not.toBeNull();
 
     selectCategory('Tools');
@@ -243,6 +254,7 @@ describe('DesignSystemsTab surface filtering', () => {
     // only web systems match — the Image chip must stay, and stay selected,
     // so the active filter is visible instead of an empty grid with no chip.
     renderTab();
+    openOfficialPresets();
     fireEvent.click(screen.getByRole('tab', { name: /^Image/ }));
 
     fireEvent.change(screen.getByTestId('design-systems-search'), {

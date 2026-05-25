@@ -774,7 +774,7 @@ export function App() {
   );
 
   const handleChangeDefaultDesignSystem = useCallback(
-    (designSystemId: string) => {
+    (designSystemId: string | null) => {
       const next = { ...config, designSystemId };
       saveConfig(next);
       void syncConfigToDaemon(next);
@@ -1374,6 +1374,8 @@ export function App() {
         onTouchProject={handleTouchProject}
         onProjectChange={handleProjectChange}
         onProjectsRefresh={refreshProjects}
+        onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
+        onDesignSystemsRefresh={refreshDesignSystems}
       />
     );
   } else {

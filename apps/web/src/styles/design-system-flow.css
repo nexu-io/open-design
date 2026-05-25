@@ -13,6 +13,7 @@
   overflow-y: auto;
   background: var(--bg);
   color: var(--text);
+  position: relative;
 }
 .ds-setup-shell--embedded {
   height: auto;
@@ -422,6 +423,31 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.ds-source-upload-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  backdrop-filter: blur(2px);
+}
+.ds-source-upload-loading__card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 .ds-hidden-input {
   display: none;
@@ -1304,7 +1330,52 @@
   min-height: 320px;
 }
 .design-systems-manager {
-  gap: 20px;
+  gap: 14px;
+}
+.ds-manager-tabs,
+.ds-manager-subtabs {
+  display: flex;
+  align-items: center;
+}
+.ds-manager-tabs {
+  margin-bottom: 2px;
+}
+.ds-manager-subtabs {
+  margin-top: -4px;
+  margin-bottom: 6px;
+}
+.ds-tag-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ds-tag-tabs::-webkit-scrollbar {
+  display: none;
+}
+.ds-tag-tabs button {
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--shadow-xs);
+}
+.ds-tag-tabs button:hover:not(.active) {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.ds-tag-tabs button.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 .ds-settings-page {
   gap: 16px;
@@ -1334,7 +1405,7 @@
   min-height: 34px;
 }
 .ds-templates-card {
-  margin-top: -4px;
+  margin-top: 0;
 }
 .ds-private-note {
   margin: -4px 2px 0;
@@ -1418,6 +1489,60 @@
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+.ds-coming-soon-card .ds-user-empty {
+  min-height: 108px;
+  display: flex;
+  align-items: center;
+}
+.ds-coming-soon-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ds-template-list {
+  display: flex;
+  flex-direction: column;
+}
+.ds-template-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+.ds-template-row:first-child {
+  border-top: 0;
+}
+.ds-template-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.ds-template-row strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-template-row span,
+.ds-template-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.ds-template-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-template-row small {
+  flex: 0 0 auto;
 }
 .ds-user-list {
   display: flex;
@@ -1835,6 +1960,21 @@
 }
 .ds-project-publish-trigger {
   display: inline-flex;
+  align-items: center;
+}
+.ds-project-publish-trigger > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 10px;
+  line-height: 1;
+}
+.ds-project-publish-trigger > button svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
 }
 /* A disabled button does not fire the hover or focus that shows its own `title`,
    so the publish guidance lives on this wrapper. Make the disabled button

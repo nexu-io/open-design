@@ -218,6 +218,8 @@ interface Props {
   onTouchProject: () => void;
   onProjectChange: (next: Project) => void;
   onProjectsRefresh: () => void;
+  onChangeDefaultDesignSystem?: (designSystemId: string | null) => void;
+  onDesignSystemsRefresh?: () => Promise<void> | void;
 }
 
 interface QueuedChatSend {
@@ -496,6 +498,8 @@ export function ProjectView({
   onTouchProject,
   onProjectChange,
   onProjectsRefresh,
+  onChangeDefaultDesignSystem,
+  onDesignSystemsRefresh,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -4359,6 +4363,9 @@ export function ProjectView({
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
+          defaultDesignSystemId={config.designSystemId}
+          onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
+          onDesignSystemsRefresh={onDesignSystemsRefresh}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
           designSystemReview={project.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}

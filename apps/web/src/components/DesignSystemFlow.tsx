@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { streamViaDaemon } from '../providers/daemon';
 import {
@@ -64,6 +64,7 @@ import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon, type IconName } from './Icon';
+import { Spinner } from './Loading';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemCreateResult,
@@ -140,6 +141,13 @@ interface CreationProps {
     outcome: { result: 'success' } | { result: 'failed'; errorCode: string },
   ) => void;
 }
+
+const SOURCE_PROCESSING_MIN_VISIBLE_MS = 900;
+const SOURCE_PROCESSING_LOADING_FILE_COUNT = 24;
+const SOURCE_PROCESSING_LOADING_BYTES = 4 * 1024 * 1024;
+const SOURCE_FILE_DIALOG_FOCUS_DELAY_MS = 120;
+const SOURCE_FILE_DIALOG_WARMUP_MS = 450;
+const SOURCE_FILE_DIALOG_STALE_MS = 30_000;
 
 interface DetailProps {
   id: string;
@@ -293,6 +301,7 @@ export function DesignSystemCreationFlow({
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
   const [error, setError] = useState<string | null>(null);
   const [generationStarting, setGenerationStarting] = useState(false);
+  const [sourceProcessingCount, setSourceProcessingCount] = useState(0);
   const composioConfigured = isComposioConfigured(config?.composio);
   const [githubConnector, setGithubConnector] = useState<ConnectorDetail | null>(null);
   const [githubConnectorLoading, setGithubConnectorLoading] = useState(false);
@@ -474,6 +483,16 @@ export function DesignSystemCreationFlow({
     }));
   }
 
+  function beginSourceProcessing() {
+    setSourceProcessingCount((count) => count + 1);
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      setSourceProcessingCount((count) => Math.max(0, count - 1));
+    };
+  }
+
   async function handlePickCodeFolder() {
     const selected = await openFolderDialog();
     if (!selected) return;
@@ -488,6 +507,14 @@ export function DesignSystemCreationFlow({
       ...curr,
       codeFolders: curr.codeFolders.filter((item) => item !== folder),
       ...(curr.codeFolders.includes(folder) ? {} : { codeFiles: [], codeFileObjects: [] }),
+    }));
+  }
+
+  function handleRemoveAssetFile(name: string) {
+    setState((curr) => ({
+      ...curr,
+      assetFiles: curr.assetFiles.filter((item) => item !== name),
+      assetFileObjects: curr.assetFileObjects.filter((file) => resourceRelativePath(file) !== name),
     }));
   }
 
@@ -645,6 +672,19 @@ export function DesignSystemCreationFlow({
 
   return (
     <div className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}>
+      {sourceProcessingCount > 0 ? (
+        <div
+          className="ds-source-upload-loading"
+          role="status"
+          aria-live="polite"
+          data-testid="ds-source-upload-loading"
+        >
+          <div className="ds-source-upload-loading__card">
+            <Spinner size={18} />
+            <span>Adding source material...</span>
+          </div>
+        </div>
+      ) : null}
       {embedded ? null : (
         <header className="ds-setup-topbar">
           <button type="button" className="ghost" onClick={onBack}>
@@ -747,6 +787,7 @@ export function DesignSystemCreationFlow({
               onBrowseFolder={() => void handlePickCodeFolder()}
               onRemoveName={handleRemoveCodeFolder}
               onError={setError}
+              onProcessingStart={beginSourceProcessing}
               onFiles={(_names, files) => {
                 const stagedFiles = selectLocalCodeFiles(files);
                 const stagedNames = stagedFiles.map((file) => localCodeRelativePath(file));
@@ -765,6 +806,7 @@ export function DesignSystemCreationFlow({
               accept=".fig"
               names={state.figFiles}
               onError={setError}
+              onProcessingStart={beginSourceProcessing}
               onFiles={(_names, files) => {
                 const stagedFiles = selectFigmaFiles(files);
                 const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
@@ -780,7 +822,9 @@ export function DesignSystemCreationFlow({
               label="Add assets"
               prompt="Drag files here or browse"
               names={state.assetFiles}
+              onRemoveName={handleRemoveAssetFile}
               onError={setError}
+              onProcessingStart={beginSourceProcessing}
               onFiles={(_names, files) => {
                 const stagedFiles = selectAssetFiles(files);
                 const stagedNames = stagedFiles.map((file) => resourceRelativePath(file));
@@ -2383,6 +2427,7 @@ interface DropZoneProps {
   onBrowseFolder?: () => void;
   onRemoveName?: (name: string) => void;
   onError?: (message: string | null) => void;
+  onProcessingStart?: () => () => void;
   onFiles: (names: string[], files: File[]) => void;
 }
 interface WebkitFileSystemEntry {
@@ -2536,21 +2581,127 @@ function DropZone({
   onBrowseFolder,
   onRemoveName,
   onError,
+  onProcessingStart,
   onFiles,
 }: DropZoneProps) {
-  function readFiles(files: FileList | File[] | null) {
-    const nextFiles = Array.from(files ?? []);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileDialogPendingRef = useRef(false);
+  const fileDialogCanShowLoadingRef = useRef(false);
+  const fileDialogLoadingFinishRef = useRef<(() => void) | undefined>();
+  const fileDialogFocusDelayRef = useRef<number | undefined>();
+  const fileDialogWarmupRef = useRef<number | undefined>();
+  const fileDialogStaleRef = useRef<number | undefined>();
+
+  useEffect(() => {
+    if (!directory || !onProcessingStart) return undefined;
+    const input = inputRef.current;
+    const handleFocus = () => {
+      beginFileDialogReturnLoading();
+    };
+    const handleCancel = () => {
+      const finish = completeFileDialogTracking();
+      finishProcessingLater(finish);
+    };
+    window.addEventListener('focus', handleFocus);
+    input?.addEventListener('cancel', handleCancel);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      input?.removeEventListener('cancel', handleCancel);
+    };
+  });
+
+  function clearFileDialogTimer(ref: { current: number | undefined }) {
+    if (ref.current === undefined) return;
+    window.clearTimeout(ref.current);
+    ref.current = undefined;
+  }
+
+  function prepareFileDialogTracking() {
+    if (!directory || !onProcessingStart) return;
+    const previousFinish = completeFileDialogTracking();
+    previousFinish?.();
+    fileDialogPendingRef.current = true;
+    fileDialogCanShowLoadingRef.current = false;
+    fileDialogFocusDelayRef.current = window.setTimeout(() => {
+      fileDialogCanShowLoadingRef.current = true;
+      fileDialogFocusDelayRef.current = undefined;
+    }, SOURCE_FILE_DIALOG_FOCUS_DELAY_MS);
+    fileDialogWarmupRef.current = window.setTimeout(() => {
+      fileDialogCanShowLoadingRef.current = true;
+      fileDialogWarmupRef.current = undefined;
+      beginFileDialogReturnLoading();
+    }, SOURCE_FILE_DIALOG_WARMUP_MS);
+  }
+
+  function beginFileDialogReturnLoading() {
+    if (!fileDialogPendingRef.current) return;
+    if (!fileDialogCanShowLoadingRef.current) return;
+    if (!onProcessingStart) return;
+    if (fileDialogLoadingFinishRef.current) return;
+    fileDialogLoadingFinishRef.current = onProcessingStart();
+    fileDialogStaleRef.current = window.setTimeout(() => {
+      const finish = completeFileDialogTracking();
+      finishProcessingLater(finish);
+    }, SOURCE_FILE_DIALOG_STALE_MS);
+  }
+
+  function completeFileDialogTracking() {
+    clearFileDialogTimer(fileDialogFocusDelayRef);
+    clearFileDialogTimer(fileDialogWarmupRef);
+    clearFileDialogTimer(fileDialogStaleRef);
+    fileDialogPendingRef.current = false;
+    fileDialogCanShowLoadingRef.current = false;
+    const finish = fileDialogLoadingFinishRef.current;
+    fileDialogLoadingFinishRef.current = undefined;
+    return finish;
+  }
+
+  function finishProcessingLater(finish: (() => void) | undefined) {
+    if (!finish) return;
+    window.setTimeout(finish, SOURCE_PROCESSING_MIN_VISIBLE_MS);
+  }
+  function shouldShowProcessing(files: File[]) {
+    if (files.length >= SOURCE_PROCESSING_LOADING_FILE_COUNT) return true;
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    return totalBytes >= SOURCE_PROCESSING_LOADING_BYTES;
+  }
+  function stageFiles(nextFiles: File[]) {
     const nextNames = nextFiles.map((file) => localCodeRelativePath(file));
     if (nextNames.length > 0) {
       onError?.(null);
       onFiles(nextNames, nextFiles);
     }
   }
+  function processSelectedFiles(nextFiles: File[], activeFinish?: () => void) {
+    if (nextFiles.length === 0) {
+      finishProcessingLater(activeFinish);
+      return;
+    }
+    if (!shouldShowProcessing(nextFiles) || !onProcessingStart) {
+      stageFiles(nextFiles);
+      finishProcessingLater(activeFinish);
+      return;
+    }
+    const finish = activeFinish ?? onProcessingStart();
+    runAfterNextPaint(() => {
+      try {
+        stageFiles(nextFiles);
+      } finally {
+        finishProcessingLater(finish);
+      }
+    });
+  }
+  function readFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    const finish = completeFileDialogTracking();
+    processSelectedFiles(files, finish);
+  }
   async function readDrop(dataTransfer: DataTransfer) {
     onError?.(null);
     try {
       const nextFiles = await filesFromDataTransfer(dataTransfer);
-      readFiles(nextFiles);
+      processSelectedFiles(nextFiles);
     } catch (error) {
       if (!isFileSystemReadError(error)) throw error;
       onError?.(FILE_SYSTEM_READ_ERROR_MESSAGE);
@@ -2571,11 +2722,13 @@ function DropZone({
           }}
         >
           <input
+            ref={inputRef}
             className="ds-hidden-input"
             type="file"
             multiple
             accept={accept}
-            onChange={(event) => readFiles(event.target.files)}
+            onClick={prepareFileDialogTracking}
+            onChange={readFiles}
             {...directoryProps}
           />
           <span>{names.length > 0 && !onRemoveName ? names.join(', ') : prompt}</span>
@@ -2601,6 +2754,14 @@ function DropZone({
       {helper ? <p>{helper}</p> : null}
     </div>
   );
+}
+
+function runAfterNextPaint(callback: () => void) {
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => window.setTimeout(callback, 0));
+    return;
+  }
+  window.setTimeout(callback, 0);
 }
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
