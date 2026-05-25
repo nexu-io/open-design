@@ -2436,9 +2436,10 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
 //     volcengine entry that carries the same wire name, so we hard-pin the
 //     wire model here instead of trusting ctx.wireModel.
 //   * create body: { model, content:[{type:'text',text}], duration, ratio,
-//     resolution, provider_specific:{ generate_audio } }. An optional
-//     { type:'image_url', image_url:{url} } content entry drives i2v — the
-//     same content shape volcengine's identical Seedance model accepts.
+//     resolution, watermark } (provider_specific:{ generate_audio } is
+//     optional and omitted). An optional { type:'image', url, role:'first_frame' }
+//     content entry drives i2v — the documented SenseAudio image shape, NOT the
+//     OpenAI-style { type:'image_url', image_url:{url} }.
 //   * status: { status: pending|processing|completed|failed, progress?,
 //     video_url?, error_message? }.
 //   * Auth: Authorization: Bearer <API_KEY>; shares the senseaudio provider
