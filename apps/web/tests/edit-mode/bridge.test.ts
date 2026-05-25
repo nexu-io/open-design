@@ -338,4 +338,120 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain('isLayoutContainer: isLayoutContainer(el)');
     expect(bridge).toContain("display.indexOf('flex') >= 0 || display.indexOf('grid') >= 0");
   });
+
+  it('supports inline text editing through the manual edit bridge', () => {
+    const bridge = buildManualEditBridge(true);
+
+    expect(bridge).toContain("type: 'od-edit-text-commit'");
+    expect(bridge).toContain("bridgeVersion = 'inline-text-v5'");
+    expect(bridge).toContain("el.setAttribute('contenteditable', 'plaintext-only')");
+    expect(bridge).toContain("explicit === 'text' || explicit === 'link' || explicit === 'image' || explicit === 'container'");
+    expect(bridge).toContain('useOuterHtml: hasElementChildren(el)');
+    expect(bridge).toContain('if (isDirectTextEditable(el)) return el;');
+    expect(bridge).toContain('setOverlayNeutralized(enabled)');
+    expect(bridge).toContain("computed.position !== 'sticky' && computed.position !== 'fixed'");
+    expect(bridge).toContain('new MutationObserver(function()');
+    expect(bridge).toContain('setTimeout(restoreInlineTextContent, 0)');
+    expect(bridge).toContain("document.addEventListener('input'");
+    expect(bridge).toContain("document.addEventListener('beforeinput', handleInlineTextBeforeInput, true)");
+    expect(bridge).toContain("ev.inputType === 'insertText'");
+    expect(bridge).toContain('focusSelectionApplied: false');
+    expect(bridge).toContain('pendingReplaceOnType: false');
+    expect(bridge).toContain('applyInlineTextKeyboardInput(ev)');
+    expect(bridge).toContain("ev.data.type === 'od-edit-key'");
+    expect(bridge).toContain("type: 'od-edit-history-key'");
+    expect(bridge).toContain('handleInlineTextHistoryShortcut(ev)');
+    expect(bridge).toContain('document.activeElement === el');
+    expect(bridge).toContain('!activeTextEdit.focusSelectionApplied');
+    expect(bridge).toContain('setSelectedTarget(selectedId, false)');
+    expect(bridge).toContain('scheduleInlineTextEditRestores(id, activeTextEdit)');
+    expect(bridge).toContain('[50, 250, 750].forEach');
+    expect(bridge).toContain("document.addEventListener('pointerdown', handleManualEditPick, true)");
+    expect(bridge).toContain("document.addEventListener('click', preventManualEditActivation, true)");
+    expect(bridge).toContain('makeInlineTextEditable(el, id, !!focus)');
+    expect(bridge).toContain("ev.key === 'Enter' && !ev.shiftKey");
+    expect(bridge).toContain("ev.key === 'Escape'");
+    expect(bridge).toContain('[data-od-editing-text]');
+  });
+
+  it('treats unknown data-od-edit values as text-editable by tag inference', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title" data-od-edit="typography">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]')!;
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+
+    expect(title.getAttribute('data-od-edit-selected')).toBe('true');
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(title.getAttribute('data-od-editing-text')).toBe('true');
+
+    dom.window.close();
+  });
+
+  it('keeps inline text editing active across stale null selected-target syncs', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]')!;
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-selected-target', id: null },
+    }));
+
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(title.getAttribute('data-od-edit-selected')).toBe('true');
+
+    dom.window.close();
+  });
+
+  it('restores inline text editing if the editable marker is stripped after selection', async () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]')!;
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    title.removeAttribute('contenteditable');
+    title.removeAttribute('data-od-editing-text');
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 80));
+
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(title.getAttribute('data-od-editing-text')).toBe('true');
+
+    dom.window.close();
+  });
+
+  it('keeps focused user text when artifact scripts rewrite the selected node', async () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost', pretendToBeVisual: true },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]') as HTMLElement;
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    title.focus();
+    title.textContent = 'Edited title';
+    title.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    title.blur();
+    title.textContent = 'Title';
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+
+    expect(title.textContent).toBe('Edited title');
+
+    dom.window.close();
+  });
 });

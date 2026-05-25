@@ -32,6 +32,8 @@ export function ManualEditPanel({
   onStyleChange,
   onInvalidStyle,
   onApplyPatch,
+  pendingInlineContentLabel,
+  onSaveInlineContent,
   onError,
   onClearSelection,
   onPickImage,
@@ -52,6 +54,8 @@ export function ManualEditPanel({
   onStyleChange?: (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
   onInvalidStyle?: (id: string, keys: Array<keyof ManualEditStyles>) => void;
   onApplyPatch: (patch: ManualEditPatch, label: string) => void;
+  pendingInlineContentLabel?: string | null;
+  onSaveInlineContent?: () => void;
   onPickImage?: (file: File) => Promise<string | null>;
   onError: (message: string) => void;
   onClearSelection: () => void;
@@ -285,9 +289,19 @@ export function ManualEditPanel({
           </div>
         ) : null}
 
-        {targetForInspector ? (
+          {targetForInspector ? (
           <div className="cc-section">
             <div className="cc-section-body">
+              {pendingInlineContentLabel && onSaveInlineContent ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={onSaveInlineContent}
+                >
+                  Save Changes
+                </button>
+              ) : null}
               {confirmDelete ? (
                 <>
                   <p className="cc-delete-confirm">{canUndo ? t('manualEdit.deleteElementConfirm') : t('manualEdit.deleteElement')}</p>

@@ -95,20 +95,31 @@ export function buildSrcdoc(
  *      key-driven re-mount), in which case the message is dropped and the
  *      iframe stays stuck on the empty shell. See #2253.
  */
-export function buildLazySrcdocTransport(): string {
+export function buildLazySrcdocTransport(initialHtml?: string): string {
+  const initialPayload = initialHtml ? JSON.stringify(initialHtml).replace(/</g, '\\u003c') : 'null';
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script data-od-lazy-srcdoc-transport>(function(){
+      var initialHtml = ${initialPayload};
+      var activatedHtml = null;
+      function activate(html){
+        if (activatedHtml === html) return;
+        activatedHtml = html;
+        document.open();
+        document.write(html);
+        document.close();
+      }
       window.addEventListener('message', function(ev){
         var data = ev && ev.data;
         if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
-        document.open();
-        document.write(data.html);
-        document.close();
+        activate(data.html);
       });
+      if (typeof initialHtml === 'string' && initialHtml) {
+        setTimeout(function(){ activate(initialHtml); }, 0);
+      }
       try {
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');

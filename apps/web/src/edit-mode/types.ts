@@ -105,10 +105,27 @@ export interface ManualEditPreviewAppliedMessage {
   error?: string;
 }
 
+export interface ManualEditTextCommitMessage {
+  type: 'od-edit-text-commit';
+  id: string;
+  value: string;
+  href?: string;
+  html?: string;
+  useOuterHtml?: boolean;
+  target?: ManualEditTarget;
+}
+
+export interface ManualEditHistoryKeyMessage {
+  type: 'od-edit-history-key';
+  action: 'undo' | 'redo';
+}
+
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
-  | ManualEditPreviewAppliedMessage;
+  | ManualEditPreviewAppliedMessage
+  | ManualEditTextCommitMessage
+  | ManualEditHistoryKeyMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',

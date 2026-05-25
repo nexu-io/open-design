@@ -29,7 +29,7 @@ export interface UrlLoadDecision {
   commentMode: boolean;
   /** Inspect mode is active — needs the srcdoc selection bridge for live tuning. */
   inspectMode?: boolean;
-  /** Direct text edit is active. Needs either srcDoc injection or an artifact-owned URL-load bridge. */
+  /** Direct text edit is active. Needs the injected srcDoc edit bridge. */
   editMode?: boolean;
   /** The artifact has its own script that listens for host mode postMessages while URL-loaded. */
   urlModeBridge?: boolean;
@@ -78,7 +78,11 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // Inspect needs the selection bridge injected via buildSrcdoc; a raw
   // URL-loaded iframe has no listener to apply per-element overrides.
   if (d.inspectMode) return false;
-  if (d.editMode && !d.urlModeBridge) return false;
+  // Manual edit relies on the host-injected bridge for target discovery,
+  // source-path annotation, live style preview, and inline contenteditable
+  // text commits. The historical URL-mode bridge only advertises a legacy
+  // direct-edit surface; it cannot service the manual edit source patch flow.
+  if (d.editMode) return false;
   // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;

@@ -46,6 +46,7 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
   const sandbox: Record<string, unknown> = {
     document: documentMock,
     window: win,
+    setTimeout: (fn: () => void) => fn(),
   };
   vm.createContext(sandbox);
   vm.runInContext(script, sandbox);
@@ -79,6 +80,7 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     const sandbox: Record<string, unknown> = {
       document: { open: () => {}, write: () => {}, close: () => {} },
       window: win,
+      setTimeout: (fn: () => void) => fn(),
     };
     vm.createContext(sandbox);
     vm.runInContext(script, sandbox);
@@ -107,10 +109,38 @@ describe('buildLazySrcdocTransport (#2253)', () => {
         close: () => {},
       },
       window: win,
+      setTimeout: (fn: () => void) => fn(),
     };
     vm.createContext(sandbox);
     vm.runInContext(script, sandbox);
     const listener = (win as { __listener: (ev: { data: unknown }) => void }).__listener;
+    listener({ data: { type: 'od:srcdoc-transport-activate', html: '<p>hi</p>' } });
+    expect(writes).toEqual(['<p>hi</p>']);
+  });
+
+  it('ignores duplicate activations for the same html inside the shell', () => {
+    const shell = buildLazySrcdocTransport();
+    const script = extractShellScript(shell);
+    const writes: string[] = [];
+    const win: Record<string, unknown> = {
+      addEventListener(_t: string, listener: (ev: { data: unknown }) => void) {
+        (win as { __listener: typeof listener }).__listener = listener;
+      },
+    };
+    win.parent = { postMessage: () => {} };
+    const sandbox: Record<string, unknown> = {
+      document: {
+        open: () => {},
+        write: (chunk: string) => writes.push(chunk),
+        close: () => {},
+      },
+      window: win,
+      setTimeout: (fn: () => void) => fn(),
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(script, sandbox);
+    const listener = (win as { __listener: (ev: { data: unknown }) => void }).__listener;
+    listener({ data: { type: 'od:srcdoc-transport-activate', html: '<p>hi</p>' } });
     listener({ data: { type: 'od:srcdoc-transport-activate', html: '<p>hi</p>' } });
     expect(writes).toEqual(['<p>hi</p>']);
   });
@@ -132,6 +162,7 @@ describe('buildLazySrcdocTransport (#2253)', () => {
         close: () => {},
       },
       window: win,
+      setTimeout: (fn: () => void) => fn(),
     };
     vm.createContext(sandbox);
     vm.runInContext(script, sandbox);
@@ -141,6 +172,28 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     listener({ data: null });
     listener({ data: { type: 'unrelated' } });
     expect(writes).toEqual([]);
+  });
+
+  it('can carry initial html so a visible srcDoc transport activates without a parent post', () => {
+    const shell = buildLazySrcdocTransport('<html><body>initial</body></html>');
+    const script = extractShellScript(shell);
+    const writes: string[] = [];
+    const win: Record<string, unknown> = {
+      addEventListener: () => {},
+    };
+    win.parent = { postMessage: () => {} };
+    const sandbox: Record<string, unknown> = {
+      document: {
+        open: () => {},
+        write: (chunk: string) => writes.push(chunk),
+        close: () => {},
+      },
+      window: win,
+      setTimeout: (fn: () => void) => fn(),
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(script, sandbox);
+    expect(writes).toEqual(['<html><body>initial</body></html>']);
   });
 });
 

@@ -28,12 +28,12 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true })).toBe(true);
   });
 
-  it('falls back to srcDoc when direct edit mode is active without an artifact-owned bridge', () => {
+  it('falls back to srcDoc when direct edit mode is active', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true })).toBe(false);
   });
 
-  it('keeps URL-load when direct edit mode is active and the artifact owns the bridge', () => {
-    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true, urlModeBridge: true })).toBe(true);
+  it('falls back to srcDoc for direct edit even when a legacy URL-mode bridge is present', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true, urlModeBridge: true })).toBe(false);
   });
 
   it('falls back to srcDoc when inspect mode is active (selection bridge required)', () => {
