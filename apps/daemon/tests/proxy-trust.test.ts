@@ -3,6 +3,7 @@ import {
   isProxyTrusted,
   extractEffectivePeer,
   effectivePeerFromReq,
+  isLocalManagementRequest,
 } from '../src/proxy-trust.js';
 
 const PREVIOUS = process.env.OD_TRUST_PROXY;
@@ -47,10 +48,10 @@ describe('extractEffectivePeer', () => {
     expect(extractEffectivePeer('127.0.0.1', '10.0.0.1, 172.16.0.1')).toBe('10.0.0.1');
   });
 
-  it('falls back to remoteAddress when X-Forwarded-For is empty', () => {
+  it('fails closed (returns empty) when X-Forwarded-For is empty under proxy trust', () => {
     process.env.OD_TRUST_PROXY = '1';
-    expect(extractEffectivePeer('127.0.0.1', '')).toBe('127.0.0.1');
-    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('127.0.0.1');
+    expect(extractEffectivePeer('127.0.0.1', '')).toBe('');
+    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('');
   });
 
   it('returns empty string when both are undefined', () => {
@@ -117,12 +118,70 @@ describe('effectivePeerFromReq', () => {
     expect(effectivePeerFromReq(req)).toBe('192.168.1.100');
   });
 
-  it('handles missing x-forwarded-for gracefully', () => {
+  it('fails closed when x-forwarded-for is missing under proxy trust', () => {
     process.env.OD_TRUST_PROXY = 'nginx';
     const req = {
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
     };
-    expect(effectivePeerFromReq(req)).toBe('127.0.0.1');
+    expect(effectivePeerFromReq(req)).toBe('');
+  });
+});
+
+describe('isLocalManagementRequest', () => {
+  it('returns true for direct loopback without proxy trust', () => {
+    delete process.env.OD_TRUST_PROXY;
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: {},
+    })).toBe(true);
+  });
+
+  it('returns false for non-loopback peer', () => {
+    delete process.env.OD_TRUST_PROXY;
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '192.168.1.5' },
+      headers: {},
+    })).toBe(false);
+  });
+
+  it('returns true when proxy trusted and XFF shows loopback client', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+    })).toBe(true);
+  });
+
+  it('returns false when proxy trusted and XFF shows remote client', () => {
+    process.env.OD_TRUST_PROXY = 'cloudflare';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { 'x-forwarded-for': '203.0.113.5' },
+    })).toBe(false);
+  });
+
+  it('fails closed when proxy trusted but XFF is missing', () => {
+    process.env.OD_TRUST_PROXY = 'nginx';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: {},
+    })).toBe(false);
+  });
+
+  it('fails closed when proxy trusted but XFF is empty string', () => {
+    process.env.OD_TRUST_PROXY = 'caddy';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { 'x-forwarded-for': '' },
+    })).toBe(false);
+  });
+
+  it('fails closed when proxy trusted but XFF is whitespace only', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { 'x-forwarded-for': '  ' },
+    })).toBe(false);
   });
 });
