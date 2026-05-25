@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type {
   DesignSystemSummary,
   MediaProviderCredentials,
@@ -35,6 +36,7 @@ interface Props {
   onCreate: (input: CreateInput & { requestId?: string }) => Promise<boolean> | boolean | void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
   onClose: () => void;
   initialTab?: CreateTab;
@@ -55,6 +57,7 @@ export function NewProjectModal({
   onCreate,
   onImportClaudeDesign,
   onImportFolder,
+  onImportFolderResponse,
   onOpenConnectorsTab,
   onClose,
   initialTab,
@@ -151,6 +154,7 @@ export function NewProjectModal({
             }}
             {...(onImportClaudeDesign ? { onImportClaudeDesign } : {})}
             {...(onImportFolder ? { onImportFolder } : {})}
+            {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
             {...(onOpenConnectorsTab ? { onOpenConnectorsTab } : {})}
             {...(initialTab ? { initialTab } : {})}
           />

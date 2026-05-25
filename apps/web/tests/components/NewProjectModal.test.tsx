@@ -3,6 +3,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@open-design/host', () => ({
+  isOpenDesignHostAvailable: () => true,
+  pickAndImportHostProject: vi.fn(),
+}));
+
+import { pickAndImportHostProject } from '@open-design/host';
 import { NewProjectModal } from '../../src/components/NewProjectModal';
 import type {
   DesignSystemSummary,
@@ -56,6 +62,7 @@ class ResizeObserverMock {
 beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   Element.prototype.scrollIntoView = vi.fn();
+  vi.mocked(pickAndImportHostProject).mockReset();
 });
 
 describe('NewProjectModal layout', () => {
@@ -114,6 +121,40 @@ describe('NewProjectModal layout', () => {
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('forwards the desktop folder import response handler to the inner panel', async () => {
+    const importResult = {
+      conversationId: 'conversation-host',
+      entryFile: 'src/App.tsx',
+      ok: true,
+      projectId: 'project-host',
+    } as const;
+    vi.mocked(pickAndImportHostProject).mockResolvedValue(importResult);
+    const onImportFolderResponse = vi.fn();
+
+    render(
+      <NewProjectModal
+        open
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId={null}
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={() => {}}
+        onImportFolderResponse={onImportFolderResponse}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
+
+    await waitFor(() => {
+      expect(pickAndImportHostProject).toHaveBeenCalledWith({ skillId: 'prototype-skill' });
+    });
+    await waitFor(() => {
+      expect(onImportFolderResponse).toHaveBeenCalledWith(importResult);
     });
   });
 });
