@@ -11,8 +11,10 @@
     "specVersion": { "type": "string", "minLength": 1 },
     "name": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
     "title": { "type": "string", "minLength": 1 },
+    "title_i18n": { "$ref": "#/$defs/LocalizedText" },
     "version": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
+    "description_i18n": { "$ref": "#/$defs/LocalizedText" },
     "author": {
       "type": "object",
       "properties": {

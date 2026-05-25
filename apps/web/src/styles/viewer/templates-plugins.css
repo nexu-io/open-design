@@ -1,0 +1,2285 @@
+/* ============================================================
+   External MCP servers — Settings panel
+   ------------------------------------------------------------
+   Compact card-per-server layout. Inputs stack vertically inside
+   each card so the narrow settings column (~440px after sidebar)
+   doesn't crush the inner grid.
+   ============================================================ */
+.mcp-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mcp-picker {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--bg-subtle);
+}
+.mcp-picker-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.mcp-picker-head strong { font-size: 12.5px; }
+.mcp-picker-grid {
+  display: grid;
+  gap: 6px;
+}
+.mcp-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.mcp-picker-item:hover {
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+/* The clickable region of a template card. Split out from the wrapper so a
+   sibling homepage `<a>` can sit next to it without nesting interactives. */
+.mcp-picker-item-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  color: inherit;
+}
+.mcp-picker-item-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  width: 100%;
+}
+.mcp-picker-transport {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  margin-left: auto;
+}
+.mcp-picker-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.mcp-picker-example {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.mcp-picker-example-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  align-self: center;
+}
+.mcp-picker-example-text {
+  font-style: italic;
+  color: var(--text);
+}
+.mcp-picker-homepage {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+}
+.mcp-picker-homepage:hover {
+  color: var(--accent, var(--text));
+  text-decoration: underline;
+}
+
+/* ── Picker grouping (added when the catalog crossed ~12 templates) ─── */
+
+/* Sticky-header row inside `.mcp-picker-head` so the close affordance is
+   always visible even after the user scrolls into a long category. */
+.mcp-picker-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mcp-picker-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+.mcp-picker-search {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.mcp-picker-search:focus {
+  outline: none;
+  border-color: var(--border-strong, var(--text-faint));
+}
+
+/* Cap the group region so 17+ templates do not push the picker into a
+   2000px tall block. The footer (custom-server card) sits OUTSIDE this
+   scroll region so it is always reachable. */
+.mcp-picker-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.mcp-picker-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.mcp-picker-group[open] {
+  background: var(--bg);
+}
+.mcp-picker-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  user-select: none;
+  list-style: none;
+}
+.mcp-picker-group-summary::-webkit-details-marker { display: none; }
+.mcp-picker-group-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  transition: transform 120ms ease;
+}
+.mcp-picker-group[open] > .mcp-picker-group-summary::before {
+  transform: rotate(90deg);
+}
+.mcp-picker-group-summary:hover {
+  background: var(--bg-subtle);
+}
+.mcp-picker-group-summary-title {
+  font-weight: 600;
+}
+.mcp-picker-group-summary-count {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+.mcp-picker-group-summary-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  text-align: right;
+  /* Hide the per-group hint on narrow widths so the count + title stay
+     readable. The hint is supplementary so dropping it is acceptable. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+@media (max-width: 480px) {
+  .mcp-picker-group-summary-hint { display: none; }
+}
+.mcp-picker-group .mcp-picker-grid {
+  padding: 4px 8px 10px;
+}
+
+.mcp-picker-empty {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 12px;
+}
+
+.mcp-picker-foot {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.mcp-picker-custom {
+  /* Visual nudge so the custom-server card reads as a footer affordance,
+     not just another template card. */
+  border-style: dashed !important;
+}
+
+.mcp-error {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #d54) 50%, transparent);
+  background: color-mix(in srgb, var(--danger, #d54) 10%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--danger, #d54);
+}
+
+.mcp-agent-support {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle, color-mix(in srgb, var(--bg-panel) 90%, transparent));
+}
+.mcp-agent-support-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.mcp-agent-support-line code {
+  font-size: 11.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.mcp-agent-support-unsupported {
+  color: color-mix(in srgb, var(--danger, #d54) 85%, var(--text));
+}
+
+.mcp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mcp-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.mcp-row-disabled { opacity: 0.55; }
+/* Template-derived hint shown on saved rows that came from a built-in
+   preset (filesystem, github, fetch, higgsfield…). Default-collapsed
+   `<details>`; the summary line is the only thing visible until the user
+   clicks. Keeps long descriptions out of the way but still discoverable. */
+.mcp-row-info {
+  border-left: 2px solid var(--border-strong, var(--border));
+  background: var(--bg-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.mcp-row-info-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  user-select: none;
+  list-style: none;
+}
+.mcp-row-info-summary::-webkit-details-marker { display: none; }
+.mcp-row-info-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.mcp-row-info[open] > .mcp-row-info-summary::before {
+  transform: rotate(90deg);
+}
+.mcp-row-info-summary:hover {
+  color: var(--text);
+}
+.mcp-row-info-summary-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-row-info-body {
+  padding: 0 8px 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mcp-row-info-desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.mcp-row-info-example {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.mcp-row-info-example-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mcp-row-info-example-text {
+  font-style: italic;
+  color: var(--text);
+}
+.mcp-row-info-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.mcp-row-info-link:hover {
+  color: var(--accent, var(--text));
+  text-decoration: underline;
+}
+.mcp-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mcp-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.mcp-row-toggle input { width: auto; }
+.mcp-row-label {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.mcp-row-counter {
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.mcp-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.mcp-row-actions .icon-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.mcp-row-actions .icon-btn:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+}
+/* The expand/collapse chevron at the end of the row header. Uses a single
+   `chevron-down` icon and rotates it 180° when the row is open so the
+   element stays visually anchored to the same DOM node. */
+.mcp-row-toggle-btn svg {
+  transition: transform 120ms ease;
+}
+.mcp-row-expanded .mcp-row-toggle-btn svg {
+  transform: rotate(180deg);
+}
+
+/* Read-only "title bar" shown when a row is collapsed. Acts as a click
+   target that expands the row, so the user doesn't have to aim for the
+   tiny chevron at the end of the row. */
+.mcp-row-summary-title {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.mcp-row-summary-title:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.mcp-row-summary-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text);
+}
+.mcp-row-summary-transport {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+
+.mcp-row-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 8px;
+}
+@media (max-width: 720px) {
+  .mcp-row-grid { grid-template-columns: 1fr; }
+}
+.mcp-row-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.mcp-row-field-label {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.mcp-row-field input,
+.mcp-row-field select,
+.mcp-row-field textarea {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+}
+.mcp-row-field textarea {
+  font-family: var(--mono);
+  resize: vertical;
+  min-height: 38px;
+}
+.mcp-row-field-stack { width: 100%; }
+
+.mcp-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.mcp-foot-spacer { flex: 1; }
+.mcp-saved-msg { color: var(--success, #6c6); }
+
+/* Per-row OAuth Connect/Disconnect control. Sits between the row header
+ * and the field grid so the connection state is the FIRST thing the user
+ * sees on a row that needs auth. */
+.mcp-oauth-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.mcp-oauth-control.connected {
+  border-color: color-mix(in srgb, var(--success, #2da44e) 60%, var(--border));
+  background: color-mix(in srgb, var(--success, #2da44e) 8%, var(--bg-subtle));
+}
+.mcp-oauth-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.mcp-oauth-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.mcp-oauth-dot-ok {
+  background: var(--success, #2da44e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #2da44e) 25%, transparent);
+}
+.mcp-oauth-dot-pending {
+  background: var(--accent);
+  animation: mcp-oauth-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mcp-oauth-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.mcp-oauth-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+.mcp-oauth-actions button {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.mcp-oauth-error {
+  font-size: 11.5px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger, #d54) 14%, transparent);
+  color: var(--danger, #d54);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.mcp-oauth-hint {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 11.5px;
+}
+.mcp-oauth-fallback {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.mcp-oauth-fallback .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mcp-oauth-fallback .md-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Unified trust badge for plugin registry surfaces. Installed
+   `bundled` plugins and marketplace `official` sources both render as
+   the user-facing Official tier. */
+.plugin-trust-badge {
+  --trust-fg: var(--text-muted);
+  --trust-bg: var(--bg-subtle);
+  --trust-border: var(--border);
+  --trust-dot: var(--trust-fg);
+
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 20px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--trust-border);
+  border-radius: 999px;
+  background: var(--trust-bg);
+  color: var(--trust-fg);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.plugin-trust-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--trust-dot);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--trust-dot) 18%, transparent);
+}
+.plugin-trust-badge--official {
+  --trust-fg: var(--blue);
+  --trust-bg: var(--blue-bg);
+  --trust-border: color-mix(in srgb, var(--blue) 22%, var(--border));
+}
+.plugin-trust-badge--trusted {
+  --trust-fg: var(--green);
+  --trust-bg: var(--green-bg);
+  --trust-border: color-mix(in srgb, var(--green) 24%, var(--border));
+}
+.plugin-trust-badge--restricted {
+  --trust-fg: var(--amber);
+  --trust-bg: var(--amber-bg);
+  --trust-border: color-mix(in srgb, var(--amber) 28%, var(--border));
+}
+.plugin-trust-badge--overlay {
+  --trust-fg: #fff;
+  --trust-bg: rgba(255, 255, 255, 0.18);
+  --trust-border: rgba(255, 255, 255, 0.24);
+  --trust-dot: #fff;
+
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* xAI OAuth paste-back: shown while a Sign in flow is in flight, in case
+   xAI returns a code instead of redirecting to the loopback listener. */
+.xai-oauth-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.xai-oauth-paste .hint {
+  font-size: 11.5px;
+}
+.xai-oauth-paste-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.xai-oauth-paste-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Heads-up banner shown while a Sign-in flow is awaiting callback. xAI
+   sometimes renders a "Cannot connect" page that misleads the user into
+   thinking auth failed; this banner tells them to ignore that page and
+   stay on the OD panel. */
+.xai-oauth-warning {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  margin-top: 6px;
+}
+.xai-oauth-warning strong {
+  color: var(--accent);
+}
+.xai-oauth-warning em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* PluginLoopHome — the minimum-closed-loop Home entry: a single prompt
+   textarea + plugin grid with "Use example query" affordance. Replaces
+   the tabbed NewProjectPanel on Home until the plugin-first UX matures. */
+.plugin-loop-home {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  padding: 18px;
+  box-shadow: var(--shadow-xs);
+}
+.plugin-loop-home__hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugin-loop-home__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-loop-home__subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.plugin-loop-home__subtitle kbd {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-subtle);
+}
+.plugin-loop-home__active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.plugin-loop-home__active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.plugin-loop-home__active-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.plugin-loop-home__active-clear {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+.plugin-loop-home__active-clear:hover {
+  color: var(--text);
+}
+.plugin-loop-home__context-summary {
+  color: var(--text-muted);
+}
+.plugin-loop-home__input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-loop-home__input {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+}
+.plugin-loop-home__input:focus {
+  outline: 2px solid var(--accent-subtle, var(--accent));
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.plugin-loop-home__submit {
+  align-self: flex-end;
+  appearance: none;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plugin-loop-home__submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.plugin-loop-home__error {
+  color: var(--danger, #c33);
+  font-size: 12px;
+}
+.plugin-loop-home__rail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+.plugin-loop-home__rail-count {
+  font-variant-numeric: tabular-nums;
+}
+.plugin-loop-home__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.plugin-loop-home__empty {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 8px 0;
+}
+.plugin-loop-home__empty code {
+  font-size: 11.5px;
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.plugin-loop-home__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 12px;
+  background: var(--bg);
+  font-size: 12.5px;
+}
+.plugin-loop-home__card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.plugin-loop-home__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.plugin-loop-home__card-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-loop-home__card-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.plugin-loop-home__card-meta {
+  display: flex;
+  gap: 4px;
+  color: var(--text-faint, var(--text-muted));
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+/* Author + source byline — sits between meta chips and the action
+   row, gives every card a visible attribution + clickable source
+   link without the user having to open the details modal. */
+.plugin-loop-home__card-byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.plugin-loop-home__card-byline-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.plugin-loop-home__card-byline-author > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plugin-loop-home__card-byline-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 6px);
+  max-width: 100%;
+}
+.plugin-loop-home__card-byline-source > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+}
+.plugin-loop-home__card-byline-source:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+.plugin-loop-home__card-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.plugin-loop-home__card-avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.plugin-loop-home__card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  align-items: stretch;
+}
+.plugin-loop-home__card-action {
+  appearance: none;
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.plugin-loop-home__card-action:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-loop-home__card-action:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+/* Secondary card affordance — opens the manifest inspector modal so
+   users can preview query/context/workflow before applying. Kept
+   compact (icon + short label) so the primary "Use plugin" CTA still
+   wins the visual weight contest inside each card. */
+.plugin-loop-home__card-details {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  cursor: pointer;
+}
+.plugin-loop-home__card-details:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-loop-home__card-details:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* PluginDetailsModal — manifest inspector launched from each card on
+   PluginLoopHome. Single-scroll layout with sticky header + footer so
+   long manifests (workflow stages, context bundles, surfaces) remain
+   navigable without losing the apply CTA. Sized smaller than the
+   ds-modal preview (no iframe stage) so it reads as an inspector
+   rather than a fullscreen surface. */
+.plugin-details-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 920;
+  background: rgba(28, 27, 26, 0.42);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.plugin-details-modal {
+  width: 100%;
+  max-width: 920px;
+  max-height: calc(100vh - 64px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.plugin-details-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, var(--bg-panel)) 0%,
+    var(--bg-panel) 100%
+  );
+}
+.plugin-details-modal__head-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-details-modal__head-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--text);
+}
+.plugin-details-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.plugin-details-modal__meta-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 4px;
+}
+.plugin-details-modal__tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.plugin-details-modal__close {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm, 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.plugin-details-modal__close svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+.plugin-details-modal__close:hover,
+.plugin-details-modal__close:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* Promoted author byline — sits inside the modal head so the maker
+   reads as a co-equal first impression alongside the plugin name.
+   Larger avatar (44px) than the in-body author block had so it
+   anchors the row even when no name string is provided. */
+.plugin-details-modal__byline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 6px 10px 6px 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  align-self: flex-start;
+  max-width: 100%;
+}
+.plugin-details-modal__byline .plugin-details-modal__avatar {
+  width: 28px;
+  height: 28px;
+}
+.plugin-details-modal__byline-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.plugin-details-modal__byline-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.plugin-details-modal__byline-prefix {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.plugin-details-modal__byline .plugin-details-modal__author-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.plugin-details-modal__byline-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.plugin-details-modal__byline-links .plugin-details-modal__ext-link {
+  padding: 2px 6px;
+  font-size: 11.5px;
+}
+
+/* Preview hero — promotes the manifest's `od.useCase.exampleOutputs`
+   to a glanceable iframe so reviewers see what the plugin actually
+   produces before reading the workflow stages. The browser-chrome
+   shell (traffic lights + URL pill) signals "this is a sandboxed
+   live render" without us needing extra copy. */
+.plugin-details-modal__hero {
+  margin: 16px 0 4px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent-tint) 70%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-panel) 100%);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plugin-details-modal__hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-strong);
+}
+.plugin-details-modal__hero-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.plugin-details-modal__hero-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__hero-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, color 120ms ease;
+}
+.plugin-details-modal__hero-tab:hover {
+  color: var(--text);
+}
+.plugin-details-modal__hero-tab.is-active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.plugin-details-modal__hero-frame {
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.plugin-details-modal__hero-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-subtle) 100%);
+  border-bottom: 1px solid var(--border);
+}
+.plugin-details-modal__hero-light {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+.plugin-details-modal__hero-light.is-red    { background: #ff5f57; }
+.plugin-details-modal__hero-light.is-yellow { background: #febc2e; margin-left: -2px; }
+.plugin-details-modal__hero-light.is-green  { background: #28c840; margin-left: -2px; }
+.plugin-details-modal__hero-url {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 12px;
+  margin: 0 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  min-width: 0;
+}
+.plugin-details-modal__hero-url > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.plugin-details-modal__hero-popout {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.plugin-details-modal__hero-popout:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+.plugin-details-modal__hero-iframe {
+  border: none;
+  width: 100%;
+  height: 380px;
+  background: #ffffff;
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .plugin-details-modal__hero-iframe {
+    height: 280px;
+  }
+}
+
+.plugin-details-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 20px 20px;
+}
+.plugin-details-modal__section {
+  padding: 16px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.plugin-details-modal__section:last-child {
+  border-bottom: none;
+}
+.plugin-details-modal__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.plugin-details-modal__section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-details-modal__section-count {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.plugin-details-modal__section-action {
+  display: inline-flex;
+  align-items: center;
+}
+.plugin-details-modal__section-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.plugin-details-modal__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugin-details-modal__description {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.plugin-details-modal__provenance-line {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.plugin-details-modal__chip-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.plugin-details-modal__chip-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.plugin-details-modal__query {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+}
+.plugin-details-modal__inputs,
+.plugin-details-modal__surfaces,
+.plugin-details-modal__connectors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-details-modal__input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.plugin-details-modal__input-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__input-head code {
+  font-size: 12.5px;
+  color: var(--text);
+}
+.plugin-details-modal__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.plugin-details-modal__badge.is-required {
+  background: rgba(200, 60, 60, 0.1);
+  color: rgb(160, 40, 40);
+}
+.plugin-details-modal__badge.is-type {
+  background: rgba(0, 120, 200, 0.08);
+  color: rgb(0, 100, 170);
+}
+.plugin-details-modal__badge.is-primary {
+  background: rgba(0, 160, 80, 0.1);
+  color: rgb(0, 110, 60);
+  margin-left: 6px;
+}
+.plugin-details-modal__badge.is-repeat {
+  background: rgba(120, 80, 200, 0.1);
+  color: rgb(90, 60, 160);
+}
+.plugin-details-modal__badge.is-failure {
+  background: rgba(200, 120, 0, 0.1);
+  color: rgb(160, 90, 0);
+}
+.plugin-details-modal__badge.is-required {
+  background: rgba(200, 60, 60, 0.1);
+  color: rgb(160, 40, 40);
+}
+.plugin-details-modal__badge.is-optional {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.plugin-details-modal__muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.plugin-details-modal__small {
+  font-size: 11.5px;
+}
+.plugin-details-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plugin-details-modal__chips--inline {
+  margin-top: 2px;
+}
+.plugin-details-modal__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.plugin-details-modal__chip--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+.plugin-details-modal__context {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plugin-details-modal__ctx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.plugin-details-modal__ctx-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.plugin-details-modal__ctx-count {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  background: var(--bg-subtle);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.plugin-details-modal__stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  counter-reset: stage;
+}
+.plugin-details-modal__stage {
+  position: relative;
+  padding: 10px 12px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-details-modal__stage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__stage-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+/* Settings → Skills (functional) row stack.
+   Mirrors the External MCP servers panel: a vertical list of
+   collapsible rows. Each row's header is always visible; SKILL.md
+   preview, file tree and inline edit form expand only on demand. The
+   single-column layout avoids the cramped left/right split the
+   previous version produced inside the narrow settings content
+   column. */
+.settings-skills .skills-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+.settings-skills .skills-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.settings-skills .skills-row {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+.settings-skills .skills-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  transition: background-color 140ms ease;
+  pointer-events: none;
+}
+.settings-skills .skills-row:hover {
+  border-color: var(--border-strong, var(--border));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.settings-skills .skills-row-expanded {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong, var(--border));
+}
+.settings-skills .skills-row-expanded::before {
+  background: var(--accent);
+}
+.settings-skills .skills-row-editing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.settings-skills .skills-row-disabled { opacity: 0.55; }
+
+.settings-skills .skills-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  min-width: 0;
+}
+.settings-skills .skills-row-summary-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.settings-skills .skills-row-summary-btn:hover .skills-row-summary-name {
+  color: var(--accent);
+}
+.settings-skills .skills-row-summary-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.settings-skills .skills-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.settings-skills .skills-row-expanded .skills-row-icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.settings-skills .skills-row-summary {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-skills .skills-row-summary-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-skills .skills-row-summary-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  transition: color 120ms ease;
+}
+.settings-skills .skills-row-summary-mode,
+.settings-skills .skills-row-summary-source,
+.settings-skills .skills-row-summary-category {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  font-weight: 500;
+}
+.settings-skills .skills-row-summary-source {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.settings-skills .skills-row-summary-category {
+  /* Soft tinted pill so the category is visually distinct from the
+   * mode pill but still subordinate to the skill name. Falls back to a
+   * neutral border when --accent-2 is not defined by the active theme. */
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.settings-skills .skills-row-summary-desc {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.settings-skills .skills-row-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.plugin-details-modal__stage-id {
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.plugin-details-modal__stage-atoms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plugin-details-modal__atom {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.plugin-details-modal__atom.is-cap {
+  background: rgba(120, 80, 200, 0.06);
+  color: rgb(90, 60, 160);
+  border-color: rgba(120, 80, 200, 0.18);
+}
+.plugin-details-modal__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plugin-details-modal__surface {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plugin-details-modal__surface-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__surface-prompt {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+.plugin-details-modal__connector-group + .plugin-details-modal__connector-group {
+  margin-top: 12px;
+}
+.plugin-details-modal__sub-title {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-details-modal__connector {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plugin-details-modal__source {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  row-gap: 4px;
+  column-gap: 12px;
+  font-size: 12px;
+}
+.plugin-details-modal__source > div {
+  display: contents;
+}
+.plugin-details-modal__source dt {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.plugin-details-modal__source dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-details-modal__source-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.plugins-view__version-install {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugins-view__version-select {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.plugins-view__version-select select {
+  width: min(240px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
+}
+.plugins-view__install-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugins-view__install-command code {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 12px;
+}
+.plugin-details-modal__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.plugin-details-modal__avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.plugin-details-modal__ext-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 6px);
+  max-width: 100%;
+}
+.plugin-details-modal__ext-link > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+.plugin-details-modal__ext-link:hover {
+  color: var(--accent);
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.plugin-details-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.plugin-details-modal__secondary {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.plugin-details-modal__secondary:hover {
+  border-color: var(--text-muted);
+}
+.plugin-details-modal__primary {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.plugin-details-modal__primary:hover:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+  border-color: var(--accent-strong, var(--accent));
+}
+.plugin-details-modal__primary:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.plugin-share-confirm__panel {
+  max-width: 720px;
+}
+.plugin-share-confirm .plugin-details-modal__foot {
+  padding: 16px 24px 22px;
+}
+.plugin-share-confirm__steps {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.plugin-share-confirm__steps li + li {
+  margin-top: 5px;
+}
+.plugin-share-confirm__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.plugin-share-confirm__facts > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+}
+.plugin-share-confirm__facts dt {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.plugin-share-confirm__facts dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.plugin-share-confirm__facts code {
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .plugin-share-confirm__facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Plugin info pane — adapter for embedding the manifest-driven meta
+   sections inside narrow contexts (PreviewModal sidebar, design-system
+   sidebar). Tightens padding, shrinks chip type, and wraps long file
+   paths so the section list reads cleanly in a 320–540px column. */
+.plugin-info-pane {
+  padding: 22px 28px 28px 32px;
+  background: var(--bg-panel);
+}
+.plugin-info-pane .plugin-meta-sections {
+  display: block;
+}
+.plugin-info-pane .plugin-meta-sections.is-compact {
+  font-size: 12px;
+}
+.plugin-info-pane .plugin-details-modal__section {
+  padding: 12px 0;
+}
+.plugin-info-pane .plugin-details-modal__section-title {
+  font-size: 11.5px;
+}
+.plugin-info-pane .plugin-details-modal__section-hint {
+  font-size: 11.5px;
+}
+.plugin-info-pane .plugin-details-modal__source {
+  grid-template-columns: 84px 1fr;
+  font-size: 11.5px;
+  gap: 6px 10px;
+}
+.plugin-info-pane .plugin-details-modal__source dd code {
+  word-break: break-all;
+}
+.plugin-info-pane .plugin-details-modal__chip,
+.plugin-info-pane .plugin-details-modal__atom {
+  font-size: 11px;
+}
+/* Compact byline — drop the capsule shape so the author block can
+   shrink, wrap, and stack inside narrow PreviewModal sidebars
+   (~320–400px) without overflowing the pane or breaking the rounded
+   pill into a stretched ellipse. The name + links wrap onto separate
+   lines when there isn't room, the links lose their border-left
+   separator (stacks vertically), and long author / handle strings
+   ellipsis-truncate against the available column width. */
+.plugin-info-pane .plugin-details-modal__byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.plugin-info-pane .plugin-details-modal__byline-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.plugin-info-pane .plugin-details-modal__byline-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.plugin-info-pane .plugin-details-modal__byline .plugin-details-modal__author-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-info-pane .plugin-details-modal__byline-links {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding-left: 0;
+  border-left: 0;
+}
+.plugin-info-pane .plugin-details-modal__byline-links .plugin-details-modal__ext-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Design-system sidebar keeps the plugin inspector first, then exposes
+   DESIGN.md as a secondary spec section. This makes design systems read
+   like first-class plugins instead of a special DESIGN.md-only viewer. */
+.plugin-design-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.plugin-design-sidebar__spec {
+  border-top: 1px dashed var(--border);
+  padding: 18px 28px 28px 32px;
+  background: var(--bg-panel);
+}
+.plugin-design-sidebar__spec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.plugin-design-sidebar__spec-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.plugin-design-sidebar__spec-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.plugin-design-sidebar__spec > .design-spec-pre,
+.plugin-design-sidebar__spec > .design-spec-empty {
+  margin: 0;
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Plugin info heading — the badge-style header shown by the
+   PluginMetaSections component when a `heading` prop is provided.
+   Used by media / example / design-system variants so the manifest
+   block carries a clear "Plugin info" label, mirroring how the
+   scenario fallback uses the modal title for the same purpose. */
+.plugin-meta-sections__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 4px 0 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.plugin-meta-sections__heading h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-strong, var(--text));
+  letter-spacing: -0.005em;
+}
+.plugin-meta-sections__heading-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.plugin-meta-sections.is-compact .plugin-meta-sections__heading {
+  padding: 2px 0 10px;
+}
+.plugin-meta-sections.is-compact .plugin-meta-sections__heading h3 {
+  font-size: 12.5px;
+}
+
+@media (max-width: 640px) {
+  .plugin-details-modal-backdrop {
+    padding: 0;
+  }
+  .plugin-details-modal {
+    max-width: none;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+  .plugin-info-pane,
+  .plugin-design-sidebar__spec {
+    padding: 18px 20px 24px;
+  }
+}
+

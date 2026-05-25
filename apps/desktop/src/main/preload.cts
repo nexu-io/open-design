@@ -15,6 +15,28 @@ const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HO
 const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 1;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
 
+// Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
+// runtime's `additionalArguments`. Duplicated literal on purpose: the
+// preload bundle must not pull in `@open-design/desktop/main` (it
+// transitively requires non-electron node modules that the sandboxed
+// preload can't load).
+const OS_LOCALE_ARG_PREFIX = '--od-os-locale=';
+
+function readOsLocaleFromArgv(): string | undefined {
+  for (const arg of process.argv) {
+    if (typeof arg === 'string' && arg.startsWith(OS_LOCALE_ARG_PREFIX)) {
+      const value = arg.slice(OS_LOCALE_ARG_PREFIX.length);
+      if (value.length === 0) return undefined;
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
 type PrintPdfOptions = {
   deck?: boolean;
 };
@@ -197,11 +219,14 @@ const updater = {
   },
 };
 
+const osLocale = readOsLocaleFromArgv();
+
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
   client: {
     type: 'desktop',
     platform: process.platform,
+    ...(osLocale !== undefined ? { osLocale } : {}),
   },
   shell,
   project,

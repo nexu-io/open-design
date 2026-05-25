@@ -65,8 +65,17 @@ jobs:
           version=$(node -p "require('./apps/landing-page/package.json').devDependencies.playwright.replace(/[^0-9.]/g,'')")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Cache generated previews
+        id: previews-cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: apps/landing-page/public/previews
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
+          restore-keys: |
+            landing-page-previews-${{ runner.os }}-
+
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -87,7 +96,9 @@ jobs:
         run: pnpm --filter @open-design/landing-page previews
 
       - name: Build landing page
-        run: pnpm --filter @open-design/landing-page build
+        env:
+          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
+        run: pnpm --filter @open-design/landing-page build:static
 
       - name: Verify zero external JavaScript
         run: |

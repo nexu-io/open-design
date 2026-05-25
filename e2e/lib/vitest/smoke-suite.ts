@@ -128,14 +128,24 @@ async function runToolsDevSuite(
   options: ToolsDevSuiteOptions = {},
 ): Promise<string> {
   const toolsDev = await import('./tools-dev.ts');
-  const runtime = await toolsDev.allocateToolsDevRuntime();
+  let runtime = await toolsDev.allocateToolsDevRuntime();
   let context: ToolsDevSuiteContext | null = null;
   let diagnostics: unknown = null;
   let caughtError: unknown = null;
   let success = false;
 
   try {
-    const start = await toolsDev.startToolsDevWeb(suite, runtime);
+    let start: ToolsDevStartResult | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        start = await toolsDev.startToolsDevWeb(suite, runtime);
+        break;
+      } catch (error) {
+        if (attempt === 3 || !toolsDev.isToolsDevPortConflict(error)) throw error;
+        runtime = await toolsDev.allocateToolsDevRuntime();
+      }
+    }
+    if (start == null) throw new Error('tools-dev start did not return a result');
     const webUrl = assertRuntimeUrl(start.web?.status.url, 'web');
     const status = await toolsDev.inspectToolsDevStatus(suite);
     assertToolsDevStatus(suite, status);

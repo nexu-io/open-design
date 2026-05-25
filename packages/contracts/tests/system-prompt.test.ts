@@ -1,6 +1,37 @@
 import { describe, expect, it } from 'vitest';
 
 import { composeSystemPrompt } from '../src/prompts/system.js';
+import { DISCOVERY_AND_PHILOSOPHY } from '../src/prompts/discovery.js';
+
+// Guard: the contracts copy of DISCOVERY_AND_PHILOSOPHY must have the same
+// cap removal as apps/daemon/src/prompts/discovery.ts. The web app imports
+// composeSystemPrompt from @open-design/contracts, so only testing the daemon
+// copy leaves the web-originated chat path unguarded.
+describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item count', () => {
+  it('does not cap the plan at 10 items via "5–10" wording', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toMatch(/5[–\-]10\s+short\s+imperative/);
+  });
+
+  it('does not cap the plan at 10 items via "5 to 10" wording', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toMatch(/5 to 10\s+(?:short\s+)?items/i);
+  });
+
+  it('does not re-introduce a numeric cap via "at most / maximum / no more than" phrasing', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toMatch(
+      /(?:at most|maximum|no more than)\s+1[0-9]\s+(?:todo|plan|step|item)/i,
+    );
+  });
+
+  it('still instructs the agent to write a TodoWrite plan', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('TodoWrite');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('RULE 3');
+  });
+
+  it('also absent from the composed system prompt', () => {
+    const prompt = composeSystemPrompt({});
+    expect(prompt).not.toMatch(/5[–\-]10\s+short\s+imperative/);
+  });
+});
 
 describe('composeSystemPrompt', () => {
   it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {

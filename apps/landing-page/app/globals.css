@@ -5,12 +5,23 @@
  * When the canonical example.html changes, mirror the diff here so the
  * template's known-good rendering stays in lockstep with the deployed site.
  *
- * Font loading lives in `_components/font-stylesheet.astro` — a server
- * component injected into every page's <head>. We used to `@import` it
- * inline here, but that serialized HTML → CSS → fonts CSS → woff2 and
- * cost ~3s on first paint. Moving to <link> + preconnect parallelizes
- * the fetch with HTML parse.
+ * Fonts are self-hosted via `@fontsource-variable/*` packages. The variable
+ * font files (one woff2 per family, ~30-50KB each) cover the entire
+ * weight axis we use, are served same-origin (no Google Fonts CSS or
+ * fonts.gstatic.com TLS handshake), and ship through CF's edge — PageSpeed
+ * was attributing ~2.3s of render-blocking + LCP to the old Google Fonts
+ * round-trip chain.
+ *
+ * Subset CSS files only declare @font-face metadata (~1KB each). The
+ * browser downloads the woff2 that matches the unicode-range of text it's
+ * about to render, so multi-script support stays intact without paying for
+ * unused scripts up front.
  */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/inter-tight';
+@import '@fontsource-variable/playfair-display';
+@import '@fontsource-variable/playfair-display/wght-italic.css';
+@import '@fontsource-variable/jetbrains-mono';
 
 :root {
   --paper: #efe7d2;
@@ -29,10 +40,10 @@
   --line-soft: rgba(21, 20, 15, 0.08);
   --line-faint: rgba(21, 20, 15, 0.05);
   --shadow: 0 30px 60px -30px rgba(21, 20, 15, 0.18);
-  --serif: 'Playfair Display', 'Times New Roman', serif;
-  --sans: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --body: 'Inter', -apple-system, system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --serif: 'Playfair Display Variable', 'Playfair Display', 'Times New Roman', serif;
+  --sans: 'Inter Tight Variable', 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --body: 'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

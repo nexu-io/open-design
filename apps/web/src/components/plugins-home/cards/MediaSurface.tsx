@@ -40,7 +40,10 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
       ) : !hasPoster ? (
         <MediaFallback pluginTitle={pluginTitle} mediaType={preview.mediaType} />
       ) : (
-        <div className="plugins-home__media-skeleton" aria-hidden />
+        <div
+          className={`plugins-home__media-skeleton${inView ? ' is-active' : ''}`}
+          aria-hidden
+        />
       )}
       {showVideo ? (
         <video

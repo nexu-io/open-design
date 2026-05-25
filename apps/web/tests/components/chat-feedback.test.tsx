@@ -113,6 +113,7 @@ function renderChatPane({
     onAssistantFeedback,
     ...render(
       <ChatPane
+        projectKindForTracking="prototype"
         messages={messages}
         streaming={streaming}
         error={null}

@@ -27,7 +27,10 @@ concurrency:
 jobs:
   comment:
     name: Publish PR visual diff comment
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Fork PR capture artifacts are untrusted. Publish comments/R2 reports for
+    # same-repository PRs automatically; fork captures require maintainer
+    # workflow_dispatch with a specific capture run id and PR number.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -36,6 +39,8 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
+          repository: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name || github.repository }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6.0.8
@@ -47,20 +52,6 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Download PR visual artifact
         uses: actions/download-artifact@v8
@@ -134,12 +125,71 @@ jobs:
             echo "Artifact manifest head_sha ($manifest_head) does not match workflow_run head_sha ($WORKFLOW_HEAD_SHA)." >&2
             exit 1
           fi
-          echo "path=$manifest" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$manifest_head" >> "$GITHUB_OUTPUT"
-          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "capture_outcome=$capture_outcome" >> "$GITHUB_OUTPUT"
+          {
+            echo "path=$manifest"
+            echo "pr_number=$pr_number"
+            echo "head_sha=$manifest_head"
+            echo "base_sha=$base_sha"
+            echo "run_id=$run_id"
+            echo "capture_outcome=$capture_outcome"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate live PR state for trusted checkout
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        id: trusted-pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.manifest.outputs.pr_number }}
+          ARTIFACT_HEAD_SHA: ${{ steps.manifest.outputs.head_sha }}
+          ARTIFACT_BASE_SHA: ${{ steps.manifest.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          pr_json="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,isDraft,headRefOid,baseRefOid)"
+          pr_state="$(jq -r '.state' <<< "$pr_json")"
+          pr_is_draft="$(jq -r '.isDraft' <<< "$pr_json")"
+          current_head="$(jq -r '.headRefOid' <<< "$pr_json")"
+          current_base="$(jq -r '.baseRefOid' <<< "$pr_json")"
+          if [ "$pr_state" != "OPEN" ]; then
+            echo "Refusing trusted checkout for PR $PR_NUMBER because state is $pr_state." >&2
+            exit 1
+          fi
+          if [ "$pr_is_draft" != "false" ]; then
+            echo "Refusing trusted checkout for PR $PR_NUMBER because it is draft." >&2
+            exit 1
+          fi
+          if [ "$current_head" != "$ARTIFACT_HEAD_SHA" ]; then
+            echo "Artifact head_sha ($ARTIFACT_HEAD_SHA) does not match live PR head ($current_head)." >&2
+            exit 1
+          fi
+          if [ "$current_base" != "$ARTIFACT_BASE_SHA" ]; then
+            echo "Artifact base_sha ($ARTIFACT_BASE_SHA) does not match live PR base ($current_base)." >&2
+            exit 1
+          fi
+          echo "base_sha=$current_base" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trusted base revision
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          clean: false
+          fetch-depth: 0
+          repository: ${{ github.repository }}
+          ref: ${{ steps.trusted-pr.outputs.base_sha }}
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Stop stale visual runs
         id: stale

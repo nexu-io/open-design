@@ -1,0 +1,2160 @@
+/* -------- Mention popover ------------------------------------------- */
+.mention-popover {
+  order: -1;
+  flex: 0 0 clamp(300px, 52vh, 480px);
+  min-height: 248px;
+  max-height: min(480px, 72vh);
+  margin: 0 0 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.mention-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 42px;
+  padding: 6px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mention-tabs::-webkit-scrollbar {
+  display: none;
+}
+.mention-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.mention-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.mention-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 3px 0;
+}
+.mention-empty {
+  padding: 14px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.45;
+}
+.mention-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 7px 10px;
+  font-size: 12px;
+  text-align: left;
+  gap: 8px;
+  color: var(--text);
+  min-height: 32px;
+}
+.mention-item:hover { background: var(--bg-subtle); border-color: transparent; }
+.mention-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 4px 8px 2px;
+}
+.mention-section-label + .mention-section-label,
+.mention-item + .mention-section-label {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.mention-item--plugin {
+  align-items: flex-start;
+}
+.mention-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.mention-item-body strong {
+  font-weight: 500;
+  font-size: 12px;
+}
+.mention-meta--desc {
+  white-space: normal;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.mention-item code {
+  flex: 1;
+  font-size: 11px;
+  background: transparent;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-meta { color: var(--text-muted); font-size: 10px; flex-shrink: 0; }
+
+/* Section header inside the @-popover when both skills and files appear. */
+.mention-section-head {
+  padding: 6px 10px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.mention-skill-item { flex-direction: column; align-items: flex-start; gap: 2px; }
+.mention-skill-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.mention-skill-row code { flex: none; font-size: 11px; }
+.mention-skill-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mention-skill-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Staged skill chips above the textarea. Reuse the staged-chip baseline
+   so they line up with attachment chips. */
+.staged-skills-row { gap: 6px; flex-wrap: wrap; }
+.staged-chip.staged-skill {
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-subtle));
+  border-color: color-mix(in oklab, var(--accent) 28%, var(--border));
+}
+.staged-chip.staged-skill .staged-icon { color: var(--accent); }
+.staged-chip.staged-skill-user {
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-subtle));
+}
+
+/* ===========================================================
+   Modal / Settings
+   =========================================================== */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(28, 27, 26, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fade-in 160ms ease-out;
+}
+.modal {
+  background: var(--bg-elevated);
+  -webkit-app-region: no-drag;
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 220ms cubic-bezier(0.21, 1.02, 0.73, 1);
+}
+.modal h2 { margin: 0; font-size: 18px; letter-spacing: -0.01em; font-weight: 600; }
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.modal .hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+.modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+.updater-popup {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 12px);
+  z-index: 80;
+  width: min(360px, calc(100vw - var(--entry-rail-width, 56px) - 24px));
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  -webkit-app-region: no-drag;
+}
+
+[dir='rtl'] .entry-updater-menu .updater-popup {
+  left: auto;
+  right: calc(100% + 12px);
+}
+
+.entry-main__topbar .entry-updater-menu .updater-popup {
+  top: calc(100% + 10px);
+  right: 0;
+  left: auto;
+}
+
+[dir='rtl'] .entry-main__topbar .entry-updater-menu .updater-popup {
+  right: auto;
+  left: 0;
+}
+
+.updater-popup__icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--accent) 12%, var(--bg-subtle));
+  color: var(--accent);
+}
+
+.updater-popup__body {
+  min-width: 0;
+}
+
+.updater-popup__body h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.updater-popup__body p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.updater-popup__error {
+  color: var(--red) !important;
+}
+
+.updater-popup__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.updater-popup__button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.updater-popup__button:hover {
+  border-color: var(--text-muted);
+}
+
+.updater-popup__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.updater-popup__button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+@media (max-width: 560px) {
+  .updater-popup {
+    width: calc(100vw - var(--entry-rail-width, 56px) - 18px);
+  }
+}
+
+/* Compact rename modal */
+.modal-rename {
+  width: 420px;
+  gap: 14px;
+}
+.modal-rename input[type="text"] {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  outline: none;
+}
+.modal-rename input[type="text"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.modal-rename .row button {
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.modal-rename .row button:hover { border-color: var(--border-strong); }
+.modal-rename .row button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.modal-rename .row button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Confirm modal — same shell, danger primary */
+.modal-confirm {
+  width: 420px;
+  gap: 12px;
+}
+.modal-confirm-message {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-strong);
+  line-height: 1.55;
+}
+.modal-confirm-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--red);
+  line-height: 1.55;
+}
+.modal-confirm .row { margin-top: 8px; }
+.modal-confirm .row button {
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.modal-confirm .row button:hover { border-color: var(--border-strong); }
+.modal-confirm .row button.primary.danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.modal-confirm .row button.primary.danger:hover { filter: brightness(0.95); }
+
+/* Project category tags */
+.design-card-tag {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.design-card-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.design-card-tag.tag-prototype {
+  color: #2348b8;
+  background: #e8efff;
+  border-color: rgba(35, 72, 184, 0.18);
+}
+.design-card-tag.tag-live-artifact {
+  color: #6d4ff5;
+  background: rgba(116, 92, 255, 0.12);
+  border-color: rgba(116, 92, 255, 0.28);
+}
+.design-card-tag.tag-slide {
+  color: #b15e00;
+  background: rgba(255, 159, 64, 0.14);
+  border-color: rgba(255, 159, 64, 0.32);
+}
+.design-card-tag.tag-media {
+  color: #1c8a73;
+  background: rgba(28, 138, 115, 0.12);
+  border-color: rgba(28, 138, 115, 0.28);
+}
+.design-card-tag.tag-design-system {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 9%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red) 34%, transparent);
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.modal-settings {
+  --modal-padding: 24px;
+  width: min(920px, calc(100vw - 48px));
+  /* Fixed height regardless of which section is active — short sections
+     pad out with empty space inside `.settings-content`, long sections
+     scroll internally. Keeps the dialog from jumping in size as the user
+     switches sidebar items. */
+  height: min(720px, calc(100vh - 64px));
+  padding: 0;
+  gap: 0;
+  /* Anchor for the absolutely-positioned `.settings-chrome` strip
+     (close button + autosave indicator). Without this the chrome
+     would escape to the viewport on long-scrolling sections. */
+  position: relative;
+}
+@media (max-height: 600px) {
+  .modal-settings { height: 90vh; }
+}
+.modal-settings .modal-body {
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+.modal-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: var(--modal-padding);
+}
+.modal-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.modal-head h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.modal-head .subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  /* 72ch lets typical one-sentence English subtitles fit on a single
+   * line inside the 920px settings modal while still wrapping cleanly
+   * on narrow viewports (the modal width clamps to 100vw - 48px) and
+   * for the longest locales (German, French). 50ch was forcing even
+   * the English subtitle onto two lines. See nexu-io/open-design#743. */
+  max-width: 72ch;
+}
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px var(--modal-padding, 22px) 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+/* Top-right chrome strip for the Settings dialog. Floats above the
+   sidebar/content rhythm so the close affordance and the autosave
+   indicator never compete with the title or sidebar nav. The strip
+   is a flex row right-anchored to the modal corner; the autosave
+   pill comes first so the close button keeps a stable optical
+   position and the user's eye returns to the same place after a
+   save settles. */
+.settings-chrome {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-chrome > * {
+  pointer-events: auto;
+}
+
+/* Close button. Minimal circular icon button with a hairline ring
+   that warms on hover and snaps to the accent on focus-visible.
+   Sized to read as a passive corner control rather than a primary
+   CTA — the autosave indicator next to it carries any system
+   feedback the user might need. */
+.settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.settings-close:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 22%, var(--border));
+  background: var(--bg-panel);
+  transform: scale(1.04);
+}
+.settings-close:active {
+  transform: scale(0.96);
+}
+.settings-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-close { transition: color 80ms linear, border-color 80ms linear; transform: none !important; }
+}
+
+/* Autosave status pill. Lives in the chrome strip now (next to the
+   close button) instead of a footer. Renders nothing while idle so
+   the chrome reads as a single close button until something is
+   actually saving; settles to a green check on success and red on
+   failure. The pill never takes focus and never blocks input — it
+   is a passive system message announced to assistive tech via
+   aria-live on the wrapper. */
+.settings-autosave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+  border: 1px solid transparent;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: opacity 160ms ease, color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+.settings-autosave.is-idle {
+  opacity: 0;
+  transform: translateY(-2px);
+  /* Collapse the visual weight so the chrome strip is just the
+     close button when nothing is happening. */
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  min-height: 0;
+}
+.settings-autosave.is-pending,
+.settings-autosave.is-saving {
+  opacity: 1;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 12%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+.settings-autosave.is-saved {
+  opacity: 1;
+  color: var(--green, #1f9d55);
+  background: color-mix(in srgb, var(--green, #1f9d55) 14%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--green, #1f9d55) 30%, transparent);
+  animation: settingsAutosavePop 220ms ease-out;
+}
+.settings-autosave.is-error {
+  opacity: 1;
+  color: var(--red, #d23434);
+  background: color-mix(in srgb, var(--red, #d23434) 14%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red, #d23434) 32%, transparent);
+}
+@keyframes settingsAutosavePop {
+  from { transform: translateY(-2px) scale(0.98); }
+  to   { transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-autosave { transition: opacity 80ms linear; animation: none !important; }
+}
+
+/* Hide the verbose error copy on narrow viewports so the chrome
+   strip doesn't crowd the close button. The icon + tooltip carry
+   the meaning, and the screen-reader announcement still fires. */
+@media (max-width: 720px) {
+  .settings-autosave.is-error span,
+  .settings-autosave.is-saved span,
+  .settings-autosave.is-pending span,
+  .settings-autosave.is-saving span {
+    display: none;
+  }
+  .settings-autosave.is-idle { padding: 0; }
+}
+
+/* Make sure header copy doesn't crash into the close button on
+   narrow viewports. The kicker/title/subtitle should keep their
+   normal width but reserve right-side gutter for the chrome. */
+.modal-settings .modal-head {
+  padding-right: calc(var(--modal-padding) + 56px);
+}
+
+/* Compact settings header: place subtitle on the same line as the h2
+   so opening the dialog doesn't burn 2-3 rows of header height. The
+   row uses baseline alignment so the smaller subtitle sits at the
+   h2 baseline and wraps to its own line on narrow viewports. The
+   welcome hero variant is unaffected — it keeps the stacked layout. */
+.modal-settings .modal-head-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+.modal-settings .modal-head-line > h2 {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.modal-settings .modal-head-line > .subtitle {
+  margin: 0;
+  flex: 1 1 240px;
+  font-size: 12.5px;
+  /* Override the 72ch cap from the stacked variant so the subtitle
+     can take the full remaining inline width before wrapping. */
+  max-width: none;
+}
+
+/* Section-local Save key button for the Composio API key field. We do
+   NOT autosave secrets, so this is the explicit gesture. Styled as a
+   primary button to stand out next to the password input + ghost
+   Clear, with a tighter vertical rhythm so it sits flush in the
+   field-row alongside the input. */
+.settings-connectors-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.settings-connectors-save.is-busy {
+  opacity: 0.85;
+  cursor: progress;
+}
+.settings-section-connectors .field-row {
+  /* Allow the input + Save key + Clear triplet to wrap on narrow widths
+     instead of crushing the input. */
+  flex-wrap: wrap;
+}
+@media (max-width: 540px) {
+  .settings-section-connectors .field-row > input,
+  .settings-section-connectors .field-row > .field-input-skeleton-wrap {
+    flex: 1 1 100%;
+  }
+}
+
+/* Two-stage destructive confirmation for clearing the saved Composio
+   API key. Step 1 ("confirm") is a soft amber-ish warning rooted in
+   the same red palette as other destructive surfaces so it reads as
+   "this will undo something" without screaming. Step 2 ("final") leans
+   into red with a brief arming animation on the commit button so a
+   reflex double-click cannot blow through both stages. The whole panel
+   collapses inline beneath the credentials field so the destructive
+   action stays visually anchored to the row that started it. */
+.settings-connectors-clear.is-arming {
+  border-color: var(--red-border);
+  color: var(--red);
+  background: color-mix(in srgb, var(--red-bg) 65%, transparent);
+}
+.settings-connectors-clear-confirm {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--red-border);
+  background: color-mix(in srgb, var(--red-bg) 78%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  animation: settings-connectors-clear-confirm-in 180ms ease-out;
+}
+.settings-connectors-clear-confirm.is-final {
+  background: var(--red-bg);
+  border-color: color-mix(in srgb, var(--red) 55%, var(--red-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 18%, transparent),
+    0 8px 24px -16px color-mix(in srgb, var(--red) 80%, transparent);
+}
+@keyframes settings-connectors-clear-confirm-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.settings-connectors-clear-confirm-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--red) 35%, var(--red-border));
+  background: var(--bg-panel);
+  color: var(--red);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.settings-connectors-clear-confirm.is-final .settings-connectors-clear-confirm-icon {
+  background: var(--red);
+  color: var(--bg-panel);
+  border-color: var(--red);
+}
+.settings-connectors-clear-confirm-glyph {
+  display: inline-block;
+  transform: translateY(-0.5px);
+}
+.settings-connectors-clear-confirm-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.settings-connectors-clear-confirm-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.3;
+}
+.settings-connectors-clear-confirm-copy span {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.settings-connectors-clear-confirm.is-final .settings-connectors-clear-confirm-copy strong {
+  color: var(--red);
+}
+.settings-connectors-clear-confirm-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  align-self: center;
+}
+/* "Continue" — moves to stage 2. Styled as a quiet outlined button
+   tinted with the red palette so it reads as "destructive but not
+   yet committed". */
+.settings-connectors-clear-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--red-border);
+  background: var(--bg-panel);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    transform 120ms ease-out;
+}
+.settings-connectors-clear-step:hover {
+  background: color-mix(in srgb, var(--red-bg) 60%, var(--bg-panel));
+  border-color: var(--red);
+}
+.settings-connectors-clear-step:active {
+  transform: translateY(1px);
+}
+/* Final commit button. Solid red with an arming sweep that fills the
+   left edge for ~700ms before the click is honored. While "arming",
+   the button is visually hot but disabled so an Enter-spam can't get
+   ahead of the user's intent; once armed, the label swaps to the
+   destructive verb and the click commits. */
+.settings-connectors-clear-commit {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 200px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--red);
+  background: var(--red);
+  color: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    transform 120ms ease-out,
+    box-shadow 160ms ease-out,
+    background 160ms ease-out;
+}
+.settings-connectors-clear-commit:disabled,
+.settings-connectors-clear-commit[aria-disabled='true'] {
+  cursor: progress;
+  background: color-mix(in srgb, var(--red) 70%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red) 60%, var(--red-border));
+}
+.settings-connectors-clear-commit.is-armed {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent),
+    0 10px 20px -12px color-mix(in srgb, var(--red) 75%, transparent);
+}
+.settings-connectors-clear-commit.is-armed:hover {
+  background: color-mix(in srgb, var(--red) 88%, #000);
+}
+.settings-connectors-clear-commit.is-armed:active {
+  transform: translateY(1px);
+}
+/* The arming sweep — a translucent fill that races from left to right
+   over the disabled window, signaling "almost ready". CSS-only so it
+   renders the same in every browser without a second timer. */
+.settings-connectors-clear-commit-arm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #fff 28%, transparent) 0%,
+    color-mix(in srgb, #fff 12%, transparent) 100%
+  );
+  transform: translateX(-100%);
+  opacity: 0.85;
+  animation: settings-connectors-clear-commit-arm 700ms ease-out forwards;
+}
+.settings-connectors-clear-commit.is-armed .settings-connectors-clear-commit-arm {
+  display: none;
+}
+@keyframes settings-connectors-clear-commit-arm {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0%); }
+}
+.settings-connectors-clear-commit-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 1;
+}
+@media (max-width: 540px) {
+  .settings-connectors-clear-confirm {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+  .settings-connectors-clear-confirm-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .settings-connectors-clear-commit {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-connectors-clear-confirm {
+    animation: none;
+  }
+  .settings-connectors-clear-commit-arm {
+    animation: none;
+    transform: translateX(0%);
+    opacity: 0.4;
+  }
+}
+.settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 10px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Sidebar items follow the ChatGPT-style settings rhythm: single line,
+   icon + label only, gray pill fill on active. The `<small>` description
+   that ships in the JSX is hidden — the label alone is the navigation
+   handle; the section's own subtitle in the content area carries any
+   intro copy. */
+.settings-nav-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.settings-nav-item.active,
+.settings-nav-item.active:hover {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+.settings-nav-item svg {
+  justify-self: center;
+  opacity: 0.75;
+}
+.settings-nav-item span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav-item strong {
+  color: currentColor;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.settings-nav-item.active strong {
+  font-weight: 600;
+}
+.settings-nav-item small {
+  display: none;
+}
+.settings-content {
+  min-width: 0;
+  min-height: 0;
+  /* Top inset matches `.settings-sidebar`'s `padding-top: 16` so the first
+     content row (the Local CLI / BYOK pill) sits level with the first
+     sidebar nav-item across the gutter. */
+  padding: 16px var(--modal-padding) 22px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+@media (max-width: 760px) {
+  .modal-settings {
+    width: min(560px, calc(100vw - 24px));
+  }
+  .modal-settings .modal-body {
+    grid-template-columns: 1fr;
+  }
+  .settings-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-nav-item {
+    min-width: 150px;
+  }
+}
+
+/* Segmented control */
+/* Compact single-line segmented control (Local CLI / BYOK and friends).
+   Mirrors `.subtab-pill` and `.ds-picker-mode`: gray rounded container,
+   white raised tab for active, just a title — the meta sub-line that used
+   to render here is hidden because the section right below already prints
+   the same context ("Local CLI · Detected by scanning..."). */
+.seg-control {
+  display: grid;
+  grid-template-columns: repeat(var(--seg-cols, 2), minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* Height-match the active sidebar nav-item across the gutter so the
+     top of the content area lines up neatly with the picked section. */
+  min-height: 42px;
+  min-width: 0;
+}
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  min-width: 0;
+}
+.seg-btn:hover:not(:disabled):not(.active) { color: var(--text); }
+.seg-btn.active {
+  background: var(--bg-panel);
+  border-color: transparent;
+  box-shadow: var(--shadow-xs);
+}
+.seg-btn .seg-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.seg-btn.active .seg-title { font-weight: 600; }
+.seg-btn .seg-meta { display: none; }
+.seg-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+/* Inline variant: title and meta sit on a single row instead of
+   stacking, which saves a row of vertical space inside the
+   execution-mode tabs (Local CLI · 2 installed / BYOK · API provider). */
+.seg-btn--inline {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  padding-block: 8px;
+}
+.seg-btn--inline > .seg-title { min-width: 0; flex: 0 0 auto; }
+.seg-btn--inline > .seg-meta { min-width: 0; flex: 1 1 auto; }
+
+/* Secondary protocol selector — pill chips, wraps to multiple rows */
+.protocol-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 0;
+  min-width: 0;
+}
+.protocol-chip {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.protocol-chip:hover:not(.active) {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.protocol-chip.active {
+  background: var(--selected);
+  border-color: color-mix(in srgb, var(--selected) 86%, var(--text-strong));
+  color: #fff;
+  font-weight: 600;
+  box-shadow:
+    0 0 0 3px var(--selected-soft),
+    0 1px 2px color-mix(in srgb, var(--selected) 22%, transparent);
+}
+.protocol-chip.active:hover {
+  background: color-mix(in srgb, var(--selected) 88%, var(--text-strong));
+  border-color: color-mix(in srgb, var(--selected) 80%, var(--text-strong));
+  color: #fff;
+}
+
+.settings-section { display: flex; flex-direction: column; gap: 12px; }
+.settings-section-connectors { gap: 16px; }
+/* Credentials sit above the catalog now; the divider lives under the field
+   so the eye reads "configure key → catalog unlocks below". */
+.settings-section-connectors > .settings-section-connectors-credentials {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+}
+.settings-section-connectors > .connectors-panel-embedded {
+  margin-top: 0;
+}
+.settings-rescan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  justify-content: center;
+}
+.settings-rescan-btn.loading {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.settings-rescan-status,
+.settings-test-status {
+  margin: -4px 0 0;
+  padding: 7px 10px;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-sm);
+  background: var(--green-bg);
+  color: var(--green);
+  font-size: 12px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.settings-rescan-status.error,
+.settings-test-status.error {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--red);
+}
+.settings-rescan-status-inline {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.settings-rescan-status-inline.error {
+  color: var(--red);
+}
+.settings-test-status.warn {
+  border-color: var(--amber-border, var(--orange-border, var(--green-border)));
+  background: var(--amber-bg, var(--orange-bg, var(--green-bg)));
+  color: var(--amber, var(--orange, var(--green)));
+}
+.settings-test-status.running {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.settings-test-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-test-actions-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.settings-test-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+  justify-content: center;
+}
+.settings-test-btn.loading {
+  border-color: var(--accent-soft);
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.section-head-actions .seg-control {
+  display: inline-grid;
+  grid-template-columns: repeat(var(--seg-cols, 2), auto);
+  min-height: unset;
+  min-width: unset;
+}
+.section-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* ============================================================
+   Orbit settings section — redesigned layout
+   Hero · Automation card · Run receipt · Artifact strip
+   ============================================================ */
+.orbit-section {
+  gap: 16px;
+}
+
+/* ---------- 1. Hero / header zone ---------- */
+.orbit-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(140% 160% at 100% 0%, color-mix(in srgb, var(--accent-tint) 75%, transparent) 0%, transparent 60%),
+    var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.orbit-hero-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  color: #fff;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 32%, transparent);
+  flex-shrink: 0;
+}
+.orbit-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.orbit-hero-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+.orbit-hero-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+  line-height: 1.15;
+}
+.orbit-hero-lede {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 52ch;
+}
+.orbit-hero-lede strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.orbit-hero-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.orbit-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.orbit-state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.orbit-state-pill.orbit-state-active {
+  background: color-mix(in srgb, var(--accent-tint) 80%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent-strong);
+}
+.orbit-state-pill.orbit-state-active .orbit-state-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+.orbit-run-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  cursor: pointer;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-strong) 22%, transparent) inset, var(--shadow-xs);
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.orbit-run-cta:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.orbit-run-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.orbit-run-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+}
+.orbit-run-cta.is-busy {
+  background: color-mix(in srgb, var(--accent) 75%, #000);
+  border-color: transparent;
+}
+.orbit-run-cta .icon-spin {
+  color: #fff;
+}
+
+@media (max-width: 620px) {
+  .orbit-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 10px;
+  }
+  .orbit-hero-actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+}
+
+/* ---------- 2. Automation card ---------- */
+.orbit-automation {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.orbit-automation.is-on {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-tint) 40%, var(--bg-panel)) 0%, var(--bg-panel) 40%);
+}
+
+/* ---------- Locked state ----------
+   When no Composio connector is wired up the automation card collapses
+   into a passive, gated surface. We desaturate the hue, tighten contrast,
+   and overlay a soft diagonal sheen so the card reads as "intentionally
+   off" rather than "broken styling". The lock banner above the rows
+   names the prerequisite plainly and points back to the Connectors gate
+   without competing with it. */
+.orbit-automation.is-locked {
+  border-color: color-mix(in srgb, var(--text-soft) 22%, var(--border));
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text-soft) 4%, transparent) 0 6px,
+      transparent 6px 14px
+    ),
+    var(--bg-subtle);
+  filter: saturate(0.55);
+}
+.orbit-automation.is-locked.is-on {
+  /* When the user previously had the schedule on but later removed the
+     last connector we still show the "on" gradient very faintly — but
+     the locked treatment wins so the panel reads as gated. */
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--text-soft) 4%, transparent) 0 6px,
+      transparent 6px 14px
+    ),
+    var(--bg-subtle);
+}
+.orbit-automation.is-locked .orbit-automation-row {
+  /* Block any accidental click-through into the row's whitespace; real
+     controls retain their own pointer behavior via :disabled. */
+  cursor: not-allowed;
+}
+.orbit-automation.is-locked .orbit-automation-title,
+.orbit-automation.is-locked .orbit-automation-sub {
+  color: var(--text-soft);
+}
+.orbit-automation.is-locked .orbit-time-input,
+.orbit-automation.is-locked .orbit-switch,
+.orbit-automation.is-locked .orbit-template-select-input,
+.orbit-automation.is-locked .orbit-automation-sub-action {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.orbit-automation.is-locked .orbit-time-input:disabled,
+.orbit-automation.is-locked .orbit-template-select-input:disabled {
+  /* The native :disabled state already dims; keep our own opacity tuned
+     so it matches the surrounding desaturated card. */
+  background: color-mix(in srgb, var(--text-soft) 6%, var(--bg-subtle));
+}
+
+/* Lock banner — sits above the configuration rows and names the gate
+   reason in a single line. Compact, low-contrast accent so it reads as
+   metadata rather than a second hero. */
+.orbit-automation-lock-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.orbit-automation-lock-banner svg {
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+.orbit-automation-lock-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  flex-shrink: 0;
+}
+.orbit-automation-lock-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .orbit-automation-lock-text { white-space: normal; }
+}
+
+.orbit-automation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 18px;
+}
+.orbit-automation-schedule-row {
+  align-items: start;
+}
+.orbit-automation-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 0 18px;
+}
+.orbit-automation-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.orbit-automation-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+.orbit-automation-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* Custom switch control — rebuilt rather than reusing .toggle-row so the
+   Orbit section owns the pattern and can tune track/thumb proportions. */
+.orbit-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.orbit-switch:hover { border-color: var(--border-strong); }
+.orbit-switch.is-on {
+  background: color-mix(in srgb, var(--accent-tint) 70%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent-strong);
+}
+.orbit-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.orbit-switch:disabled,
+.orbit-switch.is-locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-soft);
+}
+.orbit-switch:disabled .orbit-switch-track,
+.orbit-switch.is-locked .orbit-switch-track {
+  background: var(--border);
+}
+.orbit-switch:disabled.is-on .orbit-switch-track,
+.orbit-switch.is-locked.is-on .orbit-switch-track {
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.orbit-switch-track {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 160ms ease;
+}
+.orbit-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(28, 27, 26, 0.22);
+  transition: transform 180ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.orbit-switch.is-on .orbit-switch-track { background: var(--accent); }
+.orbit-switch.is-on .orbit-switch-thumb { transform: translateX(14px); }
+.orbit-switch-text {
+  font-variant-numeric: tabular-nums;
+  min-width: 22px;
+  text-align: right;
+}
+
+.orbit-automation-schedule-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.orbit-time-input {
+  width: 140px;
+  padding: 6px 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  border-radius: var(--radius-sm);
+}
+.orbit-next-run {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orbit-next-run-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.orbit-next-run-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-next-run-value.muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (max-width: 620px) {
+  .orbit-automation-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .orbit-automation-schedule-controls {
+    align-items: stretch;
+  }
+  .orbit-time-input {
+    width: 100%;
+  }
+  .orbit-switch { align-self: flex-start; }
+}
+
+/* ---------- 3. Template row (folded into Automation card) ----------
+   Previously this section lived in its own paired card. We folded it into
+   the automation card as a third row + dedicated preview slot so users
+   configure schedule and prompt-steering in one place, and the section
+   reads as one cohesive configuration surface instead of two parallel
+   panels competing for attention. The class names below still use the
+   `orbit-template-` prefix because they continue to describe template
+   surface elements — they just live inside the automation card now. */
+
+.orbit-automation.has-template {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.orbit-automation-template-row {
+  /* Slightly more vertical breathing room than the switch/schedule rows
+     because the right column hosts a wider select control. */
+  align-items: start;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+.orbit-automation-template-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 220px;
+  width: clamp(220px, 36%, 320px);
+}
+
+/* Inline warning variant of the row sub-copy. Used by the Prompt
+   template row when the saved skill id is no longer in the registry —
+   takes the place of the standard descriptive sub-line and inlines a
+   small Reset action that pushes the config back to the default
+   (`orbit-general`). The warning lives flush inside the automation
+   row so we do not need a separate preview panel for the missing
+   state. */
+.orbit-automation-sub-warning {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-top: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #c47a2c 10%, var(--bg-panel));
+  color: #8a5217;
+  font-weight: 500;
+}
+.orbit-automation-sub-warning svg {
+  color: #c47a2c;
+  flex-shrink: 0;
+}
+.orbit-automation-sub-warning strong {
+  color: #6c3f0f;
+  font-weight: 600;
+}
+.orbit-automation-sub-action {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-left: auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #8a5217;
+  background: var(--bg-panel);
+  border: 1px solid color-mix(in srgb, #c47a2c 32%, var(--border));
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.orbit-automation-sub-action:hover {
+  color: #6c3f0f;
+  border-color: color-mix(in srgb, #c47a2c 55%, var(--border));
+  background: color-mix(in srgb, #c47a2c 8%, var(--bg-panel));
+}
+.orbit-automation-sub-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, #c47a2c 65%, var(--accent));
+  outline-offset: 2px;
+}
+
+/* Native select wrapper. Originally a labelled grid (label + select);
+   the row title now carries the inline label, so the select stretches
+   to fill its column. */
+.orbit-template-select {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.orbit-template-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.orbit-template-select-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding: 8px 32px 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.orbit-template-select-input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+}
+.orbit-template-select-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.orbit-template-select-input:disabled {
+  /* While the skill registry is loading we show a progress cursor; the
+     locked variant overrides this back to not-allowed via the parent
+     `.orbit-automation.is-locked` rule above. */
+  cursor: progress;
+  opacity: 0.65;
+}
+.orbit-template-select-chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-soft);
+  pointer-events: none;
+}
+
+@media (max-width: 620px) {
+  /* On narrow viewports the template row should stack: title block on top,
+     select control full-width below it. */
+  .orbit-automation-template-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .orbit-automation-template-controls {
+    width: 100%;
+    min-width: 0;
+    justify-content: stretch;
+  }
+}
+
+/* ---------- 4. Run receipt ---------- */
+.orbit-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.orbit-receipt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.orbit-receipt-head-left {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.orbit-receipt-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.orbit-receipt-eyebrow svg { color: var(--text-soft); }
+.orbit-receipt-timestamp {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-strong);
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+.orbit-receipt-timestamp.muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.orbit-trigger-pill {
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.orbit-trigger-pill.orbit-trigger-manual {
+  background: var(--blue-bg);
+  border-color: var(--blue-border);
+  color: var(--blue);
+}
+.orbit-trigger-pill.orbit-trigger-scheduled {
+  background: color-mix(in srgb, var(--accent-tint) 80%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  color: var(--accent-strong);
+}
+
+.orbit-inline-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.orbit-inline-notice.is-success {
+  border-color: var(--green-border);
+  background: var(--green-bg);
+  color: var(--green);
+}
+.orbit-inline-notice.is-error {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+/* Proportional run meter: a single bar whose segment widths reflect the
+   success / skip / failure ratio. Preferred over 4 equal tiles because it
+   communicates "mostly succeeded" or "mostly failed" at a glance. */
+.orbit-meter {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.orbit-meter-seg {
+  height: 100%;
+  transition: width 260ms ease;
+}
+.orbit-meter-seg.is-succeeded { background: var(--green); }
+.orbit-meter-seg.is-skipped { background: var(--border-strong); }
+.orbit-meter-seg.is-failed { background: var(--red); }
+.orbit-meter-seg.is-empty {
+  width: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-subtle) 0 6px,
+    var(--bg-muted) 6px 12px
+  );
+}
+
+.orbit-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.orbit-counts .orbit-count {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px;
+}
+.orbit-counts .orbit-count + .orbit-count::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border-soft);
+}
+.orbit-count dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0;
+}
+.orbit-count dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.orbit-count.is-succeeded dd { color: var(--green); }
+.orbit-count.is-skipped dd { color: var(--text-muted); }
+.orbit-count.is-failed dd { color: var(--red); }
+
+@media (max-width: 620px) {
+  .orbit-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
+  .orbit-counts .orbit-count + .orbit-count::before { display: none; }
+}
+
+/* ---------- 1b. Configuration gate ---------------------------------------
+   Surfaces when the user has no connected integrations. We share the
+   orbit-themed accent palette of the hero/firstrun panel so the gate
+   reads as a first-class part of the panel rather than an inline error
+   banner. Layout mirrors the firstrun composition (glyph · copy · action)
+   so the section feels rhythmically consistent regardless of which
+   empty-state panel is showing. The decorative ring glyph reuses the
+   same dashed-orbit motif as the firstrun glyph but anchors a small
+   "link" icon at the center to telegraph "wire up a connector". */
+.orbit-config-gate {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 160% at 0% 50%, color-mix(in srgb, var(--accent-tint) 90%, transparent) 0%, transparent 60%),
+    var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  animation: orbitConfigGateIn 220ms ease-out;
+}
+.orbit-config-gate::after {
+  /* Soft outer ring decoration in the corner — pure visual, mirrors the
+     firstrun panel so the two empty states feel like siblings. */
+  content: '';
+  position: absolute;
+  right: -50px;
+  top: -50px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes orbitConfigGateIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.orbit-config-gate-glyph {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.orbit-config-gate-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--accent) 42%, transparent);
+}
+.orbit-config-gate-ring-outer {
+  inset: 0;
+  animation: orbitFirstrunSpin 22s linear infinite;
+}
+.orbit-config-gate-ring-inner {
+  inset: 9px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  animation: orbitFirstrunSpin 16s linear infinite reverse;
+}
+.orbit-config-gate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  color: var(--btn-primary-fg, #fff);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-config-gate-ring { animation: none !important; }
+}
+
+.orbit-config-gate-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.orbit-config-gate-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+.orbit-config-gate-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text-strong);
+  line-height: 1.3;
+}
+.orbit-config-gate-body {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-width: 56ch;
+}
+
+.orbit-config-gate-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.orbit-config-gate-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--btn-primary-fg, #fff);
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.orbit-config-gate-action:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.orbit-config-gate-action:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+.orbit-config-gate-action svg {
+  transition: transform 160ms ease;
+}
+.orbit-config-gate-action:hover svg {
+  transform: translateX(2px);
+}
+
+@media (max-width: 620px) {
+  .orbit-config-gate {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 12px;
+  }
+  .orbit-config-gate-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}

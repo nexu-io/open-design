@@ -3,7 +3,7 @@ import { cac } from "cac";
 import { startUpdaterFixtureServer } from "./updater-fixture.js";
 
 type CliOptions = {
-  channel?: "stable" | "beta";
+  channel?: "stable" | "beta" | "nightly" | "preview";
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
@@ -65,7 +65,7 @@ const cli = cac("tools-serve");
 
 cli
   .command("start <service>", "Start a local fixture service")
-  .option("--channel <channel>", "Updater channel: stable|beta", { default: "stable" })
+  .option("--channel <channel>", "Updater channel: stable|beta|nightly|preview", { default: "stable" })
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })

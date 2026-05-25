@@ -26,7 +26,7 @@ let
   pname = "open-design-web";
   version = (lib.importJSON ../package.json).version;
 
-  pnpmDepsHash = (import ./pnpm-deps.nix).hash;
+  pnpmDepsHash = (import ./pnpm-deps.nix).webHash;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;

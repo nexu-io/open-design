@@ -8,12 +8,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import {
+  localizeSkillDescription,
+  localizeSkillName,
+} from '../i18n/content';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
+  trackFileUploadResult,
 } from '../analytics/events';
+import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
 import { patchProject } from "../state/projects";
@@ -39,6 +45,7 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { isImeComposing } from '../utils/imeComposing';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -217,6 +224,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // 2026-05-20 04:08 for the rationale.
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
     const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
+    const streamingAnnotationSendPendingRef = useRef(false);
+    const [streamingAnnotationSendPending, setStreamingAnnotationSendPendingState] = useState(false);
     // Skills the user has @-mentioned for this turn. We dedupe on id and
     // strip the chip when the user removes the corresponding `@<skill>`
     // token from the draft, keeping draft and chips in sync.
@@ -262,6 +271,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [toolsTab, setToolsTab] = useState<ToolsTab>('plugins');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const composingRef = useRef(false);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
@@ -687,6 +697,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return [...commentAttachments, ...stagedVisualComments, ...extra];
     }
 
+    function setStreamingAnnotationSendPending(value: boolean) {
+      streamingAnnotationSendPendingRef.current = value;
+      setStreamingAnnotationSendPendingState(value);
+    }
+
     function currentRunContextMeta(): ChatSendMeta | undefined {
       const skillIds = stagedSkills.map((s) => s.id);
       const mcpServerIds = stagedMcpServers.map((s) => s.id);
@@ -701,6 +716,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         ...(Object.keys(context).length > 0 ? { context } : {}),
       };
       return Object.keys(meta).length > 0 ? meta : undefined;
+    }
+
+    function sendComposedTurn(
+      prompt: string,
+      attachments: ChatAttachment[],
+      nextCommentAttachments: ChatCommentAttachment[],
+      meta?: ChatSendMeta,
+    ): boolean {
+      setStreamingAnnotationSendPending(false);
+      if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return false;
+      onSend(prompt, attachments, nextCommentAttachments, meta);
+      reset();
+      return true;
     }
 
     async function insertSkillMention(skill: SkillSummary) {
@@ -732,12 +760,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!id) return;
       setUploading(true);
       setUploadError(null);
+      // Cohort math is identical to the Design Files Upload button; see
+      // `analytics/upload-tracking.ts`. v2 doc fires one
+      // file_upload_result per surface so this path reports
+      // `page_name='chat_panel'` / `area='chat_composer'`.
+      const cohort = deriveUploadCohort(files);
       try {
         const result = await uploadProjectFiles(id, files);
         if (result.uploaded.length > 0) {
           setStaged((s) => [...s, ...result.uploaded]);
         }
-        if (result.failed.length > 0) {
+        const partial = result.failed.length > 0;
+        if (partial) {
           const failedCount = result.failed.length;
           const uploadedCount = result.uploaded.length;
           const detail = result.error ? ` (${result.error})` : '';
@@ -748,6 +782,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           );
           console.warn('Some attachments failed to upload', result.failed);
         }
+        trackFileUploadResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          project_id: id,
+          ...cohort,
+          result: partial ? 'failed' : 'success',
+          ...(partial && result.error ? { error_code: result.error } : {}),
+        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setUploadError(`Attachment upload failed (${detail}).`);
+        trackFileUploadResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          project_id: id,
+          ...cohort,
+          result: 'failed',
+          error_code: detail,
+        });
       } finally {
         setUploading(false);
       }
@@ -829,6 +882,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 ]);
               }
               if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+              setStreamingAnnotationSendPending(true);
               textareaRef.current?.focus();
               return;
             }
@@ -841,9 +895,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
             const attachments = [...staged, ...uploaded];
             const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-            if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return;
-            onSend(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
-            reset();
+            sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
             return;
           }
 
@@ -855,7 +907,37 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
       window.addEventListener(ANNOTATION_EVENT, onAnnotation);
       return () => window.removeEventListener(ANNOTATION_EVENT, onAnnotation);
-    }, [commentAttachments, draft, onSend, projectId, staged, stagedSkills, stagedVisualComments, streaming]);
+    }, [
+      commentAttachments,
+      draft,
+      onSend,
+      projectId,
+      staged,
+      stagedConnectors,
+      stagedMcpServers,
+      stagedSkills,
+      stagedVisualComments,
+      streaming,
+    ]);
+
+    useEffect(() => {
+      if (!streamingAnnotationSendPending || !streamingAnnotationSendPendingRef.current) return;
+      if (streaming || sendDisabled) return;
+      const prompt = draft.trim();
+      sendComposedTurn(prompt, staged, currentCommentAttachments(), currentRunContextMeta());
+    }, [
+      commentAttachments,
+      draft,
+      onSend,
+      sendDisabled,
+      staged,
+      stagedConnectors,
+      stagedMcpServers,
+      stagedSkills,
+      stagedVisualComments,
+      streaming,
+      streamingAnnotationSendPending,
+    ]);
 
     function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
       const items = Array.from(e.clipboardData?.items ?? []);
@@ -918,6 +1000,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           new RegExp(`(^|\\s)@${escapeRegExp(s.id)}(\\s|$)`).test(value),
         ),
       );
+      // Skip mention and slash detection during IME composition (e.g.,
+      // Chinese, Japanese, Korean input) to prevent cursor jumping.
+      // Issue #2851.
+      if (composingRef.current) return;
       // Detect a fresh @ at start or after whitespace; capture the typed
       // query up to the cursor.
       const before = value.slice(0, cursor);
@@ -1040,6 +1126,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const nextCommentAttachments = currentCommentAttachments();
       if (hatched) {
         if (streaming) return;
+        setStreamingAnnotationSendPending(false);
         onSend(hatched, staged, nextCommentAttachments, contextMeta);
         reset();
         return;
@@ -1047,6 +1134,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const search = researchAvailable ? expandSearchCommand(prompt) : null;
       if (search) {
         if (streaming) return;
+        setStreamingAnnotationSendPending(false);
         onSend(search.prompt, staged, nextCommentAttachments, {
           ...contextMeta,
           research: { enabled: true, query: search.query },
@@ -1054,9 +1142,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         reset();
         return;
       }
-      if ((!prompt && staged.length === 0 && nextCommentAttachments.length === 0) || streaming) return;
-      onSend(prompt, staged, nextCommentAttachments, contextMeta);
-      reset();
+      if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) return;
+      sendComposedTurn(prompt, staged, nextCommentAttachments, contextMeta);
     }
 
     // The @-picker offers a unified search across context surfaces:
@@ -1130,6 +1217,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           .filter((s) => skillMatchesQuery(s, mentionQuery))
           .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery))
       : [];
+    const hasComposerPayload =
+      draft.trim().length > 0 || staged.length > 0 || currentCommentAttachments().length > 0;
+    const showStopButton = streaming && !hasComposerPayload;
+    const showSendButton = !streaming || hasComposerPayload;
 
     return (
       <div
@@ -1306,7 +1397,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 onScroll={(event) => {
                   setComposerScrollTop(event.currentTarget.scrollTop);
                 }}
+                onCompositionStart={() => {
+                  composingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  composingRef.current = false;
+                }}
                 onKeyDown={(e) => {
+                  if (isImeComposing(e, composingRef.current)) return;
                   if (slash && filteredSlash.length > 0) {
                     if (e.key === 'ArrowDown') {
                       e.preventDefault();
@@ -1336,7 +1434,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     setMention(null);
                     return;
                   }
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  if (
+                    e.key === 'Enter' &&
+                    !e.shiftKey &&
+                    !e.altKey &&
+                    (e.metaKey || e.ctrlKey || !mention)
+                  ) {
                     e.preventDefault();
                     void submit();
                   }
@@ -1549,7 +1652,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             </button>
             {footerAccessory}
             <span className="composer-spacer" />
-            {streaming ? (
+            {showStopButton ? (
               <button
                 type="button"
                 className="composer-send stop"
@@ -1558,7 +1661,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="stop" size={13} />
                 <span>{t('chat.stop')}</span>
               </button>
-            ) : (
+            ) : null}
+            {showSendButton ? (
               <button
                 type="button"
                 className="composer-send"
@@ -1571,15 +1675,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   });
                   void submit();
                 }}
-                disabled={
-                  sendDisabled ||
-                  (!draft.trim() && staged.length === 0 && currentCommentAttachments().length === 0)
-                }
+                disabled={sendDisabled || !hasComposerPayload}
+                aria-label={t('chat.send')}
+                title={t('chat.send')}
               >
                 <Icon name="send" size={13} />
                 <span>{t('chat.send')}</span>
               </button>
-            )}
+            ) : null}
           </div>
         </div>
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
@@ -2109,6 +2212,7 @@ function ToolsSkillsPanel({
   currentSkillId: string | null;
   onPick: (skill: SkillSummary) => void | Promise<void>;
 }) {
+  const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const visibleSkills = useMemo(
@@ -2149,11 +2253,11 @@ function ToolsSkillsPanel({
                   }
                 }}
                 disabled={pendingId !== null}
-                title={skill.description}
+                title={localizeSkillDescription(locale, skill)}
               >
                 <Icon name={active ? 'check' : 'file'} size={12} />
                 <span className="composer-tools-row-body">
-                  <strong>{skill.name}</strong>
+                  <strong>{localizeSkillName(locale, skill)}</strong>
                   <span className="composer-tools-row-meta">
                     {skill.mode}
                     {skill.surface ? ` · ${skill.surface}` : ''}
@@ -2392,6 +2496,7 @@ function MentionPopover({
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
 }) {
+  const { locale } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
@@ -2479,13 +2584,13 @@ function MentionPopover({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onPickSkill(skill)}
-                  title={skill.description}
+                  title={localizeSkillDescription(locale, skill)}
                 >
                   <Icon name={active ? 'check' : 'file'} size={12} />
                   <span className="mention-item-body">
-                    <strong>{skill.name}</strong>
+                    <strong>{localizeSkillName(locale, skill)}</strong>
                     <span className="mention-meta mention-meta--desc">
-                      {skill.description || skill.id}
+                      {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
                   <span className="mention-meta">{active ? 'Active' : skill.mode}</span>

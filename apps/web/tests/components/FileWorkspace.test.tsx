@@ -4,12 +4,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName } from '../../src/components/ProjectView';
-import { uploadProjectFiles } from '../../src/providers/registry';
+import {
+  fetchProjectFileText,
+  uploadProjectFiles,
+  writeProjectTextFile,
+} from '../../src/providers/registry';
 import type { ProjectFile } from '../../src/types';
 
 vi.mock('../../src/providers/registry', async () => {
@@ -18,16 +22,29 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
+    writeProjectTextFile: vi.fn(),
   };
 });
 
+const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
+const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// Needed else the ResizeObserver in SketchEditor crashes the test
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+  };
+});
 
 afterEach(() => {
   cleanup();
@@ -132,6 +149,44 @@ function changeInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   setter?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function renderDesignFilesPanel(overrides: Partial<React.ComponentProps<typeof DesignFilesPanel>> = {}) {
+  const props: React.ComponentProps<typeof DesignFilesPanel> = {
+    projectId: 'project-1',
+    files: [],
+    liveArtifacts: [],
+    onRefreshFiles: vi.fn(),
+    onOpenFile: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
+    onRenameFile: vi.fn(),
+    onDeleteFile: vi.fn(),
+    onDeleteFiles: vi.fn(),
+    onUpload: vi.fn(),
+    onUploadFiles: vi.fn(),
+    onPaste: vi.fn(),
+    onNewSketch: vi.fn(),
+    ...overrides,
+  };
+  return render(<DesignFilesPanel {...props} />);
+}
+
+function unreadableDropDataTransfer(fallbackFiles: File[] = []) {
+  return {
+    files: fallbackFiles,
+    items: [
+      {
+        webkitGetAsEntry: () => ({
+          isFile: true,
+          isDirectory: false,
+          name: 'stale.png',
+          file: (_done: (file: File) => void, fail?: (error: DOMException) => void) => {
+            fail?.(new DOMException('missing', 'NotFoundError'));
+          },
+        }),
+      },
+    ],
+  };
 }
 
 describe('FileWorkspace upload input', () => {
@@ -241,6 +296,35 @@ describe('FileWorkspace upload input', () => {
         'Uploaded 1 file(s), but 1 failed (permission denied).',
       );
     });
+  });
+
+  it('falls back to the browser file list when a dragged entry cannot be read', async () => {
+    const fallbackFile = new File(['mock'], 'fallback.png', { type: 'image/png' });
+    const onUploadFiles = vi.fn();
+    const { container } = renderDesignFilesPanel({ onUploadFiles });
+
+    fireEvent.drop(container.querySelector('.df-drop')!, {
+      dataTransfer: unreadableDropDataTransfer([fallbackFile]),
+    });
+
+    await waitFor(() => expect(onUploadFiles).toHaveBeenCalledWith([fallbackFile]));
+    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+  });
+
+  it('shows a recoverable read error when a dragged entry disappears before import', async () => {
+    const onUploadFiles = vi.fn();
+    const { container } = renderDesignFilesPanel({ onUploadFiles });
+
+    fireEvent.drop(container.querySelector('.df-drop')!, {
+      dataTransfer: unreadableDropDataTransfer(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'Could not read one or more dropped files or folders',
+      );
+    });
+    expect(onUploadFiles).not.toHaveBeenCalled();
   });
 
   it('hides the workspace focus control while the chat pane is open', () => {
@@ -361,7 +445,7 @@ describe('DesignFilesPanel plugin folders', () => {
       contribute?.click();
     });
     expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'contribute');
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       'Sent to the agent. The CLI run will continue in chat.',
     );
   });
@@ -676,5 +760,73 @@ describe('scrollWorkspaceTabsWithWheel', () => {
 
     expect(currentTarget.scrollLeft).toBe(200);
     expect(preventDefault).not.toHaveBeenCalled();
+  });
+});
+
+describe('FileWorkspace sketch save', () => {
+  it('keeps saving state visible for at least 500ms', async () => {
+    // Simulate user doing some edits in the workspace
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        version: 1,
+        items: [
+          { kind: 'pen', points: [{ x: 10, y: 20 }], color: '#000', size: 2 },
+        ],
+      }),
+    );
+    mockedWriteProjectTextFile.mockResolvedValue(file);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('canvas')).not.toBeNull();
+    });
+
+    vi.useFakeTimers();
+
+    const btn = screen.getByText('Save') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+
+    expect(btn.textContent).toBe('Saving…');
+    expect(btn.disabled).toBe(true);
+
+    // Before the 500ms floor is reached, still saving
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(btn.textContent).toBe('Saving…');
+    expect(btn.disabled).toBe(true);
+
+    // After 500ms total, saving should end and the checkmark should appear
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(btn.textContent).not.toBe('Saving…');
+    expect(btn.querySelector('svg')).not.toBeNull();
   });
 });

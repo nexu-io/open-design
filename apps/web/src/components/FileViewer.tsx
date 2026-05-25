@@ -7,6 +7,7 @@ import {
   type TrackingProjectKind,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
   trackArtifactHeaderClick,
@@ -32,6 +33,7 @@ import {
   fetchDeployConfig,
   fetchProjectDeployments,
   fetchProjectFilePreview,
+  fetchProjectFiles,
   fetchProjectFileText,
   uploadProjectFiles,
   liveArtifactPreviewUrl,
@@ -63,10 +65,12 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
   hasTweaksTemplate,
   hasUrlModeBridge,
+  htmlNeedsFocusGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -607,6 +611,10 @@ interface Props {
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
   onFileSaved?: () => Promise<void> | void;
+  // Open `openName` as a tab (focusing it) and close `closeName` in one
+  // atomic tab-state update. The React module pointer uses this to jump to the
+  // HTML entry that renders a module and drop the dead-end module tab.
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
 }
 
 export function FileViewer({
@@ -623,6 +631,7 @@ export function FileViewer({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onFileSaved,
+  onOpenFileReplacing,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -664,7 +673,13 @@ export function FileViewer({
     );
   }
   if (rendererMatch?.renderer.id === 'react-component') {
-    return <ReactComponentViewer projectId={projectId} file={file} />;
+    return (
+      <ReactComponentViewer
+        projectId={projectId}
+        file={file}
+        onOpenFileReplacing={onOpenFileReplacing}
+      />
+    );
   }
   if (rendererMatch?.renderer.id === 'markdown') {
     return <MarkdownViewer projectId={projectId} file={file} />;
@@ -869,6 +884,22 @@ export function LiveArtifactViewer({
   );
   const previewScale = zoom / 100;
   const previewActive = mode === 'preview';
+
+  // Instrument the live-artifact iframe so failed loads — usually a
+  // missing artifact file or a stuck `od://` resolver — surface in
+  // PostHog. iframe load errors don't propagate to window.error, so
+  // observability/install.ts cannot catch them globally.
+  useEffect(() => {
+    if (mode !== 'preview') return undefined;
+    const node = iframeRef.current;
+    if (!node) return undefined;
+    return trackIframeLoad({
+      iframe: node,
+      surface: 'live_artifact_preview',
+      artifactId: liveArtifact.artifactId,
+      projectId,
+    });
+  }, [mode, previewUrl, liveArtifact.artifactId, projectId]);
 
   function bumpZoom(delta: number) {
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
@@ -3126,12 +3157,51 @@ function clampBridgeCoordinate(value: unknown): number {
   return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
+// Shown instead of the React runtime when a .jsx/.tsx is a module loaded by a
+// sibling HTML entry (issue #2744): such a file has no standalone component to
+// render, so point the user at the page(s) that do. Clicking an entry opens
+// (or focuses) that page and closes the now-useless module tab.
+function ReactModulePointer({
+  entries,
+  onOpenEntry,
+}: {
+  entries: string[];
+  onOpenEntry?: (name: string) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="viewer-module-pointer" role="note">
+      <Icon name="info" size={20} />
+      <h2 className="viewer-module-pointer__title">{t('fileViewer.jsxModuleTitle')}</h2>
+      <p className="viewer-module-pointer__body">{t('fileViewer.jsxModuleBody')}</p>
+      <p className="viewer-module-pointer__cta">{t('fileViewer.jsxModuleCta')}</p>
+      <ul className="viewer-module-pointer__entries">
+        {entries.map((name) => (
+          <li key={name}>
+            <button
+              type="button"
+              className="viewer-module-pointer__link"
+              onClick={() => onOpenEntry?.(name)}
+              disabled={!onOpenEntry}
+            >
+              <Icon name="external-link" size={14} />
+              <span>{name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ReactComponentViewer({
   projectId,
   file,
+  onOpenFileReplacing,
 }: {
   projectId: string;
   file: ProjectFile;
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -3140,6 +3210,11 @@ function ReactComponentViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  // HTML entries that load this file as a Babel module. `null` = still
+  // checking; `[]` = standalone artifact; non-empty = a module of a
+  // multi-file React prototype, which has no standalone preview. Issue #2744.
+  const [moduleEntries, setModuleEntries] = useState<string[] | null>(null);
+  const isModule = (moduleEntries?.length ?? 0) > 0;
 
   useEffect(() => {
     setSource(null);
@@ -3147,6 +3222,36 @@ function ReactComponentViewer({
     void fetchProjectFileText(projectId, file.name).then((text) => {
       if (!cancelled) setSource(text ?? '');
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.name, file.mtime, reloadKey]);
+
+  // Detect whether this .jsx/.tsx is a module loaded by a sibling HTML entry.
+  // Runs before any srcdoc is built so a module never flashes the raw
+  // "No React component export found" error from the React runtime.
+  useEffect(() => {
+    setModuleEntries(null);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const files = await fetchProjectFiles(projectId);
+        const htmlNames = files
+          .filter((entry) => /\.html?$/i.test(entry.name))
+          .map((entry) => entry.name);
+        const htmlSources = new Map<string, string>();
+        await Promise.all(
+          htmlNames.map(async (name) => {
+            const text = await fetchProjectFileText(projectId, name).catch(() => null);
+            if (text != null) htmlSources.set(name, text);
+          }),
+        );
+        if (cancelled) return;
+        setModuleEntries(findHtmlEntriesReferencing(file.name, htmlSources));
+      } catch {
+        if (!cancelled) setModuleEntries([]);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -3173,7 +3278,9 @@ function ReactComponentViewer({
   const sourceExtension = file.name.toLowerCase().endsWith('.tsx') ? '.tsx' : '.jsx';
 
   useEffect(() => {
-    if (source === null) {
+    if (source === null || moduleEntries === null || isModule) {
+      // No source yet, still checking module status, or this file is a module
+      // with no standalone preview — never build the React runtime srcdoc.
       setSrcDoc('');
       return;
     }
@@ -3197,7 +3304,7 @@ function ReactComponentViewer({
     return () => {
       cancelled = true;
     };
-  }, [source, exportTitle]);
+  }, [source, exportTitle, moduleEntries, isModule]);
 
   return (
     <div className="viewer react-component-viewer">
@@ -3295,7 +3402,15 @@ function ReactComponentViewer({
         </div>
       </div>
       <div className="viewer-body">
-        {source === null || (mode === 'preview' && !srcDoc) ? (
+        {isModule && mode === 'preview' ? (
+          // Module of a multi-file prototype: no standalone preview, so the
+          // Preview tab shows a pointer to the HTML entry. The Source tab still
+          // renders the raw code below. Issue #2744.
+          <ReactModulePointer
+            entries={moduleEntries ?? []}
+            onOpenEntry={(htmlName) => onOpenFileReplacing?.(htmlName, file.name)}
+          />
+        ) : source === null || (mode === 'preview' && !srcDoc) ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <PreviewDrawOverlay>
@@ -3609,6 +3724,13 @@ function HtmlViewer({
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const activatedSrcDocTransportHtmlRef = useRef<string | null>(null);
+  // Tracks the iframe DOM node whose dedupe ref was last reset by the
+  // srcDoc onLoad handler. We reset the dedupe exactly once per freshly
+  // mounted iframe (the first load is the shell HTML), and skip every
+  // subsequent load on the same node (those are our own
+  // document.open/write/close inside the shell). See onLoad below for
+  // the infinite-loop story (issue #2361).
+  const srcDocFrameDedupeResetForRef = useRef<HTMLIFrameElement | null>(null);
   const isActivePreviewIframeSource = useCallback((source: MessageEventSource | null) => {
     return !!source && source === iframeRef.current?.contentWindow;
   }, []);
@@ -4013,6 +4135,10 @@ function HtmlViewer({
     () => source != null && htmlNeedsSandboxShim(source),
     [source],
   );
+  const needsFocusGuard = useMemo(
+    () => source != null && htmlNeedsFocusGuard(source),
+    [source],
+  );
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
@@ -4024,6 +4150,7 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     tweaksBridge: tweaksBridgeRequired,
     forceInline: forceInline || needsSandboxShim,
+    needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
@@ -4094,6 +4221,7 @@ function HtmlViewer({
       editBridge: manualEditMode,
       paletteBridge: true,
       initialPalette: selectedPalette,
+      previewFocusGuard: true,
     }) : ''),
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette],
   );
@@ -4859,6 +4987,9 @@ function HtmlViewer({
       setSource(result.source);
       sourceRef.current = result.source;
       setInlinedSource(null);
+      if (patch.kind !== 'set-style') {
+        setManualEditFrozenSource(result.source);
+      }
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
@@ -4912,6 +5043,7 @@ function HtmlViewer({
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
       setInlinedSource(null);
+      setManualEditFrozenSource(latest.beforeSource);
       setManualEditHistory(rest);
       setManualEditUndone((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
@@ -4943,6 +5075,7 @@ function HtmlViewer({
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
       setInlinedSource(null);
+      setManualEditFrozenSource(latest.afterSource);
       setManualEditUndone(rest);
       setManualEditHistory((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
@@ -6318,10 +6451,40 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
-                        // Belt-and-suspenders for the ready handshake: if the
-                        // postMessage racing the parent's listener registration
-                        // ever loses, the load event still tells us the shell
-                        // script ran to completion.
+                        // Reset the activation dedupe exactly ONCE per
+                        // freshly mounted iframe DOM node, never on the
+                        // subsequent load events that the same node
+                        // emits during normal srcDoc rendering.
+                        //
+                        // The iframe's load event fires twice for one
+                        // successful activation: once when the lazy
+                        // transport shell HTML loads, and again when
+                        // our own document.open/write/close inside the
+                        // shell finishes. PR #2699 reset the dedupe on
+                        // every load so that switching
+                        // preview -> source -> preview (which remounts
+                        // this iframe as a fresh DOM node) would
+                        // re-activate the new shell. But resetting on
+                        // every load also re-activated on the SECOND
+                        // load of a non-remounted frame, which
+                        // re-triggered document.open/write/close, which
+                        // re-fired the load event, ad infinitum. The
+                        // dedupe ref oscillated between null and the
+                        // current srcDoc thousands of times per render
+                        // and each iteration restarted every CSS
+                        // animation from its `from` keyframe. Designs
+                        // using `animation-fill-mode: both` with
+                        // `from { opacity: 0 }` stayed at opacity 0
+                        // forever and the preview read as blank.
+                        // That is issue #2361.
+                        //
+                        // Tracking the last frame we reset for lets us
+                        // keep PR #2699's "remount after Source toggle"
+                        // fix while breaking the loop on plain renders.
+                        if (frame && srcDocFrameDedupeResetForRef.current !== frame) {
+                          srcDocFrameDedupeResetForRef.current = frame;
+                          activatedSrcDocTransportHtmlRef.current = null;
+                        }
                         if (useLazySrcDocTransport) setSrcDocShellReady(true);
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();

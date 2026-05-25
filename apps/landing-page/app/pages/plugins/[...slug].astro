@@ -3,7 +3,7 @@ import '../../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../../_components/favicon-links.astro';
-import FontStylesheet from '../../_components/font-stylesheet.astro';
+import ResourceHints from '../../_components/resource-hints.astro';
 import GoogleAnalytics from '../../_components/google-analytics.astro';
 import { Header } from '../../_components/header';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
@@ -166,7 +166,7 @@ const breadcrumbJsonLd = {
     ))}
     <link rel='alternate' hreflang='x-default' href={xDefaultHref} />
     <FaviconLinks />
-    <FontStylesheet />
+    <ResourceHints />
     <meta property='og:type' content='article' />
     <meta property='og:site_name' content='Open Design' />
     <meta property='og:title' content={title} />

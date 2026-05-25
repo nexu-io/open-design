@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+type UpdaterFixtureChannel = "stable" | "beta" | "nightly" | "preview";
 
 export type UpdaterFixtureOptions = {
   artifactBody?: Buffer | string;
-  channel?: "stable" | "beta";
+  channel?: UpdaterFixtureChannel;
   host?: string;
   platform?: "mac" | "win";
   port?: number;
@@ -12,7 +15,7 @@ export type UpdaterFixtureOptions = {
 
 export type UpdaterFixtureInfo = {
   artifactUrl: string;
-  channel: "stable" | "beta";
+  channel: UpdaterFixtureChannel;
   checksumUrl: string;
   metadataUrl: string;
   origin: string;
@@ -60,7 +63,88 @@ function prereleaseCounterParts(version: string): { baseVersion: string; number:
   return null;
 }
 
-function channelMetadata(channel: "stable" | "beta", version: string): Record<string, unknown> {
+type ParsedRange = { end: number; start: number } | "invalid" | "unsatisfiable" | null;
+
+function parseNonNegativeInteger(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseByteRange(value: string | undefined, size: number): ParsedRange {
+  if (value == null) return null;
+  if (!value.startsWith("bytes=")) return "invalid";
+  const spec = value.slice("bytes=".length).trim();
+  if (spec.length === 0 || spec.includes(",")) return "invalid";
+
+  const match = /^(\d*)-(\d*)$/.exec(spec);
+  if (match == null) return "invalid";
+  const [, startText, endText] = match;
+  if (startText == null || endText == null || (startText.length === 0 && endText.length === 0)) {
+    return "invalid";
+  }
+  if (size <= 0) return "unsatisfiable";
+
+  if (startText.length === 0) {
+    const suffixLength = parseNonNegativeInteger(endText);
+    if (suffixLength == null || suffixLength === 0) return "invalid";
+    return {
+      end: size - 1,
+      start: Math.max(size - suffixLength, 0),
+    };
+  }
+
+  const start = parseNonNegativeInteger(startText);
+  if (start == null) return "invalid";
+  const end = endText.length === 0 ? size - 1 : parseNonNegativeInteger(endText);
+  if (end == null || start > end) return "invalid";
+  if (start >= size) return "unsatisfiable";
+  return {
+    end: Math.min(end, size - 1),
+    start,
+  };
+}
+
+function endWithOptionalBody(request: IncomingMessage, response: ServerResponse, body: Buffer | string): void {
+  response.end(request.method === "HEAD" ? undefined : body);
+}
+
+function sendArtifact(
+  request: IncomingMessage,
+  response: ServerResponse,
+  artifactBody: Buffer,
+  contentType: string,
+): void {
+  response.setHeader("accept-ranges", "bytes");
+  response.setHeader("content-type", contentType);
+  const range = parseByteRange(request.headers.range, artifactBody.byteLength);
+  if (range === "invalid" || range === "unsatisfiable") {
+    response.statusCode = 416;
+    response.setHeader("content-range", `bytes */${artifactBody.byteLength}`);
+    response.end();
+    return;
+  }
+
+  if (range != null) {
+    const body = artifactBody.subarray(range.start, range.end + 1);
+    response.statusCode = 206;
+    response.setHeader("content-length", String(body.byteLength));
+    response.setHeader("content-range", `bytes ${range.start}-${range.end}/${artifactBody.byteLength}`);
+    endWithOptionalBody(request, response, body);
+    return;
+  }
+
+  response.setHeader("content-length", String(artifactBody.byteLength));
+  endWithOptionalBody(request, response, artifactBody);
+}
+
+function normalizeChannel(value: string | undefined): UpdaterFixtureChannel {
+  if (value == null || value.length === 0) return "stable";
+  if (value === "stable" || value === "beta" || value === "nightly" || value === "preview") return value;
+  throw new Error(`unsupported updater fixture channel: ${value}`);
+}
+
+function channelMetadata(channel: UpdaterFixtureChannel, version: string): Record<string, unknown> {
   if (channel === "stable") {
     return {
       baseVersion: version,
@@ -69,19 +153,42 @@ function channelMetadata(channel: "stable" | "beta", version: string): Record<st
     };
   }
 
+  if (channel === "beta") {
+    const countedVersion = prereleaseCounterParts(version);
+    if (countedVersion == null) {
+      throw new Error(`beta updater fixture version must match x.y.z-<label>.N; got ${version}`);
+    }
+    return {
+      baseVersion: countedVersion.baseVersion,
+      betaNumber: countedVersion.number,
+      betaVersion: version,
+    };
+  }
+
   const countedVersion = prereleaseCounterParts(version);
   if (countedVersion == null) {
-    throw new Error(`beta updater fixture version must match x.y.z-<label>.N; got ${version}`);
+    throw new Error(`${channel} updater fixture version must match x.y.z-<label>.N; got ${version}`);
   }
+  if (channel === "nightly") {
+    return {
+      baseVersion: countedVersion.baseVersion,
+      nightlyNumber: countedVersion.number,
+      nightlyVersion: version,
+      releaseVersion: version,
+      stableVersion: countedVersion.baseVersion,
+    };
+  }
+
   return {
     baseVersion: countedVersion.baseVersion,
-    betaNumber: countedVersion.number,
-    betaVersion: version,
+    previewNumber: countedVersion.number,
+    previewVersion: version,
+    releaseVersion: version,
   };
 }
 
 export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions = {}): Promise<UpdaterFixtureServer> {
-  const channel = options.channel ?? "stable";
+  const channel = normalizeChannel(options.channel);
   const host = options.host ?? "127.0.0.1";
   const platform = options.platform ?? "mac";
   const port = options.port ?? 0;
@@ -139,9 +246,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       return;
     }
     if (path === `/${channel}/versions/${version}/${artifactName}`) {
-      response.setHeader("content-length", String(artifactBody.byteLength));
-      response.setHeader("content-type", contentType);
-      response.end(artifactBody);
+      sendArtifact(request, response, artifactBody, contentType);
       return;
     }
     if (path === `/${channel}/versions/${version}/${artifactName}.sha256`) {

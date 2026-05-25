@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import { electronBuilderVersionForAppVersion } from "../versions.js";
 import {
   WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
   WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
@@ -89,6 +90,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPa
 async function runElectronBuilderRaw(config: ToolPackConfig, paths: WinPaths, projectDir: string): Promise<void> {
   const namespaceToken = sanitizeNamespace(config.namespace);
   const packagedVersion = await readPackagedVersion(config);
+  const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
   const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
     ? await writeWebStandaloneHookConfig(config, paths)
     : null;
@@ -106,7 +108,7 @@ async function runElectronBuilderRaw(config: ToolPackConfig, paths: WinPaths, pr
       main: "./main.cjs",
       name: "open-design-packaged-app",
       productName: PRODUCT_NAME,
-      version: packagedVersion,
+      version: packageVersion,
     },
     extraResources: [
       { from: paths.resourceRoot, to: "open-design" },
@@ -218,7 +220,7 @@ async function rewriteUnpackedAppPackageVersion(unpackedRoot: string, packagedVe
   const packageJsonPath = join(unpackedRoot, "resources", "app", "package.json");
   if (!(await pathExists(packageJsonPath))) return;
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
-  packageJson.version = packagedVersion;
+  packageJson.version = electronBuilderVersionForAppVersion(packagedVersion);
   await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 }
 

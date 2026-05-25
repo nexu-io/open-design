@@ -36,6 +36,7 @@ interface UsePluginFacetsArgs {
   // still click a different category afterwards without the effect
   // snapping back on every re-render.
   presetSelection?: FacetSelection | null;
+  locale?: string;
 }
 
 export interface UsePluginFacetsResult {
@@ -65,6 +66,7 @@ export function usePluginFacets({
   savedPluginIds,
   preferDefaultFacet = true,
   presetSelection = null,
+  locale,
 }: UsePluginFacetsArgs): UsePluginFacetsResult {
   const [mode, setMode] = useState<FilterMode>('all');
   const [selection, setSelection] = useState<FacetSelection>(EMPTY_SELECTION);
@@ -137,8 +139,8 @@ export function usePluginFacets({
       mode === 'saved'
         ? savedList
         : applyFacetSelection(visiblePlugins, selection);
-    return filterByQuery(base, query);
-  }, [mode, savedList, visiblePlugins, selection, query]);
+    return filterByQuery(base, query, locale);
+  }, [mode, savedList, visiblePlugins, selection, query, locale]);
 
   function pickCategory(slug: string | null): void {
     if (mode === 'saved') setMode('all');

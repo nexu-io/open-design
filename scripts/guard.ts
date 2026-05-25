@@ -60,6 +60,7 @@ const residualAllowedExactPaths = new Set([
   "packages/contracts/esbuild.config.mjs",
   "packages/creative-memory-system/esbuild.config.mjs",
   "packages/diagnostics/esbuild.config.mjs",
+  "packages/download/esbuild.config.mjs",
   "packages/host/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
@@ -83,8 +84,6 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
-  "tools/pr/bin/tools-pr.mjs",
-  "tools/pr/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
@@ -591,7 +590,6 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
-  ["pr", "directory"],
   ["serve", "directory"],
 ]);
 
@@ -606,7 +604,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, pr/, and serve/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and serve/`);
       continue;
     }
 

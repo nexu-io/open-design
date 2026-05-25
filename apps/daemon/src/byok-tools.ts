@@ -9,10 +9,8 @@
 // back as a `role: 'tool'` message → re-issue the completion. The chat surface
 // stays the same; the tool dispatch happens entirely daemon-side.
 //
-// Today we ship one tool — `generate_image` — backed by SenseAudio's
-// /v1/image/sync endpoint, since the BYOK chat session already authenticates
-// against SenseAudio with the same API key. Additional tools (TTS, video,
-// research) can be added here as the BYOK surface expands.
+// Today we ship image, video, and speech tools backed by SenseAudio endpoints,
+// since the BYOK chat session already authenticates with the same API key.
 
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
@@ -43,6 +41,18 @@ export function isSenseAudioImageModel(value: unknown): value is string {
 
 const SENSEAUDIO_DEFAULT_BASE_URL = 'https://api.senseaudio.cn';
 const PROMPT_MAX_LENGTH = 2000;
+const SENSEAUDIO_TTS_MODEL = 'senseaudio-tts-1.5-260319';
+const SENSEAUDIO_DEFAULT_VOICE_ID = 'female_0033_b';
+const HEX_AUDIO_PATTERN = /^[0-9a-fA-F]+$/;
+
+function appendSenseAudioApiPath(baseUrl: string, path: string): string {
+  const url = new URL(baseUrl);
+  const trimmed = url.pathname.replace(/\/+$/, '');
+  url.pathname = /\/v\d+(\/|$)/.test(trimmed)
+    ? `${trimmed}${path}`
+    : `${trimmed}/v1${path}`;
+  return url.toString();
+}
 
 // SenseAudio video — the API only documents one model today, so the
 // wire id is a const. The chat tool's `generate_video` param surface
@@ -119,6 +129,30 @@ export const BYOK_SENSEAUDIO_TOOLS = [
           },
         },
         required: ['prompt'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generate_speech',
+      description:
+        'Generate a text-to-speech voiceover using SenseAudio TTS. Returns a URL pointing to the rendered MP3. Use this whenever the user asks for narration, voiceover, speech, TTS, or spoken audio. After this tool succeeds, reply with a clickable markdown link to the MP3.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description:
+              'Exact script to speak. Include only the words that should be spoken, not production notes.',
+          },
+          voice_id: {
+            type: 'string',
+            description:
+              `Optional SenseAudio voice id. Defaults to ${SENSEAUDIO_DEFAULT_VOICE_ID}.`,
+          },
+        },
+        required: ['text'],
       },
     },
   },
@@ -215,6 +249,102 @@ export interface ImageToolResult {
   /** Short human-readable failure reason. Stuffed into the `tool` role
    *  reply so the LLM can apologize / retry. */
   error?: string;
+}
+
+export async function executeGenerateSpeech(
+  args: { text?: unknown; voice_id?: unknown },
+  ctx: BYOKToolContext,
+): Promise<ImageToolResult> {
+  const text = typeof args.text === 'string' ? args.text.trim() : '';
+  if (!text) return { ok: false, error: 'text is required' };
+
+  let dir: string;
+  try {
+    dir = await ensureProject(ctx.projectsRoot, ctx.projectId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `invalid projectId for speech storage: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  const apiKey = ctx.upstreamApiKey;
+  if (!apiKey) return { ok: false, error: 'no SenseAudio API key available' };
+
+  const voiceId =
+    typeof args.voice_id === 'string' && args.voice_id.trim()
+      ? args.voice_id.trim()
+      : SENSEAUDIO_DEFAULT_VOICE_ID;
+  const baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;
+  let data: {
+    data?: { audio?: string };
+    base_resp?: { status_code?: number; status_msg?: string };
+  };
+  try {
+    const resp = await fetch(appendSenseAudioApiPath(baseUrl, '/t2a_v2'), {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: SENSEAUDIO_TTS_MODEL,
+        text,
+        stream: false,
+        voice_setting: {
+          voice_id: voiceId,
+          speed: 1,
+          vol: 1,
+          pitch: 0,
+        },
+        audio_setting: {
+          format: 'mp3',
+          sample_rate: 32000,
+          bitrate: 128000,
+          channel: 2,
+        },
+      }),
+    });
+    const respText = await resp.text();
+    if (!resp.ok) {
+      return { ok: false, error: `senseaudio speech ${resp.status}: ${respText.slice(0, 240)}` };
+    }
+    try {
+      data = JSON.parse(respText) as typeof data;
+    } catch {
+      return { ok: false, error: `senseaudio speech non-JSON: ${respText.slice(0, 200)}` };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    return {
+      ok: false,
+      error: `senseaudio speech api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    };
+  }
+  const hex = data?.data?.audio;
+  if (typeof hex !== 'string' || !hex) {
+    return { ok: false, error: 'senseaudio speech response missing data.audio' };
+  }
+  if (hex.length % 2 !== 0 || !HEX_AUDIO_PATTERN.test(hex)) {
+    return { ok: false, error: 'senseaudio speech response contained invalid hex audio' };
+  }
+  const bytes = Buffer.from(hex, 'hex');
+  if (bytes.length === 0) return { ok: false, error: 'senseaudio speech decoded zero bytes' };
+
+  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+  const filename = `byok-speech-${id}.mp3`;
+  await writeFile(path.join(dir, filename), bytes);
+
+  return {
+    ok: true,
+    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+  };
 }
 
 function sanitizeAspectRatio(raw: unknown): string {
@@ -595,4 +725,3 @@ export async function executeGenerateVideo(
     url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
   };
 }
-

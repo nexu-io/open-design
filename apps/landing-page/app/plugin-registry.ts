@@ -626,9 +626,19 @@ const loadBundledOfficialEntries = (
     .map((manifestPath) => officialEntryFromManifest(manifestPath, locale))
     .filter((entry): entry is PublicPluginEntry => Boolean(entry));
 
+const SHOULD_CACHE_PUBLIC_PLUGINS = import.meta.env.PROD;
+const publicPluginsCache = new Map<LandingLocaleCode, ReadonlyArray<PublicPluginEntry>>();
+
 export const getPublicPlugins = (
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): PublicPluginEntry[] => {
+  if (SHOULD_CACHE_PUBLIC_PLUGINS) {
+    const cached = publicPluginsCache.get(locale);
+    if (cached) {
+      return [...cached];
+    }
+  }
+
   const byId = new Map<string, PublicPluginEntry>();
 
   for (const entry of loadRegistryEntries(locale)) {
@@ -669,7 +679,7 @@ export const getPublicPlugins = (
     }
   }
 
-  return [...byId.values()].sort((left, right) => {
+  const plugins = [...byId.values()].sort((left, right) => {
     const sourceOrder = (entry: PublicPluginEntry) =>
       entry.registryId === 'official' ? 0 : entry.registryId === 'community' ? 1 : 2;
     const order = sourceOrder(left) - sourceOrder(right);
@@ -678,6 +688,13 @@ export const getPublicPlugins = (
     }
     return left.title.localeCompare(right.title, locale);
   });
+
+  if (!SHOULD_CACHE_PUBLIC_PLUGINS) {
+    return plugins;
+  }
+
+  publicPluginsCache.set(locale, plugins);
+  return [...plugins];
 };
 
 export const getRegistryCounts = (plugins = getPublicPlugins()) => ({

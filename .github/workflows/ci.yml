@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+  merge_group:
   # Release validation is owned by the release workflows rather than this CI
   # workflow: `release-stable` has a verify job before publishing, and
   # `release-beta` builds from its selected release commit. Keep this trigger
@@ -73,7 +74,7 @@ jobs:
               if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
-              if [[ "$file" == "package.json" || "$file" == "apps/"*/"package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
+              if [[ "$file" == "package.json" || "$file" == "apps/daemon/package.json" || "$file" == "apps/web/package.json" || "$file" == "apps/desktop/package.json" || "$file" == "apps/packaged/package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
                 daemon_tests_required=true
                 web_tests_required=true
                 tools_dev_tests_required=true
@@ -85,7 +86,7 @@ jobs:
               case "$file" in
                 *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
                   ;;
-                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml)
+                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml|.github/workflows/blog-3day-report.yml|.github/workflows/seo-daily-report.yml|.github/workflows/actionlint.yml|.github/workflows/visual-pr-capture.yml|.github/workflows/visual-pr-comment.yml)
                   ;;
                 *)
                   workspace_validation_required=true
@@ -106,6 +107,15 @@ jobs:
               || [ "$tools_pack_tests_required" = "true" ]; then
               workspace_validation_required=true
             fi
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            daemon_tests_required=true
+            web_tests_required=true
+            tools_dev_tests_required=true
+            tools_pack_tests_required=true
+            # Main already runs .github/workflows/nix-check.yml, so keep this
+            # workflow's push path focused on the non-Nix workspace signal.
+            nix_validation_required=false
+            workspace_validation_required=true
           else
             daemon_tests_required=true
             web_tests_required=true
@@ -155,30 +165,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
@@ -212,8 +200,8 @@ jobs:
       - name: Check i18n structure
         run: pnpm i18n:check
 
-  core_tests:
-    name: Core package tests
+  workspace_unit_tests:
+    name: Workspace unit tests
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
     runs-on: ubuntu-latest
@@ -223,77 +211,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Core package tests
+      - name: Workspace unit tests
         run: |
           pnpm --filter @open-design/contracts test
           pnpm --filter @open-design/host test
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
-
-  tools_workspace_tests:
-    name: Tools workspace tests
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Tools workspace smoke tests
-        run: |
           if [ "${{ needs.change_scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi
@@ -302,50 +229,24 @@ jobs:
           fi
 
   daemon_workspace_tests:
-    name: Daemon workspace tests (${{ matrix.shard }}/2)
+    name: Daemon workspace tests
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.daemon_tests_required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
       - name: Prebuild daemon entrypoint declarations
         run: pnpm --filter @open-design/daemon build
 
       - name: Daemon workspace tests
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard=${{ matrix.shard }}/2
+        run: pnpm --filter @open-design/daemon test
 
   web_workspace_tests:
     name: Web workspace tests
@@ -358,30 +259,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
       - name: Prebuild web sidecar declarations
         run: pnpm --filter @open-design/web build:sidecar
@@ -389,164 +268,26 @@ jobs:
       - name: Web workspace tests
         run: pnpm --filter @open-design/web test
 
-  app_tests:
-    name: App workspace tests
+  browser_tests:
+    name: Browser tests
     needs:
       - change_scopes
-      - tools_workspace_tests
-      - daemon_workspace_tests
-      - web_workspace_tests
-    if: ${{ always() && needs.change_scopes.result == 'success' && (needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' || needs.change_scopes.outputs.daemon_tests_required == 'true' || needs.change_scopes.outputs.web_tests_required == 'true') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Check app workspace test jobs
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-          TOOLS_REQUIRED: ${{ needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' }}
-          DAEMON_REQUIRED: ${{ needs.change_scopes.outputs.daemon_tests_required }}
-          WEB_REQUIRED: ${{ needs.change_scopes.outputs.web_tests_required }}
-        run: |
-          set -euo pipefail
-          echo "$NEEDS_JSON" | jq .
-          failures=()
-          if [ "$TOOLS_REQUIRED" = "true" ] && [ "$(echo "$NEEDS_JSON" | jq -r '.tools_workspace_tests.result')" != "success" ]; then
-            failures+=("tools_workspace_tests=$(echo "$NEEDS_JSON" | jq -r '.tools_workspace_tests.result')")
-          fi
-          if [ "$DAEMON_REQUIRED" = "true" ] && [ "$(echo "$NEEDS_JSON" | jq -r '.daemon_workspace_tests.result')" != "success" ]; then
-            failures+=("daemon_workspace_tests=$(echo "$NEEDS_JSON" | jq -r '.daemon_workspace_tests.result')")
-          fi
-          if [ "$WEB_REQUIRED" = "true" ] && [ "$(echo "$NEEDS_JSON" | jq -r '.web_workspace_tests.result')" != "success" ]; then
-            failures+=("web_workspace_tests=$(echo "$NEEDS_JSON" | jq -r '.web_workspace_tests.result')")
-          fi
-          if [ "${#failures[@]}" -gt 0 ]; then
-            printf 'App workspace validation failed:\n'
-            printf '%s\n' "${failures[@]}"
-            exit 1
-          fi
-
-  e2e_vitest:
-    name: E2E vitest
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Some Vitest-based smoke tests drive the browser directly through
-      # @playwright/test. Restore browser binaries without saving from CI runs;
-      # the key follows the @playwright/test version so browser revisions
-      # update with package bumps.
-      - name: Resolve Playwright version
-        id: playwright-version
-        run: |
-          version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test'].replace(/[^0-9.]/g,'')")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Playwright browser cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install Playwright browsers
-        run: pnpm -C e2e exec playwright install --with-deps chromium
-
-      - name: E2E vitest
-        run: pnpm --filter @open-design/e2e test
-
-  ui_e2e_critical:
-    name: Playwright critical (${{ matrix.group }})
-    needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - group: core
-            grep_flag: --grep-invert
-            grep_pattern: home starters|home hero
-          - group: starters
-            grep_flag: --grep
-            grep_pattern: home starters|home hero
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
         with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Restore Playwright browser binaries without saving from CI runs. The
-      # key follows the @playwright/test version so browser revisions update
-      # with package bumps.
-      - name: Resolve Playwright version
-        id: playwright-version
-        run: |
-          version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test'].replace(/[^0-9.]/g,'')")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Playwright browser cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install Playwright browsers
-        run: pnpm -C e2e exec playwright install --with-deps chromium
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
 
       - name: Prebuild workspace type declarations
         run: |
@@ -554,10 +295,13 @@ jobs:
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
+      - name: E2E vitest
+        run: pnpm --filter @open-design/e2e test
+
       - name: Playwright critical
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
-          pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.grep_flag }} '${{ matrix.grep_pattern }}' ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts
+          pnpm -C e2e exec playwright test -c playwright.config.ts ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts
 
   build_workspaces:
     name: Build workspaces
@@ -570,30 +314,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.8
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore pnpm store cache
-        uses: actions/cache/restore@v5.0.5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
 
       - name: Prebuild workspace type declarations
         run: |
@@ -615,10 +337,10 @@ jobs:
       - change_scopes
       - preflight
       - nix_validation
-      - core_tests
-      - app_tests
-      - e2e_vitest
-      - ui_e2e_critical
+      - workspace_unit_tests
+      - daemon_workspace_tests
+      - web_workspace_tests
+      - browser_tests
       - build_workspaces
     if: ${{ always() }}
     runs-on: ubuntu-latest

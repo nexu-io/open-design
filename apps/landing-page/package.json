@@ -1,11 +1,12 @@
 {
   "name": "@open-design/landing-page",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 127.0.0.1 --port 17574",
-    "build": "astro check && astro build",
+    "build": "astro check && pnpm run build:static",
+    "build:static": "astro build && tsx scripts/copy-example-html.ts",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
     "previews": "tsx scripts/generate-previews.ts",
     "typecheck": "astro check"
@@ -13,6 +14,10 @@
   "dependencies": {
     "@astrojs/rss": "4.0.18",
     "@astrojs/sitemap": "3.7.2",
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource-variable/inter-tight": "5.2.7",
+    "@fontsource-variable/jetbrains-mono": "5.2.8",
+    "@fontsource-variable/playfair-display": "5.2.8",
     "astro": "6.3.5",
     "react": "18.3.1",
     "react-dom": "18.3.1"

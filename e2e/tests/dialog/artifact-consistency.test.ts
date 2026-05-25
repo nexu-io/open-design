@@ -227,17 +227,25 @@ async function waitForProjectFile(
   projectId: string,
   fileName: string,
 ): Promise<ProjectFile> {
-  let latest: ProjectFile[] = [];
+  let latest: ProjectFile | undefined;
   await expect.poll(async () => {
     const response = await requestJson<{ files: ProjectFile[] }>(
       webUrl,
       `/api/projects/${encodeURIComponent(projectId)}/files`,
     );
-    latest = response.files;
-    return response.files.some((file) => file.name === fileName);
-  }, { timeout: 30_000 }).toBe(true);
+    latest = response.files.find((file) => file.name === fileName);
+    return {
+      entry: latest?.artifactManifest?.entry ?? null,
+      name: latest?.name ?? null,
+      title: latest?.artifactManifest?.title ?? null,
+    };
+  }, { timeout: 30_000 }).toEqual({
+    entry: fileName,
+    name: fileName,
+    title: HEADING,
+  });
 
-  const file = latest.find((candidate) => candidate.name === fileName);
+  const file = latest;
   if (!file) throw new Error(`project file ${fileName} did not remain listed`);
   return file;
 }

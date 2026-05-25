@@ -36,6 +36,7 @@ export function PluginExampleDetail({
   const t = useT();
   const [html, setHtml] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [unavailableKind, setUnavailableKind] = useState<string | null>(null);
   const inFlightRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -44,6 +45,7 @@ export function PluginExampleDetail({
     try {
       setHtml(null);
       setError(null);
+      setUnavailableKind(null);
       const result: SkillExampleResult = exampleStem
         ? await fetchPluginExampleHtml(record.id, exampleStem)
         : await fetchPluginPreviewHtml(record.id);
@@ -53,9 +55,16 @@ export function PluginExampleDetail({
         setError(result.error);
         setHtml(undefined);
       } else {
-        // unavailable: skill declares a non-HTML preview; treat as a
-        // calm empty state rather than an error (see registry.ts §897).
-        setError(null);
+        // unavailable: the plugin's manifest declares no shipped
+        // preview entry (or the daemon 404s on its /preview path —
+        // common for bundled plugins like example-live-artifact whose
+        // manifest references an example file that doesn't ship).
+        // Forward to PreviewModal as a typed unavailable view so it
+        // renders the calm "no shipped preview" placeholder instead
+        // of the misleading "Couldn't load this example." error. The
+        // skill helper has had this treatment since #897; the plugin
+        // helper gained it later — keep both consumers in lockstep.
+        setUnavailableKind(result.kind);
         setHtml(undefined);
       }
     } finally {
@@ -86,6 +95,7 @@ export function PluginExampleDetail({
           label: t('examples.previewLabel'),
           html,
           error,
+          unavailable: unavailableKind ? { kind: unavailableKind } : null,
           deck: isDeck,
         },
       ]}

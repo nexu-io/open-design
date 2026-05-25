@@ -111,6 +111,7 @@ test('captures the design systems page surface', async ({ page }) => {
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await expect(page.getByTestId('design-systems-tab')).toBeVisible();
+  await page.getByRole('tab', { name: 'Official presets' }).click();
   await expect(page.getByTestId('design-system-card-agentic')).toBeVisible();
   await expect(page.getByTestId('design-system-card-airbnb')).toBeVisible();
   await waitForVisualFonts(page);

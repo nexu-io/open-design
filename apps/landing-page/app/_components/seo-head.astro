@@ -24,6 +24,7 @@ import {
   stripLocaleFromPath,
 } from '../i18n';
 import FaviconLinks from './favicon-links.astro';
+import ResourceHints from './resource-hints.astro';
 
 export interface SeoHeadProps {
   /** 'website' for landing/list pages, 'article' for blog posts. */
@@ -155,6 +156,7 @@ const blogJsonLd =
 <link rel='alternate' hreflang='x-default' href={xDefaultHref} />
 <link rel='alternate' type='application/rss+xml' title='Open Design Blog' href={rssUrl} />
 <FaviconLinks />
+<ResourceHints />
 
 {props.googleSiteVerification && (
   <meta name='google-site-verification' content={props.googleSiteVerification} />

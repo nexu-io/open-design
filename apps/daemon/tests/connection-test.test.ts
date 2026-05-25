@@ -271,6 +271,39 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('does not double-append v1beta when listing Gemini models', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      expect(url).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=goog-key',
+      );
+      return jsonResponse({
+        models: [
+          {
+            name: 'models/gemini-2.0-flash',
+            displayName: 'Gemini 2.0 Flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'goog-key',
+      }),
+    });
+
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      models: [{ id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }],
+    });
+  });
+
   it('lets unsupported contract protocols return a classified provider-models result', async () => {
     const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
@@ -972,6 +1005,302 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('retries Azure OpenAI-compatible v1 alias connection tests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_completion_tokens: 100,
+      stream: false,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure deployment-mode connection tests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({ max_tokens: 100, stream: false });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({ max_completion_tokens: 100, stream: false });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('reports Azure retry latency from the final provider response', async () => {
+    let now = 10_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.fn((_input: FetchInput, init?: FetchInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        now += 25;
+        return Promise.resolve(jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 }));
+      }
+      now += 75;
+      return Promise.resolve(jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      })).resolves.toMatchObject({
+        ok: true,
+        latencyMs: 100,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('reports Azure failed-retry latency from the final provider response', async () => {
+    let now = 20_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.fn((_input: FetchInput, init?: FetchInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        now += 25;
+        return Promise.resolve(jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 }));
+      }
+      now += 75;
+      return Promise.resolve(jsonResponse({
+        error: {
+          message: 'retry failed',
+        },
+      }, { status: 500 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      })).resolves.toMatchObject({
+        ok: false,
+        kind: 'upstream_unavailable',
+        status: 500,
+        latencyMs: 100,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('keeps max_tokens for legacy OpenAI connection tests', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-good',
+        model: 'gpt-4o',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'gpt-4o',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for DeepSeek-style OpenAI-compatible connection tests', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.deepseek.com/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'deepseek-chat', object: 'model' }],
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'deepseek-key',
+        model: 'deepseek-chat',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => String(input) === 'https://api.deepseek.com/v1/chat/completions',
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deepseek-chat',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for Azure gpt-4o connection tests on the default deployment path', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'gpt-4o',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
   it('keeps the default Azure api-version in connection tests when the field is blank', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
@@ -1104,6 +1433,38 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        candidates: [
+          { content: { parts: [{ text: 'ok' }] } },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'goog-key',
+        model: 'models/gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.sample).toBe('ok');
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(String(upstream![0])).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    );
+  });
+
   it('rejects malformed bodies with HTTP 400 (not the test envelope)', async () => {
     const res = await realFetch(`${baseUrl}/api/test/connection`, {
       method: 'POST',
@@ -1180,6 +1541,7 @@ setImmediate(() => process.exit(0));
 const fs = require('node:fs');
 fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
   CODEX_HOME: process.env.CODEX_HOME || null,
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
   CODEX_API_KEY: process.env.CODEX_API_KEY || null,
   SHOULD_NOT_PASS: process.env.OD_CONNECTION_TEST_SHOULD_NOT_PASS || null,
 }));
@@ -1187,6 +1549,11 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
+          // CODEX_API_KEY only flows through when the user has also
+          // configured a custom OPENAI_BASE_URL — i.e. they intend to
+          // authenticate Codex CLI against a third-party gateway. Without
+          // the base URL, spawnEnvForAgent strips the credential so Codex
+          // CLI's own `codex login` wins (issue #2420).
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -1196,6 +1563,7 @@ setImmediate(() => process.exit(0));
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
+                  OPENAI_BASE_URL: 'https://proxy.example.com/v1',
                   CODEX_API_KEY: 'codex-key',
                   OD_CONNECTION_TEST_SHOULD_NOT_PASS: 'leaked',
                 },
@@ -1214,8 +1582,67 @@ setImmediate(() => process.exit(0));
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
+              OPENAI_BASE_URL: 'https://proxy.example.com/v1',
               CODEX_API_KEY: 'codex-key',
               SHOULD_NOT_PASS: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('strips stale Codex API keys when no custom OPENAI_BASE_URL is configured', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-strip-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const codexHome = path.join(markerDir, 'codex-home');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  CODEX_HOME: process.env.CODEX_HOME || null,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
+}));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+        async () => {
+          // Simulates the user flow that triggered issue #2420: a stale
+          // BYOK OPENAI_API_KEY sat in agentCliEnv.codex from a previous
+          // session, the user cleared the BYOK dialog (which doesn't
+          // touch agentCliEnv) and switched back to Local CLI. Without
+          // an OPENAI_BASE_URL the daemon must keep the secret out of
+          // the spawn so Codex CLI's own `codex login` wins.
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              agentCliEnv: {
+                codex: {
+                  CODEX_HOME: codexHome,
+                  OPENAI_API_KEY: 'sk-stale-byok',
+                  CODEX_API_KEY: 'sk-stale-byok',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              CODEX_HOME: codexHome,
+              OPENAI_API_KEY: null,
+              CODEX_API_KEY: null,
             }),
           );
         },

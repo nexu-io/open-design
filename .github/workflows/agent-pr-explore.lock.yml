@@ -1,0 +1,36 @@
+# Placeholder for PR Explore Agent.
+#
+# GitHub only reliably triggers pull_request workflows once a workflow
+# file with the same path exists on the default branch. The real
+# generated gh-aw workflow is introduced by PR #2604; this placeholder
+# is intentionally inert and can be replaced by the compiled workflow
+# when that PR merges.
+name: "PR Explore Agent - placeholder"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "apps/web/**"
+      - "apps/landing-page/**"
+      - "design-templates/open-design-landing/**"
+      - "skills/**"
+      - "design-systems/**"
+      - "craft/**"
+      - "templates/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/agent-pr-explore.lock.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    name: Placeholder
+    if: ${{ github.event_name == 'agent_pr_explore_placeholder_never' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "agent-pr-explore placeholder only"

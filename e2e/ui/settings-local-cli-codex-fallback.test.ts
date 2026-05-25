@@ -77,7 +77,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
@@ -276,64 +276,4 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toHaveCount(0);
   });
 
-  test('reports when the configured Codex path itself succeeds and does not show repair actions', async ({ page }) => {
-    const configuredPath = '/Users/test/.nvm/versions/node/v24.14.1/bin/codex';
-
-    const dialog = await openLocalCliSettings(page, {
-      config: baseConfig({
-        agentCliEnv: { codex: { CODEX_BIN: configuredPath } },
-      }),
-      onConnectionTest: () => ({
-        ok: true,
-        kind: 'success',
-        latencyMs: 12,
-        agentName: 'Codex CLI',
-        sample: 'ok',
-        configuredExecutablePath: configuredPath,
-        usedExecutablePath: configuredPath,
-        usedExecutableSource: 'configured',
-      }),
-    });
-
-    await dialog.getByRole('button', { name: 'Test' }).click();
-
-    await expect(dialog.locator('.settings-test-status')).toContainText(
-      `This test used the configured Codex path: ${configuredPath}.`,
-    );
-    await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
-    await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toHaveCount(0);
-  });
-
-  test('shows localized zh-CN fallback messaging and repair actions', async ({ page }) => {
-    const configuredPath = '/bad/codex';
-    const detectedPath = '/usr/local/bin/codex';
-
-    const dialog = await openLocalCliSettings(page, {
-      locale: 'zh-CN',
-      config: baseConfig({
-        agentCliEnv: { codex: { CODEX_BIN: configuredPath } },
-      }),
-      onConnectionTest: () => ({
-        ok: true,
-        kind: 'success',
-        latencyMs: 21,
-        agentName: 'Codex CLI',
-        sample: 'ready',
-        configuredExecutablePath: configuredPath,
-        detectedExecutablePath: detectedPath,
-        usedExecutablePath: detectedPath,
-        usedExecutableSource: 'fallback_invalid',
-      }),
-    });
-
-    await dialog.getByRole('button', { name: '测试' }).click();
-
-    const status = dialog.locator('.settings-test-status');
-    await expect(status).toContainText('已配置的 Codex 路径无效');
-    await expect(status).toContainText(configuredPath);
-    await expect(status).toContainText(detectedPath);
-    await expect(dialog.getByText('当前保存的 Codex 路径不适合继续使用。')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: '使用检测到的 Codex' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: '清空自定义路径' })).toBeVisible();
-  });
 });

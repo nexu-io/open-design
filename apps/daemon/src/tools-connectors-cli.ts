@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -589,10 +590,18 @@ function extractDirectoryEntries(value: unknown): GithubDirectoryEntry[] {
   return [...entries.values()].sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function scoreDesignFile(repoPath: string): number {
+export function scoreDesignFile(repoPath: string): number {
   const normalized = repoPath.toLowerCase();
   if (shouldSkipRepoPath(normalized)) return -1;
   let score = 0;
+  // Native / non-web design-token source. Without this, a SwiftUI, Kotlin, or
+  // other non-JS repo has every source file score 0, so config dotfiles (which
+  // hit the generic text bonus below) win the ranking and the real source is
+  // never snapshotted. Design-token files (ColorSystem.swift, Typography.kt,
+  // Spacing.swift, ...) get the high boost; other native source gets a solid
+  // floor so it outranks config noise.
+  if (/(^|\/)(color|colors|colour|colours|theme|themes|palette|palettes|typography|type|fonts?|spacing|sizing|metrics|dimens|tokens?|designsystem|design-?system|design|styles?|styling|appearance|brand|branding)[a-z0-9_]*\.(swift|kt|kts|java|dart|scala|cs|m|mm)$/u.test(normalized)) score += 95;
+  if (/\.(swift|kt|kts|java|scala|go|rs|rb|py|php|cs|dart|vue|svelte|astro|ex|exs|elm|c|cc|cpp|cxx|h|hpp|hh|m|mm)$/u.test(normalized)) score += 40;
   if (/(^|\/)readme\.(md|mdx|txt|rst)$/u.test(normalized)) score += 100;
   if (/(^|\/)package\.json$/u.test(normalized)) score += 95;
   if (/(^|\/)(tailwind|theme|themes?|themeprovider|antdprovider|tokens?|colors?|typography|design-system|design|constant|constants|env|style|styles)\.(config\.)?(ts|tsx|js|jsx|json|css|scss|less|md)$/u.test(normalized)) score += 95;
@@ -639,8 +648,13 @@ function scoreDesignDirectory(repoPath: string): number {
   return score;
 }
 
-function shouldSkipRepoPath(normalizedPath: string): boolean {
+export function shouldSkipRepoPath(normalizedPath: string): boolean {
   if (isDesignAssetDirectory(normalizedPath) || isDesignAssetPath(normalizedPath)) return false;
+  // Editor / CI / agent-tooling directories are never design evidence, but
+  // their .md / .json files otherwise score on the generic text bonus and crowd
+  // out real source (this is what filled a SwiftUI import with .zenflow, .zed,
+  // and .vscode files instead of the Swift token source).
+  if (/(^|\/)\.(vscode|zed|idea|fleet|zenflow|github|husky|gradle|vs|turbo|cache|devcontainer)\//u.test(normalizedPath)) return true;
   return /(^|\/)(node_modules|vendor|dist|build|coverage|\.next|\.nuxt|\.git|out|target|storybook-static)\//u.test(normalizedPath)
     || /(^|\/)(package-lock\.json|pnpm-lock\.ya?ml|yarn\.lock|bun\.lockb)$/u.test(normalizedPath)
     || /(^|\/)(__tests__|__snapshots__|test|tests)\//u.test(normalizedPath)
@@ -663,8 +677,8 @@ function isBinaryDesignAssetPath(normalizedPath: string): boolean {
   return /\.(png|jpe?g|webp|ico|ttf|otf|woff2?)$/u.test(normalizedPath);
 }
 
-function isTextSnapshotPath(normalizedPath: string): boolean {
-  return /\.(css|scss|less|tsx|ts|jsx|js|md|mdx|json|svg|txt|rst)$/u.test(normalizedPath);
+export function isTextSnapshotPath(normalizedPath: string): boolean {
+  return /\.(css|scss|less|tsx|ts|jsx|js|mjs|cjs|md|mdx|json|jsonc|svg|txt|rst|yaml|yml|toml|xml|swift|kt|kts|java|scala|go|rs|rb|py|php|cs|dart|vue|svelte|astro|ex|exs|elm|c|cc|cpp|cxx|h|hpp|hh|m|mm)$/u.test(normalizedPath);
 }
 
 function selectDesignFiles(paths: string[], maxFiles: number): string[] {
@@ -1091,9 +1105,11 @@ async function runProcessBuffered(
         ...(result.error === undefined ? {} : { error: redactSensitiveProcessOutput(result.error) }),
       });
     };
-    const child = spawn(command, args, {
+    const resolvedCommand = resolveProcessCommand(command);
+    const child = spawn(resolvedCommand, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...(options.env ?? {}) },
+      shell: process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(resolvedCommand),
     });
     timeout = setTimeout(() => {
       timedOut = true;
@@ -1116,6 +1132,18 @@ async function runProcessBuffered(
       settle({ ok: code === 0 && !timedOut, stdout, stderr, code, ...(timedOut ? { timedOut } : {}) });
     });
   });
+}
+
+function resolveProcessCommand(command: string): string {
+  if (process.platform !== 'win32' || path.extname(command)) return command;
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!directory) continue;
+    for (const extension of ['.cmd', '.exe', '.bat', '']) {
+      const candidate = path.join(directory, `${command}${extension}`);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return command;
 }
 
 function appendProcessOutput(current: string, chunk: unknown): string {

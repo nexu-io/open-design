@@ -2,8 +2,15 @@ import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
 import {
+  buildLegacyMaxTokensParam,
+  buildMaxCompletionTokensParam,
+  buildOpenAIChatTokenParam,
+  isUnsupportedMaxTokensError,
+} from './openai-chat-token-params.js';
+import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
+  executeGenerateSpeech,
   executeGenerateVideo,
   isSenseAudioImageModel,
   type BYOKToolContext,
@@ -11,8 +18,27 @@ import {
 import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { validateBaseUrlResolved } from './connectionTest.js';
+import { googleStreamGenerateContentUrl } from './google-models.js';
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths'> {}
+// Allowlist for the `/feedback` route. Mirrors the
+// ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
+// Kept inline (not imported as a runtime value, since the contract type is
+// type-only) so a stale client can't poison Langfuse with unknown categories.
+const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
+  'matched_request',
+  'strong_visual',
+  'useful_structure',
+  'easy_to_continue',
+  'followed_design_system',
+  'missed_request',
+  'weak_visual',
+  'incomplete_output',
+  'hard_to_use',
+  'missed_design_system',
+  'other',
+]);
+
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
@@ -120,6 +146,74 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return sendApiError(res, 500, 'INTERNAL', `tool result write failed: ${reason}`);
     }
     res.json({ ok: true });
+  });
+
+  // Receives the user's thumbs-up/down (+ reason codes) for an assistant
+  // turn and forwards it to Langfuse as a `score-create`. Web persists the
+  // feedback itself via PUT /messages/:id; this endpoint exists only as a
+  // telemetry side channel — the daemon is the single network egress for
+  // Langfuse and gates on `telemetry.metrics + telemetry.content` consent.
+  //
+  // The consent + sink decision is fast (awaits a small file read, no
+  // network); we await it so the response status honestly reflects whether
+  // the score was enqueued, skipped for consent, or skipped because no
+  // Langfuse sink is configured. The actual Langfuse network call happens
+  // as a detached promise inside the bridge.
+  app.post('/api/runs/:id/feedback', async (req, res) => {
+    const runId = req.params.id;
+    const body = (req.body ?? {}) as Partial<{
+      projectId: string;
+      conversationId: string;
+      assistantMessageId: string;
+      rating: 'positive' | 'negative';
+      reasonCodes: string[];
+      hasCustomReason: boolean;
+      customReason: string;
+    }>;
+    if (!runId) {
+      return sendApiError(res, 400, 'INVALID_RUN_ID', 'runId missing');
+    }
+    if (body.rating !== 'positive' && body.rating !== 'negative') {
+      return sendApiError(res, 400, 'INVALID_RATING', 'rating must be positive or negative');
+    }
+    // Drop anything outside the contract-side reason allowlist and
+    // deduplicate; otherwise a malformed or replayed client payload could
+    // create unknown Langfuse categories or duplicate score ids in the
+    // same batch.
+    const reasonCodes = Array.isArray(body.reasonCodes)
+      ? Array.from(
+          new Set(
+            body.reasonCodes.filter(
+              (c): c is string =>
+                typeof c === 'string' && FEEDBACK_REASON_ALLOWLIST.has(c),
+            ),
+          ),
+        )
+      : [];
+    const customReason = typeof body.customReason === 'string' ? body.customReason : '';
+    const reportFeedback = ctx.telemetry?.reportFeedback;
+    if (!reportFeedback) {
+      res.status(202).json({ status: 'skipped_no_sink' });
+      return;
+    }
+    // Build score metadata bag that lands in the Langfuse score body.
+    // Mirrors the PostHog event so analysts can cross-reference.
+    const scoreMetadata: Record<string, unknown> = {
+      projectId: body.projectId,
+      conversationId: body.conversationId,
+      assistantMessageId: body.assistantMessageId,
+      hasCustomReason: body.hasCustomReason === true,
+      customReason,
+    };
+    const outcome = await reportFeedback({
+      runId,
+      rating: body.rating,
+      reasonCodes,
+      hasCustomReason: body.hasCustomReason === true,
+      customReason,
+      scoreMetadata,
+    });
+    res.status(202).json(outcome);
   });
 
   app.post('/api/chat', (req, res) => {
@@ -669,8 +763,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const payload: any = {
       model,
       messages: payloadMessages,
-      max_tokens:
+      ...buildOpenAIChatTokenParam(
+        model,
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      ),
       stream: true,
     };
 
@@ -779,38 +875,67 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
+    const effectiveMaxTokens =
+      typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
     const payload = {
       ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+      ...buildLegacyMaxTokensParam(effectiveMaxTokens),
+      stream: true,
+    };
+    const retryPayload = {
+      ...(usesVersionedOpenAIPath ? { model } : {}),
+      messages: payloadMessages,
+      ...buildMaxCompletionTokensParam(effectiveMaxTokens),
       stream: true,
     };
 
     const sse = createSseResponse(res);
     sse.send('start', { model });
     try {
-      const response = await fetch(url, {
+      const requestInit = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'api-key': apiKey,
         },
+        redirect: 'error' as const,
+      };
+      let response = await fetch(url, {
+        ...requestInit,
         body: JSON.stringify(payload),
-        redirect: 'error',
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
+        let errorText = await response.text();
+        if (
+          response.status === 400 &&
+          isUnsupportedMaxTokensError(errorText)
+        ) {
+          console.warn(
+            `[proxy:azure] retrying request with max_completion_tokens deployment=${model}`,
+          );
+          response = await fetch(url, {
+            ...requestInit,
+            body: JSON.stringify(retryPayload),
+          });
+          if (response.ok) {
+            errorText = '';
+          } else {
+            errorText = await response.text();
+          }
+        }
+        if (!response.ok) {
+          console.error(
+            `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
+        }
       }
 
       let ended = false;
@@ -865,8 +990,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
 
-    const clean = effectiveBaseUrl.replace(/\/+$/, '');
-    const url = `${clean}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+    const url = googleStreamGenerateContentUrl(effectiveBaseUrl, model);
     console.log(
       `[proxy:google] ${req.method} ${validated.parsed!.hostname} model=${model}`,
     );
@@ -1255,23 +1379,28 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const executeOneTool = async (call: {
       id: string;
       function: { name: string; arguments: string };
-    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' }> => {
+    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' | 'speech' }> => {
       const fnName = call?.function?.name ?? '';
-      if (fnName !== 'generate_image' && fnName !== 'generate_video') {
+      if (fnName !== 'generate_image' && fnName !== 'generate_video' && fnName !== 'generate_speech') {
         return {
           ok: false,
           error: `unknown tool: ${fnName || 'unnamed'}`,
         };
       }
+      const toolKind = fnName === 'generate_image' ? 'image' : fnName === 'generate_video' ? 'video' : 'speech';
       let args: any = {};
       try {
         args = JSON.parse(call.function.arguments || '{}');
       } catch {
-        return { ok: false, error: 'tool arguments were not valid JSON' };
+        return { ok: false, error: 'tool arguments were not valid JSON', kind: toolKind };
       }
       if (fnName === 'generate_image') {
         const result = await executeGenerateImage(args, toolCtx);
         return { ...result, kind: 'image' };
+      }
+      if (fnName === 'generate_speech') {
+        const result = await executeGenerateSpeech(args, toolCtx);
+        return { ...result, kind: 'speech' };
       }
       // generate_video — longer (up to 5 min), async-with-polling.
       const result = await executeGenerateVideo(args, toolCtx);
@@ -1339,9 +1468,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           const content = result.ok
             ? result.kind === 'video'
               ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
+              : result.kind === 'speech'
+                ? `Speech generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link to the MP3, e.g. [▶ Play voiceover](${result.url}).`
               : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
             : result.kind === 'video'
               ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
+              : result.kind === 'speech'
+                ? `Speech generation failed: ${result.error}. Apologize briefly and suggest a retry with a shorter script or a valid voice id.`
               : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
           workingMessages.push({
             role: 'tool',

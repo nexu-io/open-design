@@ -476,6 +476,32 @@ test('codex json stream treats reconnect errors as status warnings not fatal (re
   ]);
 });
 
+test('codex json stream treats stream disconnect reconnect errors as status warnings not fatal', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'thread.started', thread_id: 'thr-1' }) + '\n' +
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'error',
+      message: 'Reconnecting... 2/5 (stream disconnected before completion: Connection reset by peer (os error 54))',
+    }) + '\n' +
+    JSON.stringify({ type: 'item.completed', item: { id: 'item-0', type: 'agent_message', text: 'OK' } }) + '\n' +
+    JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 5, output_tokens: 2, cached_input_tokens: 0 } }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'running' },
+    {
+      type: 'status',
+      label: 'Reconnecting... 2/5 (stream disconnected before completion: Connection reset by peer (os error 54))',
+    },
+    { type: 'text_delta', delta: 'OK' },
+    { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
+  ]);
+});
+
 test('codex json stream still treats real errors as fatal after reconnect warnings', () => {
   const { events, handler } = collectEvents('codex');
 
@@ -487,5 +513,23 @@ test('codex json stream still treats real errors as fatal after reconnect warnin
   assert.deepEqual(events, [
     { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
     { type: 'error', message: 'Authentication failed: invalid API key' },
+  ]);
+});
+
+test('codex json stream does not downgrade non-reconnect errors that mention reconnect text', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      message: 'Authentication failed after Reconnecting... stream disconnected before completion',
+    }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Authentication failed after Reconnecting... stream disconnected before completion',
+    },
   ]);
 });

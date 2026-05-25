@@ -54,6 +54,30 @@ afterEach(() => {
 });
 
 describe('ChatComposer infinite re-render regression (#2097)', () => {
+  it('shows only stop while streaming with an empty composer', () => {
+    renderComposer({ streaming: true });
+
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
+    expect(screen.queryByTestId('chat-send')).toBeNull();
+  });
+
+  it('keeps send available while streaming so the next prompt can queue', () => {
+    const onSend = vi.fn();
+    const onStop = vi.fn();
+    renderComposer({ streaming: true, onSend, onStop });
+
+    const textarea = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: 'change the font', selectionStart: 'change the font'.length },
+    });
+
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    expect(onStop).not.toHaveBeenCalled();
+    expect(onSend).toHaveBeenCalledWith('change the font', [], [], undefined);
+  });
+
   it('does not re-sync the composer scroll offset on every plain-text keystroke', () => {
     const scrollTopGetter = vi.fn(() => 0);
     const original = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollTop');
