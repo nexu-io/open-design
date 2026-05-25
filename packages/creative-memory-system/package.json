@@ -1,0 +1,37 @@
+{
+  "name": "@open-design/creative-memory-system",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first, deterministic creative-preference memory subsystem for the Open Design generation pipeline.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./adapter": {
+      "types": "./dist/extractionAdapter.d.ts",
+      "default": "./dist/extractionAdapter.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "demo": "tsx demo/walkthrough.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.27.7",
+    "typescript": "6.0.3",
+    "vitest": "2.1.9"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}
