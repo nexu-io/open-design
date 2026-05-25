@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
+import { navigate } from '../../src/router';
 import type {
   AppConfig,
   ChatMessage,
@@ -35,6 +36,7 @@ const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const playSound = vi.fn();
 const showCompletionNotification = vi.fn();
+const mockedNavigate = vi.mocked(navigate);
 
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
@@ -463,6 +465,31 @@ describe('ProjectView conversation run isolation', () => {
     });
   });
 
+  it('keeps a routed conversation from snapping back after creating a new conversation', async () => {
+    renderProjectView(config, project, { routeConversationId: 'conv-a' });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    mockedNavigate.mockClear();
+
+    fireEvent.click(screen.getByTestId('new-conversation'));
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-c'));
+    expect(mockedNavigate).toHaveBeenCalledWith(
+      {
+        kind: 'project',
+        projectId: project.id,
+        conversationId: 'conv-c',
+        fileName: null,
+      },
+      { replace: true },
+    );
+
+    await act(async () => {});
+
+    expect(screen.getByTestId('active-conversation').textContent).toBe('conv-c');
+    expect(screen.getByTestId('active-conversation').textContent).not.toBe('conv-a');
+  });
+
   it('notifies when a detached active run is terminal after returning to its conversation', async () => {
     renderProjectView();
 
@@ -708,11 +735,16 @@ describe('ProjectView conversation run isolation', () => {
   });
 });
 
-function renderProjectView(renderConfig = config, renderProject: Project = project) {
+function renderProjectView(
+  renderConfig = config,
+  renderProject: Project = project,
+  options: { routeConversationId?: string | null } = {},
+) {
   return render(
     <ProjectView
       project={renderProject}
       routeFileName={null}
+      routeConversationId={options.routeConversationId ?? null}
       config={renderConfig}
       agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
       skills={[]}
