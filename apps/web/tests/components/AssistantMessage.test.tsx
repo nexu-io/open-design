@@ -224,3 +224,55 @@ describe('AssistantMessage recovered produced files', () => {
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
   });
 });
+
+// Issue #2874: the running-state waiting pill rendered `latestStatus.detail`
+// verbatim, so the daemon's start-event `bin` field (the resolved agent
+// executable path) leaked into the visible chat status. That value is shaped
+// like `/Applications/Open Design Beta.app/Contents/Resources/open-design/bin/vela`
+// — it reveals the install root and on custom installs the user's home dir.
+describe('AssistantMessage waiting-pill executable-path leak (#2874)', () => {
+  const LEAKY_PATH =
+    '/Applications/Open Design Beta.app/Contents/Resources/open-design/bin/vela';
+
+  it('does not surface a raw absolute executable path while waiting for first output', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          runStatus: 'running',
+          endedAt: undefined,
+          events: [
+            { kind: 'status', label: 'starting', detail: LEAKY_PATH } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.innerHTML).not.toContain(LEAKY_PATH);
+    expect(container.innerHTML).not.toContain('/bin/vela');
+    expect(container.innerHTML).not.toContain('Open Design Beta.app');
+  });
+
+  it('still surfaces a recognized agent name extracted from the binary path', () => {
+    const claudePath =
+      '/Applications/Open Design Beta.app/Contents/Resources/open-design/bin/claude';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          runStatus: 'running',
+          endedAt: undefined,
+          events: [
+            { kind: 'status', label: 'starting', detail: claudePath } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getAllByText('Claude').length).toBeGreaterThan(0);
+  });
+});

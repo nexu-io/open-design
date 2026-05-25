@@ -97,3 +97,33 @@ function normalizeKey(raw: string): string {
     .replace(/\s+/g, ' ')
     .toLowerCase();
 }
+
+// Visible-status invariant for the chat waiting pill (issue #2874): the
+// daemon's start-event payload carries `bin` (the resolved agent executable
+// path) which gets persisted as `detail` on the `starting` status event.
+// Packaged-app paths like
+//   /Applications/Open Design Beta.app/Contents/Resources/open-design/bin/vela
+// leak the install root and (on custom installs) the user's home directory.
+// Replace the path with the known agent display name when we can recognize it,
+// otherwise drop the detail and let the localized status label speak.
+//
+// Scoped to the `starting` label on purpose: other labels (error, audit, ...)
+// legitimately carry user-readable detail strings that may themselves
+// reference paths, and over-redacting would hide actionable error context.
+export function friendlyStatusDetail(
+  label: string,
+  detail: string | null | undefined,
+): string | undefined {
+  const trimmed = detail?.trim();
+  if (!trimmed) return undefined;
+  if (label !== 'starting') return trimmed;
+  if (!looksLikeFilesystemPath(trimmed)) return trimmed;
+  return agentDisplayName(trimmed) ?? undefined;
+}
+
+function looksLikeFilesystemPath(value: string): boolean {
+  // POSIX absolute, home-relative, parent-relative, current-relative, or
+  // Windows-drive paths. Any embedded path separator also qualifies — the
+  // intent is "this string is talking about a file on disk, not a label."
+  return /^([/~]|\.\.?[\\/]|[A-Za-z]:[\\/])/.test(value) || value.includes('/') || value.includes('\\');
+}

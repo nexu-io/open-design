@@ -41,7 +41,11 @@ import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { unfinishedTodosFromEvents, type TodoItem } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
-import { agentDisplayName, exactAgentDisplayName } from "../utils/agentLabels";
+import {
+  agentDisplayName,
+  exactAgentDisplayName,
+  friendlyStatusDetail,
+} from "../utils/agentLabels";
 import {
   exactDateTime,
   messageTime,
@@ -1354,7 +1358,9 @@ function latestStatusLabel(
 ): { label: string; detail?: string | undefined } | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i]!;
-    if (ev.kind === "status") return { label: ev.label, detail: ev.detail };
+    if (ev.kind === "status") {
+      return { label: ev.label, detail: friendlyStatusDetail(ev.label, ev.detail) };
+    }
   }
   return undefined;
 }
