@@ -1,15 +1,116 @@
-// @ts-nocheck
 import { randomUUID } from 'node:crypto';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
-function readString(value) {
+interface RunMeta {
+  projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  clientRequestId?: string | null;
+  agentId?: string | null;
+  appliedPluginSnapshotId?: string | null;
+  pluginId?: string | null;
+}
+
+interface RunRecord {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  assistantMessageId: string | null;
+  clientRequestId: string | null;
+  agentId: string | null;
+  appliedPluginSnapshotId: string | null;
+  pluginId: string | null;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  events: SseEvent[];
+  nextEventId: number;
+  clients: Set<SseClient>;
+  waiters: Set<(status: RunStatusBody) => void>;
+  child: ChildProcess | null;
+  acpSession: AcpSession | null;
+  exitCode: number | null;
+  signal: string | null;
+  error: string | null;
+  errorCode: string | null;
+  cancelRequested: boolean;
+}
+
+interface SseEvent {
+  id: number;
+  event: string;
+  data: unknown;
+  timestamp: number;
+}
+
+interface SseClient {
+  send(event: string, data: unknown, id: number): void;
+  end(): void;
+  cleanup(): void;
+}
+
+interface AcpSession {
+  abort?(): void;
+}
+
+interface ChildProcess {
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  killed: boolean;
+  kill(signal?: number | string): boolean;
+  once?(event: string, listener: () => void): void;
+  off?(event: string, listener: () => void): void;
+}
+
+interface ChatRunServiceDeps {
+  createSseResponse(res: unknown): SseClient;
+  createSseErrorPayload(code: string, message: string, init?: Record<string, unknown>): unknown;
+  maxEvents?: number;
+  ttlMs?: number;
+  shutdownGraceMs?: number;
+}
+
+interface RunStatusBody {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  assistantMessageId: string | null;
+  agentId: string | null;
+  appliedPluginSnapshotId: string | null;
+  pluginId: string | null;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  exitCode: number | null;
+  signal: string | null;
+  error: string | null;
+  errorCode: string | null;
+}
+
+interface ChatRunService {
+  create(meta?: RunMeta): RunRecord;
+  start(run: RunRecord, starter: (run: RunRecord) => Promise<void>): RunRecord;
+  get(id: string): RunRecord | null;
+  list(filter?: { projectId?: string; conversationId?: string; status?: string }): RunRecord[];
+  stream(run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, unknown> }, res: unknown): void;
+  cancel(run: RunRecord): void;
+  shutdownActive(opts?: { graceMs?: number }): Promise<void>;
+  wait(run: RunRecord): Promise<RunStatusBody>;
+  emit(run: RunRecord, event: string, data: unknown): SseEvent;
+  finish(run: RunRecord, status: string, code?: number | null, signal?: string | null): void;
+  fail(run: RunRecord, code: string, message: string, init?: Record<string, unknown>): void;
+  statusBody(run: RunRecord): RunStatusBody;
+  isTerminal(status: string): boolean;
+}
+
+function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function extractErrorDetails(data) {
-  const payload = data && typeof data === 'object' ? data : {};
-  const nested = payload.error && typeof payload.error === 'object' ? payload.error : {};
+function extractErrorDetails(data: unknown): { error: string | null; errorCode: string | null } {
+  const payload = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const nested = payload.error && typeof payload.error === 'object' ? (payload.error as Record<string, unknown>) : {};
   return {
     error: readString(nested.message) ?? readString(payload.message),
     errorCode: readString(nested.code) ?? readString(payload.code),
@@ -22,23 +123,18 @@ export function createChatRunService({
   maxEvents = 2_000,
   ttlMs = 30 * 60 * 1000,
   shutdownGraceMs = 3_000,
-}) {
-  const runs = new Map();
+}: ChatRunServiceDeps): ChatRunService {
+  const runs = new Map<string, RunRecord>();
 
-  const create = (meta = {}) => {
+  const create = (meta: RunMeta = {}): RunRecord => {
     const now = Date.now();
-    const run = {
+    const run: RunRecord = {
       id: randomUUID(),
       projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
       conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
-      // Plan §3.A1 / spec §11.5. The applied plugin snapshot id pins
-      // every prompt fragment and tool gate to a frozen view so replay
-      // is byte-equal across plugin upgrades. Runs are in-memory in
-      // v1 — the id lives on the run object plus on the
-      // `applied_plugin_snapshots` row (FK back via run_id).
       appliedPluginSnapshotId:
         typeof meta.appliedPluginSnapshotId === 'string' && meta.appliedPluginSnapshotId
           ? meta.appliedPluginSnapshotId
@@ -64,22 +160,22 @@ export function createChatRunService({
     return run;
   };
 
-  const get = (id) => runs.get(id) ?? null;
+  const get = (id: string): RunRecord | null => runs.get(id) ?? null;
 
-  const scheduleCleanup = (run) => {
+  const scheduleCleanup = (run: RunRecord): void => {
     setTimeout(() => {
       if (TERMINAL_RUN_STATUSES.has(run.status)) runs.delete(run.id);
     }, ttlMs).unref?.();
   };
 
-  const emit = (run, event, data) => {
+  const emit = (run: RunRecord, event: string, data: unknown): SseEvent => {
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
     }
     const id = run.nextEventId++;
-    const record = { id, event, data, timestamp: Date.now() };
+    const record: SseEvent = { id, event, data, timestamp: Date.now() };
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
@@ -87,7 +183,7 @@ export function createChatRunService({
     return record;
   };
 
-  const statusBody = (run) => ({
+  const statusBody = (run: RunRecord): RunStatusBody => ({
     id: run.id,
     projectId: run.projectId,
     conversationId: run.conversationId,
@@ -104,7 +200,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
   });
 
-  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
+  const finish = (run: RunRecord, status: string, code: number | null = null, signal: string | null = null): void => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     run.status = status;
     run.exitCode = code;
@@ -118,19 +214,19 @@ export function createChatRunService({
     scheduleCleanup(run);
   };
 
-  const fail = (run, code, message, init = {}) => {
+  const fail = (run: RunRecord, code: string, message: string, init: Record<string, unknown> = {}): void => {
     emit(run, 'error', createSseErrorPayload(code, message, init));
     finish(run, 'failed', 1, null);
   };
 
-  const start = (run, starter) => {
-    void starter(run).catch((err) => {
+  const start = (run: RunRecord, starter: (run: RunRecord) => Promise<void>): RunRecord => {
+    void starter(run).catch((err: unknown) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });
     return run;
   };
 
-  const stream = (run, req, res) => {
+  const stream = (run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, unknown> }, res: unknown): void => {
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
     let sent = 0;
@@ -152,13 +248,17 @@ export function createChatRunService({
       return;
     }
     run.clients.add(sse);
-    res.on('close', () => {
+    (res as { on(event: string, cb: () => void): void }).on('close', () => {
       run.clients.delete(sse);
       sse.cleanup();
     });
   };
 
-  const list = ({ projectId, conversationId, status } = {}) => Array.from(runs.values()).filter((run) => {
+  const list = ({ projectId, conversationId, status }: {
+    projectId?: string;
+    conversationId?: string;
+    status?: string;
+  } = {}): RunRecord[] => Array.from(runs.values()).filter((run) => {
     if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
     if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
     if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
@@ -166,12 +266,12 @@ export function createChatRunService({
     return true;
   });
 
-  const waitForChildExit = (child, timeoutMs) => {
+  const waitForChildExit = (child: ChildProcess | null, timeoutMs: number): Promise<boolean> => {
     if (!child) return Promise.resolve(true);
     if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
     return new Promise((resolve) => {
       let settled = false;
-      const done = (exited) => {
+      const done = (exited: boolean) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -187,7 +287,7 @@ export function createChatRunService({
     });
   };
 
-  const killChild = (run, signal) => {
+  const killChild = (run: RunRecord, signal: string): boolean => {
     if (!run.child || run.child.exitCode !== null || run.child.signalCode !== null) return false;
     try {
       return run.child.kill(signal);
@@ -196,14 +296,10 @@ export function createChatRunService({
     }
   };
 
-  const cancel = (run) => {
+  const cancel = (run: RunRecord): void => {
     if (!TERMINAL_RUN_STATUSES.has(run.status)) {
       run.cancelRequested = true;
       run.updatedAt = Date.now();
-      // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
-      // abort() sends the graceful shutdown signal; cancel() owns the
-      // SIGTERM fallback so that a misbehaving session can't leave the
-      // child alive indefinitely.
       if (run.acpSession?.abort) {
         run.acpSession.abort();
         const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
@@ -218,7 +314,7 @@ export function createChatRunService({
     }
   };
 
-  const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
+  const shutdownActive = async ({ graceMs = shutdownGraceMs }: { graceMs?: number } = {}): Promise<void> => {
     const activeRuns = Array.from(runs.values()).filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
     await Promise.all(activeRuns.map(async (run) => {
       run.cancelRequested = true;
@@ -239,7 +335,7 @@ export function createChatRunService({
     }));
   };
 
-  const wait = (run) => {
+  const wait = (run: RunRecord): Promise<RunStatusBody> => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return Promise.resolve(statusBody(run));
     return new Promise((resolve) => run.waiters.add(resolve));
   };
@@ -257,7 +353,7 @@ export function createChatRunService({
     finish,
     fail,
     statusBody,
-    isTerminal(status) {
+    isTerminal(status: string): boolean {
       return TERMINAL_RUN_STATUSES.has(status);
     },
   };
