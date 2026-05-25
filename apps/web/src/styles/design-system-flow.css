@@ -1833,6 +1833,19 @@
   font-size: 13px;
   white-space: nowrap;
 }
+.ds-project-publish-trigger {
+  display: inline-flex;
+}
+/* A disabled button does not fire the hover or focus that shows its own `title`,
+   so the publish guidance lives on this wrapper. Make the disabled button
+   transparent to pointer events so hovering it reveals the wrapper title, and
+   carry the not-allowed cursor the button would otherwise show. */
+.ds-project-publish-trigger:has(> button:disabled) {
+  cursor: not-allowed;
+}
+.ds-project-publish-trigger > button:disabled {
+  pointer-events: none;
+}
 .ds-project-use-row {
   margin-top: 14px;
   padding-top: 14px;

@@ -1507,21 +1507,31 @@ function DesignSystemProjectPanel({
               : `Review ${systemDisplayName} design system`}
           </h1>
           <div className="ds-project-publish-card__toggles">
-            <button
-              type="button"
-              className={published ? 'ghost compact' : 'primary'}
-              data-testid="design-system-publish"
-              disabled={statusBusy || (!published && !githubEvidence.ready)}
+            {/* The publish button is disabled until the GitHub import evidence is
+                ready, and a disabled button never fires the hover or focus that
+                surfaces a `title` tooltip. Keep the guidance on this wrapper,
+                which is never disabled, and let pointer events fall through the
+                disabled button to it (see .ds-project-publish-trigger) so the
+                explanation stays reachable exactly when publishing is blocked. */}
+            <span
+              className="ds-project-publish-trigger"
               title={
                 !published && !githubEvidence.ready
                   ? 'Finish importing your GitHub repo before you can publish.'
                   : undefined
               }
-              onClick={() => void togglePublished(!published)}
             >
-              {published ? <Icon name="check" size={14} /> : null}
-              {published ? 'Published' : 'Publish'}
-            </button>
+              <button
+                type="button"
+                className={published ? 'ghost compact' : 'primary'}
+                data-testid="design-system-publish"
+                disabled={statusBusy || (!published && !githubEvidence.ready)}
+                onClick={() => void togglePublished(!published)}
+              >
+                {published ? <Icon name="check" size={14} /> : null}
+                {published ? 'Published' : 'Publish'}
+              </button>
+            </span>
             {published ? (
               <label>
                 <input

@@ -285,6 +285,44 @@ describe('FileWorkspace design-system project surface', () => {
     expect(registryMocks.updateDesignSystemDraft).not.toHaveBeenCalled();
   });
 
+  it('keeps the disabled-publish guidance on a non-disabled wrapper so it stays reachable', () => {
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('context/source-context.md'),
+          workspaceFile('preview/colors.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem({
+          provenance: {
+            companyBlurb: 'Acme analytics workspace',
+            githubUrls: ['https://github.com/acme/product'],
+          },
+        })}
+      />,
+    );
+
+    const publishButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-system-publish"]',
+    );
+    expect(publishButton?.disabled).toBe(true);
+
+    // A disabled button never fires the hover or focus that surfaces a `title`, so
+    // the guidance has to live on a wrapper instead of on the button itself.
+    const guidance = 'Finish importing your GitHub repo before you can publish.';
+    const carrier = container.querySelector<HTMLElement>(`[title="${guidance}"]`);
+    expect(carrier).toBeTruthy();
+    expect(carrier?.tagName).not.toBe('BUTTON');
+    expect(carrier?.contains(publishButton ?? null)).toBe(true);
+  });
+
   it('offers a Connect GitHub action that routes to Connectors when repo evidence is missing', async () => {
     const onConnectRepo = vi.fn();
     const container = renderWorkspace(
