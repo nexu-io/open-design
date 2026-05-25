@@ -284,7 +284,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         res.setHeader('Access-Control-Allow-Origin', 'null');
       }
       res.setHeader('Cache-Control', 'no-store');
-      res.sendFile(sheet.absPath);
+      await res.sendFile(sheet.absPath);
     } catch (err: any) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -527,7 +527,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
-      res.type(mimeFor(target)).sendFile(target);
+      await res.type(mimeFor(target)).sendFile(target);
     } catch (err: any) {
       res.status(500).type('text/plain').send(String(err));
     }
