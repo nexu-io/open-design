@@ -88,9 +88,15 @@ const PATTERNS: readonly Pattern[] = [
   // (415) 555-...') don't ship. Note: no leading \b — '(' isn't a word
   // char, so a starting boundary would refuse to match `(415)`. We
   // require a non-digit (or start of string) before the run instead.
+  //
+  // A bounded-length lookahead `(?=[+\d\s.()-]{1,20}(?![\d\s.()+-]))`
+  // pre-rejects positions where the phone-number-like run exceeds 20
+  // characters, preventing catastrophic backtracking on long numeric
+  // strings (hashes, IDs, timestamps) without skipping phone redaction
+  // on large inputs.
   {
     name: 'phone',
-    regex: /(?<!\d)(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g,
+    regex: /(?<!\d)(?=[+\d\s.()-]{1,20}(?![\d\s.()+-]))(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g,
   },
 ];
 
