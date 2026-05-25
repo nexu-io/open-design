@@ -47,6 +47,11 @@ import {
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { isImeComposing } from '../utils/imeComposing';
+import {
+  reconcileInsertions,
+  stripPluginInsertedTokens,
+  type TrackedInsertion,
+} from '../utils/pluginInsertionTracking';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -224,7 +229,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
-    const [draft, setDraft] = useState(() => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "");
+    const [draft, setDraft] = useState(
+      () => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "",
+    );
+    // Synchronous mirror of the latest committed draft value.
+    // `updateDraft` reads this as `prev` instead of relying on the
+    // closure `draft` (which only updates after re-render) or
+    // `setDraft((prev) => …)` (whose updater is double-invoked
+    // under React StrictMode and would mutate
+    // `pluginInsertedTokensRef` twice). The ref is updated
+    // synchronously by `updateDraft` before `setDraft`, so the
+    // next call sees a fresh `prev` even when React batches
+    // multiple updates within one tick. Initialized from the same
+    // source as the React state to keep the two in lockstep on
+    // first render. See `updateDraft` below and #2929 round 5.
+    const draftRef = useRef<string>(
+      initialDraft ?? loadComposerDraft(draftStorageKey) ?? "",
+    );
 
     // chat_panel page_view fires from ProjectView (which outlives
     // conversation switches) so the event measures real chat-panel
@@ -271,6 +292,77 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // or from the tools-menu "Details" affordance.
     const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
+    // Instance-aware tracking for `@<token>` mentions this surface
+    // inserted into the draft via the @-mention popover plugin-pick
+    // path (`insertPluginMention`). Each entry pins the precise
+    // start offset of `@`, so two `@Airbnb` mentions in the same
+    // draft (one composer-inserted, one user-authored) are
+    // distinguishable — the chip-clear strip removes only tracked
+    // instances (#2929 round 3). See utils/pluginInsertionTracking.ts
+    // for the diff/reconcile/strip primitives.
+    //
+    // Lifecycle invariants:
+    //   - add: `insertPluginMention` pushes { token, start } using the
+    //     `insertStart` returned by `replaceMentionWithText`
+    //   - reconcile: `handleChange` runs LCP/LCS diff on each
+    //     keystroke and shifts/drops entries whose offsets crossed
+    //     the edit, plus revalidates surviving entries against the
+    //     mention boundary so `@Airbnbify`-style corruption prunes
+    //   - clear: `reset()` empties the array on send; `onCleared`
+    //     strips by range and empties the array
+    //
+    // Tools-menu / details-modal applies route through
+    // `pluginsSectionRef.current.applyById` without writing to the
+    // draft, so the array stays empty for those surfaces and the
+    // post-clear strip is a no-op. Every draft mutation in this
+    // component goes through the `updateDraft` chokepoint, which
+    // runs `reconcileInsertions` against the prev → next diff. That
+    // includes typing, slash-command pick, file/MCP/connector
+    // insertion, skill chip remove, annotation append, imperative
+    // handle, post-send reset, and the on-cleared strip itself —
+    // so a tracked offset can never go stale relative to the draft
+    // and re-introduce the original #2881 orphan-mention symptom
+    // (#2929 round 4).
+    //
+    // Each entry carries the `pluginId` of the apply that produced
+    // it. When the active plugin changes (e.g. tools-menu `applyById`
+    // replaces plugin A with plugin B without writing to the draft),
+    // entries for the previous active plugin are dropped via
+    // `setActivePlugin`. Without that, clearing B's chip would still
+    // strip A's `@A` from the draft — silent user-text deletion in a
+    // supported replace-plugin flow (#2929 round 6).
+    const pluginInsertedTokensRef = useRef<TrackedInsertion[]>([]);
+    // The plugin id whose chip is currently mounted in PluginsSection's
+    // chip strip, or `null` after the strip clears or before any apply
+    // succeeds. Updated via `setActivePlugin`, which also drops any
+    // tracked entries whose `pluginId` does not match the new active
+    // — a no-op for `insertPluginMention` (the new entry it just
+    // pushed matches), critical for tools-menu / details-modal
+    // applies that arrive without an accompanying draft insertion.
+    const activePluginIdRef = useRef<string | null>(null);
+    // Monotonic counter that hands out unique `insertionId` strings to
+    // entries pushed by `insertPluginMention`. The id survives
+    // `reconcileInsertions` (utils/pluginInsertionTracking.ts forwards
+    // the field) so the in-flight handler's failure path can locate
+    // its own tracked entry even after intervening reconciles or
+    // `onCleared` mutations of the array (#2929 round 10 codex
+    // review). Plain ref counter is enough — the id only needs to be
+    // unique within a single composer instance and is never persisted.
+    const insertionIdSeqRef = useRef(0);
+
+    // Single chokepoint for setting the active plugin. Routes every
+    // `applyById` call so the tracker stays in lockstep with the
+    // chip strip's currently-mounted plugin.
+    function setActivePlugin(pluginId: string | null): void {
+      if (activePluginIdRef.current === pluginId) return;
+      if (pluginInsertedTokensRef.current.length > 0) {
+        pluginInsertedTokensRef.current =
+          pluginInsertedTokensRef.current.filter(
+            (entry) => entry.pluginId === pluginId,
+          );
+      }
+      activePluginIdRef.current = pluginId;
+    }
     // Consolidated "tools" popover — a single dropdown anchored to the
     // leading sliders icon that hosts MCP / Import / Pet quick actions and
     // a shortcut to open the full Settings dialog. Replaces the previous
@@ -299,7 +391,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     useEffect(() => {
       if (seededRef.current) return;
       if (initialDraft && initialDraft !== draft) {
-        setDraft(initialDraft);
+        updateDraft(initialDraft);
         seededRef.current = true;
       } else if (initialDraft === undefined) {
         seededRef.current = true;
@@ -614,7 +706,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // command's canonical insertion text.
       const replaced = before.replace(/\/[^\s/]*$/, cmd.insert);
       const next = replaced + after;
-      setDraft(next);
+      updateDraft(next);
       setSlash(null);
       requestAnimationFrame(() => {
         ta.focus();
@@ -658,7 +750,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const trimmed = draft.trim();
       if (!/^\/mcp\s*$/i.test(trimmed)) return false;
       onOpenMcpSettings();
-      setDraft('');
+      updateDraft('');
       return true;
     }
 
@@ -724,7 +816,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           return false;
         }
       }
-      setDraft('');
+      updateDraft('');
       return true;
     }
 
@@ -732,7 +824,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       ref,
       () => ({
         setDraft: (text: string) => {
-          setDraft(text);
+          updateDraft(text);
           seededRef.current = true;
           requestAnimationFrame(() => {
             const ta = textareaRef.current;
@@ -743,7 +835,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           });
         },
         restoreDraft: ({ text, attachments = [], commentAttachments = [] }) => {
-          setDraft(text);
+          updateDraft(text);
           setStaged(attachments);
           setStagedVisualComments(commentAttachments);
           setStagedSkills([]);
@@ -768,8 +860,39 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       []
     );
 
+    // Single chokepoint for every draft mutation. Reconciles the
+    // tracked plugin-mention offsets against the prev → next diff so
+    // any setDraft path — typing, slash command, file/MCP/connector
+    // insertion, skill chip removal, annotation append, imperative
+    // handle, post-send reset, on-cleared strip — keeps
+    // `pluginInsertedTokensRef` in lockstep with the draft.
+    //
+    // Implementation note (#2929 round 5): the reconcile and the
+    // ref mutation happen *outside* the `setDraft` updater, using
+    // the synchronous `draftRef` mirror as `prev`. Putting them
+    // inside `setDraft((prev) => …)` would not be safe under
+    // React StrictMode, which double-invokes setState updaters in
+    // development to detect impurity — the second invocation
+    // would re-shift or re-drop already-reconciled entries,
+    // bringing back the #2881 orphan-mention symptom for every
+    // user keystroke in the dev build.
+    function updateDraft(next: string | ((prev: string) => string)): void {
+      const prev = draftRef.current;
+      const value = typeof next === 'function' ? next(prev) : next;
+      if (prev === value) return;
+      if (pluginInsertedTokensRef.current.length > 0) {
+        pluginInsertedTokensRef.current = reconcileInsertions(
+          pluginInsertedTokensRef.current,
+          prev,
+          value,
+        );
+      }
+      draftRef.current = value;
+      setDraft(value);
+    }
+
     function reset() {
-      setDraft("");
+      updateDraft("");
       setStaged([]);
       setStagedVisualComments([]);
       setStagedSkills([]);
@@ -778,6 +901,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setUploadError(null);
       setMention(null);
       setSlash(null);
+      // Drop tracked plugin-mention insertions when the draft is wiped
+      // — otherwise a later chip clear would prune user-authored text
+      // that happened to share a label with a previously-applied
+      // plugin (#2929 round 2/3). Also clear the active-plugin id
+      // so the next applyById is treated as a fresh activation
+      // rather than a "same plugin re-apply" (#2929 round 6).
+      pluginInsertedTokensRef.current = [];
+      activePluginIdRef.current = null;
     }
 
     function currentCommentAttachments(extra: ChatCommentAttachment[] = []): ChatCommentAttachment[] {
@@ -829,7 +960,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // Also strip the matching `@<id>` token from the draft so the chip
       // and the textarea stay in sync. We allow trailing whitespace to be
       // collapsed too.
-      setDraft((d) =>
+      updateDraft((d) =>
         d
           .replace(new RegExp(`(^|\\s)@${escapeRegExp(id)}(\\s|$)`, 'g'), '$1$2')
           .replace(/\s{2,}/g, ' '),
@@ -1001,7 +1132,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     }),
                   ]);
                 }
-                if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+                if (detail.note) updateDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
                 setStreamingAnnotationSendPending(true);
                 textareaRef.current?.focus();
                 ack({ ok: true });
@@ -1022,7 +1153,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             }
 
             if (detail.note) {
-              setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+              updateDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
               textareaRef.current?.focus();
             }
             ack({ ok: true });
@@ -1118,7 +1249,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       const value = e.target.value;
       const cursor = e.target.selectionStart;
-      setDraft(value);
+      // Goes through the `updateDraft` chokepoint so the
+      // plugin-mention offset reconcile runs on every keystroke,
+      // matching every other setDraft path for free.
+      updateDraft(value);
       // Keep the staged-skill chips in sync with the draft. If the user
       // hand-deletes an `@<id>` token from the textarea, the chip must
       // disappear too — otherwise submit() would still forward that id in
@@ -1165,7 +1299,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const after = draft.slice(cursor);
       const replaced = before.replace(/@([^\s@]*)$/, `@${filePath} `);
       const next = replaced + after;
-      setDraft(next);
+      updateDraft(next);
       setMention(null);
       if (!staged.some((s) => s.path === filePath)) {
         setStaged((s) => [
@@ -1185,28 +1319,175 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function insertPluginMention(record: InstalledPluginRecord) {
-      const inserted = replaceMentionWithText(`${inlineMentionToken(record.title)} `);
-      if (!inserted) return;
-      await pluginsSectionRef.current?.applyById(record.id, record);
+      // Snapshot tracker AND draft state before any mutation so we
+      // can roll back if `applyById` fails (#2929 round 7). Without
+      // this, an `/apply` 5xx leaves the draft holding a freshly
+      // inserted `@<token>` whose chip never mounted — a user
+      // clearing the previously-active plugin's chip would then
+      // strip the user-visible `@<token>` they just picked, even
+      // though that text is the only signal they have that
+      // anything happened.
+      const prevDraftValue = draftRef.current;
+      const prevEntries = pluginInsertedTokensRef.current;
+      const prevActiveId = activePluginIdRef.current;
+
+      const result = replaceMentionWithText(`${inlineMentionToken(record.title)} `);
+      if (!result) return;
+      // Capture the post-insert draft *snapshot* — the value the
+      // composer is in immediately after our optimistic write.
+      // Used as a sentinel during the rollback below: if the
+      // textarea is still in this state when `applyById` fails
+      // (no user keystrokes during the await), we can fully
+      // restore `prevDraftValue`. If the user typed during the
+      // await, the draft has moved past the snapshot and we MUST
+      // NOT clobber those edits with the stale `prevDraftValue`
+      // (#2929 round 8 — the textarea stays interactive while
+      // `/apply` is in flight, so this is a real prompt-data-loss
+      // path).
+      const postInsertDraft = draftRef.current;
+      // Track the precise start offset of the inserted `@` so the
+      // post-clear strip can excise exactly this instance, leaving
+      // any user-authored `@<sameLabel>` elsewhere in the draft
+      // untouched (#2929 round 3). Entry carries `pluginId` so a
+      // later replace-plugin flow can drop it cleanly (#2929 round 6),
+      // and an `insertionId` so this handler's failure path can
+      // locate the entry it pushed even after `reconcileInsertions`
+      // shifted offsets or `onCleared` mutated the array
+      // (#2929 round 10).
+      //
+      // Push the new entry but DO NOT yet drop entries from the
+      // previously-active plugin — that filter is committed only
+      // after `applyById` resolves successfully (#2929 round 9
+      // codex review). During the await, the chip strip still
+      // shows the previously-mounted plugin and the textarea is
+      // interactive: a user click on that chip's × must strip its
+      // tracked entries (not the optimistic `@<target>` we just
+      // pushed). `onCleared` filters by
+      // `pluginsSectionRef.current?.getActiveRecord()?.id` so a
+      // pending-window clear scopes to the actually-mounted
+      // plugin's tracked tokens.
+      const ourInsertionId = `i${++insertionIdSeqRef.current}`;
+      pluginInsertedTokensRef.current = [
+        ...pluginInsertedTokensRef.current,
+        {
+          token: record.title,
+          start: result.insertStart,
+          pluginId: record.id,
+          insertionId: ourInsertionId,
+        },
+      ];
+
+      const applyResult = await pluginsSectionRef.current?.applyById(
+        record.id,
+        record,
+      );
+      if (!applyResult) {
+        // Two failure modes to disambiguate (#2929 round 10):
+        //
+        //   (a) "no intervening clear" — the user neither cleared
+        //       the previously-mounted chip nor anything else
+        //       mutated the tracker beyond our push + reconciles
+        //       from user keystrokes. `prevEntries` and
+        //       `prevActiveId` are still the truth. We restore the
+        //       tracker wholesale and restore the draft only if
+        //       the user did not type during the await
+        //       (round 7/8 path).
+        //
+        //   (b) "intervening clear" — `onCleared` ran during the
+        //       await for the previously-mounted chip, stripped
+        //       its tokens from the draft, and nulled
+        //       `activePluginIdRef`. Restoring `prevEntries`
+        //       wholesale here would resurrect already-stripped
+        //       entries with stale offsets, AND leave our
+        //       optimistic `@<target>` orphaned in the draft (the
+        //       original #2881 symptom recurring inside the
+        //       failure window). Instead we surgically remove ONLY
+        //       our own optimistic entry by `insertionId`, strip
+        //       its `@<target>` from the draft, and leave
+        //       everything `onCleared` did intact.
+        //
+        // Detection: `onCleared` always nulls
+        // `activePluginIdRef.current`; our deferred
+        // `setActivePlugin` never ran (we are in the failure
+        // branch). So `activePluginIdRef.current === null` while
+        // `prevActiveId !== null` is the smoking gun for an
+        // intervening clear. (If `prevActiveId` was already null,
+        // there was no chip to clear — no race possible.)
+        const intervenedClear =
+          activePluginIdRef.current === null && prevActiveId !== null;
+        if (intervenedClear) {
+          const cur = pluginInsertedTokensRef.current;
+          const idx = cur.findIndex(
+            (e) => e.insertionId === ourInsertionId,
+          );
+          if (idx >= 0) {
+            const ourEntry = cur[idx]!;
+            // Splice our entry out first so `updateDraft`'s
+            // internal `reconcileInsertions` operates on a tracker
+            // that already excludes it (the strip range overlaps
+            // the entry, which would drop it anyway, but splicing
+            // first keeps the invariant explicit and avoids
+            // depending on the reconcile drop edge case).
+            pluginInsertedTokensRef.current = [
+              ...cur.slice(0, idx),
+              ...cur.slice(idx + 1),
+            ];
+            updateDraft((d) => stripPluginInsertedTokens(d, [ourEntry]));
+          }
+          // Don't touch `activePluginIdRef` — `onCleared` set it
+          // to null and that is the truth (no chip is mounted).
+          return;
+        }
+        // (a) round 7/8 path: no intervening clear.
+        pluginInsertedTokensRef.current = prevEntries;
+        activePluginIdRef.current = prevActiveId;
+        // Restore the draft only if no user keystrokes arrived
+        // during the await — overwriting newer edits with the
+        // stale pre-pick snapshot would be a worse bug than the
+        // leftover `@<token>` styled mention this branch leaves
+        // behind. The orphan stays as a styled mention but no
+        // future chip clear will touch it (tracker is empty for
+        // it now), and the user can edit it manually
+        // (#2929 round 8).
+        if (draftRef.current === postInsertDraft) {
+          setDraft(prevDraftValue);
+          draftRef.current = prevDraftValue;
+        }
+        return;
+      }
+      // Apply succeeded. Now commit the active-plugin switch —
+      // this drops any entries from the previously-active plugin
+      // (a no-op for the entry we just pushed since it matches
+      // `record.id`) and updates `activePluginIdRef`. Deferring
+      // until after the await means an `onCleared` triggered
+      // during the in-flight window saw the still-mounted plugin
+      // as the active one and stripped only that plugin's tokens
+      // (#2929 round 9).
+      setActivePlugin(record.id);
     }
 
-    function replaceMentionWithText(text: string): boolean {
-      if (!mention) return false;
+    function replaceMentionWithText(
+      text: string,
+    ): { insertStart: number } | null {
+      if (!mention) return null;
       const ta = textareaRef.current;
       const cursor = mention.cursor;
       const before = draft.slice(0, cursor);
       const after = draft.slice(cursor);
       const replaced = before.replace(/(^|\s)@([^\s@]*)$/, `$1${text}`);
       const next = replaced + after;
-      setDraft(next);
+      updateDraft(next);
       setMention(null);
+      // The inserted text was appended onto `replaced`, so its first
+      // char (the `@`) sits at `replaced.length - text.length`.
+      const insertStart = replaced.length - text.length;
       requestAnimationFrame(() => {
         if (!ta) return;
         ta.focus();
         const pos = replaced.length;
         ta.setSelectionRange(pos, pos);
       });
-      return true;
+      return { insertStart };
     }
 
     function insertMcpMention(server: McpServerConfig) {
@@ -1234,7 +1515,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function removeStaged(p: string) {
       setStaged((s) => s.filter((a) => a.path !== p));
       setStagedVisualComments((current) => current.filter((attachment) => attachment.screenshotPath !== p));
-      setDraft((current) => stripInlineMentionToken(current, p));
+      updateDraft((current) => stripInlineMentionToken(current, p));
     }
 
     function removeCommentAttachment(id: string) {
@@ -1473,11 +1754,72 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               showRail={false}
               onApplied={(brief) => {
                 // Use functional setState so stale closures from the @-mention
-                // flow (which awaits applyById after setDraft) still see the
-                // latest draft value before deciding whether to seed.
+                // flow (which awaits applyById after updateDraft) still see
+                // the latest draft value before deciding whether to seed.
                 if (typeof brief === 'string' && brief.length > 0) {
-                  setDraft((cur) => (cur.trim().length === 0 ? brief : cur));
+                  updateDraft((cur) => (cur.trim().length === 0 ? brief : cur));
                 }
+              }}
+              onCleared={() => {
+                // Removing the chip strip must drop the `@…` tokens
+                // this surface authored, otherwise the textarea is
+                // left holding orphaned mentions whose chips just
+                // unmounted (#2881). We strip *only* the tracked
+                // insertions (by precise start offset) so
+                // user-authored text that happens to share a label
+                // with a chip is preserved (#2929 round 3).
+                //
+                // The chip strip can clear while an `applyById` for
+                // a *different* plugin is mid-await — the @-popover
+                // optimistically writes `@<target>` and pushes a
+                // tracked entry synchronously, then awaits the
+                // apply (#2929 round 9 codex review). During that
+                // window the ref carries entries for both the
+                // still-mounted plugin (the chip the user is
+                // removing) and the in-flight target. Trusting the
+                // ref wholesale here would strip the optimistic
+                // `@<target>` and leave the unmounting plugin's
+                // `@<token>` orphaned — a recurrence of #2881 in a
+                // pending-apply window.
+                //
+                // PluginsSection only flips `activeRecord` after
+                // `applyPlugin` resolves successfully (see
+                // `PluginsSection.tsx`), so `getActiveRecord()` at
+                // the moment `onCleared` fires reports the plugin
+                // whose chip is currently being unmounted — exactly
+                // the one whose tracked entries we should strip.
+                // Filter to that id; entries for any in-flight
+                // replace target are left in place (the in-flight
+                // handler's success path will commit
+                // `setActivePlugin(target)` and drop them; its
+                // failure path will roll the tracker back).
+                const unmountingId =
+                  pluginsSectionRef.current?.getActiveRecord()?.id ?? null;
+                const entries = pluginInsertedTokensRef.current;
+                if (entries.length > 0) {
+                  const toStrip = unmountingId
+                    ? entries.filter((e) => e.pluginId === unmountingId)
+                    : entries;
+                  if (toStrip.length > 0) {
+                    // `updateDraft` runs `reconcileInsertions`
+                    // against the prev → next diff inside the
+                    // chokepoint, so any in-flight target's entries
+                    // get their offsets shifted to track the
+                    // post-strip draft. We must re-read the ref
+                    // *after* `updateDraft` returns instead of
+                    // filtering the pre-strip `entries` snapshot,
+                    // otherwise we would clobber the reconciled
+                    // offsets and a later clear of the in-flight
+                    // chip would no-op via `isInsertionStillValid`.
+                    updateDraft((d) => stripPluginInsertedTokens(d, toStrip));
+                  }
+                  pluginInsertedTokensRef.current = unmountingId
+                    ? pluginInsertedTokensRef.current.filter(
+                        (e) => e.pluginId !== unmountingId,
+                      )
+                    : [];
+                }
+                activePluginIdRef.current = null;
               }}
               onChipDetails={(item: ContextItem) => {
                 if (item.kind !== 'plugin') return;
@@ -1700,11 +2042,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                         plugins={pluginsForComposer}
                         activePluginId={pinnedPluginId}
                         onApply={async (record) => {
+                          // Tools-menu apply: no draft write, so the
+                          // tracked-insertion array gets no new
+                          // entry. The active-plugin switch (which
+                          // drops previously-tracked entries from a
+                          // prior @-popover pick of a different
+                          // plugin, #2929 round 6) is deferred until
+                          // `applyById` resolves successfully so
+                          // that an `onCleared` triggered during the
+                          // in-flight window still sees the
+                          // still-mounted plugin's entries and
+                          // strips them correctly via the
+                          // `getActiveRecord()` filter in
+                          // `onCleared` (#2929 round 9).
+                          //
+                          // No synchronous mutation in this branch
+                          // means no rollback snapshot is needed:
+                          // the failure path is just an early return
+                          // (#2929 round 7's snapshot was needed
+                          // because `setActivePlugin` was eager).
                           const result = await pluginsSectionRef.current?.applyById(
                             record.id,
                             record,
                           );
-                          if (result) setToolsOpen(false);
+                          if (!result) return;
+                          setActivePlugin(record.id);
+                          setToolsOpen(false);
                         }}
                         onShowDetails={(record) => {
                           setDetailsRecord(record);
@@ -1726,7 +2089,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                           const before = currentDraft.slice(0, cursor);
                           const after = currentDraft.slice(cursor);
                           const next = before + insert + after;
-                          setDraft(next);
+                          updateDraft(next);
                           setToolsOpen(false);
                           requestAnimationFrame(() => {
                             const el = textareaRef.current;
@@ -1750,7 +2113,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                           const before = draft.slice(0, cursor);
                           const after = draft.slice(cursor);
                           const next = before + insert + after;
-                          setDraft(next);
+                          updateDraft(next);
                           setToolsOpen(false);
                           requestAnimationFrame(() => {
                             const el = textareaRef.current;
@@ -1905,7 +2268,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
             onUse={async (record) => {
-              await pluginsSectionRef.current?.applyById(record.id, record);
+              // Details-modal apply: same shape as tools-menu apply
+              // (no draft write). The active-plugin switch is
+              // deferred until `applyById` resolves successfully so
+              // that an `onCleared` triggered during the in-flight
+              // window still sees the still-mounted plugin's
+              // entries and strips them correctly (#2929 round 9).
+              //
+              // Modal closes regardless of apply outcome so the
+              // user is not stuck on the details view if `/apply`
+              // 5xx'd. Failure is a no-op: no synchronous mutation
+              // happened, so nothing to roll back (#2929 round 7's
+              // snapshot was needed because `setActivePlugin` was
+              // eager — round 9 made it lazy).
+              const result = await pluginsSectionRef.current?.applyById(
+                record.id,
+                record,
+              );
+              if (result) setActivePlugin(record.id);
               setDetailsRecord(null);
             }}
           />
