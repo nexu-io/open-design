@@ -90,6 +90,8 @@ Dark mode is the native mode. No light mode variant by design — mission contro
 }
 ```
 
+Consumable bindings in `tokens.css` mirror the telemetry palette as `--success` (`#26DE81`) and `--danger` (`#FF4757`).
+
 ## 3. Typography
 
 ### Font Stack
