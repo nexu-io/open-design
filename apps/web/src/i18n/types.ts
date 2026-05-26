@@ -942,6 +942,12 @@ export interface Dict {
   'integrations.skillsNoResults': string;
   'integrations.skillsNoFilterResults': string;
   'integrations.skillsTreeEmpty': string;
+  'integrations.skillsTreeGuideMode': string;
+  'integrations.skillsTreeGuideScenario': string;
+  'integrations.skillsTreeGuideSkill': string;
+  'integrations.skillsTreeLegendMode': string;
+  'integrations.skillsTreeLegendScenario': string;
+  'integrations.skillsTreeLegendSkill': string;
   'integrations.skillsTreePlatform': string;
   'integrations.skillsTreePreviewType': string;
   'integrations.skillsTreeDesignSystem': string;

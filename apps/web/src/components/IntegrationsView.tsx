@@ -534,8 +534,12 @@ function SkillTreeGraph({
   const t = useT();
   const { locale } = useI18n();
   const layout = useMemo(
-    () => buildSkillTreeSvgLayout(tree, selectedSkillId, locale),
-    [locale, selectedSkillId, tree],
+    () => buildSkillTreeSvgLayout(tree, selectedSkillId, locale, {
+      mode: t('integrations.skillsTreeGuideMode'),
+      scenario: t('integrations.skillsTreeGuideScenario'),
+      skill: t('integrations.skillsTreeGuideSkill'),
+    }),
+    [locale, selectedSkillId, t, tree],
   );
   const selectedTreeSkill = selectedSkill
     ? skillSummaryToTreeSkill(selectedSkill)
@@ -614,9 +618,9 @@ function SkillTreeGraph({
           })}
         </svg>
         <div className="integrations-skills-tree__legend" aria-hidden>
-          <span><i className="is-mode" /> Mode</span>
-          <span><i className="is-scenario" /> Scenario</span>
-          <span><i className="is-skill" /> Skill</span>
+          <span><i className="is-mode" /> {t('integrations.skillsTreeLegendMode')}</span>
+          <span><i className="is-scenario" /> {t('integrations.skillsTreeLegendScenario')}</span>
+          <span><i className="is-skill" /> {t('integrations.skillsTreeLegendSkill')}</span>
         </div>
       </div>
       <SkillTreeInfoPanel skill={selectedTreeSkill} emptyLabel={t('integrations.skillsTreeEmpty')} />
@@ -666,6 +670,11 @@ function buildSkillTreeSvgLayout(
   tree: SkillCatalogTree,
   selectedSkillId: string | null,
   locale: ReturnType<typeof useI18n>['locale'],
+  guideLabels: {
+    mode: string;
+    scenario: string;
+    skill: string;
+  },
 ): SkillTreeSvgLayout {
   const modeGap = 330;
   const modeStartX = 170;
@@ -769,9 +778,9 @@ function buildSkillTreeSvgLayout(
     nodes,
     edges,
     guides: [
-      { id: 'mode', label: 'MODE', y: modeY },
-      { id: 'scenario', label: 'SCENE', y: scenarioStartY },
-      { id: 'skill', label: 'SKILL', y: scenarioStartY + 72 },
+      { id: 'mode', label: guideLabels.mode, y: modeY },
+      { id: 'scenario', label: guideLabels.scenario, y: scenarioStartY },
+      { id: 'skill', label: guideLabels.skill, y: scenarioStartY + 72 },
     ],
   };
 }

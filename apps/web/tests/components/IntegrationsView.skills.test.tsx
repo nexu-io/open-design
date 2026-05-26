@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { IntegrationsView } from '../../src/components/IntegrationsView';
+import { I18nProvider, type Locale } from '../../src/i18n';
 import type { AppConfig, SkillSummary } from '../../src/types';
 
 const originalFetch = globalThis.fetch;
@@ -39,7 +40,7 @@ function skill(overrides: Partial<SkillSummary>): SkillSummary {
 
 function renderSkillsIntegration(
   skills: SkillSummary[],
-  options: { skillsStatus?: number; skillsBody?: unknown } = {},
+  options: { skillsStatus?: number; skillsBody?: unknown; locale?: Locale } = {},
 ) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = input.toString();
@@ -53,11 +54,13 @@ function renderSkillsIntegration(
   }) as typeof fetch;
 
   render(
-    <IntegrationsView
-      config={TEST_CONFIG}
-      initialTab="skills"
-      onPersistComposioKey={() => undefined}
-    />,
+    <I18nProvider initial={options.locale ?? 'en'}>
+      <IntegrationsView
+        config={TEST_CONFIG}
+        initialTab="skills"
+        onPersistComposioKey={() => undefined}
+      />
+    </I18nProvider>,
   );
 }
 
@@ -244,5 +247,20 @@ describe('IntegrationsView skills tree', () => {
 
     expect(await screen.findByText('Could not load skills. Make sure the local daemon is running, then try again.')).toBeTruthy();
     expect(screen.queryByText('No skills match these filters.')).toBeNull();
+  });
+
+  it('localizes tree guide and legend labels', async () => {
+    renderSkillsIntegration([
+      skill({ id: 'dashboard', name: 'Dashboard', scenario: 'operation', platform: 'desktop' }),
+    ], { locale: 'zh-CN' });
+
+    await screen.findByTestId('integrations-skill-node-dashboard');
+
+    expect(screen.getAllByText('模式').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('场景').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('技能').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Mode')).toBeNull();
+    expect(screen.queryByText('Scenario')).toBeNull();
+    expect(screen.queryByText('Skill')).toBeNull();
   });
 });

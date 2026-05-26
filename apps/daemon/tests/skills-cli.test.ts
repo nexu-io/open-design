@@ -30,6 +30,30 @@ async function withSkillsServer<T>(
 }
 
 describe('od skills CLI', () => {
+  it('prints skills tree help without contacting the daemon', async () => {
+    const result = await execFileAsync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        cliEntry,
+        'skills',
+        'tree',
+        '--help',
+        '--daemon-url',
+        'http://127.0.0.1:1',
+      ],
+      {
+        cwd: daemonRoot,
+        env: process.env,
+      },
+    );
+
+    expect(result.stdout).toContain('Usage:');
+    expect(result.stdout).toContain('od skills tree [--json]');
+    expect(result.stderr).toBe('');
+  });
+
   it('rejects malformed skills tree responses', async () => {
     await withSkillsServer(
       (_req, res) => {
