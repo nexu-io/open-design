@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import type { ProjectFile } from '../../src/types';
+import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
 const panelState = vi.hoisted(() => ({
   props: null as ComponentProps<typeof import('../../src/components/ManualEditPanel').ManualEditPanel> | null,
@@ -215,6 +216,102 @@ describe('FileViewer manual edit history regressions', () => {
       );
     });
   });
+
+  it('syncs panel target selection to the iframe bridge', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="cta">Call to action</p></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const hero = manualEditTarget('hero', 'Hero');
+    const cta = manualEditTarget('cta', 'Call to action');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-targets', targets: [hero, cta] },
+    }));
+    await waitFor(() => expect(panelState.props?.targets.length).toBe(2));
+
+    act(() => {
+      panelState.props?.onSelectTarget(cta);
+    });
+
+    await waitFor(() => {
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'od-edit-selected-target', id: 'cta' }),
+        '*',
+      );
+    });
+  });
+
+  it('flushes latest inline text when Save Changes is clicked within the debounce window', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        savedSources.push(payload.content);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(initialSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const originalPostMessage = frame.contentWindow!.postMessage.bind(frame.contentWindow);
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((message: unknown, targetOrigin: string) => {
+      const data = message as { type?: string };
+      if (data?.type === 'od-edit-text-commit-now') {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od-edit-text-commit',
+            id: 'hero',
+            value: 'Hero latest',
+            target: manualEditTarget('hero', 'Hero latest'),
+          },
+        }));
+      }
+      originalPostMessage(message, targetOrigin);
+    });
+
+    act(() => {
+      panelState.props?.onSaveInlineContent?.();
+    });
+
+    await waitFor(() => expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'od-edit-text-commit-now' }),
+      '*',
+    ));
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).toContain('Hero latest');
+  });
 });
 
 function htmlPreviewFile(): ProjectFile {
@@ -234,5 +331,22 @@ function htmlPreviewFile(): ProjectFile {
       renderer: 'html',
       exports: ['html'],
     },
+  };
+}
+
+function manualEditTarget(id: string, text: string): ManualEditTarget {
+  return {
+    id,
+    kind: 'text',
+    label: text,
+    tagName: 'h1',
+    className: '',
+    text,
+    rect: { x: 0, y: 0, width: 120, height: 32 },
+    fields: { text },
+    attributes: { 'data-od-id': id },
+    styles: emptyManualEditStyles(),
+    isLayoutContainer: false,
+    outerHtml: `<h1 data-od-id="${id}">${text}</h1>`,
   };
 }

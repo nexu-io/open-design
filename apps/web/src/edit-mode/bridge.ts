@@ -780,6 +780,10 @@ export function buildManualEditBridge(enabled: boolean): string {
       });
       return;
     }
+    if (ev.data.type === 'od-edit-text-commit-now') {
+      if (activeTextEdit) postInlineTextCommit(activeTextEdit);
+      return;
+    }
   });
   document.addEventListener('pointerdown', handleManualEditPick, true);
   document.addEventListener('click', preventManualEditActivation, true);

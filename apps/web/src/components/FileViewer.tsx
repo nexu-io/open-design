@@ -4478,6 +4478,11 @@ function HtmlViewer({
   }
 
   useEffect(() => {
+    if (!manualEditMode) return;
+    postSelectedManualEditTargetToIframe(selectedManualEditTarget?.id ?? null, iframeRef.current, false);
+  }, [manualEditMode, selectedManualEditTarget?.id, srcDoc]);
+
+  useEffect(() => {
     if (!manualEditMode || !selectedManualEditTarget?.id) return undefined;
     function onKeyDown(ev: KeyboardEvent) {
       const target = ev.target as HTMLElement | null;
@@ -5017,7 +5022,18 @@ function HtmlViewer({
     logManualEditDebug('host:content-save-queued', { patch, label });
   }
 
+  async function requestInlineTextCommitNow(): Promise<void> {
+    if (!manualEditMode) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od-edit-text-commit-now' }, '*');
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
+
   async function flushManualEditContentSave(): Promise<boolean> {
+    await requestInlineTextCommitNow();
     const pending = manualEditPendingContentRef.current;
     if (pending.length === 0) return true;
     if (manualEditSavingRef.current) {
