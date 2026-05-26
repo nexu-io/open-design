@@ -58,22 +58,26 @@ function isFilePath(detail: string): boolean {
 
 /**
  * Extract a known agent label from a filesystem path.
- * If the path contains a recognized agent executable name, return its label.
- * Otherwise, return undefined.
+ * If the path's executable name matches a recognized agent executable,
+ * return its label. Otherwise, return undefined.
  *
  * Example: "/Applications/.../bin/vela" → "Live Artifact"
+ * Example: "C:\\Program Files\\Agent\\codex.exe" → "Codex"
  * Example: "/usr/local/bin/unknown-agent" → undefined
  */
 function extractKnownAgentLabel(detail: string): string | undefined {
-  const normalizedDetail = detail.toLowerCase();
+  const pathSegments = detail.split(/[\\/]/).filter(Boolean);
+  const executableName = pathSegments[pathSegments.length - 1];
 
-  for (const [agentKey, agentLabel] of Object.entries(KNOWN_AGENT_LABELS)) {
-    if (normalizedDetail.includes(agentKey.toLowerCase())) {
-      return agentLabel;
-    }
+  if (!executableName) {
+    return undefined;
   }
 
-  return undefined;
+  const normalizedExecutableName = executableName
+    .replace(/\.exe$/i, '')
+    .toLowerCase();
+
+  return KNOWN_AGENT_LABELS[normalizedExecutableName];
 }
 
 /**
