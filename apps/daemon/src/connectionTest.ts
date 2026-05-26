@@ -32,6 +32,7 @@ import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
+import { diagnoseCopilotCliFailure } from './copilot-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
@@ -1556,9 +1557,18 @@ async function testAgentConnectionInternal(
         stdoutTail: rawStdoutTail || buffered,
         env,
       });
-      if (claudeDiagnostic) {
+      const copilotDiagnostic = diagnoseCopilotCliFailure({
+        agentId: input.agentId,
+        exitCode: winner.code,
+        signal: winner.signal,
+        stderrTail,
+        stdoutTail: rawStdoutTail || buffered,
+        env,
+      });
+      const agentDiagnostic = claudeDiagnostic ?? copilotDiagnostic;
+      if (agentDiagnostic) {
         console.warn(
-          `[test:agent] ${def.name} → claude_diagnostic: ${claudeDiagnostic.detail}`,
+          `[test:agent] ${def.name} → agent_diagnostic: ${agentDiagnostic.detail}`,
         );
         return {
           ok: false,
@@ -1566,7 +1576,7 @@ async function testAgentConnectionInternal(
           latencyMs,
           model,
           agentName: def.name,
-          detail: claudeDiagnostic.detail,
+          detail: agentDiagnostic.detail,
           diagnostics: buildDiagnostics({
             phase: 'spawn',
             exitCode: winner.code,

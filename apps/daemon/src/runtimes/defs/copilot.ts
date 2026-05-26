@@ -47,6 +47,7 @@ export const copilotAgentDef = {
     // Settings.
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      { id: 'auto', label: 'Auto (Copilot CLI)' },
       { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
       { id: 'gpt-5.2', label: 'GPT-5.2' },
     ],

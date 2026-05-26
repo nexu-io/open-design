@@ -168,6 +168,7 @@ import {
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
+import { diagnoseCopilotCliFailure } from './copilot-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
@@ -11389,14 +11390,23 @@ export async function startServer({
         artifactQuietShutdownRequested,
       });
       if (status === 'failed') {
-        const diagnostic = diagnoseClaudeCliFailure({
-          agentId: def.id,
-          exitCode: code,
-          signal,
-          stderrTail: agentStderrTail,
-          stdoutTail: agentStdoutTail,
-          env: spawnedAgentEnv,
-        });
+        const diagnostic =
+          diagnoseClaudeCliFailure({
+            agentId: def.id,
+            exitCode: code,
+            signal,
+            stderrTail: agentStderrTail,
+            stdoutTail: agentStdoutTail,
+            env: spawnedAgentEnv,
+          }) ??
+          diagnoseCopilotCliFailure({
+            agentId: def.id,
+            exitCode: code,
+            signal,
+            stderrTail: agentStderrTail,
+            stdoutTail: agentStdoutTail,
+            env: spawnedAgentEnv,
+          });
         if (diagnostic) {
           send('error', createSseErrorPayload(
             'AGENT_EXECUTION_FAILED',
