@@ -401,10 +401,24 @@ function StyleInspector({
   onChange: (key: keyof ManualEditStyles, value: string) => void;
 }) {
   const u = (key: keyof ManualEditStyles, value: string) => onChange(key, value);
+  const navRef = useRef<HTMLDivElement | null>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const checkOverflow = () => {
+      setHasOverflow(el.scrollWidth > el.clientWidth);
+    };
+    checkOverflow();
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="cc-inspector">
-      <div className="cc-inspector-nav">
+      <div className={`cc-inspector-nav${hasOverflow ? ' has-overflow' : ''}`} ref={navRef}>
         <button type="button" className="cc-inspector-page" onClick={onClearSelection} aria-label="Show page inspector">
           Page
         </button>

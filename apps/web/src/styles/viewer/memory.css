@@ -661,9 +661,29 @@
 .cc-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; overflow: auto; background: var(--bg-panel); }
 .cc-inspector { display: flex; flex-direction: column; gap: 12px; padding: 6px 12px; }
 .cc-inspector-nav {
+  position: relative;
   display: flex;
   justify-content: flex-start;
+  gap: 4px;
   margin-bottom: -4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.cc-inspector-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.cc-inspector-nav.has-overflow::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, transparent, var(--bg-panel));
+  pointer-events: none;
 }
 .cc-inspector-page {
   height: 24px;
