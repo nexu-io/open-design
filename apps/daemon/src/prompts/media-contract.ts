@@ -98,6 +98,12 @@ Always quote the prompt value. Use \`--prompt "<full prompt>"\` (or the
 equivalent safe quoting for your shell) — never splice an unquoted user
 string into the command line.
 
+For audio speech, \`--prompt\` must contain only the final words to be spoken.
+Keep language, tone, pacing, emotion, style, safety notes, and voice descriptions out of \`--prompt\`; those are direction for choosing a real
+provider voice id or for the user's review, not text for the TTS engine to
+read aloud. Use \`--voice\` only when you have a real provider voice id; omit it
+for natural-language descriptions such as "young energetic narrator".
+
 The command prints a single line of JSON describing the written file:
 
 \`\`\`json

@@ -3,6 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { composeSystemPrompt } from '../src/prompts/system.js';
 
 describe('composeSystemPrompt — audio voice options', () => {
+  it('tells speech agents to keep performance direction out of --prompt', () => {
+    const prompt = composeSystemPrompt({
+      streamFormat: 'plain',
+      metadata: {
+        kind: 'audio',
+        audioKind: 'speech',
+        audioModel: 'senseaudio-tts',
+        audioDuration: 10,
+      },
+    });
+
+    expect(prompt).toContain('For audio speech, `--prompt` must contain only the final words to be spoken');
+    expect(prompt).toContain('Keep language, tone, pacing, emotion, style, safety notes, and voice descriptions out of `--prompt`');
+    expect(prompt).toContain('Use `--voice` only when you have a real provider voice id');
+  });
+
   it('documents ElevenLabs sound effect prompt controls for API-mode prompts', () => {
     const prompt = composeSystemPrompt({
       streamFormat: 'plain',

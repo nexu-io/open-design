@@ -48,6 +48,14 @@ describe('BYOK_MEDIA_TOOLS', () => {
     expect(enumIds).toContain(SENSEAUDIO_DEFAULT_IMAGE_MODEL);
     expect(enumIds).toContain('gpt-image-2'); // an OpenAI image model
   });
+
+  it('documents that TTS prompt is spoken text only', () => {
+    const tool = BYOK_MEDIA_TOOLS.find((t) => t.function.name === 'generate_audio')!;
+    const props = tool.function.parameters.properties as any;
+    expect(props.prompt.description).toContain('For TTS, include only the final text to speak');
+    expect(props.prompt.description).toContain('Do not include language, tone, pacing, emotion, style, safety notes, or voice descriptions');
+    expect(props.voice.description).toContain('Only pass this when you have a real provider voice id');
+  });
 });
 
 describe('executeGenerateImage', () => {

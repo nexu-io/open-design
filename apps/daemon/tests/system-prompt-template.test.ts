@@ -317,6 +317,8 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
 
     expect(out).toContain('`elevenlabs-v3`');
     expect(out).toContain('`elevenlabs-sfx`');
+    expect(out).toContain('For audio speech, `--prompt` must contain only the final words to be spoken');
+    expect(out).toContain('Keep language, tone, pacing, emotion, style, safety notes, and voice descriptions out of `--prompt`');
     expect(out).toContain('provider-specific ElevenLabs `voice_id`');
     expect(out).toContain('sound description belongs in `--prompt`');
     expect(out).toContain('Describe the audible event itself');
