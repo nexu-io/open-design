@@ -2307,6 +2307,26 @@ process.exit(1);
     );
   });
 
+  it('sanitizes absolute paths from agent connection test failure details (#1912)', async () => {
+    const leakedPath = '/var/folders/leaked/od-conn-test-secretDir/extra';
+    await withFakeCodex(
+      `
+console.error('failed in ${leakedPath}');
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'codex' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Codex CLI',
+        });
+        expect(result.detail).not.toContain(leakedPath);
+        expect(result.detail).toContain('[path]');
+      },
+    );
+  });
+
   it('rejects invalid custom model ids before spawning an agent', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');

@@ -32,6 +32,7 @@ import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
+import { sanitizeAgentErrorDetail } from './user-facing-agent-error.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
@@ -1336,7 +1337,7 @@ async function testAgentConnectionInternal(
       latencyMs,
       model,
       agentName: def.name,
-      detail,
+      detail: sanitizeAgentErrorDetail(detail),
       diagnostics: buildDiagnostics(),
     };
   };
@@ -1378,7 +1379,7 @@ async function testAgentConnectionInternal(
         latencyMs: Date.now() - start,
         model,
         agentName: def.name,
-        detail: redactSecrets(detail),
+        detail: sanitizeAgentErrorDetail(detail),
         diagnostics: buildDiagnostics(),
       };
     }
@@ -1460,7 +1461,7 @@ async function testAgentConnectionInternal(
     ): ConnectionTestResponse => {
       if (winner.kind === 'spawnError') {
         const latencyMs = Date.now() - start;
-        const detail = redactSecrets(winner.error.message);
+        const detail = sanitizeAgentErrorDetail(winner.error.message);
         const guidance = redactSecrets(
           `${codexExecutableGuidance(
             input.agentId,
@@ -1574,9 +1575,7 @@ async function testAgentConnectionInternal(
           }),
         };
       }
-      const detail = redactSecrets(
-        rawDetail,
-      );
+      const detail = sanitizeAgentErrorDetail(rawDetail);
       const guidance = redactSecrets(
         `${codexExecutableGuidance(
           input.agentId,
@@ -1667,7 +1666,7 @@ async function testAgentConnectionInternal(
       latencyMs: Date.now() - start,
       model,
       agentName: def.name,
-      detail: redactSecrets(detail),
+      detail: sanitizeAgentErrorDetail(detail),
       diagnostics: buildDiagnostics(),
     };
   } finally {
