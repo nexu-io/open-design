@@ -4,15 +4,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
+import JSZip from 'jszip';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const NETLIFY_PROVIDER_ID = 'netlify';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
+export const SAVED_NETLIFY_TOKEN_MASK = 'saved-netlify-token';
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof NETLIFY_PROVIDER_ID;
 type DeployErrorDetails = JsonObject | string | undefined;
 type DeployConfig = {
   token: string;
@@ -51,6 +54,7 @@ function errorMessage(err: unknown, fallback: string): string {
 
 const VERCEL_API = 'https://api.vercel.com';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
+const NETLIFY_API = 'https://api.netlify.com/api/v1';
 const CLOUDFLARE_API_PAGE_SIZE = 100;
 const CLOUDFLARE_API_MAX_PAGES = 100;
 export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES = 100;
@@ -75,7 +79,9 @@ export class DeployError extends Error {
 
 export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
+  if (providerId === NETLIFY_PROVIDER_ID) return path.join(base, 'netlify.json');
+  return path.join(base, 'vercel.json');
 }
 
 export async function readVercelConfig(): Promise<DeployConfig> {
@@ -105,6 +111,19 @@ export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
     };
   } catch (err) {
     if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '', cloudflarePages: {} };
+    throw err;
+  }
+}
+
+export async function readNetlifyConfig(): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(NETLIFY_PROVIDER_ID), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '' };
     throw err;
   }
 }
@@ -148,6 +167,19 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
   return publicCloudflarePagesConfig(next);
 }
 
+export async function writeNetlifyConfig(input: Partial<DeployConfig>) {
+  const current = await readNetlifyConfig();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  const next = {
+    token:
+      tokenInput && tokenInput !== SAVED_NETLIFY_TOKEN_MASK
+        ? tokenInput
+        : current.token,
+  };
+  await writeDeployConfigFile(deployConfigPath(NETLIFY_PROVIDER_ID), next);
+  return publicNetlifyConfig(next);
+}
+
 async function writeDeployConfigFile(file: string, config: DeployConfig) {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
@@ -185,23 +217,37 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
+export function publicNetlifyConfig(config: Partial<DeployConfig>) {
+  return {
+    providerId: NETLIFY_PROVIDER_ID,
+    configured: Boolean(config?.token),
+    tokenMask: config?.token ? SAVED_NETLIFY_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    target: 'preview',
+  };
+}
+
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  if (providerId === NETLIFY_PROVIDER_ID) return readNetlifyConfig();
   return readVercelConfig();
 }
 
 export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
+  if (providerId === NETLIFY_PROVIDER_ID) return writeNetlifyConfig(input);
   return writeVercelConfig(input);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  if (providerId === NETLIFY_PROVIDER_ID) return publicNetlifyConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === NETLIFY_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
@@ -433,6 +479,110 @@ export async function deployToVercel({ config, files, projectId }: { config: Dep
     status: link.status,
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
+  };
+}
+
+async function readNetlifyJson(resp: Response): Promise<any> {
+  try {
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function deployToNetlify({ config, files, projectId, priorMetadata }: { config: DeployConfig; files: DeployFile[]; projectId: string; priorMetadata?: JsonObject | undefined }) {
+  if (!config?.token) {
+    throw new DeployError('Netlify token is required.', 400);
+  }
+
+  // Create zip file
+  const zip = new JSZip();
+  for (const file of files) {
+    zip.file(file.file, file.data);
+  }
+  const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+  let siteId = priorMetadata?.siteId;
+
+  // Try to find the site if not available in metadata
+  if (!siteId) {
+    const siteName = safeVercelProjectName(`od-${projectId}`);
+    const listResp = await fetch(`${NETLIFY_API}/sites?name=${siteName}`, {
+      headers: { Authorization: `Bearer ${config.token}` }
+    });
+    const sites = await readNetlifyJson(listResp);
+    if (listResp.ok && Array.isArray(sites)) {
+      const existing = sites.find(s => s.name === siteName);
+      if (existing) {
+        siteId = existing.site_id;
+      }
+    }
+
+    if (!siteId) {
+      // Create a new site
+      const createSiteResp = await fetch(`${NETLIFY_API}/sites`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: siteName }),
+      });
+      const site = await readNetlifyJson(createSiteResp);
+      if (createSiteResp.ok && site?.site_id) {
+        siteId = site.site_id;
+      } else {
+        // Fallback to unnamed site
+        const fallbackResp = await fetch(`${NETLIFY_API}/sites`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const fallbackSite = await readNetlifyJson(fallbackResp);
+        if (!fallbackResp.ok || !fallbackSite?.site_id) {
+          throw new DeployError(fallbackSite?.message || 'Failed to create Netlify site.', 502, fallbackSite);
+        }
+        siteId = fallbackSite.site_id;
+      }
+    }
+  }
+
+  const deployResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      'Content-Type': 'application/zip',
+    },
+    body: zipBuffer,
+  });
+
+  const deployed = await readNetlifyJson(deployResp);
+  if (!deployResp.ok) {
+    throw new DeployError(deployed?.message || 'Netlify deployment failed.', 502, deployed);
+  }
+
+  const deploymentId = deployed.id;
+  const initialUrl = deployed.deploy_ssl_url || deployed.ssl_url || deployed.deploy_url || deployed.url;
+
+  const link = await waitForReachableDeploymentUrl(
+    [
+      deployed.deploy_ssl_url,
+      deployed.ssl_url,
+      deployed.deploy_url,
+      deployed.url
+    ],
+    { providerLabel: 'Netlify' },
+  );
+
+  return {
+    providerId: NETLIFY_PROVIDER_ID,
+    url: link.url || initialUrl,
+    deploymentId,
+    target: 'preview',
+    status: link.status,
+    statusMessage: link.statusMessage,
+    reachableAt: link.reachableAt,
+    providerMetadata: { siteId },
   };
 }
 

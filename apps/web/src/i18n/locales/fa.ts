@@ -3587,6 +3587,15 @@ export const fa: Dict = {
   'questions.skipAll': 'رد کردن همه',
   'questions.autoSkipHint': 'با پایان تایمر به‌طور خودکار ادامه می‌یابد',
   'questions.submitting': 'در حال ارسال…',
+
+  'fileViewer.netlifyProvider': 'Netlify',
+  'fileViewer.netlifyToken': 'Netlify token',
+  'fileViewer.netlifyTokenGetLink': 'Get Netlify token',
+  'fileViewer.netlifyTokenPlaceholder': 'Paste your Netlify token',
+  'fileViewer.netlifyTokenReuseHint': 'Saved token will be used. Enter a new token to replace it.',
+  'fileViewer.netlifyTokenRequired': 'Enter and save a Netlify token first.',
+  'fileViewer.netlifyPreviewOnly': 'Deploys are preview-only for now.',
+
   'sketch.toolSelect': 'انتخاب (غیرفعال)',
   'sketch.toolPen': 'قلم',
   'sketch.toolText': 'متن',

@@ -12,7 +12,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, NETLIFY_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, deployToNetlify, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
 
   /**
    * A DeployError now carries a specific `code` (MISSING_REFERENCES,
@@ -163,11 +163,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             priorMetadata: prior?.providerMetadata,
             target,
           })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+        : providerId === NETLIFY_PROVIDER_ID
+          ? await deployToNetlify({
+              config: await readDeployConfig(NETLIFY_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+              priorMetadata: prior?.providerMetadata,
+            })
+          : await deployToVercel({
+              config: await readDeployConfig(VERCEL_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+            });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -186,7 +193,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         providerMetadata:
           providerId === CLOUDFLARE_PAGES_PROVIDER_ID
             ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
-            : prior?.providerMetadata,
+            : providerId === NETLIFY_PROVIDER_ID
+              ? result.providerMetadata
+              : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
@@ -316,7 +325,7 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
           statusMessage: result.reachable
             ? 'Public link is ready.'
             : result.statusMessage ||
-              'Vercel is still preparing the public link.',
+              'Provider is still preparing the public link.',
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });

@@ -695,7 +695,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'netlify';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
