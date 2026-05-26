@@ -779,7 +779,7 @@ export const zhTW: Dict = {
   'designs.subYours': '我的設計',
   'designs.filterAria': '篩選專案',
   'designs.searchPlaceholder': '搜尋…',
-  'designs.emptyNoProjects': '還沒有專案。請在左側建立一個。',
+  'designs.emptyNoProjects': '還沒有專案。建立你的第一個專案開始設計吧。',
   'designs.emptyNoMatch': '沒有符合的專案。',
   'designs.deleteTitle': '刪除專案',
   'designs.deleteConfirm': '確定刪除「{name}」？',

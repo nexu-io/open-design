@@ -630,6 +630,35 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+.designs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.designs-empty > p {
+  margin: 0;
+  max-width: 28rem;
+  line-height: 1.5;
+}
+.designs-empty__action {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.designs-empty__action:hover {
+  filter: brightness(1.05);
+}
+.designs-empty__action:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 70%, white 30%);
+  outline-offset: 2px;
+}
 
 .connector-inline-error {
   margin: 0 0 12px;
