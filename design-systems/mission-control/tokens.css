@@ -17,9 +17,9 @@
   --accent-on: #06101d;
   --accent-hover: color-mix(in oklab, var(--accent), black 8%);
   --accent-active: color-mix(in oklab, var(--accent), black 14%);
-  --success: #22c55e;
-  --warn: #fbbf24;
-  --danger: #fb7185;
+  --success: #26DE81;
+  --warn: #FF9F43;
+  --danger: #FF4757;
   --font-display: Inter, system-ui, sans-serif;
   --font-body: Inter, system-ui, sans-serif;
   --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
