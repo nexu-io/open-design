@@ -248,7 +248,10 @@ export type TrackingExportFormat =
   | 'markdown'
   | 'template'
   | 'share_link'
-  | 'share_page';
+  | 'share_page'
+  | 'vercel'
+  | 'cloudflare_pages'
+  | 'netlify';
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';

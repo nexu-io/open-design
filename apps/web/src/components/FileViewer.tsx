@@ -120,6 +120,7 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
+  NETLIFY_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
@@ -353,17 +354,20 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
 ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider' | 'fileViewer.netlifyProvider';
   tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink' | 'fileViewer.netlifyTokenGetLink';
   tokenPlaceholderKey:
     | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+    | 'fileViewer.cloudflareApiTokenPlaceholder'
+    | 'fileViewer.netlifyTokenPlaceholder';
+  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint' | 'fileViewer.netlifyTokenReuseHint';
+  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired' | 'fileViewer.netlifyTokenRequired';
+  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint' | 'fileViewer.netlifyPreviewOnly';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
+    | 'fileViewer.cloudflareApiToken'
+    | 'fileViewer.netlifyToken';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -677,6 +681,17 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+  {
+    id: NETLIFY_PROVIDER_ID,
+    labelKey: 'fileViewer.netlifyProvider',
+    tokenLink: 'https://app.netlify.com/user/applications/personal',
+    tokenLinkKey: 'fileViewer.netlifyTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.netlifyTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.netlifyTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.netlifyTokenRequired',
+    previewHintKey: 'fileViewer.netlifyPreviewOnly',
+    tokenLabelKey: 'fileViewer.netlifyToken',
   },
 ];
 
@@ -7512,7 +7527,10 @@ function HtmlViewer({
       | 'markdown'
       | 'template'
       | 'share_link'
-      | 'share_page',
+      | 'share_page'
+      | 'vercel'
+      | 'cloudflare_pages'
+      | 'netlify',
     fn: () => Promise<unknown> | unknown,
     context?: HtmlVersionExportContext | null,
   ) => {
@@ -14480,7 +14498,7 @@ function HtmlViewer({
   }
 
   async function retryDeploymentLink() {
-    const current = deployResult || deployment;
+    const current = (deployResult?.providerId === deployProviderId ? deployResult : null) || deployment;
     if (!current?.id) return;
     setDeployError(null);
     setDeployPhase('preparing-link');
@@ -15772,7 +15790,7 @@ function HtmlViewer({
       clearBoardComposer();
     }
   }, [activePreviewCommentId, boardMode, effectiveDeck, slideState?.active, visibleSideComments]);
-  const activeDeployment = deployResult || deployment;
+  const activeDeployment = (deployResult?.providerId === deployProviderId ? deployResult : null) || deployment;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
