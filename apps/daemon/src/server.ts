@@ -242,7 +242,11 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
-import { generateMedia } from './media.js';
+import { finalizeMediaTaskFromGenerateResult, generateMedia } from './media.js';
+import {
+  classifyMediaProjectRunCloseStatus,
+  mediaDeliverableMissingMessage,
+} from './media-deliverable-guard.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
@@ -9457,15 +9461,25 @@ export async function startServer({
         image: req.body?.image,
         onProgress: (line) => appendTaskProgress(db, task, line),
       })
-        .then((meta) => {
-          task.status = 'done';
-          task.file = meta;
-          task.endedAt = Date.now();
+        .then(async (meta) => {
+          const outcome = await finalizeMediaTaskFromGenerateResult(
+            task,
+            meta,
+            PROJECTS_DIR,
+            projectId,
+          );
           persistMediaTask(db, task);
           notifyTaskWaiters(db, task);
+          if (outcome === 'done') {
+            console.error(
+              `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
+                `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+            );
+            return;
+          }
           console.error(
-            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
-              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+            `[task ${taskId.slice(0, 8)}] failed code=${task.error?.code} ` +
+              `message=${(task.error?.message || '').slice(0, 240)}`,
           );
         })
         .catch((err) => {
@@ -11511,7 +11525,7 @@ export async function startServer({
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       design.runs.finish(run, 'failed', 1, null);
     });
-    child.on('close', (code, signal) => {
+    child.on('close', async (code, signal) => {
       clearInactivityWatchdog();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
@@ -11576,14 +11590,53 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const status = classifyChatRunCloseStatus({
+      let status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
         signal,
         acpCleanCompletion,
         artifactQuietShutdownRequested,
       });
-      if (status === 'failed') {
+      let failureAlreadyReported = false;
+      if (
+        status === 'succeeded' &&
+        typeof projectId === 'string' &&
+        projectId &&
+        projectRecord?.metadata?.kind
+      ) {
+        try {
+          const projectKind = String(projectRecord.metadata.kind);
+          const files = await listFiles(PROJECTS_DIR, projectId, {
+            metadata: projectRecord.metadata,
+          });
+          const hasDeliverableFile = files.some((file) => file.kind === projectKind);
+          const reconciled = classifyMediaProjectRunCloseStatus({
+            status,
+            projectKind,
+            hasDeliverableFile,
+          });
+          if (reconciled === 'failed') {
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              mediaDeliverableMissingMessage(projectKind),
+              { retryable: true },
+            ));
+            status = 'failed';
+            failureAlreadyReported = true;
+          }
+        } catch (err) {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `Could not verify ${projectRecord.metadata.kind} output on disk: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { retryable: true },
+          ));
+          status = 'failed';
+          failureAlreadyReported = true;
+        }
+      }
+      if (status === 'failed' && !failureAlreadyReported) {
         const diagnostic = diagnoseClaudeCliFailure({
           agentId: def.id,
           exitCode: code,

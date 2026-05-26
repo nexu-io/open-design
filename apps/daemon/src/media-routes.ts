@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
+import { finalizeMediaTaskFromGenerateResult } from './media.js';
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
 
@@ -192,15 +193,25 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         image: req.body?.image,
         onProgress: (line: any) => appendTaskProgress(task, line),
       })
-        .then((meta: any) => {
-          task.status = 'done';
-          task.file = meta;
-          task.endedAt = Date.now();
+        .then(async (meta: any) => {
+          const outcome = await finalizeMediaTaskFromGenerateResult(
+            task,
+            meta,
+            PROJECTS_DIR,
+            projectId,
+          );
           persistMediaTask(task);
           notifyTaskWaiters(task);
+          if (outcome === 'done') {
+            console.error(
+              `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
+                `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+            );
+            return;
+          }
           console.error(
-            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
-              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
+            `[task ${taskId.slice(0, 8)}] failed code=${task.error?.code} ` +
+              `message=${(task.error?.message || '').slice(0, 240)}`,
           );
         })
         .catch((err: any) => {
