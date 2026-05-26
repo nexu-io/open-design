@@ -295,9 +295,9 @@ export function createPackageManagerInvocation(args: string[], env: NodeJS.Proce
     return createCommandInvocation({ args, command: execPath, env });
   }
   if (process.platform === "win32") {
-    return buildCmdShimInvocation("pnpm", args, env);
+    return buildCmdShimInvocation("corepack", ["pnpm", ...args], env);
   }
-  return { args, command: "pnpm" };
+  return { args: ["pnpm", ...args], command: "corepack" };
 }
 
 function createLoggedStdio(logFd?: number | null): StdioOptions {
