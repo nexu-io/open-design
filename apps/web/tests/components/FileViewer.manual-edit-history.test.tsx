@@ -465,6 +465,88 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources.length).toBeGreaterThanOrEqual(2));
     expect(savedSources[1]).toContain('Hero latest');
   });
+
+  it('does not restore prior selection when inline commit arrives after panel switches target', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="cta">Call to action</p></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const hero = manualEditTarget('hero', 'Hero');
+    const cta = manualEditTarget('cta', 'Call to action');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-targets', targets: [hero, cta] },
+    }));
+    await waitFor(() => expect(panelState.props?.targets.length).toBe(2));
+
+    await act(async () => {
+      await panelState.props?.onSelectTarget(hero);
+    });
+    await waitFor(() => expect(panelState.props?.selectedTarget?.id).toBe('hero'));
+
+    await act(async () => {
+      await panelState.props?.onSelectTarget(cta);
+    });
+    await waitFor(() => expect(panelState.props?.selectedTarget?.id).toBe('cta'));
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od-edit-text-commit',
+        id: 'hero',
+        value: 'Hero latest',
+        target: manualEditTarget('hero', 'Hero latest'),
+      },
+    }));
+
+    await waitFor(() => expect(panelState.props?.selectedTarget?.id).toBe('cta'));
+  });
+
+  it('does not restore prior selection when inline commit arrives after panel clears selection', async () => {
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="cta">Call to action</p></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const hero = manualEditTarget('hero', 'Hero');
+    const cta = manualEditTarget('cta', 'Call to action');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-targets', targets: [hero, cta] },
+    }));
+    await waitFor(() => expect(panelState.props?.targets.length).toBe(2));
+
+    await act(async () => {
+      await panelState.props?.onSelectTarget(hero);
+    });
+    await waitFor(() => expect(panelState.props?.selectedTarget?.id).toBe('hero'));
+
+    await act(async () => {
+      await panelState.props?.onClearSelection();
+    });
+    await waitFor(() => expect(panelState.props?.selectedTarget).toBeNull());
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od-edit-text-commit',
+        id: 'hero',
+        value: 'Hero latest',
+        target: manualEditTarget('hero', 'Hero latest'),
+      },
+    }));
+
+    await waitFor(() => expect(panelState.props?.selectedTarget).toBeNull());
+  });
 });
 
 function htmlPreviewFile(): ProjectFile {

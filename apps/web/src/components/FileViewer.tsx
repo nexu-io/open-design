@@ -5015,18 +5015,24 @@ function HtmlViewer({
           useOuterHtml: !!data.useOuterHtml,
           targetKind: data.target?.kind,
         });
-        if (data.target) {
-          setSelectedManualEditTarget(data.target);
+        const commitTarget = data.target;
+        const commitTargetId = commitTarget?.id ?? data.id;
+        const currentSelectedId = selectedManualEditTargetIdRef.current;
+        const commitMatchesSelectedTarget = !!currentSelectedId && currentSelectedId === commitTargetId;
+        if (commitTarget && commitMatchesSelectedTarget) {
+          setSelectedManualEditTarget((current) => (
+            current?.id === commitTarget.id ? commitTarget : current
+          ));
           setManualEditDraft((current) => ({
             ...current,
             text: data.value,
             href: typeof data.href === 'string' ? data.href : current.href,
-            outerHtml: data.target?.outerHtml || current.outerHtml,
+            outerHtml: commitTarget.outerHtml || current.outerHtml,
           }));
-        } else {
+        } else if (commitMatchesSelectedTarget) {
           setManualEditDraft((current) => ({ ...current, text: data.value }));
         }
-        const label = data.target?.label || selectedManualEditTargetIdRef.current || data.id;
+        const label = data.target?.label || commitTargetId || data.id;
         const patch: ManualEditPatch = data.useOuterHtml && typeof data.html === 'string'
           ? { id: data.id, kind: 'set-outer-html', html: data.html }
           : typeof data.href === 'string'
