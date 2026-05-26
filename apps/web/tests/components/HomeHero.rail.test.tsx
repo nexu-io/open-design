@@ -10,6 +10,7 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
 import { HomeHero } from '../../src/components/HomeHero';
@@ -185,6 +186,46 @@ describe('HomeHero intent rail', () => {
     );
     expect(screen.getByTestId('home-hero-active-example').textContent).toContain('Example prompts: Research the market opportunity');
     expect(screen.getByTestId('home-hero-active-example').textContent).toContain('...');
+  });
+
+  it('clears the prompt input when the selected example chip is removed', () => {
+    function StatefulHero() {
+      const [prompt, setPrompt] = useState('');
+      return (
+        <HomeHero
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId="deck"
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[]}
+          pluginsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickExamplePlugin={() => undefined}
+          onPickChip={() => undefined}
+          onClearActiveChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+      );
+    }
+
+    render(<StatefulHero />);
+
+    const examples = screen.getAllByTestId('home-hero-prompt-example');
+    fireEvent.click(examples[0]!);
+
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    expect(input.value).toContain('Research the market opportunity');
+    expect(screen.getByTestId('home-hero-active-example')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('home-hero-active-example').querySelector('.home-hero__active-clear')!);
+
+    expect(input.value).toBe('');
+    expect(screen.queryByTestId('home-hero-active-example')).toBeNull();
   });
 
   it('shows matching plugin presets in the example prompt area for the selected tab', () => {
