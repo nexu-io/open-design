@@ -98,8 +98,8 @@ describe('ProjectDesignSystemPicker', () => {
 
     fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
 
-    expect(screen.getByPlaceholderText('Rechercher des design systems')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Rechercher des systèmes de design')).toBeTruthy();
     expect(await screen.findByText('Produit')).toBeTruthy();
-    expect(screen.getByText('Aucun design system')).toBeTruthy();
+    expect(screen.getByText('Aucun système de design')).toBeTruthy();
   });
 });
