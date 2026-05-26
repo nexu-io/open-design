@@ -6,9 +6,10 @@ Capture the integration-boundary decisions the product/pipeline team needs to
 make before any creative-memory implementation can land in the live generation
 loop. What this doc covers is **not** the memory engine itself. It is the
 contract between memory and the rest of Open Design: where signals come from,
-where the prompt block goes, how users control it, and how the raw-events /
-content-addressed-derivations contract (background below) reshapes the
-boundary.
+where the prompt block goes (and how it relates to the existing `## Personal
+memory` slot the daemon composer already populates), how users control it,
+and how the raw-events / content-addressed-derivations contract (background
+below) reshapes the boundary.
 
 This is doc-only. No code lands with this PR. Each section enumerates the
 option space, names a working lean, and flags the decision that needs an
@@ -159,28 +160,103 @@ space.
 ## 2. Retrieval insertion into generation / critique
 
 The engine returns a structured retrieval result and `buildPromptBlock` formats
-it as a fixed `[MEMORY CONTEXT]` block. The decision is where in prompt
-composition that block lands, and whether critique sees the same block.
+it as a fixed `[MEMORY CONTEXT]` block. The decisions are: where in prompt
+composition that block lands, how it relates to the existing `## Personal
+memory` slot the daemon composer already populates, and whether critique sees
+the same block.
 
-Generation prompt today (per `apps/daemon/src/prompts/system.ts`) composes
-roughly as:
+### Live composer order (today, on `main`)
 
-```
-[system identity]
-[active DESIGN.md, pruned per od.design_system.sections]
-[craft references, per od.craft.requires]
-[skill body]
-[user prompt + project files]
-```
+`apps/daemon/src/prompts/system.ts` composes the system prompt in this
+order. Each block is gated on its input being non-empty.
 
-### Insertion options
+1. Locale prompt (optional)
+2. `DISCOVERY_AND_PHILOSOPHY` + `BASE_SYSTEM_PROMPT` — identity / workflow
+   charter.
+3. `## Personal memory (auto-extracted from past chats)` — facts sedimented
+   from previous conversations and edited in Settings. Treated as
+   preferences not hard rules; brand wins on token conflicts; skill wins on
+   workflow conflicts.
+4. `## Custom instructions (user-level)` — persistent user instructions,
+   apply to every project.
+5. `## Custom instructions (project-level)` — per-project instructions;
+   overrides user-level on conflict.
+6. `## How to use this design system` — usage guidance for the active brand.
+7. `## Active design system` — the DESIGN.md prose contract.
+8. `## Design system import mode` (optional) — how the brand was imported.
+9. `## Active design system tokens` — the tokens.css contract; verbatim
+   `:root` block to paste into the artifact.
+10. `## Reference component manifest` (or `## Reference fixture` fallback) —
+    component inventory grounded in the brand.
+11. `## Pull-layer files available on demand` — paths the agent can read on
+    request.
+12. `## Active craft references` — universal brand-agnostic rules opted into
+    via `od.craft.requires`.
+13. `## Active skill` — the skill body the agent must follow.
+
+The existing precedence rule, declared in the `## Personal memory` block's
+own narrative, is: **personal memory is preferences, not hard rules; brand
+tokens win on style conflicts; skill workflow wins on workflow conflicts.**
+Creative memory has to either inherit that rule or replace it explicitly.
+
+### Decision A: relationship to `## Personal memory`
+
+The existing `## Personal memory` slot is auto-extracted from chat history
+and editable in Settings. Creative memory is a different signal source
+(typed pipeline events: accept / refine / tag / thumbs / abandon / revert)
+with a different invalidation contract (deterministic ranking, decay,
+reversal, and the §4 raw-events / content-addressed-derivations contract).
+
+| Option | What it does | Cost | Benefit |
+|---|---|---|---|
+| A1. Replace | Creative memory subsumes `## Personal memory`. Single block, single pipeline. | Loses the existing block's identity / tone / "things-already-told-you" content, which chat NLP captures and event-based extraction does not. | One layer to reason about. |
+| A2. Append | Creative memory body is concatenated into the same `## Personal memory` block. Same precedence rules. | Two extractors writing into one block: no audit trail, no per-source diagnostics, harder to disable one source without the other. | Smallest composer change. |
+| A3. Sibling block, shared precedence | New `## Creative memory` block placed adjacent to `## Personal memory`. Each has explicit scope; both follow the same "preferences not rules; brand wins; skill wins" precedence. | One more block in the system prompt; small token cost. | Audit trail preserved (which extractor produced what); §4 contract advantages preserved; either source can be disabled independently. |
+
+Lean: **A3.** The two memories serve different purposes (identity facts vs
+stylistic preferences) and have different invalidation models. Mashing them
+together loses the §4 raw-events contract advantages (re-derivability,
+content-addressed cache, derivation-version provenance). Sibling placement
+with shared precedence wording lets the model treat them similarly without
+collapsing them.
+
+This is the one explicit decision §2 surfaces that the live composer makes
+unavoidable; treating it as implicit is the failure mode this section is
+meant to remove.
+
+### Decision B: insertion point
+
+Given A3, the question is where the new `## Creative memory` block sits in
+the live order above.
 
 | Option | Where | Effect | Lean |
 |---|---|---|---|
-| A. Above DESIGN.md | First in the system block | Memory shapes which DESIGN.md sections matter. Strongest influence. | Too aggressive — preference memory should not override the active brand. |
-| B. Between DESIGN.md and craft | Mid-system | Brand wins on conflict, craft applies universally, memory layers on top of both. | **Lean.** Mirrors how craft already sits between DESIGN.md and the skill body. |
-| C. Between craft and skill body | Late-system | Memory becomes a skill-prefix nudge. Weakest influence; easy to ignore for skills with strong opinions. | Reasonable fallback if (B) shows the model overweighting memory. |
-| D. As a separate user-role turn | Outside system | Treats memory like a runtime hint, not a system constraint. | Worth A/B testing once integration ships, not the default. |
+| B1. Inside the soft-preferences cluster, after `## Personal memory` | Position 3.5, before custom instructions | Both preference layers are adjacent; custom instructions and the brand contract follow. Coarse-to-fine progression preserved. | **Lean.** Matches the live composer's existing grouping (soft → instructions → brand → craft → skill). |
+| B2. After the brand contract, before craft | Position 9.5 / 10 | Brand wins by virtue of preceding the block; memory becomes a brand-aware nudge. | Reasonable if real-world traces show creative memory drifting against the brand. Treat as a fallback. |
+| B3. After craft, before the skill | Position 12.5 | Memory becomes a skill-prefix nudge. Weakest influence; easy for opinionated skills to ignore. | Not preferred — buries the signal too late in the stack. |
+| B4. As a separate user-role turn | Outside system | Treats memory as a runtime hint, not a system constraint. | Worth A/B testing once integration ships, not the default. |
+
+Lean: **B1**. Placement keeps the two preference layers together; the
+existing precedence narrative (brand wins on tokens, skill wins on workflow)
+already covers both blocks once they share the precedence wording.
+
+### Decision C: precedence wording
+
+If A3 + B1, the new block needs a header narrative that mirrors `## Personal
+memory` so the model treats them with the same hierarchy. Proposed wording:
+
+> ## Creative memory (preferences from generation feedback)
+>
+> The following stylistic preferences have been derived from this user's
+> past acceptances, edits, tags, and rejections in generation runs. Treat
+> them as preferences and context, NOT hard rules: when they collide with
+> the active design system tokens, the brand wins; when they collide with
+> the active skill's workflow, the skill wins. Project-level preferences
+> take precedence over global ones whenever both address the same pattern.
+
+This duplicates the `brand wins / skill wins` clause from `## Personal
+memory` deliberately — the model treats each block on its own; a single
+shared rule split across two blocks would be lost.
 
 ### Critique path
 
@@ -193,8 +269,9 @@ should also see the memory block, but the contract is different:
 Lean: same retrieval call (`retrieveForInjection`) but a different
 `buildPromptBlock` variant that flips emphasis (Avoid items first, Prefer
 items as supporting context). The structured retrieval result is sufficient
-for either format; only the formatter changes. This is the open-question §7
-question, scoped to two surfaces.
+for either format; only the formatter changes. Scope: the same A3 sibling
+block, with the formatter chosen by the caller (composer for generation,
+critique runner for critique).
 
 ### Project-override semantics
 
@@ -202,7 +279,8 @@ The engine already returns project-scoped overrides separately. Two surfaces
 to confirm:
 
 - **Generation block.** Project line appended after global Prefer/Avoid, as
-  the engine already produces.
+  the engine already produces. Mirrors how `## Custom instructions
+  (project-level)` overrides user-level in the live composer.
 - **Critique block.** Project overrides should be presented as harder
   constraints than global preferences ("project says X", not "user prefers
   X"), because critique is project-scoped by definition.
@@ -210,7 +288,9 @@ to confirm:
 ### Failure modes
 
 - **Memory disabled.** Engine short-circuits and returns empty. The composer
-  must tolerate an empty block without a stray separator.
+  must tolerate an empty block without a stray separator. The existing
+  composer already gates `## Personal memory` on non-empty body; the new
+  block follows the same pattern.
 - **Empty retrieval.** No invariants violated; same handling as disabled.
 - **Token budget exceeded.** Engine drops at cut and emits a diagnostic. The
   composer should not see a half-formed block — engine already prevents this.
@@ -371,14 +451,16 @@ For maintainer review, the explicit calls this doc surfaces:
 1. **Acceptance trigger** for `onGenerationAccepted`. (§1)
 2. **Edit-coalesce window.** (§1)
 3. **Whether explicit-tag UI is in scope.** (§1)
-4. **Memory block insertion point.** (§2; lean B)
-5. **Critique-side memory format.** (§2)
-6. **Default storage path** under `OD_DATA_DIR`. (§3; lean yes)
-7. **Diagnostic feed surface** in chat. (§3; lean off by default)
-8. **Raw-events ownership** between daemon and engine package. (§4; lean C)
-9. **Derivation-version exporter.** (§4)
-10. **Pairwise rollout sequencing.** (§4)
-11. **Cache eviction cap.** (§4; lean 1000/user)
+4. **Relationship to `## Personal memory`** — replace, append, or sibling block. (§2; lean A3 sibling block)
+5. **Memory block insertion point** in the live composer order. (§2; lean B1, after `## Personal memory`)
+6. **Precedence wording** for the new block. (§2; lean: mirror the existing `brand wins / skill wins` clause)
+7. **Critique-side memory format.** (§2)
+8. **Default storage path** under `OD_DATA_DIR`. (§3; lean yes)
+9. **Diagnostic feed surface** in chat. (§3; lean off by default)
+10. **Raw-events ownership** between daemon and engine package. (§4; lean C)
+11. **Derivation-version exporter.** (§4)
+12. **Pairwise rollout sequencing.** (§4)
+13. **Cache eviction cap.** (§4; lean 1000/user)
 
 None of these require a decision today. They are surfaced so that when the
 memory roadmap moves, the conversation has a concrete option space rather
