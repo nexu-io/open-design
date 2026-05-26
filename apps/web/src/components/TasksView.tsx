@@ -24,6 +24,7 @@ import { navigate } from '../router';
 import type { SkillSummary } from '../types';
 import { useAnalytics } from '../analytics/provider';
 import { trackAutomationsClick, trackPageView } from '../analytics/events';
+import { useT } from '../i18n';
 import {
   NewAutomationModal,
   describeScheduleSummary,
@@ -387,6 +388,7 @@ function proposalActionLabel(action: AutomationEvolutionProposal['action']): str
 }
 
 export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
+  const t = useT();
   const analytics = useAnalytics();
   // P2 page_view page_name=automations. Ref-keyed so re-renders don't
   // double-fire while the user is on the page.
@@ -666,12 +668,12 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     <section className="automations-view" aria-labelledby="automations-title" data-testid="tasks-view">
       <header className="automations-hero">
         <div className="automations-hero__copy">
-          <span className="automations-hero__eyebrow">Scheduled agent sessions</span>
+          <span className="automations-hero__eyebrow">{t('tasks.eyebrow')}</span>
           <h1 id="automations-title" className="automations-hero__title">
-            Automations
+            {t('tasks.heading')}
           </h1>
           <p className="automations-hero__lede">
-            Plan recurring conversations for project work, Orbit digests, and live artifacts.
+            {t('tasks.heroParagraph')}
           </p>
         </div>
         <div className="automations-hero__actions">
@@ -687,7 +689,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
             data-testid="automations-new"
           >
             <Icon name="plus" size={14} />
-            <span>New automation</span>
+            <span>{t('tasks.newAutomation')}</span>
           </button>
         </div>
       </header>
@@ -700,7 +702,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
 
       <section className="automations-saved" aria-label="Your automations">
         <div className="automations-section-head">
-          <h2 className="automations-section__label">Your automations</h2>
+          <h2 className="automations-section__label">{t('tasks.yourAutomations')}</h2>
           {loading ? <span className="automations-section__meta">Loading</span> : null}
         </div>
         {!loading && sortedRoutines.length === 0 ? (
@@ -713,8 +715,8 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               <Icon name="plus" size={16} />
             </span>
             <span className="automation-empty__body">
-              <strong>No automations yet</strong>
-              <span>Create one from a template or start with a blank schedule.</span>
+              <strong>{t('tasks.empty.title')}</strong>
+              <span>{t('tasks.empty.hint')}</span>
             </span>
           </button>
         ) : null}
@@ -906,7 +908,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       <section className="automations-ingest" aria-label="Source ingestion">
         <div className="automations-section-head">
           <div>
-            <h2 className="automations-section__label">Ingest source</h2>
+            <h2 className="automations-section__label">{t('tasks.ingestSource')}</h2>
             <p className="automations-section__sub">
               Turn connector, repo, artifact, or chat context into reviewable evolution proposals.
             </p>
@@ -1038,7 +1040,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       <section className="automations-templates" aria-label="Automation templates">
         <div className="automations-templates__head">
           <div className="automations-templates__head-copy">
-            <h2 className="automations-section__label">Templates</h2>
+            <h2 className="automations-section__label">{t('tasks.templates')}</h2>
             <p className="automations-section__sub">
               Orbit and live artifacts are templates inside the same automation flow.
             </p>

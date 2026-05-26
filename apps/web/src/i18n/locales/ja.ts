@@ -1614,4 +1614,13 @@ export const ja: Dict = {
   'diagnostics.exporting': 'エクスポート中…',
   'diagnostics.exportSuccess': '診断情報を {path} に保存しました',
   'diagnostics.exportFailed': '診断情報のエクスポートに失敗しました: {message}',
+  // Automations page — #2917
+  'tasks.heading': '自動化',
+  'tasks.eyebrow': 'スケジュール済みエージェントセッション',
+  'tasks.heroParagraph': 'プロジェクト作業、Orbit ダイジェスト、ライブ成果物のために定期的な会話を計画します。',
+  'tasks.yourAutomations': 'マイ自動化',
+  'tasks.empty.title': '自動化がまだありません',
+  'tasks.empty.hint': 'テンプレートから作成するか、空のスケジュールから始めましょう。',
+  'tasks.ingestSource': 'ソースを取り込む',
+  'tasks.templates': 'テンプレート',
 };

@@ -1727,4 +1727,13 @@ export const ko: Dict = {
   'diagnostics.exporting': '내보내는 중…',
   'diagnostics.exportSuccess': '진단 정보를 {path}에 저장했습니다',
   'diagnostics.exportFailed': '진단 정보 내보내기 실패: {message}',
+  // Automations page — #2917
+  'tasks.heading': '자동화',
+  'tasks.eyebrow': '예약된 에이전트 세션',
+  'tasks.heroParagraph': '프로젝트 작업, Orbit 다이제스트, 라이브 결과물을 위한 정기 대화를 계획하세요.',
+  'tasks.yourAutomations': '내 자동화',
+  'tasks.empty.title': '자동화가 없습니다',
+  'tasks.empty.hint': '템플릿으로 만들거나 빈 일정으로 시작하세요.',
+  'tasks.ingestSource': '소스 가져오기',
+  'tasks.templates': '템플릿',
 };

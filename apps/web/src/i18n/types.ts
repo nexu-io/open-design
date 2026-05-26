@@ -1017,6 +1017,16 @@ export interface Dict {
   'useEverywhere.section.skills.snippet4': string;
   'useEverywhere.section.skills.footer': string;
 
+  // Automations page — #2917
+  'tasks.heading': string;
+  'tasks.eyebrow': string;
+  'tasks.heroParagraph': string;
+  'tasks.yourAutomations': string;
+  'tasks.empty.title': string;
+  'tasks.empty.hint': string;
+  'tasks.ingestSource': string;
+  'tasks.templates': string;
+
   // Automations entry view
   'tasks.kicker': string;
   'tasks.comingSoon': string;
