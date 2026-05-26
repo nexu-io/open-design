@@ -106,7 +106,12 @@ describe('verifyMediaOutputOnDisk (#2892)', () => {
     tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'od-media-verify-'));
     const projectId = 'project-1';
     await mkdir(path.join(tmpRoot, projectId), { recursive: true });
-    const task = {
+    const task: {
+      status: string;
+      file: { name?: string; size?: number } | null;
+      error: { message: string; status: number; code?: string } | null;
+      endedAt: number | null;
+    } = {
       status: 'running',
       file: null,
       error: null,
