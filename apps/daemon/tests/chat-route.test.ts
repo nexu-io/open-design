@@ -1195,7 +1195,8 @@ setInterval(() => {}, 1000);
 
           expect(eventsBody).toContain('event: error');
           expect(eventsBody).toContain('Agent stalled without emitting any new output');
-          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toContain('Phase details: spawned agent opencode;');
+          expect(eventsBody).not.toContain('spawned agent binary');
           expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
           expect(statusBody.status).toBe('failed');
         },
