@@ -46,6 +46,12 @@ export interface UrlLoadDecision {
   tweaksBridge?: boolean;
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
+  /**
+   * The HTML source contains patterns that steal focus on load (e.g.
+   * `window.focus()`, `element.focus()`). When true, forces the srcDoc path
+   * so `injectPreviewFocusGuard` can suppress the focus grab.
+   */
+  needsFocusGuard?: boolean;
 }
 
 /**
@@ -83,6 +89,7 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // the artifact ships a `.tw-panel`.
   if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
+  if (d.needsFocusGuard) return false;
   return true;
 }
 
@@ -117,7 +124,7 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * serves raw HTML untouched, so artifacts that touch sandbox-blocked Web
  * Storage at startup go blank.
  *
- * Scope is narrow on purpose. This helper detects two reliable signals
+ * Scope is narrow on purpose. This helper detects three reliable signals
  * visible in the *document* source and routes those artifacts back through
  * srcDoc by toggling `forceInline`:
  *
@@ -127,24 +134,53 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  *     Storage from `useState` initializers.
  *   - Direct `localStorage` / `sessionStorage` mentions in the document
  *     source (covers inline scripts and plain HTML that calls them).
+ *   - Any external `<script src="…">` (including `type="module"`): the
+ *     parent string scan can't see the linked subresource's body, and
+ *     agent-emitted artifacts commonly read Web Storage from an external
+ *     `boot.js` / `app.js` at module eval (issue #2361). Conservatively
+ *     route any external script through srcDoc so the shim is in place
+ *     before that read happens. The alternative — fetching every script
+ *     URL ahead of the iframe and scanning it — would duplicate work the
+ *     browser is about to do and add round trips on every preview load,
+ *     so the heuristic favors a few extra srcDoc-mode previews over those
+ *     additional requests.
  *
- * Known limitation: a `<script src="./app.js">` (or
- * `<script type="module" src="./main.js">`) whose **external** file reads
- * Web Storage at module eval is *not* covered — the helper only sees the
- * HTML, not the linked subresource, so URL-load is still chosen and the
- * SecurityError still throws. Catching that case would require fetching
- * and scanning every script reference before deciding the iframe load
- * strategy, which duplicates work the browser is about to do and adds
- * round trips on every preview load. Leaving that path uncovered until
- * there's a reported case that justifies the cost. Workaround for now:
- * users can opt the artifact into srcDoc with `?forceInline=1` or by
- * toggling Tweaks.
+ * Remaining known limitation: dynamically injected scripts
+ * (`document.createElement('script'); s.src = '…'; head.appendChild(s)`)
+ * are still invisible to this scan because the literal `<script src=…>`
+ * tag never appears in the source. Such artifacts will still URL-load and
+ * still throw on Web Storage access at startup. Workaround for now: users
+ * can opt the artifact into srcDoc with `?forceInline=1` or by toggling
+ * Tweaks.
  *
  * Pure string scan — caller passes the same `source` already fetched for
  * preview rendering, so this adds no extra I/O. Heuristic by design: false
  * positives just take the (slightly slower but safer) srcDoc path; false
  * negatives are the same blank-preview the user already hits.
  */
+/**
+ * Return true when the HTML source may call `.focus()` at load time, which
+ * would steal focus from the host page in a URL-loaded iframe. The srcDoc
+ * path injects `injectPreviewFocusGuard` to suppress this; URL-load has no
+ * such guard, so we force the srcDoc path instead.
+ *
+ * Detection covers two cases:
+ *
+ *   1. Inline `.focus(` calls and `autofocus` attributes — directly visible
+ *      in the document source.
+ *   2. External `<script src=...>` references — we cannot inspect the linked
+ *      file's content, so we conservatively assume it may call focus.
+ *
+ * False positives just route the artifact through the slightly slower srcDoc
+ * path, which is the safe direction.
+ */
+export function htmlNeedsFocusGuard(source: string): boolean {
+  if (/\.\s*focus\s*\(/i.test(source)) return true;
+  if (/\bautofocus\b/i.test(source)) return true;
+  if (/<script\b[^>]*\bsrc\s*=/i.test(source)) return true;
+  return false;
+}
+
 export function htmlNeedsSandboxShim(source: string): boolean {
   // Quote-optional: HTML5 permits unquoted attribute values
   // (`<script type=text/babel src=app.jsx>`). The trailing `\b` rejects
@@ -155,5 +191,11 @@ export function htmlNeedsSandboxShim(source: string): boolean {
   // reject hyphenated variants if a real case ever surfaces.
   if (/<script\s[^>]*\btype\s*=\s*["']?text\/babel\b/i.test(source)) return true;
   if (/\b(?:local|session)Storage\b/.test(source)) return true;
+  // External `<script ... src=...>` — see issue #2361. `\s[^>]*?` requires at
+  // least one whitespace after `<script` (so we don't match `<scripts>`-like
+  // text or self-closing-ish edge cases) and stays non-greedy to keep the
+  // search bounded to the tag itself. Lazy match avoids spilling into
+  // unrelated `src=` attributes on later tags in the same document.
+  if (/<script\s[^>]*?\bsrc\s*=/i.test(source)) return true;
   return false;
 }

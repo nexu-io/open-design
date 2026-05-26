@@ -97,6 +97,8 @@ export type DesktopUpdateMode = (typeof DESKTOP_UPDATE_MODES)[keyof typeof DESKT
 
 export const DESKTOP_UPDATE_CHANNELS = Object.freeze({
   BETA: "beta",
+  NIGHTLY: "nightly",
+  PREVIEW: "preview",
   STABLE: "stable",
 } as const);
 

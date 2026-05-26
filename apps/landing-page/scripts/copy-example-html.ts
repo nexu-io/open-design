@@ -30,7 +30,15 @@
  * convention `generate-previews.ts` already uses.
  */
 
-import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,11 +52,36 @@ const LIVE_ARTIFACTS_SRC = path.join(REPO_ROOT, 'templates', 'live-artifacts');
 
 let copied = 0;
 let skipped = 0;
+let assetDirsCopied = 0;
 
 function copyIfExists(srcFile: string, destFile: string): boolean {
   if (!existsSync(srcFile)) return false;
   mkdirSync(path.dirname(destFile), { recursive: true });
   copyFileSync(srcFile, destFile);
+  return true;
+}
+
+// Some example.html / index.html files are thin shells that iframe a
+// neighbouring `./assets/<file>` (template HTML, fonts, mp4 showcase,
+// etc.). Without copying that sibling directory the iframe path 404s on
+// Cloudflare Pages and SPA-fallbacks to the homepage, so the user sees
+// the OD landing instead of the skill preview.
+//
+// Only mirror `assets/` when the entrypoint actually references it via
+// a relative `./assets/...` URL — most skills carry an `assets/` folder
+// of reference imagery (PNG mocks, design notes) that the demo never
+// loads, and shipping those would inflate the deploy by tens of MB.
+function copyReferencedAssetsDir(
+  entrypointHtml: string,
+  srcSlugDir: string,
+  destSlugDir: string,
+): boolean {
+  if (!existsSync(entrypointHtml)) return false;
+  const html = readFileSync(entrypointHtml, 'utf8');
+  if (!/\b(?:src|href|poster)\s*=\s*["']\.\/assets\//i.test(html)) return false;
+  const assetsSrc = path.join(srcSlugDir, 'assets');
+  if (!existsSync(assetsSrc) || !statSync(assetsSrc).isDirectory()) return false;
+  cpSync(assetsSrc, path.join(destSlugDir, 'assets'), { recursive: true });
   return true;
 }
 
@@ -62,12 +95,16 @@ function listDirs(root: string): string[] {
 
 // 1. Skills — `skills/<slug>/example.html` → `out/skills/<slug>/example.html`.
 for (const slug of listDirs(SKILLS_SRC)) {
-  const ok = copyIfExists(
-    path.join(SKILLS_SRC, slug, 'example.html'),
-    path.join(OUT_DIR, 'skills', slug, 'example.html'),
-  );
-  if (ok) copied++;
-  else skipped++;
+  const srcDir = path.join(SKILLS_SRC, slug);
+  const destDir = path.join(OUT_DIR, 'skills', slug);
+  const entrypointSrc = path.join(srcDir, 'example.html');
+  const ok = copyIfExists(entrypointSrc, path.join(destDir, 'example.html'));
+  if (ok) {
+    copied++;
+    if (copyReferencedAssetsDir(entrypointSrc, srcDir, destDir)) assetDirsCopied++;
+  } else {
+    skipped++;
+  }
 }
 
 // 2. Design templates — `design-templates/<slug>/example.html` →
@@ -76,11 +113,14 @@ for (const slug of listDirs(SKILLS_SRC)) {
 //    `_lib/catalog.ts` and `pages/templates/[slug]/index.astro` which
 //    routes skill-template-origin records to `/skills/<slug>/example.html`).
 for (const slug of listDirs(DESIGN_TEMPLATES_SRC)) {
-  const ok = copyIfExists(
-    path.join(DESIGN_TEMPLATES_SRC, slug, 'example.html'),
-    path.join(OUT_DIR, 'skills', slug, 'example.html'),
-  );
-  if (ok) copied++;
+  const srcDir = path.join(DESIGN_TEMPLATES_SRC, slug);
+  const destDir = path.join(OUT_DIR, 'skills', slug);
+  const entrypointSrc = path.join(srcDir, 'example.html');
+  const ok = copyIfExists(entrypointSrc, path.join(destDir, 'example.html'));
+  if (ok) {
+    copied++;
+    if (copyReferencedAssetsDir(entrypointSrc, srcDir, destDir)) assetDirsCopied++;
+  }
 }
 
 // 3. Live-artifact templates — `templates/live-artifacts/<slug>/index.html`
@@ -90,11 +130,16 @@ for (const slug of listDirs(DESIGN_TEMPLATES_SRC)) {
 //    serve `index.html` (the rendered preview) rather than
 //    `template.html` (raw template with `{{data.*}}` placeholders).
 for (const slug of listDirs(LIVE_ARTIFACTS_SRC)) {
-  const ok = copyIfExists(
-    path.join(LIVE_ARTIFACTS_SRC, slug, 'index.html'),
-    path.join(OUT_DIR, 'templates', `live-${slug}`, 'preview.html'),
-  );
-  if (ok) copied++;
+  const srcDir = path.join(LIVE_ARTIFACTS_SRC, slug);
+  const destDir = path.join(OUT_DIR, 'templates', `live-${slug}`);
+  const entrypointSrc = path.join(srcDir, 'index.html');
+  const ok = copyIfExists(entrypointSrc, path.join(destDir, 'preview.html'));
+  if (ok) {
+    copied++;
+    if (copyReferencedAssetsDir(entrypointSrc, srcDir, destDir)) assetDirsCopied++;
+  }
 }
 
-console.log(`[copy-example-html] copied ${copied} files, skipped ${skipped} (no preview source in repo)`);
+console.log(
+  `[copy-example-html] copied ${copied} files (+ ${assetDirsCopied} assets/ dirs), skipped ${skipped} (no preview source in repo)`,
+);

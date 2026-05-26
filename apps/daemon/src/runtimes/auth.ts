@@ -4,6 +4,16 @@ import type { RuntimeEnv } from './types.js';
 export type AgentAuthProbeResult = {
   status: 'ok' | 'missing' | 'unknown';
   message?: string;
+  // Output captured from the probe child process (e.g.
+  // `cursor-agent status`). Exposed so callers like the connection
+  // test layer can fold the probe's own stderr/exit context into their
+  // structured diagnostics — the probe runs before the smoke spawn,
+  // so without this the diagnostics block would otherwise drop the
+  // probe output entirely.
+  stdoutTail?: string;
+  stderrTail?: string;
+  exitCode?: number | null;
+  signal?: string | null;
 };
 
 const CURSOR_AUTH_GUIDANCE =
@@ -66,6 +76,30 @@ export function classifyAgentAuthFailure(
   return null;
 }
 
+// Tail length matches the smoke-test sink so the diagnostics block
+// stays compact when it folds probe output back into its overrides.
+const PROBE_TAIL_BYTES = 400;
+
+function tailString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > PROBE_TAIL_BYTES ? trimmed.slice(-PROBE_TAIL_BYTES) : trimmed;
+}
+
+function withProbeTails(
+  base: AgentAuthProbeResult,
+  stdoutText: string,
+  stderrText: string,
+): AgentAuthProbeResult {
+  const result: AgentAuthProbeResult = { ...base };
+  const stdoutTail = tailString(stdoutText);
+  const stderrTail = tailString(stderrText);
+  if (stdoutTail) result.stdoutTail = stdoutTail;
+  if (stderrTail) result.stderrTail = stderrTail;
+  return result;
+}
+
 export async function probeAgentAuthStatus(
   agentId: string,
   resolvedBin: string,
@@ -78,27 +112,54 @@ export async function probeAgentAuthStatus(
       timeout: 5000,
       maxBuffer: 1024 * 1024,
     });
-    const output = `${stdout ?? ''}\n${stderr ?? ''}`;
+    const stdoutText = typeof stdout === 'string' ? stdout : '';
+    const stderrText = typeof stderr === 'string' ? stderr : '';
+    const output = `${stdoutText}\n${stderrText}`;
     if (isCursorAuthFailureText(output)) {
-      return { status: 'missing', message: cursorAuthGuidance() };
+      return withProbeTails(
+        { status: 'missing', message: cursorAuthGuidance(), exitCode: 0, signal: null },
+        stdoutText,
+        stderrText,
+      );
     }
     return { status: 'ok' };
   } catch (error) {
     const err = error as NodeJS.ErrnoException & {
       stdout?: unknown;
       stderr?: unknown;
+      code?: string | number;
+      signal?: string;
     };
-    const output = [
-      err.message,
-      typeof err.stdout === 'string' ? err.stdout : '',
-      typeof err.stderr === 'string' ? err.stderr : '',
-    ].join('\n');
+    const stdoutText = typeof err.stdout === 'string' ? err.stdout : '';
+    const stderrText = typeof err.stderr === 'string' ? err.stderr : '';
+    const output = [err.message, stdoutText, stderrText].join('\n');
+    // util.promisify(execFile) attaches `code` and `signal` to the
+    // rejection error. `code` may be a number (real non-zero exit) or
+    // a Node ErrnoException string ("ENOENT"); only the numeric form
+    // is meaningful as an exit code.
+    const numericExit = typeof err.code === 'number' ? err.code : null;
+    const childSignal = typeof err.signal === 'string' ? err.signal : null;
     if (isCursorAuthFailureText(output)) {
-      return { status: 'missing', message: cursorAuthGuidance() };
+      return withProbeTails(
+        {
+          status: 'missing',
+          message: cursorAuthGuidance(),
+          exitCode: numericExit,
+          signal: childSignal,
+        },
+        stdoutText,
+        stderrText,
+      );
     }
-    return {
-      status: 'unknown',
-      message: 'Cursor Agent authentication status could not be verified with `cursor-agent status`.',
-    };
+    return withProbeTails(
+      {
+        status: 'unknown',
+        message: 'Cursor Agent authentication status could not be verified with `cursor-agent status`.',
+        exitCode: numericExit,
+        signal: childSignal,
+      },
+      stdoutText,
+      stderrText,
+    );
   }
 }

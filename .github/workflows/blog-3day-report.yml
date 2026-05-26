@@ -87,9 +87,11 @@ jobs:
           if [ -n "$FEISHU_BLOG_DIGEST_WEBHOOK" ]; then
             feishu=true
           fi
-          echo "gsc=$gsc" >> "$GITHUB_OUTPUT"
-          echo "bot=$bot" >> "$GITHUB_OUTPUT"
-          echo "feishu=$feishu" >> "$GITHUB_OUTPUT"
+          {
+            echo "gsc=$gsc"
+            echo "bot=$bot"
+            echo "feishu=$feishu"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "### Blog 3-day report configuration"
             echo "- GSC auth configured: \`$gsc\`"
@@ -122,16 +124,16 @@ jobs:
           GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
         run: |
           mkdir -p .blog-indexing
-          flags=""
+          flags=()
           if [ -n "${{ github.event.inputs.today }}" ]; then
-            flags="$flags --today ${{ github.event.inputs.today }}"
+            flags+=(--today "${{ github.event.inputs.today }}")
           fi
           if [ "${{ github.event.inputs.skip_inspect }}" = "true" ]; then
-            flags="$flags --no-inspect"
+            flags+=(--no-inspect)
           fi
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/report-3day.ts \
             --summary-out ../../.blog-indexing/blog-traffic-digest-summary.json \
-            $flags
+            "${flags[@]}"
           # Surface the latest section in the run summary for quick review.
           {
             echo "### Latest digest section"

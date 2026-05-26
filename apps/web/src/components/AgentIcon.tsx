@@ -29,6 +29,8 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   kiro: 'svg',
   kilo: 'svg',
   vibe: 'svg',
+  aider: 'png',
+  'trae-cli': 'png',
   devin: 'png',
 };
 
@@ -45,7 +47,6 @@ const MONO_ICONS = new Set([
   'opencode',
   'hermes',
   'mimo',
-  'pi',
   'kilo',
   'grok-build',
 ]);

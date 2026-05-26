@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
 import {
   localizeSkillDescription,
+  localizeSkillName,
   localizeSkillPrompt,
 } from '../i18n/content';
 import type { Dict } from '../i18n/types';
@@ -126,10 +127,17 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
   // them up front so every count, filter, and rendered card downstream
   // sees only the user-facing entries. The full listing is still passed
   // through for `findSkillById` lookups elsewhere in the app.
-  const skills = useMemo(
-    () => rawSkills.filter((s) => !s.aggregatesExamples),
-    [rawSkills],
-  );
+  // Deduplicate by skill.id to prevent duplicate cards (issue #2889).
+  const skills = useMemo(() => {
+    const filtered = rawSkills.filter((s) => !s.aggregatesExamples);
+    const seen = new Map<string, SkillSummary>();
+    for (const skill of filtered) {
+      if (!seen.has(skill.id)) {
+        seen.set(skill.id, skill);
+      }
+    }
+    return Array.from(seen.values());
+  }, [rawSkills]);
   // Hold preview HTML per skill across re-renders so cards never re-flicker.
   const [previews, setPreviews] = useState<Record<string, string | null>>({});
   // Track per-skill fetch failures separately so the preview modal can show
@@ -318,9 +326,10 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
       if (!matchesSurface(s, surfaceFilter) || !matchesMode(s, modeFilter)) return false;
       if (scenarioFilter !== 'all' && (s.scenario || 'general') !== scenarioFilter) return false;
       if (!q) return true;
+      const name = localizeSkillName(locale, s);
       const desc = localizeSkillDescription(locale, s);
       const prompt = localizeSkillPrompt(locale, s) || '';
-      const haystack = `${s.name} ${desc} ${prompt} ${s.scenario ?? ''}`.toLowerCase();
+      const haystack = `${name} ${s.name} ${desc} ${prompt} ${s.scenario ?? ''}`.toLowerCase();
       return haystack.includes(q);
     });
     // Featured magazine-style examples float to the top (lower priority
@@ -457,7 +466,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
         const unavailableKind = previewUnavailable[previewSkill.id];
         return (
           <PreviewModal
-            title={previewSkill.name}
+            title={localizeSkillName(locale, previewSkill)}
             subtitle={
               localizeSkillPrompt(locale, previewSkill)
               ?? localizeSkillDescription(locale, previewSkill).slice(0, 160)
@@ -483,7 +492,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
             // the Retry button reaches loadPreview through the same handler.
             // Issue #860.
             onView={onPreviewView}
-            exportTitleFor={() => previewSkill.name}
+            exportTitleFor={() => localizeSkillName(locale, previewSkill)}
             onClose={() => setPreviewSkillId(null)}
           />
         );
@@ -568,7 +577,8 @@ function ExampleCard({
     };
   }, [shareOpen]);
 
-  const exportTitle = skill.name;
+  const displayName = localizeSkillName(locale, skill);
+  const exportTitle = displayName;
   const isMobile = skill.platform === 'mobile';
   const isDeck = skill.mode === 'deck';
   const displayPrompt = localizeSkillPrompt(locale, skill);
@@ -601,7 +611,7 @@ function ExampleCard({
         {html ? (
           <>
             <iframe
-              title={`${skill.name} ${t('examples.previewLabel').toLowerCase()}`}
+              title={`${displayName} ${t('examples.previewLabel').toLowerCase()}`}
               sandbox="allow-scripts"
               srcDoc={buildSrcdoc(html)}
               tabIndex={-1}
@@ -631,7 +641,7 @@ function ExampleCard({
         )}
       </div>
       <div className="example-meta">
-        <div className="example-name">{skill.name}</div>
+        <div className="example-name">{displayName}</div>
         <div className="example-tags">
           <span className={`example-tag ${isMobile ? 'platform-mobile' : ''} ${isDeck ? 'mode-deck' : ''}`}>
             {tagForSkill(skill, t)}

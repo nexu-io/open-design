@@ -160,11 +160,9 @@ in
       rm -f \
         $out/lib/open-design/node_modules/@open-design/tools-dev \
         $out/lib/open-design/node_modules/@open-design/tools-pack \
-        $out/lib/open-design/node_modules/@open-design/tools-pr \
         $out/lib/open-design/node_modules/@open-design/tools-serve \
         $out/lib/open-design/node_modules/.bin/tools-dev \
         $out/lib/open-design/node_modules/.bin/tools-pack \
-        $out/lib/open-design/node_modules/.bin/tools-pr \
         $out/lib/open-design/node_modules/.bin/tools-serve
 
       chmod +x $out/lib/open-design/apps/daemon/dist/cli.js

@@ -284,7 +284,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         res.setHeader('Access-Control-Allow-Origin', 'null');
       }
       res.setHeader('Cache-Control', 'no-store');
-      res.sendFile(sheet.absPath);
+      const buf = await fs.promises.readFile(sheet.absPath);
+      res.send(buf);
     } catch (err: any) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -502,7 +503,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // The example response above rewrites `./assets/<file>` into a request
   // against this route; we still keep the on-disk paths human-friendly so
   // contributors can preview `example.html` straight from disk.
-  app.get('/api/skills/:id/assets/*', async (req, res) => {
+  app.get('/api/skills/:id/assets/*splat', async (req, res) => {
     try {
       // Same rationale as /example above — assets need to resolve whether
       // the owning skill folder lives under skills/ or design-templates/.
@@ -511,7 +512,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
-      const relPath = String((req.params as any)[0] || '');
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
       const assetsRoot = path.resolve(skill.dir, 'assets');
       const target = path.resolve(assetsRoot, relPath);
       if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
@@ -526,7 +528,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
-      res.type(mimeFor(target)).sendFile(target);
+      await res.type(mimeFor(target)).sendFile(target);
     } catch (err: any) {
       res.status(500).type('text/plain').send(String(err));
     }

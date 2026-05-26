@@ -40,6 +40,12 @@ import {
   cursorAuthGuidance,
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
+import {
+  buildLegacyMaxTokensParam,
+  buildMaxCompletionTokensParam,
+  buildOpenAIChatTokenParam,
+  isUnsupportedMaxTokensError,
+} from './openai-chat-token-params.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import {
@@ -48,12 +54,15 @@ import {
   validateBaseUrl,
   type AgentTestRequest,
   type BaseUrlValidationResult,
+  type ConnectionTestDiagnostics,
   type ConnectionTestKind,
+  type ConnectionTestPhase,
   type ConnectionTestProtocol,
   type ConnectionTestResponse,
   type ParsedBaseUrl,
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
+import { googleGenerateContentUrl } from './google-models.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -515,6 +524,7 @@ interface ProviderCallShape {
   headers: Record<string, string>;
   body: unknown;
   extractText: (data: unknown) => string;
+  retryBodyOnUnsupportedMaxTokens?: unknown;
 }
 
 function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
@@ -567,7 +577,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           model,
-          max_tokens: PROVIDER_MAX_TOKENS,
+          ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
         },
@@ -600,17 +610,22 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           ...(usesVersionedOpenAIPath ? { model } : {}),
-          max_tokens: PROVIDER_MAX_TOKENS,
+          ...buildLegacyMaxTokensParam(PROVIDER_MAX_TOKENS),
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
+        },
+        retryBodyOnUnsupportedMaxTokens: {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+          ...buildMaxCompletionTokensParam(PROVIDER_MAX_TOKENS),
         },
         extractText: extractOpenAIMessageText,
       };
     }
     case 'google': {
-      const trimmedBase = baseUrl.replace(/\/+$/, '');
       return {
-        url: `${trimmedBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        url: googleGenerateContentUrl(baseUrl, model),
         headers: {
           'content-type': 'application/json',
           'x-goog-api-key': apiKey,
@@ -726,14 +741,59 @@ export async function testProviderConnection(
     );
     if (modelError) return modelError;
 
-    const response = await fetch(call.url, {
+    const requestInit = {
       method: 'POST',
       headers: call.headers,
-      body: JSON.stringify(call.body),
       signal: controller.signal,
-      redirect: 'error',
+      redirect: 'error' as const,
+    };
+    let response = await fetch(call.url, {
+      ...requestInit,
+      body: JSON.stringify(call.body),
     });
-    const latencyMs = Date.now() - start;
+    let latencyMs = Date.now() - start;
+    if (
+      !response.ok &&
+      call.retryBodyOnUnsupportedMaxTokens !== undefined
+    ) {
+      let detailText = '';
+      try {
+        detailText = await response.text();
+      } catch {
+        detailText = '';
+      }
+      if (response.status === 400 && isUnsupportedMaxTokensError(detailText)) {
+        console.warn(
+          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → retrying with max_completion_tokens`,
+        );
+        response = await fetch(call.url, {
+          ...requestInit,
+          body: JSON.stringify(call.retryBodyOnUnsupportedMaxTokens),
+        });
+        latencyMs = Date.now() - start;
+      } else {
+        const redactedDetail = redactSecrets(detailText.slice(0, 240), [
+          input.apiKey,
+        ]);
+        const kind = statusToKind(response.status, redactedDetail);
+        const detail =
+          redactedDetail ||
+          (response.status === 404
+            ? 'HTTP 404 from provider; check the Base URL path.'
+            : '');
+        console.warn(
+          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
+        );
+        return {
+          ok: false,
+          kind,
+          latencyMs,
+          model,
+          status: response.status,
+          detail,
+        };
+      }
+    }
     if (response.ok) {
       let data: unknown;
       let rawText = '';
@@ -1126,6 +1186,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: input.agentId,
       detail: `Unknown agent id: ${input.agentId}`,
+      diagnostics: { phase: 'binary_resolution' },
     };
   }
   const configuredAgentEnv = agentCliEnvForAgent(
@@ -1141,6 +1202,7 @@ async function testAgentConnectionInternal(
       latencyMs: Date.now() - start,
       model,
       agentName: def.name,
+      diagnostics: { phase: 'binary_resolution' },
     };
   }
 
@@ -1152,7 +1214,37 @@ async function testAgentConnectionInternal(
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
 
-  const resultFromAgentText = (text: string): ConnectionTestResponse => {
+  // Phase tracker for structured diagnostics (#2248). The order matches
+  // the lifecycle: binary_resolution → spawn → connection_smoke_test →
+  // output_parse. Each result helper below stamps the *current* phase
+  // into the response so consumers don't have to scrape `detail` to
+  // know how far the test got. Phase is mutated at the points where
+  // the daemon meaningfully advances (just before spawn, when the
+  // child first produces stdout, etc.) — not on every event.
+  let phase: ConnectionTestPhase = 'binary_resolution';
+  const buildDiagnostics = (
+    overrides: Partial<ConnectionTestDiagnostics> = {},
+  ): ConnectionTestDiagnostics => {
+    const rawStderr = sink.getStderrTail().trim();
+    const rawStdout = sink.getRawStdoutTail().trim();
+    // `exactOptionalPropertyTypes: true` means we can't pass `undefined`
+    // to an optional field directly — conditionally spread instead so
+    // empty values just don't appear in the response.
+    return {
+      phase,
+      ...(executableResolution.launchPath
+        ? { binaryPath: executableResolution.launchPath }
+        : {}),
+      ...(rawStderr ? { stderrTail: redactSecrets(rawStderr) } : {}),
+      ...(rawStdout ? { stdoutTail: redactSecrets(rawStdout) } : {}),
+      ...overrides,
+    };
+  };
+
+  const resultFromAgentText = (
+    text: string,
+    exit?: { code: number | null; signal: NodeJS.Signals | null },
+  ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
     const rawSample = truncateSample(text);
     const sample = redactSecrets(rawSample);
@@ -1168,6 +1260,10 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail,
+        diagnostics: buildDiagnostics({
+          phase: 'output_parse',
+          ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}),
+        }),
       };
     }
     if (!isSmokeOkReply(text)) {
@@ -1176,6 +1272,14 @@ async function testAgentConnectionInternal(
       );
     }
     console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
+    // resultFromChildExit can route ACP forced shutdown (code === null,
+    // signal === 'SIGTERM' + acpCleanCompletion) through this success
+    // helper. Hard-coding `exitCode: 0` would silently overwrite the
+    // SIGTERM signal and violate the raw code/signal contract in
+    // packages/contracts/src/api/connectionTest.ts. Pass through the
+    // real `winner.code` / `winner.signal` when the caller has them and
+    // only synthesize `exitCode: 0` when no exit context is available
+    // (theoretical text-without-exit path).
     return {
       ok: true,
       kind: 'success',
@@ -1183,6 +1287,11 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       sample,
+      diagnostics: buildDiagnostics(
+        exit
+          ? { phase: 'connection_smoke_test', exitCode: exit.code, signal: exit.signal }
+          : { phase: 'connection_smoke_test', exitCode: 0 },
+      ),
     };
   };
 
@@ -1201,6 +1310,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: auth.message ?? cursorAuthGuidance(),
+        diagnostics: buildDiagnostics(),
       };
     }
     if (detail && isLikelyModelErrorText(detail)) {
@@ -1214,6 +1324,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail,
+        diagnostics: buildDiagnostics({ phase: 'output_parse' }),
       };
     }
     console.warn(
@@ -1226,6 +1337,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       detail,
+      diagnostics: buildDiagnostics(),
     };
   };
 
@@ -1240,6 +1352,7 @@ async function testAgentConnectionInternal(
       latencyMs,
       model,
       agentName: def.name,
+      diagnostics: buildDiagnostics(),
     };
   };
 
@@ -1255,6 +1368,10 @@ async function testAgentConnectionInternal(
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
+      // buildArgs runs *after* binary resolution but *before* spawn, so
+      // phase is still 'binary_resolution' here. Stamp diagnostics so the
+      // contract advertised in packages/contracts/src/api/connectionTest.ts
+      // ("Always set on local agent test responses") actually holds.
       return {
         ok: false,
         kind: 'agent_spawn_failed',
@@ -1262,6 +1379,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: redactSecrets(detail),
+        diagnostics: buildDiagnostics(),
       };
     }
     const stdinMode =
@@ -1277,6 +1395,17 @@ async function testAgentConnectionInternal(
     const env = applyAgentLaunchEnv(baseEnv, executableResolution);
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
+      // Preflight auth probe runs after binary resolution but before the
+      // smoke spawn — phase is still 'binary_resolution'. The smoke
+      // sink is empty here (no spawn happened), so the probe itself is
+      // the only source of stderr/stdout/exit context. Fold what the
+      // probe captured into the diagnostics block; `...overrides` in
+      // buildDiagnostics() lets these win over the empty sink tails.
+      const probeOverrides: Partial<ConnectionTestDiagnostics> = {};
+      if (auth.stdoutTail) probeOverrides.stdoutTail = redactSecrets(auth.stdoutTail);
+      if (auth.stderrTail) probeOverrides.stderrTail = redactSecrets(auth.stderrTail);
+      if (auth.exitCode !== undefined) probeOverrides.exitCode = auth.exitCode;
+      if (auth.signal !== undefined) probeOverrides.signal = auth.signal;
       return {
         ok: false,
         kind: 'agent_auth_required',
@@ -1284,6 +1413,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: auth.message ?? cursorAuthGuidance(),
+        diagnostics: buildDiagnostics(probeOverrides),
       };
     }
     const invocation = createCommandInvocation({
@@ -1291,6 +1421,12 @@ async function testAgentConnectionInternal(
       args,
       env,
     });
+    // We are about to hand off to child_process.spawn(). Any failure
+    // from here on (ENOENT, bad argv, non-zero exit) belongs to the
+    // 'spawn' phase rather than 'binary_resolution', so flip the tracker
+    // *before* spawning. resultFromAgentText flips it again to
+    // 'connection_smoke_test' / 'output_parse' once we get text out.
+    phase = 'spawn';
     child = spawn(invocation.command, invocation.args, {
       env,
       stdio: [stdinMode, 'pipe', 'pipe'],
@@ -1344,6 +1480,9 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: `${detail}${guidance}`,
+          diagnostics: buildDiagnostics({
+            phase: isMissing ? 'binary_resolution' : 'spawn',
+          }),
         };
       }
 
@@ -1373,10 +1512,11 @@ async function testAgentConnectionInternal(
         (winner.code === 0 && !winner.signal) || acpForcedShutdown;
       if (buffered) {
         const rawSample = truncateSample(buffered);
+        const exitInfo = { code: winner.code, signal: winner.signal };
         if (rawSample && isLikelyModelErrorText(rawSample)) {
-          return resultFromAgentText(buffered);
+          return resultFromAgentText(buffered, exitInfo);
         }
-        if (exitedCleanly) return resultFromAgentText(buffered);
+        if (exitedCleanly) return resultFromAgentText(buffered, exitInfo);
       }
       const stderrTail = sink.getStderrTail().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
@@ -1401,6 +1541,11 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: auth.message ?? cursorAuthGuidance(),
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
         };
       }
       const claudeDiagnostic = diagnoseClaudeCliFailure({
@@ -1422,6 +1567,11 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: claudeDiagnostic.detail,
+          diagnostics: buildDiagnostics({
+            phase: 'spawn',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
         };
       }
       const detail = redactSecrets(
@@ -1446,6 +1596,11 @@ async function testAgentConnectionInternal(
         agentName: def.name,
         detail:
           `${detail || 'Agent exited without producing assistant text'}${guidance}`,
+        diagnostics: buildDiagnostics({
+          phase: buffered ? 'output_parse' : 'spawn',
+          exitCode: winner.code,
+          signal: winner.signal,
+        }),
       };
     };
 
@@ -1502,6 +1657,10 @@ async function testAgentConnectionInternal(
     return resultFromChildExit(winner);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    // Outer catch — the failure may have happened at any phase between
+    // binary_resolution and output_parse, so stamp the current phase as
+    // observed. buildDiagnostics is defined in the enclosing scope and
+    // is safe to call here.
     return {
       ok: false,
       kind: 'agent_spawn_failed',
@@ -1509,6 +1668,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       detail: redactSecrets(detail),
+      diagnostics: buildDiagnostics(),
     };
   } finally {
     if (timer) clearTimeout(timer);

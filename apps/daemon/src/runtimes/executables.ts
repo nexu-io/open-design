@@ -7,6 +7,7 @@ import { expandHomePath } from './paths.js';
 import type { RuntimeAgentDef } from './types.js';
 
 const AGENT_BIN_ENV_KEYS = new Map<string, string>([
+  ['aider', 'AIDER_BIN'],
   ['claude', 'CLAUDE_BIN'],
   ['codex', 'CODEX_BIN'],
   ['copilot', 'COPILOT_BIN'],
@@ -22,6 +23,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['pi', 'PI_BIN'],
   ['qoder', 'QODER_BIN'],
   ['qwen', 'QWEN_BIN'],
+  ['trae-cli', 'TRAE_CLI_BIN'],
   ['vibe', 'VIBE_BIN'],
 ]);
 

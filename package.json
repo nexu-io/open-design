@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -13,10 +13,9 @@
     "postinstall": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
-    "tools-pr": "pnpm exec tools-pr",
     "tools-serve": "pnpm exec tools-serve",
     "nix:update-hash": "tsx ./scripts/update-nix-pnpm-deps-hash.ts",
-    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/approve-fork-pr-workflows.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
@@ -28,7 +27,6 @@
   "devDependencies": {
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
-    "@open-design/tools-pr": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
     "@types/node": "20.19.39",
     "tsx": "4.22.3",
@@ -47,6 +45,7 @@
       "ip-address": "10.2.0",
       "postcss": "8.5.15",
       "protobufjs": "8.4.0",
+      "qs": "6.15.2",
       "yaml": "2.9.0"
     },
     "onlyBuiltDependencies": [

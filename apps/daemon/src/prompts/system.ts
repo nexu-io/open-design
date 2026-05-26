@@ -118,6 +118,7 @@ type ProjectMetadata = {
   intent?: string | null;
   fidelity?: string | null;
   speakerNotes?: boolean | null;
+  slideCount?: string | null;
   animations?: boolean | null;
   includeLandingPage?: boolean | null;
   includeOsWidgets?: boolean | null;
@@ -858,6 +859,9 @@ function renderMetadataBlock(
     lines.push(
       '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
     );
+    lines.push(
+      '- **artifact-output rule**: when you generate an HTML artifact, keep conversational prose concise and product-facing. Do not dump the full raw HTML source back into chat; the artifact/file is the source of truth and the assistant message should only summarize the result.',
+    );
   }
   if (metadata.includeLandingPage) {
     lines.push(
@@ -884,6 +888,9 @@ function renderMetadataBlock(
     );
   }
   if (metadata.kind === 'deck') {
+    lines.push(
+      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+    );
     lines.push(
       `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
     );

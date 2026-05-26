@@ -12,7 +12,7 @@ import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
-import type { AppConfig, DesignSystemDetail, Project, ProjectFile } from '../../src/types';
+import type { AppConfig, Conversation, DesignSystemDetail, Project, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 
 const mocks = vi.hoisted(() => ({
@@ -42,17 +42,31 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
+    error,
+    onNewConversation,
     onSend,
   }: {
+    error?: string | null;
+    onNewConversation?: () => void;
     onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
   }) => (
-    <button
-      type="button"
-      data-testid="design-system-chat-send"
-      onClick={() => onSend('Update the design tokens', [], [])}
-    >
-      send
-    </button>
+    <>
+      {error ? <div role="alert">{error}</div> : null}
+      <button
+        type="button"
+        data-testid="new-conversation"
+        onClick={() => onNewConversation?.()}
+      >
+        New
+      </button>
+      <button
+        type="button"
+        data-testid="design-system-chat-send"
+        onClick={() => onSend('Update the design tokens', [], [])}
+      >
+        send
+      </button>
+    </>
   ),
 }));
 
@@ -873,6 +887,7 @@ describe('DesignSystemCreationFlow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Browse folder' }));
 
     await waitFor(() => expect(screen.getByText('/Users/qingyu/work/comfyui')).toBeTruthy());
+    expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull();
 
     continueToGeneration();
     continueToGeneration();
@@ -958,6 +973,7 @@ describe('DesignSystemCreationFlow', () => {
     });
     fireEvent.change(localCodeInput!, { target: { files: [tokenFile] } });
     expect(screen.getByText('1 local code files selected')).toBeTruthy();
+    expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull();
 
     continueToGeneration();
     continueToGeneration();
@@ -981,6 +997,166 @@ describe('DesignSystemCreationFlow', () => {
     );
     expect(window.sessionStorage.getItem(`od:auto-send-first:${project.id}`)).toBe('1');
     expect(onCreated).toHaveBeenCalledWith(project.id, project);
+  });
+
+  it('shows global loading as soon as a large file-picker selection returns', async () => {
+    const { container } = render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const localCodeInput = container.querySelector('input[webkitdirectory]') as HTMLInputElement | null;
+    const tokenFiles = Array.from({ length: 25 }, (_, index) => {
+      const file = new File([`:root { --brand-${index}: #d86a4a; }`], `tokens-${index}.css`, {
+        type: 'text/css',
+      });
+      Object.defineProperty(file, 'webkitRelativePath', { value: `comfyui/src/tokens-${index}.css` });
+      return file;
+    });
+
+    fireEvent.change(localCodeInput!, { target: { files: tokenFiles } });
+
+    expect(screen.getByTestId('ds-source-upload-loading').textContent).toContain('Adding source material...');
+    expect(screen.queryByText('25 local code files selected')).toBeNull();
+    await waitFor(() => expect(screen.getByText('25 local code files selected')).toBeTruthy(), { timeout: 2000 });
+    await waitFor(() => expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull(), { timeout: 2500 });
+  });
+
+  it('shows global loading when the folder picker returns before files are enumerated', async () => {
+    const { container } = render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const localCodeInput = container.querySelector('input[webkitdirectory]') as HTMLInputElement | null;
+    const tokenFiles = Array.from({ length: 25 }, (_, index) => {
+      const file = new File([`:root { --brand-${index}: #d86a4a; }`], `tokens-${index}.css`, {
+        type: 'text/css',
+      });
+      Object.defineProperty(file, 'webkitRelativePath', { value: `comfyui/src/tokens-${index}.css` });
+      return file;
+    });
+
+    fireEvent.click(localCodeInput!);
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ds-source-upload-loading').textContent).toContain('Adding source material...');
+    });
+    expect(screen.queryByText('25 local code files selected')).toBeNull();
+
+    fireEvent.change(localCodeInput!, { target: { files: tokenFiles } });
+
+    await waitFor(() => expect(screen.getByText('25 local code files selected')).toBeTruthy(), { timeout: 2000 });
+    await waitFor(() => expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull(), { timeout: 2500 });
+  });
+
+  it('primes global loading while the folder picker is still open', async () => {
+    const { container } = render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const localCodeInput = container.querySelector('input[webkitdirectory]') as HTMLInputElement | null;
+    const tokenFiles = Array.from({ length: 25 }, (_, index) => {
+      const file = new File([`:root { --brand-${index}: #d86a4a; }`], `tokens-${index}.css`, {
+        type: 'text/css',
+      });
+      Object.defineProperty(file, 'webkitRelativePath', { value: `comfyui/src/tokens-${index}.css` });
+      return file;
+    });
+
+    fireEvent.click(localCodeInput!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ds-source-upload-loading').textContent).toContain('Adding source material...');
+    }, { timeout: 1000 });
+
+    fireEvent.change(localCodeInput!, { target: { files: tokenFiles } });
+
+    await waitFor(() => expect(screen.getByText('25 local code files selected')).toBeTruthy(), { timeout: 2000 });
+    await waitFor(() => expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull(), { timeout: 2500 });
+  });
+
+  it('shows a recoverable error when a dragged local code entry cannot be read', async () => {
+    const { container } = render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const dropZone = container.querySelector('input[webkitdirectory]')?.closest('.ds-drop-zone') as HTMLElement | null;
+
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: [],
+        items: [
+          {
+            webkitGetAsEntry: () => ({
+              isFile: true,
+              isDirectory: false,
+              name: 'stale-token.css',
+              file: (_done: (file: File) => void, fail?: (error: DOMException) => void) => {
+                fail?.(new DOMException('missing', 'NotFoundError'));
+              },
+            }),
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not read one or more dropped files or folders/)).toBeTruthy();
+    });
+    expect(screen.queryByText(/local code files selected/)).toBeNull();
+  });
+
+  it('shows a global loading state while local source files are being read', async () => {
+    const { container } = render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+      />,
+    );
+    const dropZone = container.querySelector('input[webkitdirectory]')?.closest('.ds-drop-zone') as HTMLElement | null;
+    const tokenFiles = Array.from({ length: 25 }, (_, index) => (
+      new File([`:root { --brand-${index}: #d86a4a; }`], `tokens-${index}.css`, { type: 'text/css' })
+    ));
+    let resolveRead!: () => void;
+    const readReady = new Promise<void>((resolve) => {
+      resolveRead = resolve;
+    });
+
+    fireEvent.drop(dropZone!, {
+      dataTransfer: {
+        files: [],
+        items: [
+          ...tokenFiles.map((tokenFile) => ({
+            webkitGetAsEntry: () => ({
+              isFile: true,
+              isDirectory: false,
+              name: tokenFile.name,
+              file: (done: (file: File) => void) => {
+                void readReady.then(() => done(tokenFile));
+              },
+            }),
+          })),
+        ],
+      },
+    });
+
+    expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull();
+    resolveRead();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ds-source-upload-loading').textContent).toContain('Adding source material...');
+    });
+    await waitFor(() => expect(screen.getByText('25 local code files selected')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull());
   });
 
   it('recursively reads a dragged local code folder into the design-system project context', async () => {
@@ -1224,7 +1400,10 @@ describe('DesignSystemCreationFlow', () => {
       target: { value: 'Assets: product brand with custom logo and font' },
     });
     fireEvent.change(assetInput!, { target: { files: [logoFile, fontFile] } });
-    expect(screen.getByText('logo.svg, brand.woff2')).toBeTruthy();
+    expect(screen.getByText('Drag files here or browse')).toBeTruthy();
+    expect(screen.getByText('logo.svg')).toBeTruthy();
+    expect(screen.getByText('brand.woff2')).toBeTruthy();
+    expect(screen.queryByTestId('ds-source-upload-loading')).toBeNull();
 
     continueToGeneration();
     continueToGeneration();
@@ -2045,6 +2224,134 @@ describe('DesignSystemDetailView', () => {
       }),
     );
     expect(screen.queryByText('Could not open the design system workspace.')).toBeNull();
+  });
+
+  it('starts a new design-system conversation by opening the workspace first', async () => {
+    const system: DesignSystemDetail = {
+      id: 'installed:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'installed',
+      status: 'published',
+      isEditable: true,
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const fresh: Conversation = {
+      id: 'conv-new',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue({ project, files: [] });
+    mocks.createConversation.mockResolvedValue(fresh);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={null}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    const button = await screen.findByTestId('new-conversation');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
+    await waitFor(() => expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system'));
+    expect(mocks.createConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.listConversations).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id));
+  });
+
+  it('clears a stale creation error after a successful new conversation retry', async () => {
+    const system: DesignSystemDetail = {
+      id: 'installed:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'installed',
+      status: 'published',
+      isEditable: true,
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const fresh: Conversation = {
+      id: 'conv-new',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue({ project, files: [] });
+    mocks.createConversation
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(fresh);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={null}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    const button = await screen.findByTestId('new-conversation');
+    fireEvent.click(button);
+
+    await screen.findByText('Could not create a design system conversation.');
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.createConversation).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText('Could not create a design system conversation.')).toBeNull();
+    });
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id));
   });
 
   it('passes the current UI locale to daemon workspace chat runs', async () => {

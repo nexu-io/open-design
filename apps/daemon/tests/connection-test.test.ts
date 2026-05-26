@@ -271,6 +271,39 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('does not double-append v1beta when listing Gemini models', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      expect(url).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=goog-key',
+      );
+      return jsonResponse({
+        models: [
+          {
+            name: 'models/gemini-2.0-flash',
+            displayName: 'Gemini 2.0 Flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'goog-key',
+      }),
+    });
+
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      models: [{ id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }],
+    });
+  });
+
   it('lets unsupported contract protocols return a classified provider-models result', async () => {
     const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
@@ -972,6 +1005,302 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('retries Azure OpenAI-compatible v1 alias connection tests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_completion_tokens: 100,
+      stream: false,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure deployment-mode connection tests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({ max_tokens: 100, stream: false });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({ max_completion_tokens: 100, stream: false });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('reports Azure retry latency from the final provider response', async () => {
+    let now = 10_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.fn((_input: FetchInput, init?: FetchInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        now += 25;
+        return Promise.resolve(jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 }));
+      }
+      now += 75;
+      return Promise.resolve(jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      })).resolves.toMatchObject({
+        ok: true,
+        latencyMs: 100,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('reports Azure failed-retry latency from the final provider response', async () => {
+    let now = 20_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.fn((_input: FetchInput, init?: FetchInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        now += 25;
+        return Promise.resolve(jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 }));
+      }
+      now += 75;
+      return Promise.resolve(jsonResponse({
+        error: {
+          message: 'retry failed',
+        },
+      }, { status: 500 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+      })).resolves.toMatchObject({
+        ok: false,
+        kind: 'upstream_unavailable',
+        status: 500,
+        latencyMs: 100,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('keeps max_tokens for legacy OpenAI connection tests', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-good',
+        model: 'gpt-4o',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'gpt-4o',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for DeepSeek-style OpenAI-compatible connection tests', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.deepseek.com/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'deepseek-chat', object: 'model' }],
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'deepseek-key',
+        model: 'deepseek-chat',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => String(input) === 'https://api.deepseek.com/v1/chat/completions',
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deepseek-chat',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for Azure gpt-4o connection tests on the default deployment path', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'azure',
+        baseUrl: 'https://my-azure.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'gpt-4o',
+        apiVersion: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstream).toBeDefined();
+    const [, upstreamInit] = upstream!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      messages: [{ role: 'user', content: 'Reply with only: ok' }],
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
   it('keeps the default Azure api-version in connection tests when the field is blank', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
@@ -1091,6 +1420,38 @@ describe('POST /api/test/connection provider mode', () => {
         baseUrl: 'https://generativelanguage.googleapis.com',
         apiKey: 'goog-key',
         model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.sample).toBe('ok');
+    const upstream = fetchMock.mock.calls.find(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(String(upstream![0])).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    );
+  });
+
+  it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        candidates: [
+          { content: { parts: [{ text: 'ok' }] } },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'goog-key',
+        model: 'models/gemini-2.0-flash',
       }),
     });
     const body = (await res.json()) as Record<string, unknown>;
@@ -2108,6 +2469,141 @@ setInterval(() => {}, 1000);
       body: JSON.stringify({ mode: 'agent' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  // Regression coverage for #2248: the daemon must return structured
+  // diagnostics next to the existing `kind`/`detail` strings so Settings
+  // and CLI consumers don't have to scrape the human-readable detail
+  // line to know what phase failed, which binary path was used, or what
+  // the child's exit metadata was. The legacy fields stay unchanged so
+  // older clients keep rendering.
+  it('attaches structured diagnostics on Claude smoke-test success (#2248)', async () => {
+    await withFakeClaude(
+      `
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({ ok: true, kind: 'success' });
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        // The binary path is whatever fake bin the test harness installed
+        // on PATH (a temp directory). All we want here is that the
+        // daemon actually fills it in, not that it matches an exact path.
+        expect(typeof result.diagnostics?.binaryPath).toBe('string');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/claude/);
+        expect(result.diagnostics?.exitCode).toBe(0);
+      },
+    );
+  });
+
+  it('attaches structured diagnostics on Claude exit-failed (#2248)', async () => {
+    await withFakeClaude(
+      `console.error('boom-on-stderr'); process.exit(7);`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result.ok).toBe(false);
+        // Back-compat: existing kind + detail keep their shape.
+        expect(typeof result.kind).toBe('string');
+        expect(typeof result.detail).toBe('string');
+        // New: structured fields are attached.
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics?.phase).toBe('spawn');
+        expect(result.diagnostics?.exitCode).toBe(7);
+        expect(result.diagnostics?.stderrTail ?? '').toContain('boom-on-stderr');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/claude/);
+      },
+    );
+  });
+
+  it('reports an early-phase diagnostics block when the agent CLI is missing (#2248)', async () => {
+    // Clear PATH so the daemon cannot locate `claude`. We restore the
+    // env in `finally` to avoid leaking the empty PATH to later tests.
+    // Depending on whether the resolver short-circuits or the spawn
+    // itself ENOENTs, the kind may be agent_not_installed or
+    // agent_spawn_failed and the phase may be 'binary_resolution' or
+    // 'spawn'. Both are valid "we never reached the smoke test" shapes
+    // — the actionable bit for the UI is that diagnostics arrived at
+    // all and that the phase is one of the two early values.
+    const oldPath = process.env.PATH;
+    process.env.PATH = '';
+    try {
+      const result = await testAgentConnection({ agentId: 'claude' });
+      expect(result.ok).toBe(false);
+      expect(['agent_not_installed', 'agent_spawn_failed']).toContain(result.kind);
+      expect(result.diagnostics).toBeDefined();
+      expect(['binary_resolution', 'spawn']).toContain(result.diagnostics?.phase);
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
+  it('attaches diagnostics when the preflight auth probe reports missing auth (#2248)', async () => {
+    // Cursor Agent's preflight `cursor-agent status` check rejects the
+    // smoke run before the daemon ever spawns the smoke prompt. The
+    // initial #2248 pass forgot to stamp diagnostics on that return
+    // path, which contradicted the "Always set on local agent test
+    // responses" contract in packages/contracts. Lock the contract,
+    // and additionally lock the probe's own stderr/exit metadata —
+    // without those, the diagnostics block would drop the only context
+    // a caller has on a missing-auth failure (no smoke spawn ever ran,
+    // so the smoke sink is empty).
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.error('Not logged in');
+  process.exit(1);
+}
+console.error('smoke prompt should not run when status reports missing auth');
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'cursor-agent' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+        });
+        expect(result.diagnostics).toBeDefined();
+        // Preflight runs after binary resolution but before the smoke
+        // spawn, so phase should still be 'binary_resolution'.
+        expect(result.diagnostics?.phase).toBe('binary_resolution');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/cursor-agent/);
+        // The probe child wrote "Not logged in" on stderr and exited
+        // 1; both must propagate into diagnostics so Settings/CLI can
+        // render the structured auth-failure context.
+        expect(result.diagnostics?.stderrTail ?? '').toContain('Not logged in');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
   });
 });
 

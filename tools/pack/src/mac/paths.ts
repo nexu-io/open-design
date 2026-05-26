@@ -44,7 +44,7 @@ export function resolveMacPaths(config: ToolPackConfig): MacPaths {
     identity.publicAppBundleName,
   );
   const installApplicationsRoot = join(namespaceRoot, "install", "Applications");
-  const installedAppPath = join(installApplicationsRoot, macAppBundleName(config.namespace));
+  const installedAppPath = join(installApplicationsRoot, identity.systemAppBundleName);
 
   return {
     appBuilderConfigPath: join(namespaceRoot, "builder-config.json"),

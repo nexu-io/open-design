@@ -114,7 +114,12 @@ describe('FileViewer manual edit regressions', () => {
       const second = { ...htmlPreviewFile(), name: 'second.html', path: 'second.html' };
       const { rerender } = render(<FileViewer projectId="project-1" projectKind="prototype" file={first} />);
 
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/raw/preview.html', {}));
+      // The raw fetch is cache-busted on every mtime / reload / files-refresh
+      // bump so srcDoc-mode previews see fresh HTML after agent edits.
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/api\/projects\/project-1\/raw\/preview\.html(\?|$)/),
+        {},
+      ));
       fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
       const baseSizeInput = await waitFor(() => {
         const input = Array.from(document.querySelectorAll('.cc-row'))

@@ -38,6 +38,7 @@ import type { InspectOverrideMap } from '../../src/components/FileViewer';
 import type { LiveArtifact, LiveArtifactWorkspaceEntry, PreviewComment, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
 afterEach(() => {
   cleanup();
@@ -78,6 +79,14 @@ function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
 }
 
 describe('FileViewer preview scale', () => {
+  it('keeps file viewer selectors in the effective global stylesheet', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain('.viewer');
+    expect(css).toContain('.viewer-toolbar');
+    expect(css).toContain('.viewer-action');
+  });
+
   it('uses the requested zoom for desktop preview overlays', () => {
     expect(effectivePreviewScale('desktop', 1.5, { width: 320, height: 480 })).toBe(1.5);
   });
@@ -433,6 +442,7 @@ describe('FileViewer SVG artifacts', () => {
       const activations = srcDocActivationMessages(postMessageSpy.mock.calls);
       expect(activations.at(-1)?.html).toContain('__odArtifactBootCount');
       expect(activations.at(-1)?.html).toContain('data-od-selection-bridge');
+      expect(activations.at(-1)?.html).toContain('data-od-preview-focus-guard');
     });
   });
 
@@ -609,6 +619,73 @@ describe('FileViewer SVG artifacts', () => {
 
     const frame = await screen.findByTestId('react-component-preview-frame');
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+  });
+
+  it('points a .jsx module loaded by a sibling HTML to that entry, not the React error (issue #2744)', async () => {
+    const file = baseFile({
+      name: 'icons.jsx',
+      path: 'icons.jsx',
+      mime: 'text/jsx',
+      kind: 'code',
+      artifactManifest: {
+        version: 1,
+        kind: 'react-component',
+        title: 'icons',
+        entry: 'icons.jsx',
+        renderer: 'react-component',
+        exports: ['jsx'],
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url === '/api/projects/project-1/files') {
+          return new Response(
+            JSON.stringify({
+              files: [
+                { name: 'icons.jsx', path: 'icons.jsx' },
+                { name: 'backups.html', path: 'backups.html' },
+              ],
+            }),
+          );
+        }
+        if (url === '/api/projects/project-1/raw/backups.html') {
+          return new Response('<script type="text/babel" src="icons.jsx"></script>');
+        }
+        if (url === '/api/projects/project-1/raw/icons.jsx') {
+          return new Response('window.I = { star: null };');
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    const onOpenFileReplacing = vi.fn();
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        onOpenFileReplacing={onOpenFileReplacing}
+      />,
+    );
+
+    // The module points at its HTML entry instead of rendering the React
+    // runtime (which would throw "No React component export found").
+    const link = await screen.findByRole('button', { name: /backups\.html/ });
+    expect(screen.queryByTestId('react-component-preview-frame')).toBeNull();
+
+    // The toolbar still offers a way to read the raw code: clicking the Code
+    // tab swaps the pointer for the file's source. Issue #2744 follow-up.
+    fireEvent.click(screen.getByRole('button', { name: /^code$/i }));
+    expect(container.textContent).toContain('window.I');
+    expect(screen.queryByRole('button', { name: /backups\.html/ })).toBeNull();
+
+    // Back on Preview, clicking the entry opens the HTML page and closes the
+    // dead-end module tab (icons.jsx) in one move.
+    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /backups\.html/ }));
+    expect(onOpenFileReplacing).toHaveBeenCalledWith('backups.html', 'icons.jsx');
   });
 
   it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
@@ -2444,14 +2521,14 @@ function baseLiveArtifactWorkspaceEntry(
 
 describe('LiveArtifactViewer', () => {
   it('hides inactive live previews even when a device viewport sets display', () => {
-    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const css = readExpandedIndexCss();
     const rule = css.match(/\.live-artifact-preview-layer\.preview-viewport\[data-active='false'\]\s*\{[^}]+\}/)?.[0] ?? '';
 
     expect(rule).toContain('display: none;');
   });
 
   it('keeps the presentation exit button aligned with preview chrome spacing', () => {
-    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const css = readExpandedIndexCss();
     const rule = css.match(/\.present-exit\s*\{[^}]+\}/)?.[0] ?? '';
 
     expect(rule).toContain('top: calc(env(safe-area-inset-top, 0px) + 20px);');

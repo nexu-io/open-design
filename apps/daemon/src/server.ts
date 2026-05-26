@@ -89,6 +89,7 @@ import { createDesignSystemGenerationJobStore } from './design-system-generation
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
+  buildConnectorProbe,
   defaultBundledRoot,
   doctorPlugin,
   FIRST_PARTY_ATOMS,
@@ -192,16 +193,26 @@ import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
-import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
+import {
+  countDesignSystemPreviewModules,
+  countNewHtmlArtifacts,
+  didRunCreateDesignSystemFile,
+} from './run-artifacts.js';
+import {
+  reportRunCompletedFromDaemon,
+  reportRunFeedbackFromDaemon,
+} from './langfuse-bridge.js';
 import {
   createAnalyticsService,
   newInsertId,
   readAnalyticsContext,
   readPublicConfigResponse,
 } from './analytics.js';
+import { observePendingInstallerApplyAttempts } from './update-apply-observations.js';
 import {
   agentIdToTracking,
   deriveConfigureGlobals,
+  type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
   redactSecrets,
@@ -384,7 +395,7 @@ import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
-import { configureConnectorCredentialStore, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
+import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
@@ -774,6 +785,7 @@ export function normalizeCommentAttachments(input) {
         currentText: compactString(raw.currentText, 160),
         pagePosition: normalizeAttachmentPosition(raw.pagePosition),
         htmlHint: compactString(raw.htmlHint, 180),
+        style: normalizeAnnotationStyle(raw.style),
         selectionKind,
         memberCount,
         podMembers,
@@ -809,6 +821,7 @@ export function renderCommentAttachmentHint(commentAttachments) {
       `position: ${formatAttachmentPosition(item.pagePosition)}`,
       `currentText: ${item.currentText || '(empty)'}`,
       `htmlHint: ${item.htmlHint || '(none)'}`,
+      `computedStyle: ${formatAnnotationStyle(item.style) || '(none)'}`,
       `comment: ${item.comment}`,
     );
     if (targetKind === 'visual') {
@@ -827,6 +840,8 @@ export function renderCommentAttachmentHint(commentAttachments) {
         lines.push(
           `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
         );
+        const memberStyle = formatAnnotationStyle(member.style);
+        if (memberStyle) lines.push(`member.${memberIndex + 1}.computedStyle: ${memberStyle}`);
       });
     }
   }
@@ -885,10 +900,49 @@ function normalizeAttachmentPodMembers(input) {
         text: compactString(member.text, 160),
         position: normalizeAttachmentPosition(member.position),
         htmlHint: compactString(member.htmlHint, 180),
+        style: normalizeAnnotationStyle(member.style),
       };
     })
     .filter(Boolean);
 }
+
+function normalizeAnnotationStyle(input) {
+  if (!input || typeof input !== 'object') return undefined;
+  const style = {};
+  for (const key of ANNOTATION_STYLE_KEYS) {
+    const value = input[key];
+    if (typeof value !== 'string') continue;
+    const trimmed = value.replace(/\s+/g, ' ').trim();
+    if (trimmed) style[key] = trimmed.slice(0, 120);
+  }
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
+function formatAnnotationStyle(style) {
+  if (!style || typeof style !== 'object') return '';
+  return ANNOTATION_STYLE_KEYS
+    .map((key) => {
+      const value = style[key];
+      return value ? `${key}: ${value}` : null;
+    })
+    .filter(Boolean)
+    .join('; ');
+}
+
+const ANNOTATION_STYLE_KEYS = [
+  'color',
+  'backgroundColor',
+  'fontSize',
+  'fontWeight',
+  'lineHeight',
+  'textAlign',
+  'fontFamily',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'borderRadius',
+];
 
 function finiteAttachmentNumber(value) {
   return Number.isFinite(value) ? Math.round(value) : 0;
@@ -1076,7 +1130,7 @@ export function resolveStaticSpaFallbackPath(req, staticDir) {
 }
 
 export function registerStaticSpaFallback(app, staticDir) {
-  app.get('*', (req, res, next) => {
+  app.get('/*splat', (req, res, next) => {
     const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
     if (indexPath == null) return next();
     res.sendFile(indexPath);
@@ -1725,12 +1779,54 @@ function execFileBuffered(command, args, opts = {}) {
   });
 }
 
+function quotePosixShellArg(value) {
+  const text = String(value ?? '');
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function buildGhShellCommand(args) {
+  return ['gh', ...args].map(quotePosixShellArg).join(' ');
+}
+
+function buildCommandShellCommand(command, args) {
+  return [command, ...args].map(quotePosixShellArg).join(' ');
+}
+
+function buildLoginShellCommand(innerCommand) {
+  // Use a non-login shell and re-export PATH so test fakes and agent wrappers
+  // remain visible; login shells often reset PATH from profile scripts.
+  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
+}
+
+function execGhBuffered(args, opts = {}) {
+  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+    env: process.env,
+    ...opts,
+  });
+}
+
+function execCommandViaLoginShell(command, args, opts = {}) {
+  if (process.platform === 'win32') return execFileBuffered(command, args, opts);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand(command, args))], {
+    env: process.env,
+    ...opts,
+  });
+}
+
 async function readProjectPluginManifest(folder) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
   const manifest = JSON.parse(raw);
   const name = typeof manifest.name === 'string' && manifest.name.trim()
     ? manifest.name.trim()
     : path.basename(folder);
+  if (/[/\\]/.test(name) || /^\.+$/.test(name)) {
+    throw new Error(
+      `open-design.json in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
+    );
+  }
   return {
     name,
     title: typeof manifest.title === 'string' ? manifest.title : name,
@@ -1738,6 +1834,8 @@ async function readProjectPluginManifest(folder) {
     manifest,
   };
 }
+
+export const __forTestReadProjectPluginManifest = readProjectPluginManifest;
 
 function githubRepoNameFromPluginName(name) {
   const slug = String(name)
@@ -1869,7 +1967,7 @@ function shouldSkipPluginContextEntry(name) {
 }
 
 async function ensureGhReady() {
-  const version = await execFileBuffered('gh', ['--version'], { timeout: 10_000 });
+  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
   if (!version.ok) {
     return {
       ok: false,
@@ -1879,7 +1977,7 @@ async function ensureGhReady() {
       log: [version.stderr || version.stdout || 'gh --version failed'],
     };
   }
-  const auth = await execFileBuffered('gh', ['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
+  const auth = await execGhBuffered(['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
   if (!auth.ok) {
     return {
       ok: false,
@@ -2848,8 +2946,10 @@ function sendMulterError(res, err) {
 }
 
 const mediaTasks = new Map();
+const pluginShareTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
 const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
+const PLUGIN_SHARE_TERMINAL_STATUSES = new Set(['done', 'failed']);
 
 function hydrateMediaTask(row) {
   const task = {
@@ -2962,6 +3062,154 @@ function mediaTaskSnapshot(task, since = 0) {
     snapshot.error = task.error;
   }
   return snapshot;
+}
+
+function createPluginShareTask(taskId, projectId, info = {}) {
+  const task = {
+    id: taskId,
+    projectId,
+    status: 'queued',
+    action: info.action,
+    path: info.path,
+    progress: [],
+    result: null,
+    error: null,
+    startedAt: Date.now(),
+    endedAt: null,
+    waiters: new Set(),
+  };
+  pluginShareTasks.set(taskId, task);
+  return task;
+}
+
+function getLivePluginShareTask(taskId) {
+  return pluginShareTasks.get(taskId) ?? null;
+}
+
+function appendPluginShareTaskProgress(task, line) {
+  task.progress.push(String(line ?? ''));
+  notifyPluginShareTaskWaiters(task);
+}
+
+function notifyPluginShareTaskWaiters(task) {
+  const wakers = Array.from(task.waiters);
+  for (const w of wakers) {
+    try {
+      w();
+    } catch {
+      // Never let one bad waiter block the rest.
+    }
+  }
+  if (PLUGIN_SHARE_TERMINAL_STATUSES.has(task.status) && !task._gcScheduled) {
+    task._gcScheduled = true;
+    setTimeout(() => {
+      if (task.waiters.size === 0) {
+        pluginShareTasks.delete(task.id);
+      }
+    }, TASK_TTL_AFTER_DONE_MS).unref?.();
+  }
+}
+
+function pluginShareTaskSnapshot(task, since = 0) {
+  const snapshot = {
+    taskId: task.id,
+    action: task.action,
+    path: task.path,
+    status: task.status,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+    progress: task.progress.slice(since),
+    nextSince: task.progress.length,
+  };
+  if (task.status === 'done') snapshot.result = task.result;
+  if (task.status === 'failed') snapshot.error = task.error;
+  return snapshot;
+}
+
+function pluginShareActionToCli(action) {
+  if (action === 'publish-github') {
+    return {
+      argv: ['plugin', 'publish-repo'],
+      title: 'Publish repo',
+      command: 'od plugin publish-repo',
+      successMessage: 'Published plugin to GitHub.',
+      failureCode: 'publish-repo-failed',
+    };
+  }
+  return {
+    argv: ['plugin', 'open-design-pr'],
+    title: 'Open Design PR',
+    command: 'od plugin open-design-pr',
+    successMessage: 'Opened Open Design PR flow.',
+    failureCode: 'open-design-pr-failed',
+  };
+}
+
+function pluginShareProgressPlan(action) {
+  if (action === 'publish-github') {
+    return [
+      'Resolve GitHub owner and validate plugin metadata',
+      'Create or update the GitHub repository',
+      'Push plugin files',
+      'Return the repository URL',
+    ];
+  }
+  return [
+    'Ensure the Open Design fork exists',
+    'Clone the fork and prepare a branch',
+    'Copy the plugin into plugins/community',
+    'Push the branch and open the PR form',
+  ];
+}
+
+async function runPluginShareTask(task, folder) {
+  const share = pluginShareActionToCli(task.action);
+  appendPluginShareTaskProgress(task, `${share.title} started for ${task.path}`);
+  appendPluginShareTaskProgress(task, `$ ${share.command} ${task.path}`);
+  for (const step of pluginShareProgressPlan(task.action)) {
+    appendPluginShareTaskProgress(task, `- ${step}`);
+  }
+  const result = await execCommandViaLoginShell(OD_NODE_BIN, [
+    OD_BIN,
+    ...share.argv,
+    folder,
+    '--json',
+  ], { timeout: task.action === 'publish-github' ? 240_000 : 300_000 });
+  let payload = null;
+  try {
+    payload = result.stdout ? JSON.parse(result.stdout) : null;
+  } catch (error) {
+    payload = null;
+    appendPluginShareTaskProgress(task, `Failed to parse CLI JSON output: ${String(error?.message || error)}`);
+  }
+  const stepLog = payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [];
+  for (const line of stepLog) {
+    appendPluginShareTaskProgress(task, String(line).trim());
+  }
+  if (!result.ok || !payload?.ok) {
+    task.status = 'failed';
+    task.error = {
+      code: payload?.error?.label || share.failureCode,
+      message: payload?.error?.stderr || payload?.error?.stdout || result.stderr || result.stdout || `${share.title} failed.`,
+      log: stepLog.length > 0 ? stepLog : [result.stderr || result.stdout || `${share.command} failed`],
+    };
+    task.endedAt = Date.now();
+    notifyPluginShareTaskWaiters(task);
+    return;
+  }
+  const url = payload.repoUrl || payload.prUrl || undefined;
+  task.status = 'done';
+  task.result = {
+    message: url
+      ? (task.action === 'publish-github'
+          ? `Published plugin to ${url}.`
+          : `Opened Open Design PR flow at ${url}.`)
+      : share.successMessage,
+    ...(url ? { url } : {}),
+    log: stepLog,
+  };
+  task.endedAt = Date.now();
+  notifyPluginShareTaskWaiters(task);
 }
 
 export function createSseResponse(
@@ -3630,13 +3878,15 @@ export async function startServer({
     bundledMarketplaceEntries = result.registered.map((plugin) => ({
       name:        `open-design/${plugin.id}`,
       title:       plugin.title,
-      description: plugin.description,
+      title_i18n:  plugin.manifest.title_i18n,
+      description: plugin.manifest.description,
+      description_i18n: plugin.manifest.description_i18n,
       version:     plugin.version,
       source:      bundledPluginRegistrySource(plugin.source),
       publisher:   { id: 'open-design', url: 'https://open-design.ai' },
       homepage:    plugin.manifest.homepage,
       license:     plugin.manifest.license,
-      tags:        plugin.tags,
+      tags:        plugin.manifest.tags,
       capabilitiesSummary: Array.isArray(plugin.manifest.od?.capabilities)
         ? plugin.manifest.od.capabilities
         : undefined,
@@ -4555,34 +4805,159 @@ export async function startServer({
     readAnalyticsContext,
   };
 
-  // PostHog runtime config — gated on BOTH a server-side key (POSTHOG_KEY)
-  // and the user's opt-in metrics consent (Privacy → "Share usage data").
-  // The web bundle short-circuits when enabled=false so opt-out behaviour
-  // is instant after the user toggles metrics off and reloads.
+  // PostHog runtime config.
+  //
+  // - `enabled` reflects ONLY the user's consent toggle (Privacy → "Share
+  //   usage data"). When false, posthog-js's full autocapture/$pageview/
+  //   $autocapture pipeline must stay off — that's the privacy contract.
+  //
+  // - `key` and `host` are populated whenever the server has a build-time
+  //   POSTHOG_KEY, regardless of consent. The error-tracking module
+  //   (apps/web/src/analytics/error-tracking.ts) reads them to ship
+  //   `$exception` events directly to the ingest endpoint, bypassing the
+  //   consent gate. Product decision: error reports always flow so we
+  //   don't lose ground truth on stability — see the privacy section of
+  //   Settings → Privacy for the user-facing copy.
+  //
+  // - When the build itself has no POSTHOG_KEY (forks, PR builds, OSS
+  //   contributors), `key` and `host` are null and even the error
+  //   pipeline becomes a no-op.
   app.get('/api/analytics/config', async (_req, res) => {
     const baseline = readPublicConfigResponse();
     if (!baseline.enabled) {
+      // No build-time key → nothing to report on, consent or not.
       res.json(baseline);
       return;
     }
     try {
       const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
       const consentGranted = appCfg.telemetry?.metrics === true;
-      if (!consentGranted) {
-        res.json({ enabled: false, key: null, host: null });
-        return;
-      }
       // Echo the installationId so the web client uses the same anonymous
       // id PostHog already saw on prior runs (and that Langfuse uses too).
       const installationId =
         typeof appCfg.installationId === 'string' && appCfg.installationId
           ? appCfg.installationId
           : null;
-      res.json({ ...baseline, installationId });
+      res.json({
+        enabled: consentGranted,
+        key: baseline.key,
+        host: baseline.host,
+        installationId,
+      });
     } catch {
-      // If the config file is unreadable, fail closed — no events.
-      res.json({ enabled: false, key: null, host: null });
+      // If the config file is unreadable, fail closed for analytics but
+      // still let the error tracker run — exception reports are the most
+      // valuable signal in a degraded-state scenario.
+      res.json({
+        enabled: false,
+        key: baseline.key,
+        host: baseline.host,
+        installationId: null,
+      });
     }
+  });
+
+  // Cross-process safety-event bridge. Used by:
+  //   - Electron main process (renderer crash via render-process-gone)
+  //   - Any future helper / sidecar that needs to report a safety event
+  //     without owning its own posthog-node client
+  //
+  // The route DOES NOT check the user's analytics consent: this is the
+  // same "safety telemetry always flows" contract the web error-tracking
+  // module relies on. If POSTHOG_KEY is not set on the daemon (fork
+  // builds), captureSafety is a no-op on NOOP_SERVICE.
+  app.post('/api/observability/event', express.json({ limit: '64kb' }), (req, res) => {
+    const body = (req.body ?? {}) as Partial<ObservabilityEventRequest>;
+    const eventName = typeof body.event === 'string' ? body.event.trim() : '';
+    if (!eventName) {
+      res.status(400).json({ error: 'missing or invalid `event` field' });
+      return;
+    }
+    const properties =
+      body.properties != null && typeof body.properties === 'object' && !Array.isArray(body.properties)
+        ? (body.properties as Record<string, unknown>)
+        : {};
+    analyticsService.captureSafety({
+      eventName,
+      appVersion: cachedAppVersion?.version ?? '0.0.0',
+      properties,
+    });
+    res.json({ ok: true });
+  });
+
+  // Daemon-side uncaught errors. Without these, a crash in any daemon
+  // request handler or background task leaves no PostHog signal — the
+  // user sees a 500 (or worse, a connection drop) and we see nothing.
+  // Both listeners install AFTER the analyticsService is created so the
+  // captureSafety dispatch path is guaranteed to be ready.
+  //
+  // IMPORTANT — these handlers MUST keep Node's fatal-exit semantics.
+  // Installing an `uncaughtException` listener silences Node's default
+  // crash/exit path, and Node 15+ does the same for `unhandledRejection`
+  // when a listener is present (the `--unhandled-rejections=throw` mode
+  // only fires when nothing has subscribed). We bounded-flush posthog-
+  // node and then call `process.exit(1)` explicitly so the supervisor
+  // (pm2, packaged updater, dev `tools-dev`) gets a fresh process and
+  // we don't leave a half-broken daemon answering requests with state
+  // corruption. See codex review on PR #2527 (Siri-Ray).
+  const FATAL_FLUSH_TIMEOUT_MS = 1000;
+  let fatalShuttingDown = false;
+  const triggerFatalShutdown = (
+    eventName: string,
+    properties: Record<string, unknown>,
+  ): void => {
+    if (fatalShuttingDown) return;
+    fatalShuttingDown = true;
+    // CRITICAL — wait for captureSafety to ENQUEUE the event in
+    // posthog-node's local buffer before starting shutdown(). The
+    // captureSafety implementation does an `await readInstallationIdSafe()`
+    // before calling `client.capture()`; a sync fire-and-forget here would
+    // race shutdown() ahead of that await, drain an empty queue, and lose
+    // the crash event itself. See codex review on PR #2527 (Siri-Ray).
+    const flushSequence = (async () => {
+      try {
+        await analyticsService.captureSafety({
+          eventName,
+          appVersion: cachedAppVersion?.version ?? '0.0.0',
+          properties,
+        });
+      } catch {
+        // capture must never block the exit path
+      }
+      await analyticsService.shutdown();
+    })();
+    // Race the enqueue+shutdown sequence against a bounded timeout. If
+    // posthog-node hangs on a slow flush (or the installationId read
+    // hangs on the filesystem) we still die in bounded time — the
+    // supervisor will restart us, which is the whole point.
+    void Promise.race([
+      flushSequence,
+      new Promise<void>((resolve) => {
+        const handle = setTimeout(resolve, FATAL_FLUSH_TIMEOUT_MS);
+        handle.unref?.();
+      }),
+    ]).finally(() => {
+      process.exitCode = 1;
+      process.exit(1);
+    });
+  };
+  process.on('uncaughtException', (error) => {
+    triggerFatalShutdown('daemon_uncaught_exception', {
+      error_message: error?.message ?? String(error),
+      error_name: error?.name ?? 'Error',
+      // Stack truncation: 8 KB ceiling to keep the ingest payload bounded
+      // even when the stack contains huge native frames. Most actionable
+      // stacks fit in well under 2 KB.
+      error_stack: typeof error?.stack === 'string' ? error.stack.slice(0, 8192) : undefined,
+    });
+  });
+  process.on('unhandledRejection', (reason) => {
+    const asError = reason instanceof Error ? reason : null;
+    triggerFatalShutdown('daemon_unhandled_rejection', {
+      error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
+      error_name: asError?.name ?? 'NonErrorRejection',
+      error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
+    });
   });
 
   // Tracks runs whose completion has already been forwarded to Langfuse so
@@ -4594,6 +4969,15 @@ export async function startServer({
   void (async () => {
     try {
       cachedAppVersion = await readCurrentAppVersionInfo();
+      await observePendingInstallerApplyAttempts({
+        analytics: analyticsService,
+        appVersion: cachedAppVersion.version,
+        currentChannel: cachedAppVersion.channel,
+        currentVersion: cachedAppVersion.version,
+        dataRoot: RUNTIME_DATA_DIR,
+        logger: console,
+        namespace: process.env[SIDECAR_ENV.NAMESPACE] ?? SIDECAR_DEFAULTS.namespace,
+      });
     } catch {
       // Telemetry is best-effort; appVersion is omitted when unavailable.
     }
@@ -4606,6 +4990,19 @@ export async function startServer({
     reportedRuns,
     getAppVersion: () => cachedAppVersion,
   });
+
+  const reportFeedback = (req: {
+    runId: string;
+    rating: 'positive' | 'negative';
+    reasonCodes: string[];
+    hasCustomReason: boolean;
+    customReason: string;
+    scoreMetadata?: Record<string, unknown>;
+  }) =>
+    reportRunFeedbackFromDaemon({
+      dataDir: RUNTIME_DATA_DIR,
+      ...req,
+    });
 
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
@@ -5377,7 +5774,8 @@ export async function startServer({
         res.setHeader('Access-Control-Allow-Origin', 'null');
       }
       res.setHeader('Cache-Control', 'no-store');
-      res.sendFile(sheet.absPath);
+      const buf = await fs.promises.readFile(sheet.absPath);
+      res.send(buf);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -6007,7 +6405,8 @@ export async function startServer({
       const locale = typeof body.locale === 'string' ? body.locale : undefined;
 
       const registry = await loadPluginRegistryView();
-      const computed = applyPlugin({ plugin, inputs, registry, locale });
+      const connectorProbe = buildConnectorProbe(connectorService);
+      const computed = applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
       // Plan §3.B2 — apply-time grants are merged into the snapshot's
       // capabilitiesGranted so the §9 capability gate sees them, but
       // they are NOT written back to installed_plugins.capabilities_granted.
@@ -6091,6 +6490,7 @@ export async function startServer({
       });
 
       const registry = await loadPluginRegistryView();
+      const connectorProbe = buildConnectorProbe(connectorService);
       const resolved = resolvePluginSnapshot({
         db,
         body: {
@@ -6107,6 +6507,7 @@ export async function startServer({
         projectId: id,
         conversationId: cid,
         registry,
+        connectorProbe,
       });
       if (resolved && !resolved.ok) {
         res.status(resolved.status).json(resolved.body);
@@ -6139,7 +6540,8 @@ export async function startServer({
       const plugin = getInstalledPlugin(db, req.params.id);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
       const registry = await loadPluginRegistryView();
-      const report = doctorPlugin(plugin, registry);
+      const connectorProbe = buildConnectorProbe(connectorService);
+      const report = doctorPlugin(plugin, registry, { connectorProbe });
       res.json(report);
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -6596,11 +6998,12 @@ export async function startServer({
     });
   });
 
-  app.get('/api/plugins/:id/asset/*', async (req, res) => {
+  app.get('/api/plugins/:id/asset/*splat', async (req, res) => {
     try {
       const plugin = getInstalledPlugin(db, req.params.id);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const relpath = String(req.params[0] ?? '');
+      const splatParam = req.params.splat;
+      const relpath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
       // Reject obvious traversal up-front; the path resolution below
       // normalizes again, but this catches the easy cases without
       // touching disk.
@@ -7400,14 +7803,15 @@ export async function startServer({
   // The example response above rewrites `./assets/<file>` into a request
   // against this route; we still keep the on-disk paths human-friendly so
   // contributors can preview `example.html` straight from disk.
-  app.get('/api/skills/:id/assets/*', async (req, res) => {
+  app.get('/api/skills/:id/assets/*splat', async (req, res) => {
     try {
       const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
-      const relPath = String(req.params[0] || '');
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
       const assetsRoot = path.resolve(skill.dir, 'assets');
       const target = path.resolve(assetsRoot, relPath);
       if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
@@ -7422,7 +7826,7 @@ export async function startServer({
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
-      res.type(mimeFor(target)).sendFile(target);
+      await res.type(mimeFor(target)).sendFile(target);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -8202,53 +8606,28 @@ export async function startServer({
       const relativePath = normalizeProjectPluginFolderPath(body.path);
       const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const gh = await ensureGhReady();
-      if (!gh.ok) {
-        res.status(409).json(gh);
+      const result = await execCommandViaLoginShell(OD_NODE_BIN, [
+        OD_BIN,
+        'plugin',
+        'publish-repo',
+        folder,
+        '--json',
+      ], { timeout: 240_000 });
+      const payload = result.stdout ? JSON.parse(result.stdout) : null;
+      if (!result.ok || !payload?.ok) {
+        res.status(500).json({
+          ok: false,
+          code: payload?.error?.label || 'publish-repo-failed',
+          message: payload?.error?.stderr || payload?.error?.stdout || 'GitHub repo publish failed.',
+          log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || 'publish-repo failed'],
+        });
         return;
       }
-      const meta = await readProjectPluginManifest(folder);
-      const repoName = githubRepoNameFromPluginName(meta.name);
-      const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-publish-'));
-      const work = path.join(tmp, repoName);
-      await fs.promises.cp(folder, work, { recursive: true });
-      const log = [...(gh.log ?? [])];
-      for (const [cmd, args] of [
-        ['git', ['init']],
-        ['git', ['add', '.']],
-        ['git', ['-c', 'user.name=Open Design', '-c', 'user.email=open-design@example.invalid', 'commit', '-m', `Publish ${meta.title}`]],
-      ]) {
-        const result = await execFileBuffered(cmd, args, { cwd: work });
-        log.push(result.stdout || result.stderr);
-        if (!result.ok) {
-          await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-          res.status(500).json({ ok: false, code: `${cmd}-failed`, message: `${cmd} failed while preparing the plugin repository.`, log });
-          return;
-        }
-      }
-      const create = await execFileBuffered('gh', [
-        'repo',
-        'create',
-        repoName,
-        '--public',
-        '--source',
-        work,
-        '--push',
-      ], { cwd: work });
-      log.push(create.stdout || create.stderr);
-      if (!create.ok) {
-        await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-        res.status(500).json({ ok: false, code: 'gh-repo-create-failed', message: 'GitHub repo creation failed.', log });
-        return;
-      }
-      const view = await execFileBuffered('gh', ['repo', 'view', '--json', 'url', '--jq', '.url'], { cwd: work });
-      const url = view.ok && view.stdout ? view.stdout : undefined;
-      await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
       res.json({
         ok: true,
-        message: url ? `Published ${meta.title} to ${url}.` : `Published ${meta.title} to GitHub.`,
-        ...(url ? { url } : {}),
-        log,
+        message: payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.',
+        ...(payload.repoUrl ? { url: payload.repoUrl } : {}),
+        log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [],
       });
     } catch (err) {
       res.status(400).json({ ok: false, message: String(err?.message || err), log: [] });
@@ -8266,107 +8645,124 @@ export async function startServer({
       const relativePath = normalizeProjectPluginFolderPath(body.path);
       const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const gh = await ensureGhReady();
-      if (!gh.ok) {
-        res.status(409).json(gh);
-        return;
-      }
-      const meta = await readProjectPluginManifest(folder);
-      const repoName = githubRepoNameFromPluginName(meta.name);
-      const user = await execFileBuffered('gh', ['api', 'user', '--jq', '.login'], { timeout: 20_000 });
-      if (!user.ok || !user.stdout) {
-        res.status(409).json({
+      const result = await execCommandViaLoginShell(OD_NODE_BIN, [
+        OD_BIN,
+        'plugin',
+        'open-design-pr',
+        folder,
+        '--json',
+      ], { timeout: 300_000 });
+      const payload = result.stdout ? JSON.parse(result.stdout) : null;
+      if (!result.ok || !payload?.ok) {
+        res.status(500).json({
           ok: false,
-          code: 'gh-user-unavailable',
-          message: 'Could not read the authenticated GitHub user from gh.',
-          log: [...(gh.log ?? []), user.stderr || user.stdout],
+          code: payload?.error?.label || 'open-design-pr-failed',
+          message: payload?.error?.stderr || payload?.error?.stdout || 'Open Design PR creation failed.',
+          log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || 'open-design-pr failed'],
         });
-        return;
-      }
-      const login = user.stdout.trim();
-      const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-pr-'));
-      const work = path.join(tmp, 'open-design');
-      const branch = `plugin/${repoName}-${Date.now()}`;
-      const dest = path.join(work, 'plugins', 'community', repoName);
-      const bodyText = [
-        `Adds ${meta.title} as a community Open Design plugin.`,
-        '',
-        '## Source',
-        '',
-        `- Generated from project: ${project.id}`,
-        `- Manifest name: \`${meta.name}\``,
-        `- Version: \`${meta.version}\``,
-        '',
-        '## Checklist',
-        '',
-        '- [ ] Maintainer reviewed manifest metadata',
-        '- [ ] Maintainer verified plugin skill instructions',
-      ].join('\n');
-      const log = [...(gh.log ?? [])];
-      for (const [cmd, args, opts] of [
-        ['gh', ['repo', 'fork', 'nexu-io/open-design', '--remote=false'], { cwd: tmp }],
-        ['gh', ['repo', 'clone', 'nexu-io/open-design', work], { cwd: tmp }],
-        ['git', ['checkout', '-b', branch], { cwd: work }],
-        ['git', ['remote', 'add', 'fork', `https://github.com/${login}/open-design.git`], { cwd: work }],
-      ]) {
-        const result = await execFileBuffered(cmd, args, opts);
-        log.push(result.stdout || result.stderr);
-        const toleratedExistingFork =
-          cmd === 'gh' && args[0] === 'repo' && args[1] === 'fork' &&
-          /already exists|existing fork/i.test(String(result.stderr || result.stdout));
-        const toleratedExistingRemote =
-          cmd === 'git' && args[0] === 'remote' &&
-          /already exists/i.test(String(result.stderr || result.stdout));
-        if (!result.ok && !toleratedExistingFork && !toleratedExistingRemote) {
-          await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-          res.status(500).json({ ok: false, code: `${cmd}-failed`, message: `${cmd} failed while preparing the Open Design PR.`, log });
-          return;
-        }
-      }
-      await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      await fs.promises.cp(folder, dest, { recursive: true });
-      for (const [cmd, args] of [
-        ['git', ['add', `plugins/community/${repoName}`]],
-        ['git', ['-c', 'user.name=Open Design', '-c', 'user.email=open-design@example.invalid', 'commit', '-m', `Add ${meta.title} plugin`]],
-        ['git', ['push', '-u', 'fork', branch]],
-      ]) {
-        const result = await execFileBuffered(cmd, args, { cwd: work });
-        log.push(result.stdout || result.stderr);
-        if (!result.ok) {
-          await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-          res.status(500).json({ ok: false, code: `${cmd}-failed`, message: `${cmd} failed while preparing the Open Design PR.`, log });
-          return;
-        }
-      }
-      const pr = await execFileBuffered('gh', [
-        'pr',
-        'create',
-        '--repo',
-        'nexu-io/open-design',
-        '--head',
-        `${login}:${branch}`,
-        '--base',
-        'main',
-        '--title',
-        `Add ${meta.title} plugin`,
-        '--body',
-        bodyText,
-      ], { cwd: work });
-      log.push(pr.stdout || pr.stderr);
-      await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-      if (!pr.ok) {
-        res.status(500).json({ ok: false, code: 'gh-pr-create-failed', message: 'Open Design PR creation failed.', log });
         return;
       }
       res.json({
         ok: true,
-        message: `Created Open Design PR for ${meta.title}.`,
-        url: pr.stdout || undefined,
-        log,
+        message: payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.',
+        ...(payload.prUrl ? { url: payload.prUrl } : {}),
+        log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [],
       });
     } catch (err) {
       res.status(400).json({ ok: false, message: String(err?.message || err), log: [] });
     }
+  });
+
+  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const action = body.action === 'publish-github' || body.action === 'contribute-open-design'
+        ? body.action
+        : null;
+      if (!action) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required');
+        return;
+      }
+      const relativePath = normalizeProjectPluginFolderPath(body.path);
+      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
+      const taskId = randomUUID();
+      const task = createPluginShareTask(taskId, req.params.id, {
+        action,
+        path: relativePath,
+      });
+      task.status = 'running';
+      notifyPluginShareTaskWaiters(task);
+      void runPluginShareTask(task, folder).catch((err) => {
+        task.status = 'failed';
+        task.error = {
+          code: 'plugin-share-task-failed',
+          message: String(err?.message || err),
+          log: [String(err?.stack || err?.message || err)],
+        };
+        task.endedAt = Date.now();
+        notifyPluginShareTaskWaiters(task);
+      });
+      res.status(202).json({
+        taskId,
+        action,
+        path: relativePath,
+        status: task.status,
+        startedAt: task.startedAt,
+      });
+    } catch (err) {
+      const code = err && err.code;
+      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post('/api/plugins/share-tasks/:id/wait', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const task = getLivePluginShareTask(req.params.id);
+    if (!task) return res.status(404).json({ error: 'task not found' });
+
+    const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
+    const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
+      ? Number(req.body.timeoutMs)
+      : 25_000;
+    const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);
+
+    const respond = () => {
+      if (res.writableEnded) return;
+      res.json(pluginShareTaskSnapshot(task, since));
+    };
+
+    if (PLUGIN_SHARE_TERMINAL_STATUSES.has(task.status) || task.progress.length > since) {
+      return respond();
+    }
+
+    let resolved = false;
+    const wake = () => {
+      if (resolved) return;
+      resolved = true;
+      task.waiters.delete(wake);
+      clearTimeout(timer);
+      respond();
+    };
+    task.waiters.add(wake);
+    const timer = setTimeout(wake, timeoutMs);
+    res.on('close', wake);
   });
 
   app.get('/api/projects/:id/search', async (req, res) => {
@@ -8472,7 +8868,7 @@ export async function startServer({
   // Preflight for the raw file route. Current artifact fetches are simple GETs
   // (no preflight needed), but an explicit handler future-proofs the route if
   // artifacts ever add custom request headers.
-  app.options('/api/projects/:id/raw/*', (req, res) => {
+  app.options('/api/projects/:id/raw/*splat', (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET');
@@ -8481,9 +8877,10 @@ export async function startServer({
     res.sendStatus(204);
   });
 
-  app.get('/api/projects/:id/raw/*', async (req, res) => {
+  app.get('/api/projects/:id/raw/*splat', async (req, res) => {
     try {
-      const relPath = req.params[0];
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
       const project = getProject(db, req.params.id);
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
@@ -8540,10 +8937,12 @@ export async function startServer({
     }
   });
 
-  app.delete('/api/projects/:id/raw/*', async (req, res) => {
+  app.delete('/api/projects/:id/raw/*splat', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0], project?.metadata);
+      const splatParam = req.params.splat;
+      const rawSplat = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -8585,13 +8984,15 @@ export async function startServer({
     }
   });
 
-  app.get('/api/projects/:id/files/*', async (req, res) => {
+  app.get('/api/projects/:id/files/*splat', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
+      const splatParam = req.params.splat;
+      const fileSplat = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
-        req.params[0],
+        fileSplat,
         project?.metadata,
       );
       res.type(file.mime).send(file.buffer);
@@ -9986,13 +10387,22 @@ export async function startServer({
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
+    // Some models (notably claude-opus-4-7 with --include-partial-messages)
+    // start their reply by echoing the top of the user message verbatim,
+    // so the rendered chat shows a "# Instructions ..." block ahead of the
+    // real answer. Closing every Instructions block with an explicit
+    // "do not echo" line cuts the regression in practice without changing
+    // the turn-shape every agent CLI expects (user message carrying both
+    // instructions and request) — see server.ts:9920 composer notes.
+    const ECHO_GUARD =
+      '\n\n(Do not quote, restate, or echo the # Instructions block above in your reply. Begin your response with the answer to the # User request below.)';
     const composed = [
       instructionPrompt
-        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}\n\n---\n`
+        ? `# Instructions (read first)\n\n${instructionPrompt}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
         : cwdHint
-          ? `# Instructions${cwdHint}${linkedDirsHint}\n\n---\n`
+          ? `# Instructions${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
           : linkedDirsHint
-            ? `# Instructions${linkedDirsHint}\n\n---\n`
+            ? `# Instructions${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
             : '',
       `# User request\n\n${userRequestPrompt}${attachmentHint}${commentHint}`,
       safeImages.length
@@ -11326,6 +11736,7 @@ export async function startServer({
           ? req.body.conversationId
           : null,
         registry: registryView,
+        connectorProbe: buildConnectorProbe(connectorService),
       });
       if (resolved && !resolved.ok) {
         if (!explicitPlugin) {
@@ -11464,23 +11875,52 @@ export async function startServer({
       const userQueryTokens = promptText.length > 0
         ? Math.ceil(promptText.length / 4)
         : 0;
+      // Optional analytics context the client may attach to a run.
+      // Used to thread the DS run variant (`design_system_project` /
+      // `design_system_generation` page+area, `project_kind=design_system`,
+      // entry_from values like `design_system_create`) plus per-source
+      // counts onto run_created / run_finished. Behavior never depends on
+      // these; only PostHog props do.
+      const analyticsHints =
+        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
+          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
+          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
+          : {};
+      const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
+        ? analyticsHints.entryFrom
+        : undefined;
+      const hintProjectKind = typeof analyticsHints.projectKind === 'string'
+        ? analyticsHints.projectKind
+        : null;
+      const dsRunContext =
+        analyticsHints.designSystemRunContext
+          && typeof analyticsHints.designSystemRunContext === 'object'
+          ? (analyticsHints.designSystemRunContext as Record<string, unknown>)
+          : {};
+      const isDesignSystemRun =
+        hintProjectKind === 'design_system'
+        || hintEntryFrom === 'design_system_create'
+        || hintEntryFrom === 'onboarding_design_system'
+        || hintEntryFrom === 'regenerate_from_review';
       // Only fields the current `/api/runs` create payload actually
       // sends. The v2 schema documents extended context props
       // (entry_from / project_kind / target_platforms / fidelity /
       // companion_surfaces / connectors / use_speaker_notes /
       // include_animations / reference_template / aspect /
-      // project_source) but `packages/contracts/src/api/chat.ts` and
-      // `apps/web/src/providers/daemon.ts` do not yet thread them onto
-      // the wire, so reading them here would always produce null/undef
-      // — better to omit until a follow-up extends the create payload.
+      // project_source) — most aren't on the wire yet, but
+      // entry_from / projectKind / DS run context land here when the
+      // client populates `analyticsHints`. Other dimensions stay
+      // omitted until follow-up PRs thread them through.
       const baseProps: Record<string, unknown> = {
-        page_name: 'chat_panel',
-        area: 'chat_composer',
+        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
+        area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
         project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
         conversation_id:
           typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
         run_id: run.id,
+        project_kind: hintProjectKind,
+        ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         design_system_id:
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
@@ -11499,6 +11939,33 @@ export async function startServer({
           typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
             ? 'unknown'
             : 'not_applicable',
+        ...(isDesignSystemRun ? {
+          ds_source_origin: typeof dsRunContext.origin === 'string'
+            ? dsRunContext.origin
+            : undefined,
+          source_count: typeof dsRunContext.sourceCount === 'number'
+            ? dsRunContext.sourceCount
+            : undefined,
+          has_brand_description: typeof dsRunContext.hasBrandDescription === 'boolean'
+            ? dsRunContext.hasBrandDescription
+            : undefined,
+          brand_description_length_bucket:
+            typeof dsRunContext.brandDescriptionLengthBucket === 'string'
+              ? dsRunContext.brandDescriptionLengthBucket
+              : undefined,
+          github_repo_count: typeof dsRunContext.githubRepoCount === 'number'
+            ? dsRunContext.githubRepoCount
+            : undefined,
+          local_folder_count: typeof dsRunContext.localFolderCount === 'number'
+            ? dsRunContext.localFolderCount
+            : undefined,
+          fig_file_count: typeof dsRunContext.figFileCount === 'number'
+            ? dsRunContext.figFileCount
+            : undefined,
+          asset_file_count: typeof dsRunContext.assetFileCount === 'number'
+            ? dsRunContext.assetFileCount
+            : undefined,
+        } : {}),
         has_attachment: Array.isArray(reqBody.attachments)
           ? (reqBody.attachments as unknown[]).length > 0
           : false,
@@ -11559,9 +12026,31 @@ export async function startServer({
           appVersion: design.getAppVersion(),
           properties: {
             ...baseProps,
-            area: 'chat_panel',
+            // `area` flips on run_finished: chat_panel runs publish
+            // under `chat_panel`, DS runs stay on
+            // `design_system_generation` to match the run_created shape.
+            area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
-            artifact_count: 0,
+            // Incremental count of `.html` paths the run produced or
+            // modified, deduped per file. Replaces the hard-coded `0`
+            // that masked the "did this run actually generate an
+            // artifact?" funnel on PostHog. See `run-artifacts.ts`
+            // for the dedup semantics; tested in
+            // `tests/run-artifacts.test.ts`.
+            artifact_count: countNewHtmlArtifacts(run.events),
+            ...(isDesignSystemRun ? {
+              // DS runs land a `DESIGN.md` write when generation
+              // succeeded; the run-artifacts inspector reuses the
+              // same Write/Edit pairing it already does for HTML
+              // artifact counts, just keyed on `DESIGN.md`.
+              design_system_created: didRunCreateDesignSystemFile(run.events),
+              preview_module_count: countDesignSystemPreviewModules(run.events),
+              // `missing_font_count` defaults to 0 — the agent flow
+              // doesn't emit a structured "missing fonts" signal yet.
+              // Kept on the wire so the dashboard has the column from
+              // day one; can be sourced later from a font-audit hook.
+              missing_font_count: 0,
+            } : {}),
             total_duration_ms: Date.now() - runStartedAt,
             ...(errorCode ? { error_code: errorCode } : {}),
             ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
@@ -11963,7 +12452,7 @@ export async function startServer({
     critique: critiqueDeps,
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
-
+    telemetry: { reportFinalizedMessage, reportFeedback },
   });
 
   registerStaticSpaFallback(app, STATIC_DIR);
@@ -11992,6 +12481,32 @@ export async function startServer({
     let server;
     try {
       server = app.listen(port, host, () => {
+        // Widen the between-request idle window so kept-alive sockets
+        // belonging to chat/SSE clients survive the gaps between bursts.
+        //
+        // Node's `keepAliveTimeout` (default 5s) only arms *after* a
+        // response finishes writing, bounding the idle gap before the next
+        // request on the same socket — it does not fire while an SSE
+        // response is still streaming. A streaming `/api/runs/:id/events`
+        // response stays open until the agent finishes, so middlebox idle
+        // timers (nginx, socat/docker bridges, EC2 SG NAT) are typically
+        // the proximate cause when an SSE stream drops; this listener-
+        // side change cannot extend a connection past those middleboxes.
+        //
+        // What it *does* fix: chat clients that pipeline multiple requests
+        // on the same TCP socket (status polls, run-status fetches, the
+        // initial GET before the SSE upgrade). With the default 5s window
+        // a sluggish client can lose the connection between two normal
+        // calls and reconnect-storm. 120s aligns with the in-band
+        // SSE_KEEPALIVE_INTERVAL_MS (25s) so kept-alive sockets used
+        // around an SSE stream stay warm across reasonable client pauses.
+        //
+        // `headersTimeout` must exceed `keepAliveTimeout` per the Node
+        // docs; otherwise a slow-loris client can stall request parsing.
+        if (server) {
+          server.keepAliveTimeout = 120_000;
+          server.headersTimeout = 125_000;
+        }
         const address = server.address();
         // `address()` can in theory return `string | AddressInfo | null`. For
         // a TCP listener it's always `AddressInfo` with a `.port` — the guard

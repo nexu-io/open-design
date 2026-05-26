@@ -116,6 +116,7 @@ function migrate(db: SqliteDb): void {
       text TEXT NOT NULL,
       position_json TEXT NOT NULL,
       html_hint TEXT NOT NULL,
+      style_json TEXT,
       note TEXT NOT NULL,
       status TEXT NOT NULL,
       created_at INTEGER NOT NULL,
@@ -246,6 +247,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!previewCommentCols.some((c: DbRow) => c.name === 'pod_members_json')) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN pod_members_json TEXT`);
+  }
+  if (!previewCommentCols.some((c: DbRow) => c.name === 'style_json')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN style_json TEXT`);
   }
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
@@ -1053,7 +1057,7 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
               file_path AS filePath, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
-              pod_members_json AS podMembersJson,
+              pod_members_json AS podMembersJson, style_json AS styleJson,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
         WHERE project_id = ? AND conversation_id = ?
@@ -1076,6 +1080,7 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
   const position = normalizePosition(target.position);
   const selectionKind = target.selectionKind === 'pod' ? 'pod' : 'element';
   const podMembers = selectionKind === 'pod' ? normalizePodMembers(target.podMembers) : [];
+  const style = normalizeAnnotationStyle(target.style);
   const memberCount = selectionKind === 'pod'
     ? (podMembers.length > 0
         ? podMembers.length
@@ -1097,8 +1102,8 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
     `INSERT INTO preview_comments
        (id, project_id, conversation_id, file_path, element_id, selector, label,
         text, position_json, html_hint, selection_kind, member_count, pod_members_json,
-        note, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        style_json, note, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_id, conversation_id, file_path, element_id) DO UPDATE SET
        selector = excluded.selector,
        label = excluded.label,
@@ -1108,6 +1113,7 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
        selection_kind = excluded.selection_kind,
        member_count = excluded.member_count,
        pod_members_json = excluded.pod_members_json,
+       style_json = excluded.style_json,
        note = excluded.note,
        status = 'open',
        updated_at = excluded.updated_at`,
@@ -1125,6 +1131,7 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
     selectionKind,
     selectionKind === 'pod' ? memberCount : null,
     selectionKind === 'pod' ? JSON.stringify(podMembers) : null,
+    style ? JSON.stringify(style) : null,
     note,
     'open',
     createdAt,
@@ -1161,7 +1168,7 @@ function getPreviewComment(db: SqliteDb, projectId: string, conversationId: stri
               file_path AS filePath, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
-              pod_members_json AS podMembersJson,
+              pod_members_json AS podMembersJson, style_json AS styleJson,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
         WHERE id = ? AND project_id = ? AND conversation_id = ?`,
@@ -1184,6 +1191,7 @@ function normalizePreviewComment(row: DbRow) {
     text: row.text,
     position: parseJsonOrUndef(row.positionJson) ?? { x: 0, y: 0, width: 0, height: 0 },
     htmlHint: row.htmlHint,
+    style: normalizeAnnotationStyle(parseJsonOrUndef(row.styleJson)),
     selectionKind: row.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount:
       normalizedPodMembers && normalizedPodMembers.length > 0
@@ -1225,10 +1233,39 @@ function normalizePodMembers(input: unknown) {
           typeof member.htmlHint === 'string'
             ? compactWhitespace(member.htmlHint).slice(0, 180)
             : '',
+        style: normalizeAnnotationStyle(member.style),
       };
     })
     .filter(Boolean);
 }
+
+function normalizeAnnotationStyle(input: unknown) {
+  if (!input || typeof input !== 'object') return undefined;
+  const raw = input as DbRow;
+  const style: DbRow = {};
+  for (const key of ANNOTATION_STYLE_KEYS) {
+    const value = raw[key];
+    if (typeof value !== 'string') continue;
+    const trimmed = compactWhitespace(value);
+    if (trimmed) style[key] = trimmed.slice(0, 120);
+  }
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
+const ANNOTATION_STYLE_KEYS = [
+  'color',
+  'backgroundColor',
+  'fontSize',
+  'fontWeight',
+  'lineHeight',
+  'textAlign',
+  'fontFamily',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'borderRadius',
+] as const;
 
 function compactWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();

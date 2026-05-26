@@ -63,6 +63,7 @@ export interface ManualEditTarget {
   attributes: Record<string, string>;
   styles: ManualEditStyles;
   isLayoutContainer: boolean;
+  isHidden?: boolean;
   outerHtml: string;
 }
 

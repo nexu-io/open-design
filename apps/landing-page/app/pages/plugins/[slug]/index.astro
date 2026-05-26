@@ -1,0 +1,221 @@
+---
+/*
+ * /plugins/<manifest-id>/ — bundled-plugin detail page.
+ *
+ * One static page per manifest under `plugins/_official/`, built from
+ * `open-design.json`. The page is deliberately information-dense
+ * rather than visual: bundled plugins ship a poster (already on R2)
+ * for the hero, then a structured read-out of mode / scenario /
+ * platform / tags / triggers / author / GitHub source.
+ *
+ * Note: the route's `slug` parameter is the manifest `name` field
+ * (e.g. `image-template-3d-stone-staircase-evolution-infographic`),
+ * not the folder name. Manifest ids are globally unique within the
+ * registry so there's no risk of collision across buckets.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import {
+  getBundledPlugins,
+  type BundledPluginRecord,
+} from '../../../_lib/bundled-plugins';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+export async function getStaticPaths() {
+  return getBundledPlugins().map((plugin) => ({
+    params: { slug: plugin.manifestId },
+    props: { plugin },
+  }));
+}
+
+interface Props {
+  plugin: BundledPluginRecord;
+}
+
+const { plugin } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+/*
+ * Author normalisation. First-party manifests authored by Open Design
+ * point at the org URL (`https://github.com/nexu-io`) — fine for the
+ * daemon, but on the marketing site that lands the visitor on a bare
+ * org page rather than the project repo. Map the org URL to the
+ * concrete `nexu-io/open-design` repo so the "Open Design" attribution
+ * is actionable.
+ */
+const ORG_TO_REPO: Record<string, string> = {
+  'https://github.com/nexu-io': 'https://github.com/nexu-io/open-design',
+  'https://github.com/nexu-io/': 'https://github.com/nexu-io/open-design',
+};
+const authorUrl = plugin.authorUrl
+  ? (ORG_TO_REPO[plugin.authorUrl.replace(/\/$/, '')] ?? plugin.authorUrl)
+  : undefined;
+
+const bucketLabel: Record<BundledPluginRecord['bucket'], string> = {
+  examples: 'Example',
+  'image-templates': 'Image template',
+  'video-templates': 'Video template',
+  scenarios: 'Scenario',
+  'design-systems': 'Design system',
+  atoms: 'Atom',
+};
+
+const title = `${plugin.title} · Open Design plugin`;
+const description = plugin.description;
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+      { '@type': 'ListItem', position: 2, name: 'Plugins', item: new URL('/plugins/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: plugin.title, item: new URL(plugin.detailHref, Astro.site).toString() },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareSourceCode',
+    name: plugin.title,
+    description,
+    codeRepository: plugin.sourceUrl,
+    programmingLanguage: 'JSON',
+    keywords: plugin.tags.join(', '),
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  },
+];
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>Plugins</a>
+    <span>/</span>
+    <span aria-current="page">{plugin.title}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">
+        Plugin · {bucketLabel[plugin.bucket]}
+      </span>
+      <h1 class="display">{plugin.title}<span class="dot">.</span></h1>
+      <p class="lead">{description}</p>
+      <div class="detail-actions">
+        <a class="btn btn-primary" href="https://github.com/nexu-io/open-design/releases" target="_blank" rel="noopener">
+          Use this plugin →
+        </a>
+        <a class="btn btn-ghost" href={plugin.sourceUrl} target="_blank" rel="noopener">
+          Find on GitHub →
+        </a>
+        {plugin.homepage && plugin.homepage !== plugin.sourceUrl && (
+          <a class="btn btn-ghost" href={plugin.homepage} target="_blank" rel="noopener">
+            Homepage ↗
+          </a>
+        )}
+      </div>
+    </header>
+
+    {plugin.previewPoster && (
+      <figure class="detail-preview">
+        {plugin.previewType === 'video' && plugin.previewVideo ? (
+          /*
+           * Bundled video templates carry their poster + playable MP4
+           * as separate URLs in the manifest. Use both directly —
+           * earlier we tried to derive the MP4 URL from the poster
+           * URL by string-replacing `thumbnail.jpg` → `default.mp4`,
+           * which only worked for one Cloudflare Stream URL shape and
+           * silently produced an unplayable `<source>` for everything
+           * else.
+           */
+          <video
+            class="detail-preview-video"
+            controls
+            preload="metadata"
+            poster={plugin.previewPoster}
+          >
+            <source src={plugin.previewVideo} type="video/mp4" />
+            Your browser does not support video playback.
+          </video>
+        ) : (
+          <img
+            class="detail-preview-static"
+            src={plugin.previewPoster}
+            alt={`${plugin.title} preview`}
+            loading="eager"
+            fetchpriority="high"
+          />
+        )}
+        <figcaption>Preview from the bundled-plugin manifest.</figcaption>
+      </figure>
+    )}
+
+    <dl class="detail-meta">
+      {plugin.mode && (
+        <Fragment>
+          <dt>Mode</dt>
+          <dd>{plugin.mode}</dd>
+        </Fragment>
+      )}
+      {plugin.scenario && (
+        <Fragment>
+          <dt>Scenario</dt>
+          <dd>{plugin.scenario}</dd>
+        </Fragment>
+      )}
+      {plugin.platform && (
+        <Fragment>
+          <dt>Platform</dt>
+          <dd>{plugin.platform}</dd>
+        </Fragment>
+      )}
+      {plugin.surface && plugin.surface !== plugin.mode && (
+        <Fragment>
+          <dt>Surface</dt>
+          <dd>{plugin.surface}</dd>
+        </Fragment>
+      )}
+      {plugin.authorName && (
+        <Fragment>
+          <dt>Author</dt>
+          <dd>
+            {authorUrl ? (
+              <a href={authorUrl} target="_blank" rel="noopener">{plugin.authorName} ↗</a>
+            ) : plugin.authorName}
+          </dd>
+        </Fragment>
+      )}
+      <Fragment>
+        <dt>Manifest id</dt>
+        <dd><code>{plugin.manifestId}</code></dd>
+      </Fragment>
+    </dl>
+
+    {plugin.tags.length > 0 && (
+      <section class="detail-block">
+        <h2>Tags</h2>
+        <ul class="trigger-list">
+          {plugin.tags.map((t) => <li><code>{t}</code></li>)}
+        </ul>
+      </section>
+    )}
+  </article>
+</Layout>
+
+<style>
+  .detail-preview-static {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--line);
+    background: var(--paper-warm);
+  }
+  .detail-preview-video {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--line);
+    background: #000;
+  }
+</style>

@@ -25,6 +25,7 @@ import {
   assertArtifactPublicationAllowed,
   isPublicationGuardedArtifactKind,
 } from './artifact-publication-guard.js';
+import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
@@ -66,7 +67,7 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   const out = [];
   // Skip build/install dirs for linked folders so node_modules doesn't stall
   // the walk on large repos.
-  const skipDirs = metadata?.baseDir ? SKIP_DIRS : undefined;
+  const skipDirs = metadata?.baseDir ? isIgnoredProjectDirName : undefined;
   await collectFiles(dir, '', out, skipDirs, dir);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
@@ -76,16 +77,6 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   }
   return out;
 }
-
-// Build/install dirs that should be hidden from the file panel when a
-// project is rooted at metadata.baseDir (the user's own folder). Without
-// this, the listing would be dominated by node_modules, lockfiles, and
-// build output that have no design value.
-const SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '.turbo',
-  '.cache', '.output', 'out', 'coverage', '__pycache__', '.venv',
-  'vendor', 'target', '.od', '.tmp',
-]);
 
 // Best-effort entry-file detector — looks for index.html at the root,
 // then any *.html file. Returns null if nothing obvious is found, in
@@ -104,7 +95,7 @@ export async function detectEntryFile(dir: string): Promise<string | null> {
   return null;
 }
 
-async function collectFiles(dir, relDir, out, skipDirs?: Set<string>, projectRoot = dir) {
+async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => boolean, projectRoot = dir) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -117,8 +108,8 @@ async function collectFiles(dir, relDir, out, skipDirs?: Set<string>, projectRoo
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (skipDirs && skipDirs.has(e.name)) continue;
-      await collectFiles(full, rel, out, skipDirs, projectRoot);
+      if (shouldSkipDir?.(e.name)) continue;
+      await collectFiles(full, rel, out, shouldSkipDir, projectRoot);
       continue;
     }
     if (!e.isFile()) continue;

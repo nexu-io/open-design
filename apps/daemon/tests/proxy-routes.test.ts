@@ -308,6 +308,209 @@ describe('API proxy routes', () => {
     expect(upstreamInit?.redirect).toBe('error');
   });
 
+  it('retries Azure OpenAI-compatible v1 alias requests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+        ));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+        maxTokens: 1234,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 1234,
+      stream: true,
+    });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_completion_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure deployment-mode requests with max_completion_tokens when max_tokens is rejected', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+        ));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'prod',
+        apiVersion: '',
+        maxTokens: 1234,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body));
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]![1]?.body));
+    expect(firstBody).toMatchObject({ max_tokens: 1234, stream: true });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({ max_completion_tokens: 1234, stream: true });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('keeps max_tokens for legacy OpenAI-compatible chat-completions payloads', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-4o',
+        maxTokens: 4321,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'gpt-4o',
+      max_tokens: 4321,
+      stream: true,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for DeepSeek-style OpenAI-compatible hosts', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'sk-test',
+        model: 'deepseek-chat',
+        maxTokens: 2222,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe('https://api.deepseek.com/v1/chat/completions');
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      model: 'deepseek-chat',
+      max_tokens: 2222,
+      stream: true,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
+  it('keeps max_tokens for Azure gpt-4o deployment chat-completions payloads', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/azure/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'gpt-4o',
+        apiVersion: '',
+        maxTokens: 3333,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 3333,
+      stream: true,
+    });
+    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty(
+      'max_completion_tokens',
+    );
+  });
+
   it.each([
     ['anthropic', 'https://api.anthropic.com/v1/messages'],
     ['openai', 'https://api.openai.com/v1/chat/completions'],
@@ -486,6 +689,32 @@ describe('API proxy routes', () => {
     expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
       generationConfig: { maxOutputTokens: 1234 },
     });
+  });
+
+  it('normalizes Gemini model ids and base URLs in the streaming proxy', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/google/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'google-key',
+        model: 'models/gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
+    );
+    expect(upstreamInit?.redirect).toBe('error');
   });
 
   // Regression for PR #1176: the Ollama proxy fetch must also set

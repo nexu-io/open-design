@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-card-twitter",
-  "title": "Twitter 分享卡",
+  "title": "Twitter Share Card",
   "version": "0.1.0",
-  "description": "推特金句 / 数据卡, 适合配推文",
+  "description": "Twitter quote or data card designed to pair with a post.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -42,11 +42,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Twitter 分享卡」模板把我的内容做成一份「推特金句 / 数据卡, 适合配推文」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Twitter Share Card template to turn my content into a Twitter quote or data card designed to pair with a post. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Twitter 分享卡」模板把我的内容做成一份「推特金句 / 数据卡, 适合配推文」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Twitter 分享卡"
+          "title": "Twitter Share Card",
+          "title_i18n": {
+            "en": "Twitter Share Card",
+            "zh-CN": "Twitter 分享卡"
+          }
         }
       ]
     },
@@ -75,5 +82,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Twitter Share Card",
+    "zh-CN": "Twitter 分享卡"
+  },
+  "description_i18n": {
+    "en": "Twitter quote or data card designed to pair with a post.",
+    "zh-CN": "推特金句 / 数据卡, 适合配推文"
   }
 }

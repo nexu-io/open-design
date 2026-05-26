@@ -32,6 +32,7 @@ interface SkillFrontmatter {
   zh_name?: string;
   en_name?: string;
   description?: string;
+  example_prompt?: string;
   triggers?: unknown[];
   tags?: unknown[];
   od?: {
@@ -169,8 +170,8 @@ function inferSurface(mode: string): string {
   return 'web';
 }
 
-function derivePrompt(fm: SkillFrontmatter): string {
-  const explicit = fm.od?.example_prompt;
+export function derivePrompt(fm: SkillFrontmatter): string {
+  const explicit = fm.example_prompt ?? fm.od?.example_prompt;
   if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
   const desc = typeof fm.description === 'string' ? fm.description.trim() : '';
   if (!desc) return 'Produce the artifact described in this skill, following its workflow exactly.';

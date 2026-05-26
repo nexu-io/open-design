@@ -183,6 +183,7 @@ test('design systems page is reachable from entry nav and supports search, previ
   await expect(page.getByTestId('entry-nav-design-systems')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { name: 'Design systems' })).toBeVisible();
   await expect(page.getByTestId('design-systems-tab')).toBeVisible();
+  await page.getByRole('tab', { name: 'Official presets' }).click();
   await expect(page.getByTestId('design-system-card-agentic')).toBeVisible();
   await expect(page.getByTestId('design-system-card-agentic')).toContainText(/default/i);
   await expect(page.getByTestId('design-system-card-airbnb')).toBeVisible();

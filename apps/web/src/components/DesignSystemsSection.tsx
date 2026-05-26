@@ -6,8 +6,11 @@ import {
   fetchDesignSystems,
   importGitHubDesignSystem,
   importLocalDesignSystem,
+  updateDesignSystemDraft,
 } from '../providers/registry';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
+import { Icon } from './Icon';
+import { orderDesignSystemGroups } from './design-system-group-order';
 
 // Sibling Settings section that hosts the design-systems registry.
 // Lifted out of the previous LibrarySection so each surface (functional
@@ -33,6 +36,14 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [previewSystem, setPreviewSystem] = useState<DesignSystemSummary | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  // Monotonic token for the active rename modal session. Bumped whenever the
+  // modal opens or closes so a slow PATCH that resolves after the user has
+  // moved on cannot clobber a newer session's modal state.
+  const renameSessionRef = useRef(0);
   const [importPath, setImportPath] = useState('');
   const [importSource, setImportSource] = useState<'local' | 'github'>('local');
   const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
@@ -88,13 +99,23 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     return groups;
   }, [filtered]);
 
+  // Pin groups that hold editable (user-created) systems to the top so a
+  // user's own design systems are the first thing they see. Issue #2813.
+  const orderedGroups = useMemo(
+    () => orderDesignSystemGroups(Array.from(grouped.entries())),
+    [grouped],
+  );
+
   useEffect(() => {
     if (!highlightedDesignSystemId) return;
     const raf = window.requestAnimationFrame(() => {
-      cardRefs.current.get(highlightedDesignSystemId)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      const card = cardRefs.current.get(highlightedDesignSystemId);
+      if (typeof card?.scrollIntoView === 'function') {
+        card.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
     });
     const timeout = window.setTimeout(() => {
       setHighlightedDesignSystemId((current) =>
@@ -118,6 +139,60 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
       else set.add(id);
       return { ...c, disabledDesignSystems: [...set] };
     });
+  }
+
+  function startRename(ds: DesignSystemSummary) {
+    renameSessionRef.current += 1;
+    setRenameTarget({ id: ds.id, original: ds.title });
+    setRenameInput(ds.title);
+    setRenameError(null);
+  }
+
+  function cancelRename() {
+    renameSessionRef.current += 1;
+    setRenameTarget(null);
+    setRenameError(null);
+    setRenaming(false);
+  }
+
+  // Rename an editable design system via PATCH /api/design-systems/:id, then
+  // reflect the new title in the local list (re-sorted to keep card order
+  // stable). Built-in systems never reach here — the button is editable-only.
+  async function commitRename() {
+    if (!renameTarget || renaming) return;
+    const trimmed = renameInput.trim();
+    if (!trimmed || trimmed === renameTarget.original) {
+      cancelRename();
+      return;
+    }
+    const session = renameSessionRef.current;
+    const targetId = renameTarget.id;
+    setRenaming(true);
+    setRenameError(null);
+    const updated = await updateDesignSystemDraft(targetId, { title: trimmed });
+    if (updated) {
+      // The rename happened server-side, so reflect it in the list even if the
+      // user has since moved to another rename session.
+      setDesignSystems((current) =>
+        current
+          .map((d) => (d.id === targetId ? { ...d, title: updated.title } : d))
+          .sort((a, b) => a.title.localeCompare(b.title)),
+      );
+    }
+    // Ignore a stale completion: the user cancelled or opened another rename
+    // while this PATCH was in flight, so the modal state now belongs to a
+    // different session and must not be touched.
+    if (renameSessionRef.current !== session) return;
+    setRenaming(false);
+    // updateDesignSystemDraft returns null on any non-OK response or fetch
+    // failure. Keep the modal open with the typed title intact so a transient
+    // daemon/network error can be retried instead of silently disappearing.
+    if (!updated) {
+      setRenameError(t('settings.designSystemRenameFailed'));
+      return;
+    }
+    setRenameTarget(null);
+    setRenameError(null);
   }
 
   function clearImportFeedback() {
@@ -389,7 +464,7 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
           <p className="library-empty">{t('settings.libraryNoResults')}</p>
         ) : (
           <>
-            {Array.from(grouped.entries()).map(([category, items]) => (
+            {orderedGroups.map(([category, items]) => (
               <div key={category} className="library-group">
                 {categoryFilter === 'All' ? (
                   <h4 className="library-group-title">
@@ -434,7 +509,24 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
                             ))}
                           </div>
                         )}
-                        <div className="library-ds-title">{ds.title}</div>
+                        <div className="library-ds-title">
+                          <span className="library-ds-title-text">{ds.title}</span>
+                          {ds.source === 'user' || ds.isEditable === true ? (
+                            <button
+                              type="button"
+                              className="library-ds-edit"
+                              title={t('common.rename')}
+                              aria-label={`${t('common.rename')} ${ds.title}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRename(ds);
+                              }}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            >
+                              <Icon name="pencil" size={13} />
+                            </button>
+                          ) : null}
+                        </div>
                         <div className="library-ds-summary">{ds.summary}</div>
                       </div>
                       <div className="library-ds-toggle-cell">
@@ -466,6 +558,52 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
           system={previewSystem}
           onClose={() => setPreviewSystem(null)}
         />
+      ) : null}
+      {renameTarget ? (
+        <div className="modal-backdrop" onClick={cancelRename}>
+          <form
+            className="modal modal-rename"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              void commitRename();
+            }}
+          >
+            <h2>{t('common.rename')}</h2>
+            <label>
+              <input
+                type="text"
+                value={renameInput}
+                autoFocus
+                aria-label={t('common.rename')}
+                onChange={(e) => setRenameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelRename();
+                  }
+                }}
+              />
+            </label>
+            {renameError ? <p className="library-install-error">{renameError}</p> : null}
+            <div className="row">
+              <button type="button" onClick={cancelRename}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="submit"
+                className="primary"
+                disabled={
+                  renaming ||
+                  !renameInput.trim() ||
+                  renameInput.trim() === renameTarget.original
+                }
+              >
+                {t('common.save')}
+              </button>
+            </div>
+          </form>
+        </div>
       ) : null}
     </section>
   );

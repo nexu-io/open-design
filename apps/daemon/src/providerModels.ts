@@ -9,6 +9,7 @@ import type {
 } from '@open-design/contracts/api/providerModels';
 import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateBaseUrlResolved } from './connectionTest.js';
+import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 
 type ProviderModelsInput = ProviderModelsRequest & { signal?: AbortSignal };
 
@@ -114,11 +115,10 @@ function extractAnthropicModels(data: unknown): ProviderModelOption[] {
 
 function googleModelId(rawName: unknown, rawBaseModelId: unknown): string {
   if (typeof rawBaseModelId === 'string' && rawBaseModelId.trim()) {
-    return rawBaseModelId.trim();
+    return normalizeGoogleModelId(rawBaseModelId);
   }
   if (typeof rawName !== 'string') return '';
-  const name = rawName.trim();
-  return name.startsWith('models/') ? name.slice('models/'.length) : name;
+  return normalizeGoogleModelId(rawName);
 }
 
 function supportsGoogleGenerateContent(item: unknown): boolean {
@@ -158,9 +158,7 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
     return url.toString();
   }
   if (protocol === 'google') {
-    const url = new URL(`${baseUrl.replace(/\/+$/, '')}/v1beta/models`);
-    url.searchParams.set('key', apiKey);
-    return url.toString();
+    return googleProviderModelsUrl(baseUrl, apiKey);
   }
   throw new Error(`Unsupported protocol: ${protocol}`);
 }

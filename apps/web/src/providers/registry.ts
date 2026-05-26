@@ -1560,17 +1560,39 @@ export async function writeProjectTextFile(
   content: string,
   options?: { artifactManifest?: ArtifactManifest },
 ): Promise<ProjectFile | null> {
+  const result = await writeProjectTextFileDetailed(projectId, name, content, options);
+  return result.ok ? result.file : null;
+}
+
+export type WriteProjectTextFileResult =
+  | { ok: true; file: ProjectFile }
+  | { ok: false; status?: number; code?: string; message: string };
+
+export async function writeProjectTextFileDetailed(
+  projectId: string,
+  name: string,
+  content: string,
+  options?: { artifactManifest?: ArtifactManifest },
+): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const body = await readApiErrorBody(resp);
+      return {
+        ok: false,
+        status: resp.status,
+        code: body.code,
+        message: body.message || resp.statusText || 'Save failed',
+      };
+    }
     const json = (await resp.json()) as { file: ProjectFile };
-    return json.file;
+    return { ok: true, file: json.file };
   } catch {
-    return null;
+    return { ok: false, message: 'Network error while saving the file' };
   }
 }
 
@@ -1846,6 +1868,13 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
 // Mirrors fetchSkillExample's discriminated result so the modal can
 // surface a Retry button instead of staying stuck at "Loading…" when
 // a plugin ships no preview entry or the asset is missing on disk.
+//
+// 404 is mapped to `unavailable` (mirroring the skill helper's #897
+// behavior) because the daemon returns 404 when the manifest's
+// `preview.entry` points at a file that doesn't ship — a missing
+// asset for an otherwise valid plugin is not an error the user can
+// retry their way out of. Surfacing the calm "no shipped preview"
+// placeholder is the truthful UX.
 export async function fetchPluginPreviewHtml(
   id: string,
 ): Promise<SkillExampleResult> {
@@ -1853,7 +1882,10 @@ export async function fetchPluginPreviewHtml(
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(id)}/preview`,
     );
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      if (resp.status === 404) return { unavailable: true, kind: 'html' };
+      return { error: `HTTP ${resp.status}` };
+    }
     return { html: await resp.text() };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'network error';
@@ -1862,7 +1894,8 @@ export async function fetchPluginPreviewHtml(
 }
 
 // Fetch a single example output by stem (matches the basename of the
-// `od.useCase.exampleOutputs[].path` minus its extension).
+// `od.useCase.exampleOutputs[].path` minus its extension). 404 is
+// mapped to `unavailable` for the same reason as fetchPluginPreviewHtml.
 export async function fetchPluginExampleHtml(
   pluginId: string,
   stem: string,
@@ -1871,7 +1904,10 @@ export async function fetchPluginExampleHtml(
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/example/${encodeURIComponent(stem)}`,
     );
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      if (resp.status === 404) return { unavailable: true, kind: 'html' };
+      return { error: `HTTP ${resp.status}` };
+    }
     return { html: await resp.text() };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'network error';
