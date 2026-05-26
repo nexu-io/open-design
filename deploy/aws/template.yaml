@@ -16,9 +16,10 @@ Parameters:
   AllowedSourceIp:
     Type: String
     Description: 'REQUIRED: The CIDR block allowed to access the ALB (e.g., your VPN or office IP. Must end in /32 for a single IP).'
-  ContainerPort:
+  ProxyPort:
     Type: Number
-    Default: 7456
+    Default: 8080
+    Description: 'The dynamic port used by the Nginx proxy and exposed to the Load Balancer.'
   AppStoragePath:
     Type: String
     Description: 'Container path where the .od SQLite directory is stored.'
@@ -168,8 +169,8 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
+          FromPort: !Ref ProxyPort
+          ToPort: !Ref ProxyPort
           SourceSecurityGroupId: !Ref AlbSecurityGroup
   EfsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -228,7 +229,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       VpcId: !Ref VPC
-      Port: 8080
+      Port: !Ref ProxyPort
       Protocol: HTTP
       TargetType: ip
       HealthCheckPath: /nginx-health
@@ -369,10 +370,10 @@ Resources:
         - Name: auth-proxy
           Image: nginxinc/nginx-unprivileged:1.25-alpine-slim
           PortMappings:
-            - ContainerPort: 8080
+            - ContainerPort: !Ref ProxyPort
           Environment:
             - Name: PROXY_PORT
-              Value: "8080"
+              Value: !Ref ProxyPort
             - Name: OD_BIND_HOST
               Value: "127.0.0.1"
             - Name: OD_WEB_PORT
@@ -446,7 +447,7 @@ Resources:
             - !Ref FargateSecurityGroup
       LoadBalancers:
         - ContainerName: auth-proxy
-          ContainerPort: 8080
+          ContainerPort: !Ref ProxyPort
           TargetGroupArn: !Ref TargetGroup
 
   LogGroup:
@@ -464,5 +465,8 @@ Resources:
 
 Outputs:
   AppUrl:
-    Description: URL of the Application Load Balancer
-    Value: !Sub 'http://${LoadBalancer.DNSName}'
+    Description: 'URL of the Load Balancer/Custom Domain'
+    Value: !If 
+      - UseCustomDomain
+      - !Sub 'https://${CustomDomainName}'
+      - !Sub 'http://${LoadBalancer.DNSName}'

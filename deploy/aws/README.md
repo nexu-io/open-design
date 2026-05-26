@@ -41,7 +41,7 @@ When deploying the CloudFormation stack, you can customize the following paramet
 | `FargateMemory` | Fargate task memory in MiB. | `1024` |
 | `CustomDomainName` | *(Optional)* Your custom domain name (e.g., `design.yourcompany.com`). If blank, the default ALB DNS name is used over HTTP. | *None* |
 | `AcmCertificateArn` | *(Optional)* The ARN of your AWS Certificate Manager (ACM) certificate. **Required** if `CustomDomainName` is provided. | *None* |
-| `ContainerPort` | The internal port the Open Design container listens on. | `7456` |
+| `ProxyPort` | The dynamic port used by the Nginx proxy and exposed to the Load Balancer. | `8080` |
 | `AppStoragePath` | The container path where the `.od` SQLite directory is mounted via EFS. | `/app/.od` |
 
 ## Deployment
