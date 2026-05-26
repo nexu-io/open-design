@@ -17,6 +17,11 @@
  *   }
  *   </question-form>
  *
+ * `<ask-question>...</ask-question>` is accepted as an alias for
+ * `<question-form>`, so a model that drifts to the colloquial tag
+ * name still renders correctly instead of leaking raw markup into
+ * prose (see issue #1194).
+ *
  * Splits a final assistant text payload into ordered segments — prose +
  * forms — so AssistantMessage can render the form inline.
  */
@@ -85,15 +90,19 @@ export type FormSegment =
   | { kind: 'text'; text: string }
   | { kind: 'form'; form: QuestionForm; raw: string };
 
-const OPEN_RE = /<question-form\b([^>]*)>/i;
-const CLOSE_TAG = '</question-form>';
+// `question-form` is the canonical tag; `ask-question` is an alias the
+// model occasionally drifts to (issue #1194). The close tag must match
+// the open tag name, so each match captures the name and computes its
+// own close-tag string. Treat the lookup case-insensitively at scan
+// time so `<Question-Form>` and `<ASK-QUESTION>` still parse.
+const OPEN_RE = /<(question-form|ask-question)\b([^>]*)>/i;
 
 export function splitOnQuestionForms(input: string): FormSegment[] {
   const out: FormSegment[] = [];
   let cursor = 0;
-  // Scan repeatedly for <question-form> opens; for each, locate the
-  // matching close tag and try to parse the JSON body. Anything that
-  // doesn't parse cleanly stays in the prose stream.
+  // Scan repeatedly for question-form / ask-question opens; for each,
+  // locate the matching close tag and try to parse the JSON body.
+  // Anything that doesn't parse cleanly stays in the prose stream.
   while (cursor < input.length) {
     const slice = input.slice(cursor);
     const m = OPEN_RE.exec(slice);
@@ -101,9 +110,11 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
       out.push({ kind: 'text', text: slice });
       break;
     }
+    const tagName = (m[1] ?? 'question-form').toLowerCase();
+    const closeTag = `</${tagName}>`;
     const openStart = cursor + m.index;
     const openEnd = openStart + m[0].length;
-    const closeIdx = input.indexOf(CLOSE_TAG, openEnd);
+    const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
       // Unterminated — leave the rest as prose so we don't swallow it.
       out.push({ kind: 'text', text: slice });
@@ -113,17 +124,30 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
       out.push({ kind: 'text', text: input.slice(cursor, openStart) });
     }
     const body = input.slice(openEnd, closeIdx);
-    const attrs = parseAttrs(m[1] ?? '');
+    const attrs = parseAttrs(m[2] ?? '');
     const form = tryParseForm(body, attrs);
+    const blockEnd = closeIdx + closeTag.length;
     if (form) {
-      out.push({ kind: 'form', form, raw: input.slice(openStart, closeIdx + CLOSE_TAG.length) });
+      out.push({ kind: 'form', form, raw: input.slice(openStart, blockEnd) });
     } else {
       // Malformed — keep raw text so the user can still see it.
-      out.push({ kind: 'text', text: input.slice(openStart, closeIdx + CLOSE_TAG.length) });
+      out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
     }
-    cursor = closeIdx + CLOSE_TAG.length;
+    cursor = blockEnd;
   }
   return out;
+}
+
+function findCloseTag(input: string, from: number, closeTag: string): number {
+  const closeLower = closeTag.toLowerCase();
+  const tagLen = closeTag.length;
+  const maxStart = input.length - tagLen;
+  for (let i = from; i <= maxStart; i++) {
+    if (input.slice(i, i + tagLen).toLowerCase() === closeLower) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function parseAttrs(raw: string): Record<string, string> {
