@@ -1,6 +1,6 @@
 # Open Design —— [Claude Design][cd] 的官方开源替代品
 
-> **Open Design 是 [Claude Design][cd] 的开源、本地优先替代品。** 可部署到 Vercel、每一层都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。
+> **Open Design 是 [Claude Design][cd] 的开源、本地优先替代品。** 可部署到 Vercel、每一层都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是设计引擎，由 **134 个可组合 Skills** 和 **152 套品牌级 Design System** 驱动。
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` 已发布。设计的旧世界，到此为止。
@@ -30,8 +30,8 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#支持的-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#内置-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
+  <a href="#design-system"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-152-orange?style=flat-square" /></a>
+  <a href="#内置-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-134-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-加入-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.zh-CN.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
@@ -63,8 +63,8 @@ OD 站在四个开源项目的肩膀上：
 |---|---|
 | **Coding-agent CLI（16 套）** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI —— 在 `PATH` 上自动检测，picker 一键切换 |
 | **BYOK 兜底** | 协议分流代理 `/api/proxy/{anthropic,openai,azure,google}/stream` —— 填 `baseUrl` + `apiKey` + `model`，选择 Anthropic / OpenAI / Azure OpenAI / Google Gemini，daemon 会把各家 SSE 统一成同一条 chat stream。daemon 边界拒绝 loopback / link-local / RFC1918 防 SSRF。 |
-| **内置 design system** | **72 套** —— 2 套手写起手 + 70 套从 [`awesome-design-md`][acd2] 导入的产品系统（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小红书…） |
-| **内置 skill** | **31 个** —— 27 个 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 个 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分组：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
+| **内置 design system** | **152 套** —— 2 套手写起手 + 70 套从 [`awesome-design-md`][acd2] 导入的产品系统（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小红书…） |
+| **内置 skill** | **134 个** —— 27 个 `prototype` 模式（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ 4 个 `deck` 模式（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。Picker 按 `scenario` 分组：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **媒体生成** | 图像 · 视频 · 音频三类 surface 与设计循环并行可用。**gpt-image-2**（Azure / OpenAI）做海报、头像、信息图、城市插画地图 · **Seedance 2.0**（字节跳动）做 15 秒电影感 t2v + i2v · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）做 HTML→MP4 动态图形（产品揭示、动力学排版、数据图表、社媒卡片、Logo 收尾）。**93 条**可一键复刻的 prompt gallery —— 43 条 gpt-image-2 + 39 条 Seedance + 11 条 HyperFrames，统一放在 [`prompt-templates/`](prompt-templates/) 下，附预览图与来源署名。Chat 入口和写代码同一处；输出真实的 `.mp4` / `.png` 落到项目工作区里。 |
 | **视觉方向** | 5 套精选流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental），每套自带 OKLch 色板 + 字体栈（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **设备外壳** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome —— 像素级精确，跨 skill 共享，统一在 [`assets/frames/`](assets/frames/) |
@@ -107,8 +107,8 @@ OD 站在四个开源项目的肩膀上：
 <sub><b>沙盒预览</b> —— 每个 <code>&lt;artifact&gt;</code> 都在干净的 srcdoc iframe 里渲染。可在文件工作区里就地编辑；可下载为 HTML / PDF / ZIP。</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72 套 design system 库" /><br/>
-<sub><b>72 套 design system 库</b> —— 每套产品系统都展示 4 色色卡。点进去看完整的 <code>DESIGN.md</code>、色板网格、live showcase。</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 152 套 design system 库" /><br/>
+<sub><b>152 套 design system 库</b> —— 每套产品系统都展示 4 色色卡。点进去看完整的 <code>DESIGN.md</code>、色板网格、live showcase。</sub>
 </td>
 </tr>
 <tr>
@@ -125,7 +125,7 @@ OD 站在四个开源项目的肩膀上：
 
 ## 内置 Skills
 
-**31 个 skill，每个一个文件夹**，都遵循 Claude Code 的 [`SKILL.md`][skill] 规范，并叠加 OD 的 `od:` frontmatter，daemon 原样解析 —— `mode`、`platform`、`scenario`、`preview.type`、`design_system.requires`、`default_for`、`featured`、`fidelity`、`speaker_notes`、`animations`、`example_prompt`（[`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)）。
+**134 个 skill，每个一个文件夹**，都遵循 Claude Code 的 [`SKILL.md`][skill] 规范，并叠加 OD 的 `od:` frontmatter，daemon 原样解析 —— `mode`、`platform`、`scenario`、`preview.type`、`design_system.requires`、`default_for`、`featured`、`fidelity`、`speaker_notes`、`animations`、`example_prompt`（[`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)）。
 
 两种顶层 **mode** 撑起整个目录：**`prototype`**（27 个 —— 任何能被渲染成单页 artifact 的产物，从杂志风 landing 到手机屏到 PM 规范文档都算）和 **`deck`**（4 个 —— 横滑式演示，自带 deck framework 框架）。**`scenario`** 是 picker 用来分组的字段：`design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`。
 
@@ -236,7 +236,7 @@ Daemon 启动时扫 `PATH`，找 [`claude`](https://docs.anthropic.com/en/docs/c
 
 ### 3 · Design System 是可移植的 Markdown，不是 theme JSON
 
-[`VoltAgent/awesome-design-md`][acd2] 的 9 段式 `DESIGN.md` —— color、typography、spacing、layout、components、motion、voice、brand、anti-patterns。每个 artifact 都从激活的 system 里读 token。切换 system → 下一次渲染就用新的 token。下拉框里现成的有：**Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Apple、Anthropic、Cursor、Supabase、Figma、Resend、Raycast、Lovable、Cohere、Mistral、ElevenLabs、X.AI、Spotify、Webflow、Sanity、PostHog、Sentry、MongoDB、ClickHouse、Cal、Replicate、Clay、Composio、小红书…** 共 72 套。
+[`VoltAgent/awesome-design-md`][acd2] 的 9 段式 `DESIGN.md` —— color、typography、spacing、layout、components、motion、voice、brand、anti-patterns。每个 artifact 都从激活的 system 里读 token。切换 system → 下一次渲染就用新的 token。下拉框里现成的有：**Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Apple、Anthropic、Cursor、Supabase、Figma、Resend、Raycast、Lovable、Cohere、Mistral、ElevenLabs、X.AI、Spotify、Webflow、Sanity、PostHog、Sentry、MongoDB、ClickHouse、Cal、Replicate、Clay、Composio、小红书…** 共 152 套。
 
 ### 4 · 初始化问题表单干掉 80% 的来回返工
 
@@ -255,8 +255,8 @@ Daemon `spawn` CLI 时，`cwd` 设到该项目在 `.od/projects/<id>/` 下的 ar
 ```
 DISCOVERY 指令         （turn-1 表单、turn-2 品牌分支、TodoWrite、五维评审）
   + 身份与工作流宪章   （OFFICIAL_DESIGNER_PROMPT、anti-AI-slop、Junior Designer 模式）
-  + 激活的 DESIGN.md   （72 套备选）
-  + 激活的 SKILL.md    （31 套备选）
+  + 激活的 DESIGN.md   （152 套备选）
+  + 激活的 SKILL.md    （134 套备选）
   + 项目元数据          （kind、fidelity、speakerNotes、animations、灵感 system id）
   + Skill 副文件       （自动注入 pre-flight：先读 assets/template.html + references/*.md）
   + （deck kind 且无 skill 种子时） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
@@ -337,7 +337,7 @@ Windows 用户可参考 [`docs/windows-troubleshooting.md`](docs/windows-trouble
 第一次加载会：
 
 1. 检测你 `PATH` 上有哪些 agent CLI，自动选一个。
-2. 加载 31 个 skill + 72 套 design system。
+2. 加载 134 个 skill + 152 套 design system。
 3. 弹欢迎对话框，让你贴 Anthropic key（仅 BYOK 兜底路径需要）。
 4. **自动创建 `./.od/`** —— 本地运行时目录，存放 SQLite 项目库、各项目工作区、保存下来的 artifact。**没有** `od init` 这一步，daemon 启动时会自己 `mkdir`。
 
@@ -404,7 +404,7 @@ open-design/
 │   ├── sidecar/                   ← 通用 sidecar runtime primitives
 │   └── platform/                  ← 通用 process/platform primitives
 │
-├── skills/                        ← 31 个 SKILL.md skill 包（27 prototype + 4 deck）
+├── skills/                        ← 134 个 SKILL.md skill 包（27 prototype + 4 deck）
 │   ├── web-prototype/             ← prototype 默认
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -419,7 +419,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 套 DESIGN.md
+├── design-systems/                ← 152 套 DESIGN.md
 │   ├── default/                   ← Neutral Modern（起手）
 │   ├── warm-editorial/            ← Warm Editorial（起手）
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -459,10 +459,10 @@ open-design/
 ## Design System
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="72 套 Design Systems 库 — 编辑版式双页" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="152 套 Design Systems 库 — 编辑版式双页" width="100%" />
 </p>
 
-72 套开箱即用，每套一个 [`DESIGN.md`](design-systems/README.md)：
+152 套开箱即用，每套一个 [`DESIGN.md`](design-systems/README.md)：
 
 <details>
 <summary><b>完整目录</b>（点击展开）</summary>
@@ -582,7 +582,7 @@ Chat / artifact 循环最显眼，但这套仓库里还有几个能力被埋得�
 
 - **Claude Design ZIP 导入。** 把 claude.ai 导出的 ZIP 拖到欢迎弹窗，`POST /api/import/claude-design` 把它解压成真实 `.od/projects/<id>/`，把入口文件作为 tab 打开，并预置一句「接着 Anthropic 停下的地方继续编辑」给本地 agent。不用再让模型重述上下文，也不用「让模型重新画一遍」。([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
 - **多 provider BYOK 代理。** `POST /api/proxy/{anthropic,openai,azure,google}/stream` 接收 `{ baseUrl, apiKey, model, messages }`，构造各 provider 的上游请求，把 SSE chunk 统一成 `delta/end/error`，同时拒绝 loopback / link-local / RFC1918 防 SSRF。OpenAI 兼容路径覆盖 OpenAI、Azure AI Foundry `/openai/v1`、DeepSeek、Groq、MiMo、OpenRouter、自托管 vLLM；Azure OpenAI 路径补上 deployment URL + `api-version`；Google 路径走 Gemini `:streamGenerateContent`。
-- **用户自存 templates。** 喜欢某次渲染？`POST /api/templates` 把 HTML + 元数据快照进 SQLite `templates` 表。下个项目的 picker 里多一行「你的模板」 —— 跟内置 31 套同一个挑选面，但是你的。
+- **用户自存 templates。** 喜欢某次渲染？`POST /api/templates` 把 HTML + 元数据快照进 SQLite `templates` 表。下个项目的 picker 里多一行「你的模板」 —— 跟内置 134 套同一个挑选面，但是你的。
 - **Tab 持久化。** 每个项目记得自己打开的文件和当前 tab，存在 `tabs` 表里。明天再打开，工作区还是你昨天离开时的样子。
 - **Artifact lint API。** `POST /api/artifacts/lint` 对生成的 artifact 跑结构性检查（`<artifact>` 框架是否破损、必需的副文件是否缺失、palette token 是否过期），返回 agent 下一回合可以读回去的 findings。五维自评审就是用它把分数落到证据上而不是 vibe。
 - **Sidecar 协议 + 桌面端自动化。** Daemon、web、desktop 进程都带类型化的 5 字段 stamp（`app · mode · namespace · ipc · source`），并把 JSON-RPC IPC 通道暴露在 `/tmp/open-design/ipc/<namespace>/<app>.sock`。`tools-dev inspect desktop status \| eval \| screenshot` 就跑在这条通道上，所以 headless E2E 直接打到真实 Electron 壳，不用造定制夹具（[`packages/sidecar-proto/`](packages/sidecar-proto/)、[`apps/desktop/src/main/`](apps/desktop/src/main/)）。
@@ -608,8 +608,8 @@ Chat / artifact 循环最显眼，但这套仓库里还有几个能力被埋得�
 | 形态 | Web (claude.ai) | 桌面 (Electron) | **Web 应用 + 本地 daemon** |
 | 可部署 Vercel | ❌ | ❌ | **✅** |
 | Agent 运行时 | 内置 (Opus 4.7) | 内置 ([`pi-ai`][piai]) | **委托给用户已装好的 CLI** |
-| Skill | 私有 | 12 套自定义 TS 模块 + `SKILL.md` | **31 套基于文件的 [`SKILL.md`][skill]，可丢入** |
-| Design system | 私有 | `DESIGN.md`（v0.2 路线图） | **`DESIGN.md` × 72 套，开箱即有** |
+| Skill | 私有 | 12 套自定义 TS 模块 + `SKILL.md` | **134 套基于文件的 [`SKILL.md`][skill]，可丢入** |
+| Design system | 私有 | `DESIGN.md`（v0.2 路线图） | **`DESIGN.md` × 152 套，开箱即有** |
 | Provider 灵活度 | 仅 Anthropic | 7+（[`pi-ai`][piai]） | **16 套 CLI adapter + OpenAI 兼容 BYOK 代理** |
 | 初始化问题表单 | ❌ | ❌ | **✅ 硬规则 turn 1** |
 | 方向选择器 | ❌ | ❌ | **✅ 5 套确定性方向** |
@@ -680,7 +680,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 
 - [x] Daemon + agent 检测（16 套 CLI adapter）+ skill registry + design-system 目录
 - [x] Web 应用 + 对话 + question form + 5 套方向选择器 + todo progress + 沙盒预览
-- [x] 31 个 skill + 72 套 design system + 5 套视觉方向 + 5 个设备外壳
+- [x] 134 个 skill + 152 套 design system + 5 套视觉方向 + 5 个设备外壳
 - [x] SQLite 后端的 projects · conversations · messages · tabs · templates
 - [x] 多 provider BYOK 代理（`/api/proxy/{anthropic,openai,azure,google}/stream`）含 SSRF 防御
 - [x] Claude Design ZIP 导入（`/api/import/claude-design`）

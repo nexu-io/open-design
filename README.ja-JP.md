@@ -1,6 +1,6 @@
 # Open Design — [Claude Design][cd] の公式オープンソース代替
 
-> **Open Design は [Claude Design][cd] のオープンソース、ローカルファーストな代替です。** Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
+> **Open Design は [Claude Design][cd] のオープンソース、ローカルファーストな代替です。** Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**134 個の組み合わせ可能な Skill** と **152 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` が公開されました。デザインの旧時代は、ここで終わります。
@@ -31,8 +31,8 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
-  <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
+  <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-152-orange?style=flat-square" /></a>
+  <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-134-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.ja-JP.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
@@ -64,8 +64,8 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 |---|---|
 | **Coding-agent CLI（16 種類）** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH` 上で自動検出、ピッカーでワンクリック切り替え |
 | **BYOK フォールバック** | OpenAI 互換プロキシ `/api/proxy/stream` — `baseUrl` + `apiKey` + `model` を貼れば、任意のベンダー（Anthropic-via-OpenAI、DeepSeek、Groq、MiMo、OpenRouter、セルフホスト vLLM、その他の OpenAI 互換プロバイダ）がエンジンになります。daemon 側で loopback / link-local / RFC1918 を拒否し SSRF を防御。 |
-| **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
-| **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
+| **組み込み Design System** | **152 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
+| **組み込み Skill** | **134 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **メディア生成** | 画像 · 動画 · 音声サーフェスがデザインループと並走。**gpt-image-2**（Azure / OpenAI）でポスター・アバター・インフォグラフィック・イラスト都市マップ · **Seedance 2.0**（ByteDance）で 15 秒のシネマティック text-to-video / image-to-video · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）で HTML→MP4 のモーショングラフィック（プロダクトリビール、キネティックタイポグラフィ、データチャート、ソーシャルオーバーレイ、ロゴアウトロ）。**93 件**のすぐ複製できる prompt ギャラリー — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames、すべて [`prompt-templates/`](prompt-templates/) にプレビュー画像と出典付きで配置。Chat の入口はコードと同じ；実体の `.mp4` / `.png` がプロジェクトワークスペースに chip として落ちます。 |
 | **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **デバイスフレーム** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — ピクセル単位で正確、Skill 間で共有、[`assets/frames/`](assets/frames/) に集約 |
@@ -108,8 +108,8 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 <sub><b>サンドボックスプレビュー</b> — すべての <code>&lt;artifact&gt;</code> がクリーンな srcdoc iframe でレンダリングされます。ファイルワークスペースでその場編集可能。HTML / PDF / ZIP でダウンロード。</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72 種 Design System ライブラリ" /><br/>
-<sub><b>72 種 Design System ライブラリ</b> — 各プロダクトシステムが 4 色のカラーカードを表示。クリックで完全な <code>DESIGN.md</code>、スウォッチグリッド、ライブショーケースを閲覧。</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 152 種 Design System ライブラリ" /><br/>
+<sub><b>152 種 Design System ライブラリ</b> — 各プロダクトシステムが 4 色のカラーカードを表示。クリックで完全な <code>DESIGN.md</code>、スウォッチグリッド、ライブショーケースを閲覧。</sub>
 </td>
 </tr>
 <tr>
@@ -126,7 +126,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 
 ## 組み込み Skill
 
-**31 個の Skill が同梱されています。** 各 Skill は [`skills/`](skills/) 配下のフォルダで、Claude Code の [`SKILL.md`][skill] 規約に従いつつ、daemon がそのままパースする OD 拡張 `od:` frontmatter を持ちます — `mode`、`platform`、`scenario`、`preview.type`、`design_system.requires`、`default_for`、`featured`、`fidelity`、`speaker_notes`、`animations`、`example_prompt`（[`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)）。
+**134 個の Skill が同梱されています。** 各 Skill は [`skills/`](skills/) 配下のフォルダで、Claude Code の [`SKILL.md`][skill] 規約に従いつつ、daemon がそのままパースする OD 拡張 `od:` frontmatter を持ちます — `mode`、`platform`、`scenario`、`preview.type`、`design_system.requires`、`default_for`、`featured`、`fidelity`、`speaker_notes`、`animations`、`example_prompt`（[`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)）。
 
 2 つのトップレベル **mode** がカタログを構成します：**`prototype`**（27 個 — 雑誌風ランディングからモバイル画面、PM 仕様書まで、単一ページ artifact としてレンダリングされるすべて）と **`deck`**（4 個 — デッキフレームワーク付きの横スワイプ型プレゼンテーション）。**`scenario`** フィールドがピッカーのグループ化に使われます：`design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`。
 
@@ -237,7 +237,7 @@ Claude Code の [`SKILL.md` 規約](https://docs.anthropic.com/en/docs/claude-co
 
 ### 3 · Design System は移植可能な Markdown であり、theme JSON ではない
 
-[`VoltAgent/awesome-design-md`][acd2] の 9 セクション `DESIGN.md` スキーマ — color、typography、spacing、layout、components、motion、voice、brand、anti-patterns。すべての artifact はアクティブなシステムからトークンを読み取ります。システムを切り替えれば、次のレンダリングは新しいトークンを使用します。ドロップダウンには **Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Apple、Anthropic、Cursor、Supabase、Figma、Resend、Raycast、Lovable、Cohere、Mistral、ElevenLabs、X.AI、Spotify、Webflow、Sanity、PostHog、Sentry、MongoDB、ClickHouse、Cal、Replicate、Clay、Composio、小紅書…** — 全 72 種が揃っています。
+[`VoltAgent/awesome-design-md`][acd2] の 9 セクション `DESIGN.md` スキーマ — color、typography、spacing、layout、components、motion、voice、brand、anti-patterns。すべての artifact はアクティブなシステムからトークンを読み取ります。システムを切り替えれば、次のレンダリングは新しいトークンを使用します。ドロップダウンには **Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Apple、Anthropic、Cursor、Supabase、Figma、Resend、Raycast、Lovable、Cohere、Mistral、ElevenLabs、X.AI、Spotify、Webflow、Sanity、PostHog、Sentry、MongoDB、ClickHouse、Cal、Replicate、Clay、Composio、小紅書…** — 全 152 種が揃っています。
 
 ### 4 · 初期化質問フォームが手戻りの 80% を解消
 
@@ -256,8 +256,8 @@ Daemon は CLI を spawn する際、`cwd` を `.od/projects/<id>/` 配下のプ
 ```
 DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド分岐、TodoWrite、五次元評価）
   + アイデンティティ憲章      （OFFICIAL_DESIGNER_PROMPT、anti-AI-slop、Junior Designer モード）
-  + アクティブな DESIGN.md    （72 種から選択）
-  + アクティブな SKILL.md     （31 個から選択）
+  + アクティブな DESIGN.md    （152 種から選択）
+  + アクティブな SKILL.md     （134 個から選択）
   + プロジェクトメタデータ     （kind、fidelity、speakerNotes、animations、インスピレーション system id）
   + Skill 副ファイル         （自動注入 pre-flight：assets/template.html + references/*.md を先読み）
   + （deck kind かつ Skill seed なし時） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
@@ -338,7 +338,7 @@ Windows ユーザーはネイティブセットアップパスと小さなダブ
 初回ロード時：
 
 1. `PATH` 上のエージェント CLI を検出し、自動的に 1 つを選択。
-2. 31 個の Skill + 72 種の Design System をロード。
+2. 134 個の Skill + 152 種の Design System をロード。
 3. ウェルカムダイアログが表示され、Anthropic キーの貼り付けを促す（BYOK フォールバックパスのみ必要）。
 4. **`./.od/` を自動作成** — SQLite プロジェクト DB、プロジェクトごとの artifact、保存されたレンダリングを格納するローカルランタイムフォルダ。`od init` ステップは不要、daemon が起動時に必要なディレクトリをすべて `mkdir` します。
 
@@ -405,7 +405,7 @@ open-design/
 │   ├── sidecar/                   ← 汎用 sidecar ランタイムプリミティブ
 │   └── platform/                  ← 汎用 process/platform プリミティブ
 │
-├── skills/                        ← 31 個の SKILL.md Skill バンドル（27 prototype + 4 deck）
+├── skills/                        ← 134 個の SKILL.md Skill バンドル（27 prototype + 4 deck）
 │   ├── web-prototype/             ← prototype のデフォルト
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -420,7 +420,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 種の DESIGN.md
+├── design-systems/                ← 152 種の DESIGN.md
 │   ├── default/                   ← Neutral Modern（スターター）
 │   ├── warm-editorial/            ← Warm Editorial（スターター）
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -460,10 +460,10 @@ open-design/
 ## Design System
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="72 種の Design System ライブラリ — スタイルガイド見開き" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="152 種の Design System ライブラリ — スタイルガイド見開き" width="100%" />
 </p>
 
-72 種がすぐ使えます。各システムは 1 つの [`DESIGN.md`](design-systems/README.md)：
+152 種がすぐ使えます。各システムは 1 つの [`DESIGN.md`](design-systems/README.md)：
 
 <details>
 <summary><b>全カタログ</b>（クリックで展開）</summary>
@@ -583,7 +583,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 
 - **Claude Design ZIP インポート。** claude.ai からのエクスポート ZIP をウェルカムダイアログにドロップ。`POST /api/import/claude-design` が `.od/projects/<id>/` に展開し、エントリファイルをタブとして開き、ローカルエージェント向けに「Anthropic の中断箇所から編集を続行」するプロンプトを用意します。再プロンプティング不要、「モデルに作り直してもらう」必要なし。（[`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`）
 - **OpenAI 互換 BYOK プロキシ。** `POST /api/proxy/stream` は `{ baseUrl, apiKey, model, messages }` を受け取り、パスを正規化（`…/v1/chat/completions`）、SSE チャンクをブラウザに転送、loopback / link-local / RFC1918 を拒否して SSRF を防御。OpenAI chat スキーマを話す任意のベンダーが使えます — Anthropic-via-OpenAI shim、DeepSeek、Groq、MiMo、OpenRouter、セルフホスト vLLM。MiMo は自動的に `tool_choice: 'none'` が付加されます（tool スキーマがフリーフォーム生成と相性が悪いため）。
-- **ユーザー保存テンプレート。** レンダリング結果が気に入ったら、`POST /api/templates` で HTML + メタデータを SQLite `templates` テーブルにスナップショット。次のプロジェクトのピッカーに「あなたのテンプレート」行が追加されます — 同梱の 31 個と同じ選択画面で、ただしあなたのもの。
+- **ユーザー保存テンプレート。** レンダリング結果が気に入ったら、`POST /api/templates` で HTML + メタデータを SQLite `templates` テーブルにスナップショット。次のプロジェクトのピッカーに「あなたのテンプレート」行が追加されます — 同梱の 134 個と同じ選択画面で、ただしあなたのもの。
 - **タブ永続化。** 各プロジェクトは開いているファイルとアクティブタブを `tabs` テーブルに記録。翌日開いてもワークスペースは昨日の状態そのまま。
 - **Artifact lint API。** `POST /api/artifacts/lint` は生成された artifact に対して構造チェックを実行（`<artifact>` フレーミングの破損、必須副ファイルの欠落、古いパレットトークン）し、エージェントが次のターンで読み返せる findings を返します。五次元セルフ評価はこれを使ってスコアを vibes ではなくエビデンスに基づかせます。
 - **Sidecar プロトコル + デスクトップ自動化。** Daemon、web、desktop プロセスは型付き 5 フィールドスタンプ（`app · mode · namespace · ipc · source`）を持ち、`/tmp/open-design/ipc/<namespace>/<app>.sock` に JSON-RPC IPC チャネルを公開。`tools-dev inspect desktop status \| eval \| screenshot` はこのチャネル上で動作するため、ヘッドレス E2E テストが実際の Electron シェルに対して、カスタムハーネスなしで実行可能（[`packages/sidecar-proto/`](packages/sidecar-proto/)、[`apps/desktop/src/main/`](apps/desktop/src/main/)）。
@@ -609,8 +609,8 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 | 形態 | Web (claude.ai) | デスクトップ (Electron) | **Web アプリ + ローカル daemon** |
 | Vercel デプロイ | ❌ | ❌ | **✅** |
 | エージェントランタイム | 同梱 (Opus 4.7) | 同梱 ([`pi-ai`][piai]) | **ユーザーの既存 CLI に委任** |
-| Skill | プロプライエタリ | 12 個のカスタム TS モジュール + `SKILL.md` | **31 個のファイルベース [`SKILL.md`][skill] バンドル、ドロップイン** |
-| Design System | プロプライエタリ | `DESIGN.md`（v0.2 ロードマップ） | **`DESIGN.md` × 72 種、すぐに利用可能** |
+| Skill | プロプライエタリ | 12 個のカスタム TS モジュール + `SKILL.md` | **134 個のファイルベース [`SKILL.md`][skill] バンドル、ドロップイン** |
+| Design System | プロプライエタリ | `DESIGN.md`（v0.2 ロードマップ） | **`DESIGN.md` × 152 種、すぐに利用可能** |
 | プロバイダ柔軟性 | Anthropic のみ | 7+（[`pi-ai`][piai]） | **11 種の CLI adapter + OpenAI 互換 BYOK プロキシ** |
 | 初期化質問フォーム | ❌ | ❌ | **✅ ハードルール、turn 1** |
 | ディレクションピッカー | ❌ | ❌ | **✅ 5 つの決定論的ディレクション** |
@@ -681,7 +681,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 
 - [x] Daemon + エージェント検出（11 種 CLI adapter）+ Skill レジストリ + Design System カタログ
 - [x] Web アプリ + チャット + 質問フォーム + 5 つのディレクションピッカー + todo 進捗 + サンドボックスプレビュー
-- [x] 31 個の Skill + 72 種の Design System + 5 つのビジュアルディレクション + 5 つのデバイスフレーム
+- [x] 134 個の Skill + 152 種の Design System + 5 つのビジュアルディレクション + 5 つのデバイスフレーム
 - [x] SQLite バックドの projects · conversations · messages · tabs · templates
 - [x] OpenAI 互換 BYOK プロキシ（`/api/proxy/stream`）SSRF 防御付き
 - [x] Claude Design ZIP インポート（`/api/import/claude-design`）

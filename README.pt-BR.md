@@ -1,6 +1,6 @@
 # Open Design — a alternativa open source oficial ao [Claude Design][cd]
 
-> **Open Design é a alternativa open source e local-first ao [Claude Design][cd].** Deployável via web, BYOK em toda camada — **16 CLIs de agentes de código** detectados automaticamente no seu `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) viram a engine de design, dirigidos por **31 Skills compositáveis** e **72 Design Systems de qualidade de marca**. Sem CLI? Um proxy BYOK compatível com OpenAI é o mesmo loop, só sem o spawn.
+> **Open Design é a alternativa open source e local-first ao [Claude Design][cd].** Deployável via web, BYOK em toda camada — **16 CLIs de agentes de código** detectados automaticamente no seu `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) viram a engine de design, dirigidos por **134 Skills compositáveis** e **152 Design Systems de qualidade de marca**. Sem CLI? Um proxy BYOK compatível com OpenAI é o mesmo loop, só sem o spawn.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` chegou. O velho mundo do design acaba aqui.
@@ -30,8 +30,8 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#agentes-de-código-suportados"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
+  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-152-orange?style=flat-square" /></a>
+  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-134-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-entrar-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.pt-BR.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
@@ -64,7 +64,7 @@ OD se apoia em quatro ombros open-source:
 | **CLIs de agente (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — detectados automaticamente no `PATH`, troca em um clique |
 | **Fallback BYOK** | Proxy de API por protocolo em `/api/proxy/{anthropic,openai,azure,google}/stream` — cole `baseUrl` + `apiKey` + `model`, escolha Anthropic / OpenAI / Azure OpenAI / Google Gemini, e o daemon normaliza o SSE de volta para o mesmo stream de chat. IPs internos / SSRF bloqueados na borda do daemon. |
 | **Design systems built-in** | **129** — 2 starters escritos à mão + 70 sistemas de produto (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) de [`awesome-design-md`][acd2], mais 57 design skills de [`awesome-design-skills`][ads] adicionados direto em `design-systems/` |
-| **Skills built-in** | **31** — 27 em modo `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 em modo `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Agrupadas no picker por `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **Skills built-in** | **134** — 27 em modo `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 em modo `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Agrupadas no picker por `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Geração de mídia** | Imagem · vídeo · áudio entregues lado a lado com o loop de design. **gpt-image-2** (Azure / OpenAI) para pôsteres, avatares, infográficos, mapas ilustrados · **Seedance 2.0** (ByteDance) para texto-para-vídeo cinematográfico de 15s e imagem-para-vídeo · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) para motion graphics HTML→MP4 (revelações de produto, kinetic typography, gráficos de dados, overlays sociais, logo outros). **93** prompts prontos para replicar — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — em [`prompt-templates/`](prompt-templates/), com thumbnails de preview e atribuição da fonte. Mesma superfície de chat do código; saída é um `.mp4` / `.png` real entrando no workspace do projeto. |
 | **Direções visuais** | 5 escolas curadas (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — cada uma trazendo paleta OKLch determinística + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Frames de dispositivo** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, compartilhados entre skills sob [`assets/frames/`](assets/frames/) |
@@ -108,8 +108,8 @@ OD se apoia em quatro ombros open-source:
 <sub><b>Preview sandboxed</b> — todo <code>&lt;artifact&gt;</code> renderiza dentro de um iframe srcdoc limpo. Editável in place via o workspace de arquivos; baixável como HTML, PDF, ZIP.</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · Biblioteca de 72 sistemas" /><br/>
-<sub><b>Biblioteca de 72 sistemas</b> — todo sistema de produto mostra sua assinatura de 4 cores. Clique para ver o <code>DESIGN.md</code> completo, swatch grid e showcase ao vivo.</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · Biblioteca de 152 sistemas" /><br/>
+<sub><b>Biblioteca de 152 sistemas</b> — todo sistema de produto mostra sua assinatura de 4 cores. Clique para ver o <code>DESIGN.md</code> completo, swatch grid e showcase ao vivo.</sub>
 </td>
 </tr>
 <tr>
@@ -126,7 +126,7 @@ OD se apoia em quatro ombros open-source:
 
 ## Skills
 
-**31 skills entregues na caixa.** Cada uma é uma pasta sob [`skills/`](skills/) seguindo a convenção [`SKILL.md`][skill] do Claude Code, estendida com um frontmatter `od:` que o daemon parseia literalmente — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**134 skills entregues na caixa.** Cada uma é uma pasta sob [`skills/`](skills/) seguindo a convenção [`SKILL.md`][skill] do Claude Code, estendida com um frontmatter `od:` que o daemon parseia literalmente — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
 Dois **modos** top-level carregam o catálogo: **`prototype`** (27 skills — qualquer coisa que renderize como artifact de página única, de uma landing estilo revista a uma tela de celular a um doc de spec de PM) e **`deck`** (4 skills — apresentações com swipe horizontal, com chrome de framework de deck). O campo **`scenario`** é o que o picker usa para agrupar: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
@@ -256,8 +256,8 @@ O que você compõe no envio não é "system + user". É:
 ```
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
+  + active DESIGN.md   (152 systems available)
+  + active SKILL.md    (134 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -338,7 +338,7 @@ Para startup desktop/background, restart com porta fixa e checagens do dispatche
 No primeiro carregamento:
 
 1. Detecta quais CLIs de agente você tem no `PATH` e escolhe um automaticamente.
-2. Carrega 31 skills + 72 design systems.
+2. Carrega 134 skills + 152 design systems.
 3. Abre o welcome dialog para você colar uma chave Anthropic (só necessária para o caminho de fallback BYOK).
 4. **Cria automaticamente `./.od/`** — a pasta de runtime local para o SQLite de projetos, artifacts por projeto e renders salvos. Não há passo `od init`; o daemon `mkdir`a tudo no boot.
 
@@ -410,7 +410,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
+├── skills/                        ← 134 SKILL.md skill bundles (27 prototype + 4 deck)
 │   ├── web-prototype/             ← default for prototype mode
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -425,7 +425,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 DESIGN.md systems
+├── design-systems/                ← 152 DESIGN.md systems
 │   ├── default/                   ← Neutral Modern (starter)
 │   ├── warm-editorial/            ← Warm Editorial (starter)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -466,10 +466,10 @@ open-design/
 ## Design Systems
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="A biblioteca de 72 design systems — spread de style guide" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="A biblioteca de 152 design systems — spread de style guide" width="100%" />
 </p>
 
-72 sistemas na caixa, cada um como um único [`DESIGN.md`](design-systems/README.md):
+152 sistemas na caixa, cada um como um único [`DESIGN.md`](design-systems/README.md):
 
 <details>
 <summary><b>Catálogo completo</b> (clique para expandir)</summary>
@@ -688,7 +688,7 @@ Procedência em formato longo — o que pegamos de cada um, o que deliberadament
 
 - [x] Daemon + detecção de agente (14 adapters de CLI) + registry de skills + catálogo de design system
 - [x] Web app + chat + formulário de perguntas + picker de 5 direções + progresso de todos + preview sandboxed
-- [x] 31 skills + 72 design systems + 5 direções visuais + 5 frames de dispositivo
+- [x] 134 skills + 152 design systems + 5 direções visuais + 5 frames de dispositivo
 - [x] Projects · conversations · messages · tabs · templates lastreados em SQLite
 - [x] Proxy BYOK multi-provider (`/api/proxy/{anthropic,openai,azure,google}/stream`) com guarda SSRF
 - [x] Importação de ZIP do Claude Design (`/api/import/claude-design`)

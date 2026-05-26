@@ -32,8 +32,8 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#الوكلاء-المدعومون"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#أنظمة-التصميم"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#الـ-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
+  <a href="#أنظمة-التصميم"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-152-orange?style=flat-square" /></a>
+  <a href="#الـ-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-134-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-انضم-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
@@ -66,7 +66,7 @@
 | **أدوات CLI لوكلاء البرمجة (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — يكتشفها تلقائياً من `PATH`، وتبدّل بينها بنقرة واحدة |
 | **بديل BYOK** | بروكسي API خاص بكل بروتوكول على `/api/proxy/{anthropic,openai,azure,google}/stream` — الصق `baseUrl` + `apiKey` + `model`، اختر Anthropic / OpenAI / Azure OpenAI / Google Gemini، ويُطبّع الـ daemon أحداث SSE إلى نفس chat stream. يتمّ صدّ عناوين IP الداخلية وثغرات SSRF عند حدود الـ daemon. |
 | **أنظمة تصميم مدمجة** | **129** — 2 starters مكتوبة يدوياً + 70 نظاماً للمنتجات (Linear، Stripe، Vercel، Airbnb، Tesla، Notion، Anthropic، Apple، Cursor، Supabase، Figma، Xiaohongshu، …) من [`awesome-design-md`][acd2]، إضافة إلى 57 design skill من [`awesome-design-skills`][ads] أُضيفت مباشرة تحت `design-systems/` |
-| **Skills مدمجة** | **31** — 27 في وضع `prototype` (web-prototype، saas-landing، dashboard، mobile-app، gamified-app، social-carousel، magazine-poster، dating-web، sprite-animation، motion-frames، critique، tweaks، wireframe-sketch، pm-spec، eng-runbook، finance-report، hr-onboarding، invoice، kanban-board، team-okrs، …) + 4 في وضع `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). مُجمَّعة في الـ picker حسب `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **Skills مدمجة** | **134** — 27 في وضع `prototype` (web-prototype، saas-landing، dashboard، mobile-app، gamified-app، social-carousel، magazine-poster، dating-web، sprite-animation، motion-frames، critique، tweaks، wireframe-sketch، pm-spec، eng-runbook، finance-report، hr-onboarding، invoice، kanban-board، team-okrs، …) + 4 في وضع `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). مُجمَّعة في الـ picker حسب `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **توليد الوسائط** | تشتغل أسطح الصورة والفيديو والصوت بالتوازي مع حلقة التصميم. **gpt-image-2** (Azure / OpenAI) للملصقات والصور الرمزية والإنفوغرافيك وخرائط المدن المرسومة · **Seedance 2.0** (ByteDance) لـ 15 ثانية t2v + i2v بطابع سينمائي · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) لتحويل HTML→MP4 (إعلانات منتجات، طباعة حركية، رسومات بيانية، بطاقات اجتماعية، Logo outros). معرض **93** برومبت جاهزة للاستنساخ — 43 لـ gpt-image-2 + 39 لـ Seedance + 11 لـ HyperFrames — تحت [`prompt-templates/`](prompt-templates/) مع صور معاينة وبيانات المصدر. نفس واجهة الـ chat كما في الكود؛ المخرجات ملفات `.mp4` / `.png` حقيقية تنزل في مساحة عمل المشروع. |
 | **الاتجاهات البصرية** | 5 مدارس منتقاة (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — كل واحدة تأتي بلوحة OKLch حتميّة + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **إطارات الأجهزة** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — دقيقة على مستوى البكسل، مُشتركة عبر الـ skills تحت [`assets/frames/`](assets/frames/) |
@@ -128,7 +128,7 @@
 
 ## الـ Skills
 
-**31 skill جاهزة في الصندوق.** كل واحدة مجلد تحت [`skills/`](skills/) يتبع اصطلاح Claude Code [`SKILL.md`][skill] مع frontmatter موسّع `od:` يفسّره الـ daemon حرفياً — `mode`، `platform`، `scenario`، `preview.type`، `design_system.requires`، `default_for`، `featured`، `fidelity`، `speaker_notes`، `animations`، `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**134 skill جاهزة في الصندوق.** كل واحدة مجلد تحت [`skills/`](skills/) يتبع اصطلاح Claude Code [`SKILL.md`][skill] مع frontmatter موسّع `od:` يفسّره الـ daemon حرفياً — `mode`، `platform`، `scenario`، `preview.type`، `design_system.requires`، `default_for`، `featured`، `fidelity`، `speaker_notes`، `animations`، `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
 يحمل الكتالوج وضعان رئيسيان: **`prototype`** (27 skill — أيّ شيء يُعرض كصفحة artifact واحدة، من landing بأسلوب مجلّة إلى شاشة هاتف إلى مستند PM spec) و**`deck`** (4 skills — عروض أفقية مع إطار deck-framework). حقل **`scenario`** هو ما يُجمِّع به الـ picker: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
@@ -258,8 +258,8 @@
 ```
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
+  + active DESIGN.md   (152 systems available)
+  + active SKILL.md    (134 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -340,7 +340,7 @@ pnpm tools-dev run web
 عند أوّل تحميل:
 
 1. يكتشف أيّ CLI وكلاء على `PATH` ويختار واحدة تلقائياً.
-2. يحمّل 31 skill + 72 نظام تصميم.
+2. يحمّل 134 skill + 152 نظام تصميم.
 3. يُظهر مربع الترحيب لتلصق Anthropic key (مطلوب فقط لمسار BYOK البديل).
 4. **ينشئ `./.od/` تلقائياً** — مجلد التشغيل المحلي الذي يحوي SQLite للمشاريع، artifacts كل مشروع، والرندرز المحفوظة. لا يوجد `od init`؛ الـ daemon يعمل `mkdir` لما يحتاجه عند الإقلاع.
 
@@ -480,7 +480,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
+├── skills/                        ← 134 SKILL.md skill bundles (27 prototype + 4 deck)
 │   ├── web-prototype/             ← default for prototype mode
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -495,7 +495,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 DESIGN.md systems
+├── design-systems/                ← 152 DESIGN.md systems
 │   ├── default/                   ← Neutral Modern (starter)
 │   ├── warm-editorial/            ← Warm Editorial (starter)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -758,7 +758,7 @@ OD لا يقف عند الكود. نفس واجهة الـ chat التي تنت�
 
 - [x] Daemon + اكتشاف الوكلاء (16 CLI adapter) + سجلّ skills + كتالوج أنظمة التصميم
 - [x] تطبيق ويب + chat + نموذج أسئلة + منتقي 5 اتجاهات + تقدّم todo + معاينة معزولة
-- [x] 31 skill + 72 نظام تصميم + 5 اتجاهات بصرية + 5 إطارات أجهزة
+- [x] 134 skill + 152 نظام تصميم + 5 اتجاهات بصرية + 5 إطارات أجهزة
 - [x] مشاريع · محادثات · رسائل · tabs · قوالب مدعومة بـ SQLite
 - [x] بروكسي BYOK متعدّد المزوّدين (`/api/proxy/{anthropic,openai,azure,google}/stream`) مع حماية SSRF
 - [x] استيراد ZIP من Claude Design (`/api/import/claude-design`)

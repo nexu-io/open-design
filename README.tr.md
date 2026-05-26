@@ -1,6 +1,6 @@
 # Open Design — [Claude Design][cd]'in resmi açık kaynak alternatifi
 
-> **Open Design, [Claude Design][cd]'in açık kaynak ve yerel öncelikli alternatifidir.** Web'e dağıtılabilir, her katmanda BYOK; `PATH` üzerinde otomatik algılanan **16 coding-agent CLI** (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) tasarım motoruna dönüşür. Hepsi **31 birleştirilebilir Skill** ve **72 marka kalitesinde Design System** tarafından yönlendirilir. CLI yok mu? OpenAI uyumlu BYOK proxy aynı döngünün agent spawn olmadan çalışan halidir.
+> **Open Design, [Claude Design][cd]'in açık kaynak ve yerel öncelikli alternatifidir.** Web'e dağıtılabilir, her katmanda BYOK; `PATH` üzerinde otomatik algılanan **16 coding-agent CLI** (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) tasarım motoruna dönüşür. Hepsi **134 birleştirilebilir Skill** ve **152 marka kalitesinde Design System** tarafından yönlendirilir. CLI yok mu? OpenAI uyumlu BYOK proxy aynı döngünün agent spawn olmadan çalışan halidir.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` burada. Tasarımın eski dünyası burada bitiyor.
@@ -30,8 +30,8 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#supported-coding-agents"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
+  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-152-orange?style=flat-square" /></a>
+  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-134-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://x.com/nexudotio"><img alt="Follow @nexudotio on X" src="https://img.shields.io/badge/follow-%40nexudotio-1DA1F2?style=flat-square&logo=x&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
@@ -65,7 +65,7 @@ OD dört açık kaynak omuz üzerinde durur:
 | **Coding-agent CLI'ları (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — `PATH` üzerinde otomatik algılanır, tek tıkla değiştirilir |
 | **BYOK fallback** | `/api/proxy/{anthropic,openai,azure,google}/stream` üzerinde protokole özel API proxy — `baseUrl` + `apiKey` + `model` yapıştır, Anthropic / OpenAI / Azure OpenAI / Google Gemini seç; daemon SSE'yi aynı chat stream'ine normalize eder. Internal-IP/SSRF daemon kenarında engellenir. |
 | **Yerleşik design system'ler** | **129** — el yazımı 2 starter + [`awesome-design-md`][acd2] kaynaklı 70 ürün sistemi (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) ve `design-systems/` altına doğrudan eklenen [`awesome-design-skills`][ads] kaynaklı 57 design skill |
-| **Yerleşik skill'ler** | **31** — `prototype` modunda 27 skill (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + `deck` modunda 4 skill (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Picker'da `scenario` ile gruplanır: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **Yerleşik skill'ler** | **134** — `prototype` modunda 27 skill (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + `deck` modunda 4 skill (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Picker'da `scenario` ile gruplanır: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
 | **Medya üretimi** | Görsel · video · ses yüzeyleri tasarım döngüsünün yanında gelir. Posterler, avatarlar, infografikler ve illüstre haritalar için **gpt-image-2** (Azure / OpenAI) · sinematik 15s text-to-video ve image-to-video için **Seedance 2.0** (ByteDance) · HTML→MP4 motion graphics için **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)). [`prompt-templates/`](prompt-templates/) altında **93** yeniden üretilebilir prompt — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — preview thumbnail ve kaynak atfıyla gelir. Kodla aynı chat yüzeyi; çıktılar proje workspace'ine gerçek `.mp4` / `.png` chip'i olarak düşer. |
 | **Görsel yönler** | 5 küratörlü okul (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — her biri deterministik OKLch palet + font stack ile gelir ([`packages/contracts/src/prompts/directions.ts`](packages/contracts/src/prompts/directions.ts)) |
 | **Cihaz frame'leri** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, skill'ler arasında [`assets/frames/`](assets/frames/) altında paylaşılır |
@@ -109,8 +109,8 @@ OD dört açık kaynak omuz üzerinde durur:
 <sub><b>Sandbox preview</b> — her <code>&lt;artifact&gt;</code> temiz bir srcdoc iframe içinde render edilir. File workspace üzerinden yerinde düzenlenebilir; HTML, PDF, ZIP olarak indirilebilir.</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72-system library" /><br/>
-<sub><b>72 sistemlik kütüphane</b> — her ürün sistemi 4 renkli imzasını gösterir. Tam <code>DESIGN.md</code>, swatch grid ve canlı showcase için tıkla.</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 152-system library" /><br/>
+<sub><b>152 sistemlik kütüphane</b> — her ürün sistemi 4 renkli imzasını gösterir. Tam <code>DESIGN.md</code>, swatch grid ve canlı showcase için tıkla.</sub>
 </td>
 </tr>
 <tr>
@@ -127,7 +127,7 @@ OD dört açık kaynak omuz üzerinde durur:
 
 ## Skills
 
-**Kutudan 31 skill çıkar.** Her biri [`skills/`](skills/) altında Claude Code [`SKILL.md`][skill] konvansiyonunu izleyen bir klasördür ve daemon'un aynen parse ettiği genişletilmiş `od:` frontmatter taşır: `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**Kutudan 134 skill çıkar.** Her biri [`skills/`](skills/) altında Claude Code [`SKILL.md`][skill] konvansiyonunu izleyen bir klasördür ve daemon'un aynen parse ettiği genişletilmiş `od:` frontmatter taşır: `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
 Katalog iki üst düzey **mod** taşır: **`prototype`** (27 skill — dergi landing'inden telefon ekranına ve PM spec doc'a kadar tek sayfalık artefakt render eden her şey) ve **`deck`** (4 skill — deck-framework chrome ile yatay kaydırmalı sunumlar). Picker gruplamasını **`scenario`** alanı yapar: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
@@ -257,8 +257,8 @@ Send anında compose edilen şey "system + user" değildir. Şudur:
 ```text
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
+  + active DESIGN.md   (152 systems available)
+  + active SKILL.md    (134 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -329,7 +329,7 @@ Desktop/background startup, fixed-port restart'lar ve medya üretimi dispatcher 
 İlk yükleme:
 
 1. `PATH` üzerindeki agent CLI'larını algılar ve birini otomatik seçer.
-2. 31 skill + 72 design system yükler.
+2. 134 skill + 152 design system yükler.
 3. Anthropic key yapıştırabilmen için welcome dialog'u açar (yalnızca BYOK fallback path için gerekir).
 4. **`./.od/` klasörünü otomatik oluşturur** — SQLite project DB, proje artefaktları ve kayıtlı render'lar için local runtime klasörü. `od init` adımı yoktur; daemon boot sırasında ihtiyacı olan her şeyi `mkdir` eder.
 
@@ -607,8 +607,8 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
-├── design-systems/                ← 72 DESIGN.md systems
+├── skills/                        ← 134 SKILL.md skill bundles (27 prototype + 4 deck)
+├── design-systems/                ← 152 DESIGN.md systems
 ├── assets/frames/                 ← shared device frames (used cross-skill)
 ├── templates/                     ← deck baselines
 ├── scripts/                       ← sync/import utilities
@@ -619,10 +619,10 @@ open-design/
 ## Design Systems
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="72 design system kütüphanesi — style guide spread" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="152 design system kütüphanesi — style guide spread" width="100%" />
 </p>
 
-Kutudan tekil [`DESIGN.md`](design-systems/README.md) dosyaları olarak 72 sistem çıkar:
+Kutudan tekil [`DESIGN.md`](design-systems/README.md) dosyaları olarak 152 sistem çıkar:
 
 <details>
 <summary><b>Tam katalog</b> (açmak için tıkla)</summary>
@@ -841,7 +841,7 @@ Uzun biçimli provenance yazısı — her birinden ne aldığımız ve neyi bili
 
 - [x] Daemon + agent detection (16 CLI adapter) + skill registry + design-system katalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 31 skill + 72 design system + 5 görsel direction + 5 cihaz frame'i
+- [x] 134 skill + 152 design system + 5 görsel direction + 5 cihaz frame'i
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] SSRF guard'lı multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google}/stream`)
 - [x] Claude Design ZIP import (`/api/import/claude-design`)
