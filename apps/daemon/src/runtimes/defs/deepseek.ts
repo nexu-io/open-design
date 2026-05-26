@@ -5,15 +5,13 @@ export const deepseekAgentDef = {
     id: 'deepseek',
     name: 'DeepSeek TUI',
     // The `deepseek` dispatcher owns the `exec` / `--auto` subcommands and
-    // delegates to a sibling `deepseek-tui` runtime binary at exec time.
-    // Upstream documents both binaries as required (npm and cargo paths
-    // install them together), so a host with only `deepseek-tui` on PATH
-    // isn't a supported install — and `deepseek-tui` itself doesn't accept
-    // the argv shape `buildArgs` produces (`exec --auto <prompt>`). We only
-    // probe the dispatcher; advertising availability via a `deepseek-tui`
-    // fallback would surface the agent as runnable but make `/api/chat`
-    // exit immediately on the first prompt.
+    // delegates to a sibling TUI runtime binary at exec time. Upstream also
+    // ships the same dispatcher as `codewhale` after the CodeWhale rename
+    // (issue #2983). The companion `deepseek-tui` / `codewhale-tui` runtime
+    // is not probed here — it does not accept the argv shape `buildArgs`
+    // produces (`exec --auto <prompt>`).
     bin: 'deepseek',
+    fallbackBins: ['codewhale'],
     versionArgs: ['--version'],
     // No `models` subcommand that prints a clean id-per-line list; the
     // canonical model ids for DeepSeek V4 are documented in the README,

@@ -68,8 +68,8 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://github.com/mistralai/vibe-acp',
   },
   deepseek: {
-    installUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI',
-    docsUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI/blob/main/README.md',
+    installUrl: 'https://github.com/Hmbown/CodeWhale',
+    docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
   },
 };
 

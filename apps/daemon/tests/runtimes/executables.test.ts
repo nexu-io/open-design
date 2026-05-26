@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  assert, chmodSync, claude, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withPlatform, writeFileSync,
+  assert, chmodSync, claude, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
@@ -21,6 +21,17 @@ test('claude entry declares openclaude as a fallback bin (issue #235)', () => {
   assert.ok(
     claude.fallbackBins.includes('openclaude'),
     `claude.fallbackBins must include 'openclaude'; got ${JSON.stringify(claude.fallbackBins)}`,
+  );
+});
+
+test('deepseek entry declares codewhale as a fallback bin (issue #2983)', () => {
+  assert.ok(
+    Array.isArray(deepseek.fallbackBins),
+    'deepseek.fallbackBins must be an array',
+  );
+  assert.ok(
+    deepseek.fallbackBins.includes('codewhale'),
+    `deepseek.fallbackBins must include 'codewhale'; got ${JSON.stringify(deepseek.fallbackBins)}`,
   );
 });
 
