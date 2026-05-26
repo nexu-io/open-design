@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import { validateBaseUrl, byokAllowlistFromResponse } from '@open-design/contracts/api/connectionTest';
+import { getByokPrivateTargetAllowlist } from '../state/config';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
@@ -602,7 +603,9 @@ function applyApiProtocolConfig(
 export function isValidApiBaseUrl(value: string): boolean {
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return false;
-  const result = validateBaseUrl(trimmed);
+  const result = validateBaseUrl(trimmed, {
+    allowlist: byokAllowlistFromResponse(getByokPrivateTargetAllowlist()),
+  });
   return Boolean(result.parsed && !result.error);
 }
 

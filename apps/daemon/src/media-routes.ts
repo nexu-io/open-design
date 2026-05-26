@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { getByokPrivateTargetAllowlistForApi } from './connectionTest.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
@@ -74,7 +75,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
     try {
       const config = await readAppConfig(RUNTIME_DATA_DIR);
-      res.json({ config });
+      res.json({
+        config,
+        byokPrivateTargetAllowlist: getByokPrivateTargetAllowlistForApi(),
+      });
     } catch (err: any) {
       res
         .status(500)

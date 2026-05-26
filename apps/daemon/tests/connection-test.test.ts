@@ -2871,4 +2871,27 @@ describe('validateBaseUrlResolved (DNS-aware base URL validation)', () => {
     expect(result.error).toBeUndefined();
     expect(failingLookup).toHaveBeenCalledOnce();
   });
+
+  it('allows private targets covered by the BYOK admin allowlist (#2986)', async () => {
+    const allowlist = {
+      hostnames: new Set(['host.docker.internal']),
+      cidrs: ['192.168.0.0/16'],
+    };
+    expect(
+      (
+        await validateBaseUrlResolved(
+          'http://host.docker.internal:1234/v1',
+          lookupReturning([{ address: '192.168.65.2', family: 4 }]),
+          { allowlist },
+        )
+      ).error,
+    ).toBeUndefined();
+    expect(
+      (
+        await validateBaseUrlResolved('http://192.168.1.50:4000/v1', lookupReturning([]), {
+          allowlist,
+        })
+      ).error,
+    ).toBeUndefined();
+  });
 });

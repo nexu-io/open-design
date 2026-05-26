@@ -1,3 +1,5 @@
+import type { ByokPrivateTargetAllowlist } from './connectionTest.js';
+
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
@@ -44,6 +46,8 @@ export interface AppConfigPrefs {
 
 export interface AppConfigResponse {
   config: AppConfigPrefs;
+  /** Read-only daemon policy from env; not persisted in app-config.json (#2986). */
+  byokPrivateTargetAllowlist?: ByokPrivateTargetAllowlist;
 }
 
 export type UpdateAppConfigRequest = Partial<AppConfigPrefs>;

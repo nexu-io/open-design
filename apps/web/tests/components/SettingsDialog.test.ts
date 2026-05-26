@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setByokPrivateTargetAllowlistForTests } from '../../src/state/config';
 import {
   agentRefreshOptionsForConfig,
   canFetchProviderModels,
@@ -299,6 +300,17 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
     expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
+  });
+
+  it('accepts private targets when the daemon exposes a BYOK allowlist (#2986)', () => {
+    setByokPrivateTargetAllowlistForTests({
+      hostnames: ['host.docker.internal'],
+      cidrs: ['192.168.0.0/16'],
+    });
+    expect(isValidApiBaseUrl('http://host.docker.internal:1234/v1')).toBe(true);
+    expect(isValidApiBaseUrl('http://192.168.1.50:4000/v1')).toBe(true);
+    expect(isValidApiBaseUrl('http://10.0.0.5:11434/v1')).toBe(false);
+    setByokPrivateTargetAllowlistForTests(null);
   });
 });
 

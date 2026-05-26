@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  byokAllowlistFromResponse,
   isLoopbackApiHost,
+  parseByokPrivateAllowlistFromEnv,
   validateBaseUrl,
 } from '../src/api/connectionTest';
 
@@ -65,5 +67,33 @@ describe('provider base URL validation', () => {
         forbidden: true,
       });
     }
+  });
+});
+
+describe('BYOK private target allowlist (#2986)', () => {
+  it('parses host and CIDR entries from env vars', () => {
+    const allowlist = parseByokPrivateAllowlistFromEnv({
+      OD_BYOK_PRIVATE_HOST_ALLOWLIST: 'host.docker.internal, LiteLLM.internal.',
+      OD_BYOK_PRIVATE_CIDR_ALLOWLIST: '192.168.0.0/16, 10.0.0.0/8',
+    });
+    expect([...allowlist.hostnames]).toEqual(['host.docker.internal', 'litellm.internal']);
+    expect(allowlist.cidrs).toEqual(['192.168.0.0/16', '10.0.0.0/8']);
+  });
+
+  it('allows allowlisted hostnames and CIDRs while keeping default blocks', () => {
+    const allowlist = byokAllowlistFromResponse({
+      hostnames: ['host.docker.internal'],
+      cidrs: ['192.168.0.0/16'],
+    });
+    expect(validateBaseUrl('http://host.docker.internal:1234/v1', { allowlist }).error).toBeUndefined();
+    expect(validateBaseUrl('http://192.168.1.50:4000/v1', { allowlist }).error).toBeUndefined();
+    expect(validateBaseUrl('http://10.0.0.5:11434/v1', { allowlist })).toMatchObject({
+      error: 'Internal IPs blocked',
+      forbidden: true,
+    });
+    expect(validateBaseUrl('http://10.0.0.5:11434/v1')).toMatchObject({
+      error: 'Internal IPs blocked',
+      forbidden: true,
+    });
   });
 });

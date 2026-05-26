@@ -107,7 +107,121 @@ export function isBlockedExternalApiHostname(hostname: string): boolean {
   return Boolean(mapped && isBlockedIpv4(mapped));
 }
 
-export function validateBaseUrl(baseUrl: string): BaseUrlValidationResult {
+/** Daemon-admin allowlist for trusted internal BYOK gateways (#2986). */
+export interface ByokPrivateTargetAllowlist {
+  hostnames: string[];
+  cidrs: string[];
+}
+
+export interface ByokPrivateAllowlist {
+  hostnames: Set<string>;
+  cidrs: string[];
+}
+
+function ipv4ToUint32(hostname: string): number | null {
+  const parts = parseIpv4(normalizeBracketedIpv6(hostname));
+  if (!parts) return null;
+  return (
+    ((parts[0] << 24) >>> 0) +
+    (parts[1] << 16) +
+    (parts[2] << 8) +
+    parts[3]
+  ) >>> 0;
+}
+
+function parseIpv4Cidr(cidr: string): { network: number; mask: number } | null {
+  const trimmed = cidr.trim();
+  const slash = trimmed.indexOf('/');
+  if (slash <= 0) return null;
+  const ipPart = trimmed.slice(0, slash);
+  const prefix = Number(trimmed.slice(slash + 1));
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
+  const network = ipv4ToUint32(ipPart);
+  if (network === null) return null;
+  const mask = prefix === 0 ? 0 : ((0xffffffff << (32 - prefix)) >>> 0);
+  return { network: network & mask, mask };
+}
+
+export function ipv4MatchesCidr(ip: string, cidr: string): boolean {
+  const parsed = parseIpv4Cidr(cidr);
+  const value = ipv4ToUint32(ip);
+  if (!parsed || value === null) return false;
+  return (value & parsed.mask) === parsed.network;
+}
+
+export function parseByokPrivateAllowlistFromEnv(
+  env: Record<string, string | undefined> = typeof process === 'undefined'
+    ? {}
+    : process.env,
+): ByokPrivateAllowlist {
+  const hostnames = new Set<string>();
+  for (const entry of String(env.OD_BYOK_PRIVATE_HOST_ALLOWLIST ?? '').split(',')) {
+    const normalized = entry.trim().toLowerCase().replace(/\.+$/, '');
+    if (normalized) hostnames.add(normalized);
+  }
+  const cidrs = String(env.OD_BYOK_PRIVATE_CIDR_ALLOWLIST ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return { hostnames, cidrs };
+}
+
+export function serializeByokPrivateAllowlist(
+  allowlist: ByokPrivateAllowlist,
+): ByokPrivateTargetAllowlist {
+  return {
+    hostnames: [...allowlist.hostnames],
+    cidrs: [...allowlist.cidrs],
+  };
+}
+
+export function byokAllowlistFromResponse(
+  response: ByokPrivateTargetAllowlist | null | undefined,
+): ByokPrivateAllowlist | null {
+  if (!response) return null;
+  const hostnames = new Set<string>();
+  for (const entry of response.hostnames ?? []) {
+    const normalized = String(entry).trim().toLowerCase().replace(/\.+$/, '');
+    if (normalized) hostnames.add(normalized);
+  }
+  const cidrs = (response.cidrs ?? []).map((entry) => String(entry).trim()).filter(Boolean);
+  if (hostnames.size === 0 && cidrs.length === 0) return null;
+  return { hostnames, cidrs };
+}
+
+export function isHostnameAllowlisted(
+  hostname: string,
+  allowlist: ByokPrivateAllowlist,
+): boolean {
+  const host = normalizeBracketedIpv6(hostname);
+  return allowlist.hostnames.has(host);
+}
+
+export function ipv4MatchesAnyCidr(ip: string, allowlist: ByokPrivateAllowlist): boolean {
+  return allowlist.cidrs.some((cidr) => ipv4MatchesCidr(ip, cidr));
+}
+
+export function isPrivateTargetAllowedByAllowlist(
+  hostname: string,
+  allowlist: ByokPrivateAllowlist | null | undefined,
+  resolvedIp?: string,
+): boolean {
+  if (!allowlist) return false;
+  if (isHostnameAllowlisted(hostname, allowlist)) return true;
+  const ip = resolvedIp ?? normalizeBracketedIpv6(hostname);
+  if (parseIpv4(ip)) return ipv4MatchesAnyCidr(ip, allowlist);
+  const mapped = ipv4MappedToDotted(ip);
+  return Boolean(mapped && ipv4MatchesAnyCidr(mapped, allowlist));
+}
+
+export interface ValidateBaseUrlOptions {
+  allowlist?: ByokPrivateAllowlist | null;
+}
+
+export function validateBaseUrl(
+  baseUrl: string,
+  options?: ValidateBaseUrlOptions,
+): BaseUrlValidationResult {
   let parsed: ParsedBaseUrl;
   try {
     parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
@@ -118,7 +232,10 @@ export function validateBaseUrl(baseUrl: string): BaseUrlValidationResult {
     return { error: 'Only http/https allowed' };
   }
   const hostname = parsed.hostname.toLowerCase();
-  if (!isLoopbackApiHost(hostname) && isBlockedExternalApiHostname(hostname)) {
+  if (isLoopbackApiHost(hostname)) return { parsed };
+  const allowlist = options?.allowlist ?? null;
+  if (isPrivateTargetAllowedByAllowlist(hostname, allowlist)) return { parsed };
+  if (isBlockedExternalApiHostname(hostname)) {
     return { error: 'Internal IPs blocked', forbidden: true };
   }
   return { parsed };

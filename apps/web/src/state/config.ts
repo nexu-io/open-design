@@ -1,4 +1,5 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
+import type { ByokPrivateTargetAllowlist } from '@open-design/contracts/api/connectionTest';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -20,6 +21,18 @@ import {
 
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 1;
+
+let byokPrivateTargetAllowlist: ByokPrivateTargetAllowlist | null = null;
+
+export function getByokPrivateTargetAllowlist(): ByokPrivateTargetAllowlist | null {
+  return byokPrivateTargetAllowlist;
+}
+
+export function setByokPrivateTargetAllowlistForTests(
+  allowlist: ByokPrivateTargetAllowlist | null,
+) {
+  byokPrivateTargetAllowlist = allowlist;
+}
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -769,6 +782,7 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
     const res = await fetch('/api/app-config');
     if (!res.ok) return null;
     const data = await res.json();
+    byokPrivateTargetAllowlist = data?.byokPrivateTargetAllowlist ?? null;
     return data?.config ?? null;
   } catch {
     return null;
