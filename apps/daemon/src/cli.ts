@@ -5082,10 +5082,10 @@ async function runSkills(args) {
 }
 
 async function runSkillsTree(args) {
-  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+  if (args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od skills tree [--json]  Print skills grouped by mode and scenario.`);
-    process.exit(args.length === 0 ? 2 : 0);
+    process.exit(0);
   }
   const flags = parseFlags(args, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');

@@ -30,6 +30,51 @@ async function withSkillsServer<T>(
 }
 
 describe('od skills CLI', () => {
+  it('prints the skills tree for the plain command', async () => {
+    await withSkillsServer(
+      (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          skills: [
+            {
+              id: 'dashboard',
+              name: 'Dashboard',
+              mode: 'prototype',
+              scenario: 'operation',
+              platform: 'desktop',
+              previewType: 'html',
+              designSystemRequired: true,
+            },
+          ],
+        }));
+      },
+      async (baseUrl) => {
+        const result = await execFileAsync(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            cliEntry,
+            'skills',
+            'tree',
+            '--daemon-url',
+            baseUrl,
+          ],
+          {
+            cwd: daemonRoot,
+            env: process.env,
+          },
+        );
+
+        expect(result.stdout).toContain('Skills tree (1)');
+        expect(result.stdout).toContain('Prototype (1)');
+        expect(result.stdout).toContain('Operation (1)');
+        expect(result.stdout).toContain('- dashboard [desktop · html · design system]');
+        expect(result.stderr).toBe('');
+      },
+    );
+  });
+
   it('prints skills tree help without contacting the daemon', async () => {
     const result = await execFileAsync(
       process.execPath,
