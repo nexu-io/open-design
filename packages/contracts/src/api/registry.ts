@@ -140,6 +140,159 @@ export interface SkillsResponse {
   skills: SkillSummary[];
 }
 
+export interface SkillCatalogTreeSkill {
+  id: string;
+  name: string;
+  description: string;
+  mode: SkillSummary['mode'];
+  scenario: string;
+  platform: SkillSummary['platform'];
+  previewType: string;
+  designSystemRequired: boolean;
+  examplePrompt: string;
+  source: SkillSummary['source'];
+  featured: number | null;
+  defaultFor: string[];
+  category: string | null;
+  skill: SkillSummary;
+}
+
+export interface SkillCatalogTreeScenario {
+  id: string;
+  label: string;
+  count: number;
+  skills: SkillCatalogTreeSkill[];
+}
+
+export interface SkillCatalogTreeMode {
+  id: SkillSummary['mode'];
+  label: string;
+  count: number;
+  scenarios: SkillCatalogTreeScenario[];
+}
+
+export interface SkillCatalogTree {
+  total: number;
+  modes: SkillCatalogTreeMode[];
+}
+
+const SKILL_MODE_ORDER: readonly SkillSummary['mode'][] = [
+  'prototype',
+  'deck',
+  'template',
+  'design-system',
+  'image',
+  'video',
+  'audio',
+];
+
+export function buildSkillCatalogTree(
+  skills: readonly SkillSummary[],
+): SkillCatalogTree {
+  const modeBuckets = new Map<SkillSummary['mode'], Map<string, SkillCatalogTreeSkill[]>>();
+
+  for (const skill of skills) {
+    const scenario = normalizeTreeScenario(skill.scenario);
+    let scenarioBuckets = modeBuckets.get(skill.mode);
+    if (!scenarioBuckets) {
+      scenarioBuckets = new Map<string, SkillCatalogTreeSkill[]>();
+      modeBuckets.set(skill.mode, scenarioBuckets);
+    }
+    const bucket = scenarioBuckets.get(scenario) ?? [];
+    bucket.push({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      mode: skill.mode,
+      scenario,
+      platform: skill.platform ?? null,
+      previewType: skill.previewType,
+      designSystemRequired: skill.designSystemRequired,
+      examplePrompt: skill.examplePrompt,
+      source: skill.source,
+      featured: skill.featured ?? null,
+      defaultFor: skill.defaultFor ?? [],
+      category: skill.category ?? null,
+      skill,
+    });
+    scenarioBuckets.set(scenario, bucket);
+  }
+
+  const modes = [...modeBuckets.entries()]
+    .sort(([a], [b]) => compareMode(a, b))
+    .map(([mode, scenarioBuckets]) => {
+      const scenarios = [...scenarioBuckets.entries()]
+        .sort(([a], [b]) => compareScenario(a, b))
+        .map(([scenario, scenarioSkills]) => {
+          const sortedSkills = [...scenarioSkills].sort(compareTreeSkill);
+          return {
+            id: scenario,
+            label: labelFromSlug(scenario),
+            count: sortedSkills.length,
+            skills: sortedSkills,
+          };
+        });
+      return {
+        id: mode,
+        label: labelFromSlug(mode),
+        count: scenarios.reduce((total, scenario) => total + scenario.count, 0),
+        scenarios,
+      };
+    });
+
+  return {
+    total: skills.length,
+    modes,
+  };
+}
+
+function normalizeTreeScenario(scenario: SkillSummary['scenario']): string {
+  const normalized = typeof scenario === 'string' ? scenario.trim() : '';
+  return normalized.length > 0 ? normalized : 'general';
+}
+
+function compareMode(a: SkillSummary['mode'], b: SkillSummary['mode']): number {
+  const aIndex = SKILL_MODE_ORDER.indexOf(a);
+  const bIndex = SKILL_MODE_ORDER.indexOf(b);
+  if (aIndex !== bIndex) return aIndex - bIndex;
+  return a.localeCompare(b);
+}
+
+function compareScenario(a: string, b: string): number {
+  if (a === 'general' && b !== 'general') return -1;
+  if (b === 'general' && a !== 'general') return 1;
+  return a.localeCompare(b);
+}
+
+function compareTreeSkill(
+  a: SkillCatalogTreeSkill,
+  b: SkillCatalogTreeSkill,
+): number {
+  const rankDiff = treeSkillRank(a) - treeSkillRank(b);
+  if (rankDiff !== 0) return rankDiff;
+  if (a.featured !== null || b.featured !== null) {
+    const featuredDiff = (a.featured ?? Number.MAX_SAFE_INTEGER) - (b.featured ?? Number.MAX_SAFE_INTEGER);
+    if (featuredDiff !== 0) return featuredDiff;
+  }
+  const nameDiff = a.name.localeCompare(b.name);
+  if (nameDiff !== 0) return nameDiff;
+  return a.id.localeCompare(b.id);
+}
+
+function treeSkillRank(skill: SkillCatalogTreeSkill): number {
+  if (skill.defaultFor.length > 0) return 0;
+  if (skill.featured !== null) return 1;
+  return 2;
+}
+
+function labelFromSlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export interface SkillResponse {
   skill: SkillDetail;
 }
