@@ -2,7 +2,7 @@
 // and live artifact refreshers. The daemon still stores these as routines;
 // the UI presents them as scheduled agent conversations.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AutomationContentPacket,
   AutomationEvolutionProposal,
@@ -411,6 +411,8 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
   const [ingestingSource, setIngestingSource] = useState(false);
   const [crystallizingRunId, setCrystallizingRunId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [focusRoutineId, setFocusRoutineId] = useState<string | null>(null);
+  const routineRowRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const [historyTick, setHistoryTick] = useState(0);
 
   const templates = useMemo(
@@ -490,9 +492,17 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
 
   // Sort routines by creation time, newest first
   const sortedRoutines = useMemo(
-    () => [...routines].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+    () => sortRoutinesNewestFirst(routines),
     [routines],
   );
+
+  useEffect(() => {
+    if (!focusRoutineId) return;
+    const node = routineRowRefs.current[focusRoutineId];
+    node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const timer = window.setTimeout(() => setFocusRoutineId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [focusRoutineId, sortedRoutines]);
 
   const activeCount = sortedRoutines.filter((routine) => routine.enabled).length;
   const pausedCount = sortedRoutines.length - activeCount;
@@ -730,7 +740,11 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               return (
                 <li
                   key={r.id}
-                  className={`automation-row${r.enabled ? '' : ' is-paused'}`}
+                  ref={(node) => {
+                    routineRowRefs.current[r.id] = node;
+                  }}
+                  data-testid={`automation-row-${r.id}`}
+                  className={`automation-row${r.enabled ? '' : ' is-paused'}${focusRoutineId === r.id ? ' is-focused' : ''}`}
                 >
                   <div className="automation-row__main">
                     <span className="automation-row__icon">
@@ -1124,12 +1138,20 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         skills={skills}
         connectors={connectors}
         onClose={() => setModal(null)}
-        onSaved={() => {
-          void refresh();
+        onSaved={(routine) => {
+          void (async () => {
+            await refresh();
+            setExpandedId(routine.id);
+            setFocusRoutineId(routine.id);
+          })();
         }}
       />
     </section>
   );
+}
+
+export function sortRoutinesNewestFirst(routines: Routine[]): Routine[] {
+  return [...routines].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

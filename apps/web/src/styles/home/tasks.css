@@ -287,6 +287,13 @@
   opacity: 0.74;
 }
 
+.automation-row.is-focused {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent),
+    var(--shadow-xs);
+}
+
 .automation-row__main {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
