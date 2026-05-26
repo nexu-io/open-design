@@ -369,7 +369,7 @@ export function PreviewDrawOverlay({
   const overlayPointer = mode === 'draw' ? 'auto' : 'none';
   const showCanvas = active || mode === 'draw' || hasInk;
   const canSubmit = hasInk || Boolean(captureTarget) || Boolean(note.trim());
-  const canSend = canSubmit && !sendDisabled;
+  const canSend = canSubmit;
   const submitAction: 'queue' | 'send' = canSend ? 'send' : 'queue';
 
   return (

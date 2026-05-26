@@ -1564,6 +1564,37 @@ describe('FileViewer tweaks toolbar', () => {
     window.removeEventListener(ANNOTATION_EVENT, annotationSpy);
   });
 
+  it('lets Draw Enter use the selected Send action while a task is running', async () => {
+    const annotationSpy = vi.fn();
+    window.addEventListener(ANNOTATION_EVENT, annotationSpy);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        streaming
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    const note = screen.getByPlaceholderText('Type anywhere to add a note');
+    fireEvent.change(note, { target: { value: 'mark this with enter' } });
+
+    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+
+    fireEvent.keyDown(note, { key: 'Enter' });
+
+    await waitFor(() => expect(annotationSpy).toHaveBeenCalledTimes(1));
+    expect(annotationSpy.mock.calls[0]?.[0]).toMatchObject({
+      detail: {
+        action: 'send',
+        note: 'mark this with enter',
+        filePath: 'preview.html',
+      },
+    });
+    window.removeEventListener(ANNOTATION_EVENT, annotationSpy);
+  });
+
   it('hides non-open saved comments from preview markers when the side panel is empty', () => {
     const resolvedComment: PreviewComment = {
       id: 'comment-applying',
