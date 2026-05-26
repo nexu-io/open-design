@@ -1063,9 +1063,10 @@
 }
 
 .manual-edit-tabs button.selected {
-  border-color: var(--accent);
+  border-color: var(--border);
   color: var(--text);
   background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .manual-edit-tab-body {
