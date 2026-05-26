@@ -2,7 +2,7 @@
   "name": "open-design",
   "version": "0.5.0",
   "private": true,
-  "packageManager": "pnpm@10.33.2",
+  "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
@@ -10,8 +10,13 @@
     "od": "./apps/daemon/dist/cli.js"
   },
   "scripts": {
+    "preinstall": "node ./scripts/enforce-pnpm.mjs",
     "postinstall": "node ./scripts/postinstall.mjs",
     "dev": "pnpm exec tools-dev",
+    "dev:web": "pnpm -C apps/web dev",
+    "dev:landing": "pnpm -C apps/landing-page dev",
+    "dev:daemon": "pnpm -C apps/daemon dev",
+    "dev:list": "echo 'Per-app dev scripts (cheap on CPU — pick what you need):' && echo '  pnpm dev          # full orchestrator (all apps + watchers — heavy)' && echo '  pnpm dev:web      # Next.js web app only' && echo '  pnpm dev:landing  # Astro landing page only' && echo '  pnpm dev:daemon   # gRPC daemon only' && echo '' && echo 'Note: apps/desktop and apps/packaged are build-only — they have no dev script.'",
     "tools-pack": "pnpm exec tools-pack",
     "guard": "tsx ./scripts/guard.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
@@ -29,7 +34,7 @@
   },
   "engines": {
     "node": "~24",
-    "pnpm": ">=10.33.2 <11"
+    "pnpm": ">=10.33.2"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
