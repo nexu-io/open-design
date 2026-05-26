@@ -66,11 +66,11 @@ export function isReasonixAuthFailureText(text: string): boolean {
   const value = String(text || '');
   if (!value.trim()) return false;
   return (
-    /api[_ -]?key/i.test(value) &&
-    (/missing|not set|required|unauthorized|invalid/i.test(value))
+    /~\/\.reasonix\/config\.json/i.test(value) &&
+    /api[_ -]?key|missing|not set|required|unauthorized|invalid/i.test(value)
   ) || (
     /DEEPSEEK_API_KEY/i.test(value) &&
-    /auth|api[_ -]?key|missing|not set|required|unauthorized/i.test(value)
+    /auth|missing|not set|required|unauthorized|invalid/i.test(value)
   );
 }
 

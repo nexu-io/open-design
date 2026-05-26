@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { detectAcpModels, DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
 // Design instructions injected into Reasonix's ACP system prompt via
@@ -37,6 +37,14 @@ export const reasonixAgentDef = {
     bin: 'reasonix',
     fallbackBins: ['dsnix'],
     versionArgs: ['--version'],
+    fetchModels: async (resolvedBin, env) =>
+      detectAcpModels({
+        bin: resolvedBin,
+        args: ['acp'],
+        env,
+        timeoutMs: 15_000,
+        defaultModelOption: DEFAULT_MODEL_OPTION,
+      }),
     // Reasonix ships an ACP (Agent Client Protocol) mode via `reasonix acp`
     // that speaks NDJSON JSON-RPC over stdio — the same wire format Hermes,
     // Kimi, Kilo, Kiro, and Vibe use. This avoids the Windows CreateProcess
