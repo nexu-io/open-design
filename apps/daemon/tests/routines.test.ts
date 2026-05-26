@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   nextRunAtForSchedule,
+  nextRunAtForScheduleAfterScheduledFire,
   validateSchedule,
   validateTarget,
 } from '../src/routines.js';
@@ -159,6 +160,38 @@ describe('nextRunAtForSchedule DST handling', () => {
     expect(parts.day).toBe('15');
     expect(parts.hour).toBe('08');
     expect(parts.minute).toBe('30');
+  });
+});
+
+describe('nextRunAtForScheduleAfterScheduledFire', () => {
+  it('does not reschedule the second ambiguous instance on the same fall-back day (#2890)', () => {
+    const schedule = {
+      kind: 'daily' as const,
+      time: '01:30',
+      timezone: 'America/New_York',
+    };
+    const firstFire = new Date('2026-11-01T05:30:00Z');
+    const next = nextRunAtForScheduleAfterScheduledFire(schedule, firstFire);
+    expect(next).not.toBeNull();
+    if (!next) return;
+
+    const parts = partsIn('America/New_York', next);
+    expect(parts.year).toBe('2026');
+    expect(parts.month).toBe('11');
+    expect(parts.day).toBe('02');
+    expect(parts.hour).toBe('01');
+    expect(parts.minute).toBe('30');
+  });
+
+  it('still advances hourly schedules from the fire instant', () => {
+    const firedAt = new Date('2026-05-13T10:15:30Z');
+    const next = nextRunAtForScheduleAfterScheduledFire(
+      { kind: 'hourly', minute: 15 },
+      firedAt,
+    );
+    expect(next).not.toBeNull();
+    if (!next) return;
+    expect(next.toISOString()).toBe('2026-05-13T11:15:00.000Z');
   });
 });
 

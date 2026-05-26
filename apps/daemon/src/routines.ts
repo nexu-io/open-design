@@ -331,6 +331,56 @@ export function nextRunAtForSchedule(
   return null;
 }
 
+// After a scheduled fire, advance past every UTC instant that maps to the
+// same wall-clock slot on the same calendar day. On DST fall-back days a
+// daily 01:30 can exist twice (EDT then EST); firing the first must not
+// immediately reschedule the second — users expect one run per slot (#2890).
+export function nextRunAtForScheduleAfterScheduledFire(
+  schedule: RoutineSchedule,
+  firedAt: Date,
+): Date | null {
+  if (schedule.kind === 'hourly') {
+    return nextRunAtForSchedule(schedule, firedAt);
+  }
+  if (
+    schedule.kind !== 'daily' &&
+    schedule.kind !== 'weekdays' &&
+    schedule.kind !== 'weekly'
+  ) {
+    return nextRunAtForSchedule(schedule, firedAt);
+  }
+
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(schedule.time);
+  if (!timeMatch) return nextRunAtForSchedule(schedule, firedAt);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  const firedParts = partsInTimezone(schedule.timezone, firedAt);
+  if (firedParts.hour !== hour || firedParts.minute !== minute) {
+    return nextRunAtForSchedule(schedule, firedAt);
+  }
+  if (schedule.kind === 'weekdays' && (firedParts.weekday < 1 || firedParts.weekday > 5)) {
+    return nextRunAtForSchedule(schedule, firedAt);
+  }
+  if (schedule.kind === 'weekly' && firedParts.weekday !== schedule.weekday) {
+    return nextRunAtForSchedule(schedule, firedAt);
+  }
+
+  const candidates = tzWallToUtcCandidates(
+    schedule.timezone,
+    firedParts.year,
+    firedParts.month,
+    firedParts.day,
+    hour,
+    minute,
+  );
+  if (candidates.length <= 1) {
+    return nextRunAtForSchedule(schedule, firedAt);
+  }
+
+  const lastCandidate = candidates[candidates.length - 1]!;
+  return nextRunAtForSchedule(schedule, new Date(lastCandidate.getTime() + 1_000));
+}
+
 // ---------- validation ----------
 
 export function isValidWallTime(time: string): boolean {
@@ -435,7 +485,7 @@ export class RoutineService {
     }
   }
 
-  rescheduleOne(routineId: string): void {
+  rescheduleOne(routineId: string, afterScheduledFireAt?: Date): void {
     const existing = this.timers.get(routineId);
     if (existing) {
       clearTimeout(existing.timer);
@@ -443,7 +493,7 @@ export class RoutineService {
     }
     if (!this.started) return;
     const routine = this.persistence.list().find((r) => r.id === routineId);
-    if (routine) this.scheduleRoutine(routine);
+    if (routine) this.scheduleRoutine(routine, afterScheduledFireAt);
   }
 
   unschedule(routineId: string): void {
@@ -454,9 +504,11 @@ export class RoutineService {
     }
   }
 
-  private scheduleRoutine(routine: Routine): void {
+  private scheduleRoutine(routine: Routine, afterScheduledFireAt?: Date): void {
     if (!routine.enabled) return;
-    const fireAt = nextRunAtForSchedule(routine.schedule);
+    const fireAt = afterScheduledFireAt
+      ? nextRunAtForScheduleAfterScheduledFire(routine.schedule, afterScheduledFireAt)
+      : nextRunAtForSchedule(routine.schedule);
     if (!fireAt) return;
     // setTimeout can't carry past 2^31 ms (~24.8 days); we cap and use
     // a chained re-schedule. Routines fire within hours/days, but a
@@ -473,7 +525,7 @@ export class RoutineService {
         })
         .finally(() => {
           // Always reschedule so a single fire keeps the cadence alive.
-          this.rescheduleOne(routine.id);
+          this.rescheduleOne(routine.id, fireAt);
         });
     }, delay);
     if (typeof timer.unref === 'function') timer.unref();
