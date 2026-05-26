@@ -1615,4 +1615,13 @@ export const de: Dict = {
   'diagnostics.exporting': 'Exportiere…',
   'diagnostics.exportSuccess': 'Diagnose gespeichert: {path}',
   'diagnostics.exportFailed': 'Diagnose-Export fehlgeschlagen: {message}',
+  // Automations page — #2917
+  'tasks.heading': 'Automatisierungen',
+  'tasks.eyebrow': 'Geplante Agenten-Sitzungen',
+  'tasks.heroParagraph': 'Plant wiederkehrende Gespräche für Projektarbeit, Orbit-Digests und Live-Artefakte.',
+  'tasks.yourAutomations': 'Meine Automatisierungen',
+  'tasks.empty.title': 'Noch keine Automatisierungen',
+  'tasks.empty.hint': 'Erstelle eine aus einer Vorlage oder beginne mit einem leeren Zeitplan.',
+  'tasks.ingestSource': 'Quelle importieren',
+  'tasks.templates': 'Vorlagen',
 };

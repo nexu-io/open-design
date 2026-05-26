@@ -566,6 +566,15 @@ export const zhTW: Dict = {
   'mcpClient.storedAt': '儲存於',
   'mcpClient.daemonError': '無法連線到本機 daemon。請確認 Open Design 正在執行，然後重新開啟此面板。',
   'mcpClient.saveFailed': '儲存失敗。請確認 daemon 正在執行後再試一次。',
+  // Automations page — #2917
+  'tasks.heading': '自動化',
+  'tasks.eyebrow': '排程智能體會話',
+  'tasks.heroParagraph': '為專案工作、Orbit 摘要和實時製品規劃定期對話。',
+  'tasks.yourAutomations': '我的自動化',
+  'tasks.empty.title': '尚無自動化',
+  'tasks.empty.hint': '從範本建立一個，或從空白排程開始。',
+  'tasks.ingestSource': '匯入來源',
+  'tasks.templates': '範本',
   'tasks.comingSoon': '即將推出',
 
   'routines.title': '自動化',

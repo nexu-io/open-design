@@ -1566,4 +1566,13 @@ export const esES: Dict = {
   'diagnostics.exporting': 'Exportando…',
   'diagnostics.exportSuccess': 'Diagnósticos guardados en {path}',
   'diagnostics.exportFailed': 'No se pudieron exportar los diagnósticos: {message}',
+  // Automations page — #2917
+  'tasks.heading': 'Automatizaciones',
+  'tasks.eyebrow': 'Sesiones de agente programadas',
+  'tasks.heroParagraph': 'Planifica conversaciones recurrentes para trabajo en proyectos, resúmenes de Orbit y artefactos en vivo.',
+  'tasks.yourAutomations': 'Mis automatizaciones',
+  'tasks.empty.title': 'Aún no hay automatizaciones',
+  'tasks.empty.hint': 'Crea una desde una plantilla o empieza con un horario en blanco.',
+  'tasks.ingestSource': 'Importar fuente',
+  'tasks.templates': 'Plantillas',
 };
