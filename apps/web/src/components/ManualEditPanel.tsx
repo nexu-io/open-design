@@ -27,6 +27,7 @@ export function ManualEditPanel({
   draft,
   error,
   canUndo,
+  busy,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
