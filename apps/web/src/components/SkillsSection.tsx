@@ -34,6 +34,7 @@ import {
 interface Props {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  onSkillsRefresh?: () => Promise<void> | void;
 }
 
 type SourceFilter = 'all' | 'user' | 'built-in';
@@ -68,7 +69,7 @@ function parseTriggers(raw: string): string[] {
     .filter(Boolean);
 }
 
-export function SkillsSection({ cfg, setCfg }: Props) {
+export function SkillsSection({ cfg, setCfg, onSkillsRefresh }: Props) {
   const t = useT();
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -292,6 +293,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
     }
     const updated = result.skill;
     await refresh();
+    await onSkillsRefresh?.();
     setBodyById((cur) => ({ ...cur, [updated.id]: body }));
     // Drop the cached file tree for this id so the next expand
     // re-walks the on-disk folder; SKILL.md may have been the only
@@ -305,7 +307,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
     setEditingId(null);
     setCreating(false);
     setDraft(EMPTY_DRAFT);
-  }, [draft, draftSaving, editingId, refresh]);
+  }, [draft, draftSaving, editingId, onSkillsRefresh, refresh]);
 
   const armDelete = useCallback((id: string) => {
     setConfirmDeleteId(id);
@@ -324,6 +326,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
       }
       setConfirmDeleteId(null);
       await refresh();
+      await onSkillsRefresh?.();
       setBodyById((cur) => {
         const next = { ...cur };
         delete next[id];
@@ -347,7 +350,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
         setDraft(EMPTY_DRAFT);
       }
     },
-    [editingId, expandedId, refresh, setCfg],
+    [editingId, expandedId, onSkillsRefresh, refresh, setCfg],
   );
 
   const toggleEnabled = useCallback(

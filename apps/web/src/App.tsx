@@ -607,6 +607,11 @@ export function App() {
     setDesignSystems(list);
   }, []);
 
+  const refreshSkills = useCallback(async () => {
+    const list = await fetchSkills();
+    setSkills(list);
+  }, []);
+
   const refreshTemplates = useCallback(async () => {
     const list = await listTemplates();
     setTemplates(list);
@@ -1513,6 +1518,7 @@ export function App() {
             setSettingsOpen(false);
           }}
           onRefreshAgents={refreshAgents}
+          onSkillsRefresh={refreshSkills}
           daemonMediaProviders={daemonMediaProviders}
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
