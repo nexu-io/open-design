@@ -1,0 +1,160 @@
+{
+  "mcpServers": {
+    "agent-browser": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "agent-browser"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~60k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable agent-browser"
+      }
+    },
+    "browserbase": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "browserbase"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~60k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable browserbase"
+      }
+    },
+    "coderabbit": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "coderabbit"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~65k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable coderabbit"
+      }
+    },
+    "context7": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "context7"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~65k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable context7"
+      }
+    },
+    "desktop-commander": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "desktop-commander"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~3k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable desktop-commander"
+      }
+    },
+    "filesystem": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "filesystem"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~65k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable filesystem"
+      }
+    },
+    "github": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "github"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~50k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable github"
+      }
+    },
+    "gitkraken": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "gitkraken"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~50k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable gitkraken"
+      }
+    },
+    "jules": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "jules"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~50k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable jules"
+      }
+    },
+    "mac-ui-bridge": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "mac-ui-bridge"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~2k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable mac-ui-bridge"
+      }
+    },
+    "sequential-thinking": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "sequential-thinking"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~50k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable sequential-thinking"
+      }
+    },
+    "tiger": {
+      "args": [
+        "/Users/jederlichman/Development/Projects/dev-infra/.claude/worktrees/fix-onboard-bash32/scripts/mcp-server",
+        "tiger"
+      ],
+      "command": "bash",
+      "disabled": true,
+      "metadata": {
+        "cost": "~50k tokens",
+        "reason": "Disabled via mcp-toggle",
+        "reenable": "mcp enable tiger"
+      }
+    }
+  }
+}

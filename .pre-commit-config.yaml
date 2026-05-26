@@ -1,0 +1,62 @@
+# .pre-commit-config.yaml
+# Base pre-commit hooks for project security and quality
+# Distributed by dev-infra init (https://github.com/jederlichman/dev-infra)
+#
+# Setup:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Manual run:
+#   pre-commit run --all-files
+
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  # Detect secrets before they're committed
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+        additional_dependencies: ['pyyaml']
+        exclude: |
+          (?x)^(
+            package-lock\.json|
+            yarn\.lock|
+            \.secrets\.baseline|
+            node_modules/.*
+          )$
+
+  # Fast structural checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: no-commit-to-branch
+        args: ["--branch", "main", "--branch", "master"]
+        stages: [pre-commit]
+
+  # Gitleaks for comprehensive secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  # ShellCheck for bash scripts (remove this block if your project has no shell scripts)
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: ["--severity=warning"]
+        types: [shell]
