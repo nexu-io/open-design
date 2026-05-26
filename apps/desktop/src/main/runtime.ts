@@ -16,6 +16,7 @@ import {
 import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
+import { openProjectDirectoryInFileManager } from "./open-project-directory.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 
@@ -1198,7 +1199,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const validated = await validateExistingDirectory(resolved.context.resolvedDir);
     if (!validated.ok) return `open-path: ${validated.reason}`;
     try {
-      return await shell.openPath(validated.resolved);
+      return await openProjectDirectoryInFileManager(validated.resolved);
     } catch (err) {
       return err instanceof Error ? err.message : String(err);
     }
