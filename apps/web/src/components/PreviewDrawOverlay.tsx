@@ -369,7 +369,8 @@ export function PreviewDrawOverlay({
   const overlayPointer = mode === 'draw' ? 'auto' : 'none';
   const showCanvas = active || mode === 'draw' || hasInk;
   const canSubmit = hasInk || Boolean(captureTarget) || Boolean(note.trim());
-  const canSend = canSubmit;
+  const canSend = canSubmit && !sendDisabled;
+  const submitAction: 'queue' | 'send' = canSend ? 'send' : 'queue';
 
   return (
     <div
@@ -460,14 +461,19 @@ export function PreviewDrawOverlay({
               fontSize: 13,
               transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') void send('queue'); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void send(submitAction);
+              }
+            }}
           />
           <button
             type="button"
             onClick={() => void send('queue')}
             disabled={sending || !canSubmit}
             style={{
-              ...ghostStyle,
+              ...(submitAction === 'queue' ? pillStyle(true) : ghostStyle),
               opacity: canSubmit ? 1 : 0.4,
               cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
             }}
@@ -487,7 +493,7 @@ export function PreviewDrawOverlay({
             disabled={sending || !canSend}
             title={sendDisabled ? sendDisabledReason : undefined}
             style={{
-              ...pillStyle(true),
+              ...pillStyle(submitAction === 'send'),
               opacity: canSend ? 1 : 0.4,
               cursor: sending ? 'wait' : (canSend ? 'pointer' : 'not-allowed'),
             }}
