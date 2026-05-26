@@ -3896,6 +3896,7 @@ function HtmlViewer({
   const [sendingBoardBatch, setSendingBoardBatch] = useState(false);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
+  const [htmlEditToast, setHtmlEditToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -6370,7 +6371,11 @@ function HtmlViewer({
                 }}
                 onInvalidStyle={cancelManualEditPendingStyles}
                 onApplyPatch={(patch, label) => {
-                  void applyManualEdit(patch, label);
+                  void (async () => {
+                    const ok = await applyManualEdit(patch, label);
+                    // TODO i18n key: editor.htmlUpdated
+                    if (ok && patch.kind === 'set-outer-html') setHtmlEditToast('HTML updated');
+                  })();
                 }}
                 onError={setManualEditError}
                 onClearSelection={() => {
@@ -6535,6 +6540,15 @@ function HtmlViewer({
                   message={templateSavedToast}
                   ttlMs={2200}
                   onDismiss={() => setTemplateSavedToast(null)}
+                />
+              </div>
+            ) : null}
+            {htmlEditToast ? (
+              <div className="comment-toast-anchor">
+                <Toast
+                  message={htmlEditToast}
+                  ttlMs={1500}
+                  onDismiss={() => setHtmlEditToast(null)}
                 />
               </div>
             ) : null}
