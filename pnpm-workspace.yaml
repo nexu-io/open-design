@@ -10,10 +10,16 @@ overrides:
   fast-uri: 3.1.2
   hono: 4.12.19
   ip-address: 10.2.0
-  postcss: 8.5.14
+  postcss: 8.5.15
+  protobufjs: 8.4.0
+  qs: 6.15.2
   yaml: 2.9.0
 
 onlyBuiltDependencies:
   - better-sqlite3
+  - core-js
   - electron
+  - electron-winstaller
   - esbuild
+  - protobufjs
+  - sharp

@@ -132,6 +132,13 @@ export function validateArtifactManifestInput(
     }
   }
 
+  if (manifest.primary !== undefined) {
+    if (manifest.primary !== true) {
+      const primaryErr = validateSupportingPath(manifest.primary);
+      if (primaryErr) return { ok: false, error: `artifactManifest.primary ${primaryErr}` };
+    }
+  }
+
   if (manifest.supportingFiles !== undefined) {
     if (!Array.isArray(manifest.supportingFiles)) {
       return { ok: false, error: 'artifactManifest.supportingFiles must be an array' };
@@ -216,6 +223,12 @@ export function sanitizeManifest(
     renderer: manifest.renderer,
     status: typeof manifest.status === 'string' && ALLOWED_STATUS.has(manifest.status) ? manifest.status : 'complete',
     exports: manifest.exports,
+    primary:
+      manifest.primary === true
+        ? true
+        : typeof manifest.primary === 'string'
+          ? manifest.primary.replace(/\\/g, '/')
+          : undefined,
     supportingFiles: Array.isArray(manifest.supportingFiles)
       ? manifest.supportingFiles.map((x) => String(x).replace(/\\/g, '/'))
       : undefined,

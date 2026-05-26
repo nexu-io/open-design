@@ -35,7 +35,13 @@
   (() => {
     const IMG_SELECTOR = 'img[data-precise-src]';
     const VIDEO_SELECTOR = 'video[data-precise-load]';
-    const IMG_ROOT_MARGIN = '300px 0px';
+    // 1500px is roughly two laptop viewports of pre-load: enough that
+    // a fast scroll through long catalogs (e.g. /skills/instructions/
+    // with 90+ rows of typographic fallback cards) keeps thumbnails
+    // ready instead of holding placeholders until each row settles.
+    // Trade-off: a slightly larger Cloudflare CDN burst on initial
+    // load — acceptable because every preview is a small static PNG.
+    const IMG_ROOT_MARGIN = '1500px 0px';
     const VIDEO_ROOT_MARGIN = '600px 0px';
 
     const swapImage = (img) => {

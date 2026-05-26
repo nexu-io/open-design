@@ -2914,6 +2914,13 @@ export function SettingsDialog({
                   <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
                 </div>
               </div>
+              <p
+                className="settings-test-status warn settings-byok-no-file-tools-notice"
+                role="note"
+                data-testid="settings-byok-no-file-tools-notice"
+              >
+                {t('settings.byokNoFileToolsNotice')}
+              </p>
               {byokPreconditionNotice ? (
                 <p
                   className="settings-test-status error"

@@ -16,7 +16,7 @@ export const traeCliAgentDef = {
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
     fallbackModels: [DEFAULT_MODEL_OPTION],
-    buildArgs: () => ['acp', 'serve'],
+    buildArgs: () => ['acp', 'serve', '--yolo'],
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',

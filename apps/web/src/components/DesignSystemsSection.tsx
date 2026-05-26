@@ -109,10 +109,13 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   useEffect(() => {
     if (!highlightedDesignSystemId) return;
     const raf = window.requestAnimationFrame(() => {
-      cardRefs.current.get(highlightedDesignSystemId)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      const card = cardRefs.current.get(highlightedDesignSystemId);
+      if (typeof card?.scrollIntoView === 'function') {
+        card.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
     });
     const timeout = window.setTimeout(() => {
       setHighlightedDesignSystemId((current) =>

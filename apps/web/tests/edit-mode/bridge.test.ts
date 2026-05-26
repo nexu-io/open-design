@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import {
   buildManualEditBridge,
@@ -337,5 +337,60 @@ describe('manual edit bridge target normalization', () => {
 
     expect(bridge).toContain('isLayoutContainer: isLayoutContainer(el)');
     expect(bridge).toContain("display.indexOf('flex') >= 0 || display.indexOf('grid') >= 0");
+  });
+
+  it('turns text targets into inline editors and commits changed text', () => {
+    const dom = new JSDOM(
+      `<main><h1 data-od-id="title">Original title</h1></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    title.dispatchEvent(new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 8,
+      clientY: 8,
+    }));
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(title.getAttribute('data-od-editing')).toBe('true');
+
+    title.textContent = 'Edited title';
+    title.dispatchEvent(new dom.window.FocusEvent('blur', { bubbles: false }));
+
+    expect(title.hasAttribute('contenteditable')).toBe(false);
+    expect(title.hasAttribute('data-od-editing')).toBe(false);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-text-commit',
+      id: 'title',
+      value: 'Edited title',
+    }, '*');
+
+    dom.window.close();
+  });
+
+  it('cancels inline text edits with Escape without posting a commit', () => {
+    const dom = new JSDOM(
+      `<main><p data-od-id="body">Original body</p></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const body = dom.window.document.querySelector('[data-od-id="body"]') as HTMLElement;
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    body.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    body.textContent = 'Draft body';
+    body.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }));
+
+    expect(body.textContent).toBe('Original body');
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-text-commit',
+    }), '*');
+
+    dom.window.close();
   });
 });

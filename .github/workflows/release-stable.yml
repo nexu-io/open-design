@@ -503,7 +503,7 @@ jobs:
             "--namespace", "${{ needs.metadata.outputs.win_namespace }}",
             "--portable",
             "--app-version", "${{ needs.metadata.outputs.release_version }}",
-            "--to", "nsis",
+            "--to", "all",
             "--json"
           )
           "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -521,7 +521,7 @@ jobs:
               --namespace "${{ needs.metadata.outputs.win_namespace }}" `
               --portable `
               --app-version "${{ needs.metadata.outputs.release_version }}" `
-              --to nsis `
+              --to all `
               --json
             if ($LASTEXITCODE -ne 0) {
               throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"
@@ -888,6 +888,7 @@ jobs:
           R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
           R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
           R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+          R2_WIN_PORTABLE_ZIP_URL: ${{ steps.r2.outputs.win_portable_zip_url }}
         run: bash .github/scripts/release/r2/verify.sh
 
       - name: Promote draft to published latest
@@ -921,6 +922,7 @@ jobs:
           R2_VERSION_PREFIX: ${{ steps.r2.outputs.version_prefix }}
           R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
           R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+          R2_WIN_PORTABLE_ZIP_URL: ${{ steps.r2.outputs.win_portable_zip_url }}
         run: bash .github/scripts/release/r2/summary.sh
 
       - name: Cleanup workflow artifacts

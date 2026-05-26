@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
+import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 import type { ProjectFile } from '../../src/types';
 
 const panelState = vi.hoisted(() => ({
@@ -21,6 +22,19 @@ vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
 });
 
 import { FileViewer } from '../../src/components/FileViewer';
+
+function openManualTools() {
+  // Manual tools now live directly in the primary toolbar.
+}
+
+function clickManualTool(testId: string) {
+  openManualTools();
+  fireEvent.click(screen.getByTestId(testId));
+}
+
+function clickAgentTool(testId: string) {
+  fireEvent.click(screen.getByTestId(testId));
+}
 
 afterEach(() => {
   cleanup();
@@ -63,16 +77,17 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    clickManualTool('manual-edit-mode-toggle');
     await waitFor(() => expect(panelState.props).not.toBeNull());
 
     act(() => {
       panelState.props?.onStyleChange?.('hero', { color: '#ef4444' }, 'Style: Hero');
     });
-    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    clickAgentTool('draw-overlay-toggle');
 
     await waitFor(() => expect(savedSources).toHaveLength(1));
     expect(savedSources[0]).toContain('rgb(239, 68, 68)');
+    openManualTools();
     expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('false');
 
@@ -84,7 +99,10 @@ describe('FileViewer manual edit history regressions', () => {
       await saveResponse;
     });
 
-    await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false'));
+    await waitFor(() => {
+      openManualTools();
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -122,7 +140,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    clickManualTool('manual-edit-mode-toggle');
     await waitFor(() => expect(panelState.props).not.toBeNull());
 
     act(() => {
@@ -194,8 +212,6 @@ describe('FileViewer manual edit history regressions', () => {
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(panelState.props?.draft.fullSource).toContain('Hero');
     });
-    const postMessageSpy = vi.spyOn(getActivePreviewFrame().contentWindow!, 'postMessage');
-
     act(() => {
       panelState.props?.onApplyPatch(
         { id: 'hero', kind: 'set-text', value: 'Updated hero' },
@@ -206,13 +222,75 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources).toHaveLength(1));
     await waitFor(() => expect(panelState.props?.draft.fullSource).toContain('Updated hero'));
     await waitFor(() => {
-      expect(postMessageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'od:srcdoc-transport-activate',
-          html: expect.stringContaining('Updated hero'),
-        }),
-        '*',
+      expect(getActivePreviewFrame().srcdoc).toContain('Updated hero');
+    });
+  });
+
+  it('clears the selected target after deleting an element', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    let persistedSource = initialSource;
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        persistedSource = payload.content;
+        savedSources.push(payload.content);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(persistedSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    await act(async () => {
+      await panelState.props?.onSelectTarget(heroTarget());
+    });
+    await waitFor(() => expect(panelState.props?.selectedTarget?.id).toBe('hero'));
+    expect(panelState.props?.draft.text).toBe('Hero');
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { id: 'hero', kind: 'remove-element' },
+        'Delete element',
       );
+    });
+
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).not.toContain('data-od-id="hero"');
+    expect(savedSources[0]).toContain('data-od-id="body"');
+    await waitFor(() => expect(panelState.props?.selectedTarget).toBeNull());
+    expect(panelState.props?.draft.text).toBe('');
+    expect(panelState.props?.draft.fullSource).not.toContain('data-od-id="hero"');
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'od-edit-selected-target', id: null }),
+      '*',
+    );
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .not.toContain('data-od-id="hero"');
     });
   });
 });
@@ -234,5 +312,22 @@ function htmlPreviewFile(): ProjectFile {
       renderer: 'html',
       exports: ['html'],
     },
+  };
+}
+
+function heroTarget(): ManualEditTarget {
+  return {
+    id: 'hero',
+    kind: 'text',
+    label: 'Hero',
+    tagName: 'h1',
+    className: '',
+    text: 'Hero',
+    rect: { x: 0, y: 0, width: 120, height: 40 },
+    fields: { text: 'Hero' },
+    attributes: { 'data-od-id': 'hero' },
+    styles: emptyManualEditStyles(),
+    isLayoutContainer: false,
+    outerHtml: '<h1 data-od-id="hero">Hero</h1>',
   };
 }

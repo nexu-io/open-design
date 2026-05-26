@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -19,8 +19,9 @@ import {
   listConversations,
   listMessages,
   loadTabs,
+  saveTabs,
 } from '../../src/state/projects';
-import { fetchPreviewComments } from '../../src/providers/registry';
+import { fetchPreviewComments, fetchProjectFiles } from '../../src/providers/registry';
 
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
@@ -98,7 +99,21 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: () => <div data-testid="file-workspace" />,
+  FileWorkspace: ({ tabsState, onTabsStateChange }: {
+    tabsState: { tabs: string[]; active: string | null };
+    onTabsStateChange: (state: { tabs: string[]; active: string | null }) => void;
+  }) => (
+    <div data-testid="file-workspace">
+      <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
+      <button
+        type="button"
+        data-testid="close-all-tabs"
+        onClick={() => onTabsStateChange({ tabs: [], active: null })}
+      >
+        close all tabs
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -113,7 +128,9 @@ const mockedListConversations = vi.mocked(listConversations);
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedListMessages = vi.mocked(listMessages);
 const mockedLoadTabs = vi.mocked(loadTabs);
+const mockedSaveTabs = vi.mocked(saveTabs);
 const mockedFetchPreviewComments = vi.mocked(fetchPreviewComments);
+const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
 const mockedNavigate = vi.mocked(navigate);
 
 const config: AppConfig = {
@@ -174,6 +191,7 @@ describe('ProjectView tab URL hydration', () => {
     mockedCreateConversation.mockResolvedValue(conversation);
     mockedListMessages.mockResolvedValue([]);
     mockedLoadTabs.mockResolvedValue({ tabs: ['index.html'], active: 'index.html' });
+    mockedFetchProjectFiles.mockResolvedValue([]);
     mockedFetchPreviewComments.mockResolvedValue([]);
   });
 
@@ -250,5 +268,71 @@ describe('ProjectView tab URL hydration', () => {
         { replace: true },
       );
     });
+  });
+
+  it('does not reopen the primary file after the user closes the last tab', async () => {
+    mockedLoadTabs.mockResolvedValue({ tabs: [], active: null });
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        type: 'file',
+        size: 1,
+        mtime: 1,
+        mime: 'text/html',
+        kind: 'html',
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: 'Index',
+          entry: 'index.html',
+          renderer: 'html',
+          primary: true,
+          exports: ['html'],
+        },
+      },
+    ]);
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe('index.html'));
+    expect(mockedSaveTabs).toHaveBeenCalledWith(project.id, { tabs: ['index.html'], active: 'index.html' });
+
+    fireEvent.click(screen.getByTestId('close-all-tabs'));
+
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
+    await waitFor(() => {
+      expect(mockedSaveTabs.mock.calls.at(-1)).toEqual([project.id, { tabs: [], active: null }]);
+    });
+    expect(mockedSaveTabs).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not auto-open the primary file when saved tabs were explicitly empty', async () => {
+    mockedLoadTabs.mockResolvedValue({ tabs: [], active: null, hasSavedState: true });
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        type: 'file',
+        size: 1,
+        mtime: 1,
+        mime: 'text/html',
+        kind: 'html',
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: 'Index',
+          entry: 'index.html',
+          renderer: 'html',
+          primary: true,
+          exports: ['html'],
+        },
+      },
+    ]);
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
+    expect(mockedSaveTabs).not.toHaveBeenCalled();
   });
 });

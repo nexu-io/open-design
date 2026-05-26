@@ -1,0 +1,122 @@
+---
+/*
+ * /plugins/templates/ — visual templates landing page.
+ *
+ * Reads `plugins/_official/<bucket>/open-design.json` (the daemon's
+ * bundled-plugin registry) and groups by the seven artifact kinds
+ * the in-app Plugins home uses (Prototype / Live Artifact / Slides /
+ * Image / Video / HyperFrames / Audio). Counts therefore match the
+ * counts visitors see when they open Open Design itself.
+ *
+ * `design-systems` and `atoms` buckets are excluded — the former has
+ * its own /plugins/systems/ tile, the latter is infrastructure the
+ * client filters out of the public library.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import PluginRow from '../../../_components/plugin-row.astro';
+import { getBundledPlugins, type BundledPluginRecord } from '../../../_lib/bundled-plugins';
+import {
+  PLUGIN_CATEGORIES,
+  bundledRecordOf,
+  categorizePlugin,
+  type PluginCategorySlug,
+} from '../../../_lib/plugin-facets';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+const all = getBundledPlugins().filter((p) => p.bucket !== 'design-systems');
+
+interface ListItem {
+  record: BundledPluginRecord;
+  category: PluginCategorySlug | null;
+}
+
+const items: ListItem[] = all.map((record) => ({
+  record,
+  category: categorizePlugin(bundledRecordOf(record)),
+}));
+
+// Templates view = anything that lands in one of the seven artifact
+// kinds. The remainder (categorize === null) renders on /plugins/skills/.
+const templates = items.filter((i) => i.category !== null);
+
+const categoryCounts = new Map<PluginCategorySlug, number>();
+for (const t of templates) {
+  if (t.category) {
+    categoryCounts.set(t.category, (categoryCounts.get(t.category) ?? 0) + 1);
+  }
+}
+
+const totalCount = templates.length;
+const title = `Templates · ${totalCount} · Open Design`;
+const description = `${totalCount} runnable visual templates — prototypes, slides, image and video generators, motion compositions, audio kits. Mirrors the in-app Plugins home so the catalog reads identically here and inside Open Design.`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL('/plugins/templates/', Astro.site).toString(),
+  numberOfItems: totalCount,
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>Plugins</a>
+    <span>/</span>
+    <span aria-current="page">Templates</span>
+  </nav>
+
+  <header class="catalog-head">
+    <span class="label">Plugins · Templates</span>
+    <h1 class="display">{totalCount} runnable templates<span class="dot">.</span></h1>
+    <p class="lead">
+      Every template ships a working preview — the catalog row’s thumbnail comes straight from
+      the manifest poster the agent uses inside the product. Browse all of them below, or jump
+      to one of the seven artifact kinds.
+    </p>
+  </header>
+
+  {/*
+    Same artifact-kind rail the category sub-pages render. On the
+    flat /plugins/templates/ index the `All` chip is the active one,
+    so visitors see at a glance that they're looking at every kind.
+    Each chip URL ends in `#filter-strip` so cross-page navigation
+    keeps the chip rail in view instead of scrolling back to the
+    page header.
+  */}
+  <section class="filter-strip" id="filter-strip" aria-label="Artifact kinds">
+    <div class="filter-group">
+      <span class="filter-label">Artifact kind</span>
+      <ul>
+        <li>
+          <a class="chip chip-link is-active" href={href('/plugins/templates/#filter-strip')} aria-current="page">All<span class="chip-num">{totalCount}</span></a>
+        </li>
+        {PLUGIN_CATEGORIES.map((cat) => {
+          const count = categoryCounts.get(cat.slug) ?? 0;
+          if (count === 0) return null;
+          return (
+            <li>
+              <a class="chip chip-link" href={href(`/plugins/templates/${cat.slug}/#filter-strip`)}>
+                {cat.label}<span class="chip-num">{count}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  </section>
+
+  <section class="catalog-grid catalog-grid-skills" aria-label="All templates">
+    <ol>
+      {templates.map((item, idx) => (
+        <PluginRow item={{ kind: 'bundled', record: item.record }} index={idx} />
+      ))}
+    </ol>
+  </section>
+</Layout>

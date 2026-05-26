@@ -24,6 +24,15 @@ afterEach(() => {
   }
 });
 
+describe("resolveToolPackConfig win build target", () => {
+  it("accepts the portable zip target and rejects unsupported values", () => {
+    expect(resolveToolPackConfig("win", { to: "zip" }).to).toBe("zip");
+    expect(resolveToolPackConfig("win", { to: "all" }).to).toBe("all");
+    expect(resolveToolPackConfig("win", { to: "nsis" }).to).toBe("nsis");
+    expect(() => resolveToolPackConfig("win", { to: "dmg" })).toThrow(/unsupported win --to target: dmg/);
+  });
+});
+
 describe("resolveToolPackConfig namespace defaults", () => {
   it("keeps ordinary local builds on the default namespace", () => {
     expect(resolveToolPackConfig("mac").namespace).toBe("default");

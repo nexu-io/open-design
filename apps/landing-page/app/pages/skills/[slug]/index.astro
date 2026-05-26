@@ -2,12 +2,16 @@
 /*
  * /skills/<slug>/ — a detail page per skill.
  *
- * Mostly a structured read-out of SKILL.md frontmatter (description,
- * triggers, mode/scenario/platform, featured rank) plus deep links
- * to the GitHub source. We deliberately don't render the full
- * SKILL.md body to avoid duplicating the README and to keep the page
- * scan-friendly for both humans and search engines.
+ * Two flavours render slightly differently:
+ *   - `template` skills get a click-to-expand iframe of their
+ *     `example.html` demo and stay deliberately brief — the demo is the
+ *     content, the README is one click away on GitHub.
+ *   - `instruction` skills (no runnable demo) instead render the full
+ *     SKILL.md body inline, so the page reads like a brief: what the
+ *     skill does, when it triggers, how to use it. Otherwise the page
+ *     would be a one-line description and a row of CTAs.
  */
+import { getEntry, render } from 'astro:content';
 import Layout from '../../../_components/sub-page-layout.astro';
 import LazyImg from '../../../_components/lazy-img.astro';
 import { getSkillRecords, type SkillRecord } from '../../../_lib/catalog';
@@ -167,6 +171,22 @@ const related = all
   .filter((s) => s.mode === skill.mode || s.scenario === skill.scenario)
   .slice(0, 4);
 
+/*
+ * Instruction skills don't have a runnable demo to iframe — to avoid
+ * a near-empty detail page, render the SKILL.md prose inline so the
+ * page reads like a brief. Template skills keep the page deliberately
+ * brief because their demo is the content; their full SKILL.md is one
+ * "Find on GitHub" click away.
+ *
+ * Astro 6 exposes the markdown pipeline through a top-level
+ * `render(entry)` helper rather than the legacy `entry.render()`
+ * method. The output (heading anchors, smart-typography, GFM
+ * tables) styles cleanly with the existing `.detail-md` rules.
+ */
+const skillEntry =
+  skill.kind === 'instruction' ? await getEntry('skills', `${skill.slug}/SKILL`) : null;
+const SkillBody = skillEntry ? (await render(skillEntry)).Content : null;
+
 const jsonLd = [
   {
     '@context': 'https://schema.org',
@@ -251,16 +271,16 @@ const jsonLd = [
       </div>
     </header>
 
-    {skill.previewUrl && (
+    {skill.kind === 'template' && skill.previewUrl && (
       <figure class="detail-preview">
         {/*
-          Click-to-expand interactive preview. The thumb itself is the
-          summary of a `<details>` element — clicking the image opens
+          Click-to-expand interactive preview. Only template-kind skills
+          ship a runnable example.html, so this block is gated on kind
+          rather than just `previewUrl` — instruction skills now have a
+          synthesized cover thumbnail too, but no iframe target. The
+          thumb is the summary of a `<details>` element: clicking opens
           the live iframe, replacing the thumb with the canonical
-          `<slug>/example.html` rendered inside a sandboxed frame. A
-          hover overlay on the thumb hints "Click for live preview ↗"
-          so the affordance is discoverable. The iframe loads lazily,
-          only fetching once the user actually expands.
+          `<slug>/example.html` rendered inside a sandboxed frame.
         */}
         <details class="detail-preview-live">
           <summary class="detail-preview-thumb-trigger" aria-label={`Open interactive preview for ${skill.name}`}>
@@ -419,6 +439,13 @@ const jsonLd = [
       <section class="detail-block">
         <h2>{ui.catalog.skills.examplePrompt}</h2>
         <pre class="example-prompt">{skill.examplePrompt}</pre>
+      </section>
+    )}
+
+    {SkillBody && (
+      <section class="detail-block detail-md">
+        <h2>About this skill</h2>
+        <SkillBody />
       </section>
     )}
 

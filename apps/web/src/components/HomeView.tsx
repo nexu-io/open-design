@@ -1614,15 +1614,19 @@ function designSystemOptionsForHome(
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
       return a.title.localeCompare(b.title);
     });
+  const autoOption: HomeDesignSystemOption = {
+    id: AUTO_DESIGN_SYSTEM_OPTION_ID,
+    title: t('homeHero.footer.autoDesignSystem'),
+    isDefault: false,
+    auto: true,
+    summary: t('homeHero.footer.autoDesignSystemSummary'),
+  };
+  const defaultOption = systemOptions.find((option) => option.isDefault);
+  if (!defaultOption) return [autoOption, ...systemOptions];
   return [
-    {
-      id: AUTO_DESIGN_SYSTEM_OPTION_ID,
-      title: t('homeHero.footer.autoDesignSystem'),
-      isDefault: false,
-      auto: true,
-      summary: t('homeHero.footer.autoDesignSystemSummary'),
-    },
-    ...systemOptions,
+    defaultOption,
+    autoOption,
+    ...systemOptions.filter((option) => option.id !== defaultOption.id),
   ];
 }
 

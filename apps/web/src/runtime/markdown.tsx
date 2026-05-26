@@ -11,7 +11,9 @@
  * Output is a React fragment of typed elements — no dangerouslySetInnerHTML,
  * so untrusted text can't smuggle markup through.
  */
-import { Fragment, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useT } from '../i18n';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 
 export type MarkdownLinkClickHandler = (
   href: string,
@@ -47,8 +49,18 @@ type Block =
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
   | { kind: 'code'; lang: string | null; body: string }
+  | { kind: 'codeComment'; comment: CodeCommentDirective }
   | { kind: 'table'; aligns: TableAlign[]; headers: string[]; rows: string[][] }
   | { kind: 'hr' };
+
+interface CodeCommentDirective {
+  title: string;
+  body: string;
+  file: string;
+  start?: number;
+  end?: number;
+  priority?: number;
+}
 
 function splitTableCells(line: string): string[] {
   // Walk char-by-char so we can respect three GFM cell-content rules without
@@ -123,6 +135,12 @@ function parseBlocks(input: string): Block[] {
   while (i < lines.length) {
     const line = lines[i] ?? '';
     if (line.trim() === '') {
+      i++;
+      continue;
+    }
+    const codeComment = parseCodeCommentDirective(line);
+    if (codeComment) {
+      out.push({ kind: 'codeComment', comment: codeComment });
       i++;
       continue;
     }
@@ -202,6 +220,7 @@ function parseBlocks(input: string): Block[] {
       if (/^#{1,4}\s+/.test(next)) break;
       if (/^\s*[-*+]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
+      if (parseCodeCommentDirective(next)) break;
       if (isTableStartAt(lines, i)) break;
       buf.push(next);
       i++;
@@ -239,10 +258,15 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
   }
   if (block.kind === 'code') {
     return (
-      <pre key={key} className="md-code">
-        <code data-lang={block.lang ?? undefined}>{block.body}</code>
-      </pre>
+      <MarkdownCodeBlock
+        key={key}
+        body={block.body}
+        lang={block.lang}
+      />
     );
+  }
+  if (block.kind === 'codeComment') {
+    return <CodeCommentBlock key={key} comment={block.comment} />;
   }
   if (block.kind === 'table') {
     const { aligns, headers, rows } = block;
@@ -277,6 +301,116 @@ function renderBlock(block: Block, key: number, options?: RenderMarkdownOptions)
     return <hr key={key} className="md-hr" />;
   }
   return null;
+}
+
+function parseCodeCommentDirective(line: string): CodeCommentDirective | null {
+  const match = /^\s*::code-comment\{([\s\S]*)\}\s*$/.exec(line);
+  if (!match) return null;
+  const attrs = parseDirectiveAttributes(match[1] ?? '');
+  const body = attrs.get('body')?.trim() ?? '';
+  const file = attrs.get('file')?.trim() ?? '';
+  if (!body || !file) return null;
+  const title = attrs.get('title')?.trim() || 'Code comment';
+  const start = parsePositiveInt(attrs.get('start'));
+  const end = parsePositiveInt(attrs.get('end'));
+  const priority = parsePositiveInt(attrs.get('priority'));
+  return {
+    title,
+    body,
+    file,
+    ...(start === undefined ? {} : { start }),
+    ...(end === undefined ? {} : { end }),
+    ...(priority === undefined ? {} : { priority }),
+  };
+}
+
+function parseDirectiveAttributes(raw: string): Map<string, string> {
+  const attrs = new Map<string, string>();
+  const attrRe = /([A-Za-z_][\w-]*)\s*=\s*("([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|[^\s}]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = attrRe.exec(raw))) {
+    const key = match[1]!;
+    const quoted = match[3] ?? match[4];
+    const value = quoted ?? match[2] ?? '';
+    attrs.set(key, unescapeDirectiveValue(value.replace(/^['"]|['"]$/g, '')));
+  }
+  return attrs;
+}
+
+function unescapeDirectiveValue(value: string): string {
+  return value.replace(/\\(["'\\])/g, '$1');
+}
+
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function CodeCommentBlock({ comment }: { comment: CodeCommentDirective }) {
+  const location = codeCommentLocation(comment);
+  return (
+    <article className="md-code-comment" data-priority={comment.priority ?? undefined}>
+      <div className="md-code-comment-head">
+        <span className="md-code-comment-icon" aria-hidden>!</span>
+        <strong>{renderInline(comment.title)}</strong>
+        {comment.priority ? (
+          <span className="md-code-comment-priority">P{comment.priority}</span>
+        ) : null}
+      </div>
+      <p className="md-code-comment-body">{renderInline(comment.body)}</p>
+      <code className="md-code-comment-file">{location}</code>
+    </article>
+  );
+}
+
+function codeCommentLocation(comment: CodeCommentDirective): string {
+  if (!comment.start) return comment.file;
+  if (comment.end && comment.end !== comment.start) {
+    return `${comment.file}:${comment.start}-${comment.end}`;
+  }
+  return `${comment.file}:${comment.start}`;
+}
+
+function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+  const copyLabel = copied ? t('fileViewer.copied') : t('fileViewer.copy');
+
+  useEffect(() => () => {
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function handleCopy() {
+    const ok = await copyToClipboard(body);
+    if (!ok) return;
+    setCopied(true);
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      resetTimerRef.current = null;
+    }, 1600);
+  }
+
+  return (
+    <div className="md-code-block">
+      <div className="md-code-actions">
+        <button
+          type="button"
+          className="md-code-action"
+          onClick={() => { void handleCopy(); }}
+          aria-label={copyLabel}
+          title={copyLabel}
+        >
+          {copyLabel}
+        </button>
+      </div>
+      <pre className="md-code">
+        <code data-lang={lang ?? undefined}>{body}</code>
+      </pre>
+    </div>
+  );
 }
 
 // Allowed schemes / forms for image `src` attributes. The BYOK chat

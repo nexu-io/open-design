@@ -3,6 +3,7 @@ import type {
   PreviewCommentMember,
   PreviewCommentPosition,
   PreviewCommentSelectionKind,
+  PreviewAnnotationStyle,
   PreviewVisualMarkKind,
 } from './comments';
 import type { ResearchOptions } from './research';
@@ -219,6 +220,7 @@ export interface ChatCommentAttachment {
   currentText: string;
   pagePosition: PreviewCommentPosition;
   htmlHint: string;
+  style?: PreviewAnnotationStyle;
   selectionKind?: ChatCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];

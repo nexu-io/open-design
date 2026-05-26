@@ -207,6 +207,76 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     return fallback;
   }
+  function caretRangeFromClick(clickEvent){
+    try {
+      if (document.caretPositionFromPoint) {
+        var position = document.caretPositionFromPoint(clickEvent.clientX, clickEvent.clientY);
+        if (!position) return null;
+        var positionRange = document.createRange();
+        positionRange.setStart(position.offsetNode, position.offset);
+        positionRange.collapse(true);
+        return positionRange;
+      }
+      if (document.caretRangeFromPoint) {
+        return document.caretRangeFromPoint(clickEvent.clientX, clickEvent.clientY);
+      }
+    } catch (e) {}
+    return null;
+  }
+  function placeCaretFromClick(clickEvent, el){
+    var range = caretRangeFromClick(clickEvent);
+    if (!range) {
+      range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+    }
+    try {
+      var sel = window.getSelection();
+      if (!sel) return;
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) {}
+  }
+  function makeEditable(el, clickEvent){
+    if (!el || el.getAttribute('contenteditable') === 'true') return;
+    var originalText = el.textContent || '';
+    clearSelectedTarget();
+    el.setAttribute('contenteditable', 'plaintext-only');
+    el.setAttribute('data-od-editing', 'true');
+    try { el.focus(); } catch (e) {}
+    placeCaretFromClick(clickEvent, el);
+    function finish(commit){
+      el.removeAttribute('contenteditable');
+      el.removeAttribute('data-od-editing');
+      el.removeEventListener('blur', onBlur);
+      el.removeEventListener('keydown', onKey);
+      var value = (el.textContent || '').trim();
+      if (commit && value !== originalText.trim()) {
+        window.parent.postMessage({
+          type: 'od-edit-text-commit',
+          id: stableId(el),
+          value: value
+        }, '*');
+      } else if (!commit) {
+        el.textContent = originalText;
+      }
+    }
+    function onBlur(){ finish(true); }
+    function onKey(ev){
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        finish(true);
+        try { el.blur(); } catch (e) {}
+      }
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        finish(false);
+        try { el.blur(); } catch (e) {}
+      }
+    }
+    el.addEventListener('blur', onBlur);
+    el.addEventListener('keydown', onKey);
+  }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }
   function findById(id){
@@ -270,10 +340,16 @@ export function buildManualEditBridge(enabled: boolean): string {
   });
   document.addEventListener('click', function(ev){
     if (!enabled) return;
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     var el = closestTarget(ev);
     if (!el) return;
     ev.preventDefault();
     ev.stopPropagation();
+    var kind = inferKind(el);
+    if (kind === 'text' || kind === 'link') {
+      makeEditable(el, ev);
+      return;
+    }
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
   }, true);
   window.addEventListener('resize', postTargets);
@@ -294,6 +370,12 @@ html[data-od-edit-mode] [data-od-edit-selected] {
   outline: 2px solid #2563eb !important;
   outline-offset: 4px;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+}
+html[data-od-edit-mode] [data-od-editing="true"] {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 4px;
+  background: rgba(37, 99, 235, 0.06);
+  cursor: text !important;
 }
 </style>`;
 }

@@ -54,6 +54,20 @@ describe('parseArtifactManifest', () => {
     const out = parseArtifactManifest(raw);
     expect(out?.status).toBe('streaming');
   });
+
+  it('preserves primary file hints', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'html',
+      title: 'x',
+      entry: 'index.html',
+      renderer: 'html',
+      exports: ['html'],
+      primary: 'index.html',
+    });
+    const out = parseArtifactManifest(raw);
+    expect(out?.primary).toBe('index.html');
+  });
 });
 
 describe('inferLegacyManifest', () => {
@@ -112,6 +126,7 @@ describe('createHtmlArtifactManifest', () => {
     expect(out.renderer).toBe('html');
     expect(out.status).toBe('complete');
     expect(out.exports).toEqual(['html', 'pdf', 'zip']);
+    expect(out.primary).toBe(true);
     expect(out.entry).toBe('index.html');
     expect(out.title).toBe('Landing');
     expect(typeof out.createdAt).toBe('string');

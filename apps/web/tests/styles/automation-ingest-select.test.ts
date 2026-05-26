@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 
 import postcss, { type Declaration, type Root, type Rule } from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
-const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
+const indexCss = readExpandedIndexCss();
 const tasksCss = readFileSync(
   new URL('../../src/styles/home/tasks.css', import.meta.url),
   'utf8',

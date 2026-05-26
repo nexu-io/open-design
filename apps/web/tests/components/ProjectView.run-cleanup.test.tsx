@@ -9,6 +9,7 @@ import {
   findExistingArtifactProjectFile,
   resolveRetryTarget,
   resolveSucceededRunStatus,
+  selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
 } from '../../src/components/ProjectView';
 import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
@@ -59,6 +60,22 @@ function artifactProjectFile(name: string, mtime: number): ProjectFile {
     },
     kind: 'html',
     mime: 'text/html',
+    mtime,
+    name,
+    size: 100,
+  };
+}
+
+function projectFile(
+  name: string,
+  kind: ProjectFile['kind'],
+  mtime: number,
+  artifactManifest?: ProjectFile['artifactManifest'],
+): ProjectFile {
+  return {
+    artifactManifest,
+    kind,
+    mime: kind === 'html' ? 'text/html' : 'application/octet-stream',
     mtime,
     name,
     size: 100,
@@ -165,6 +182,30 @@ describe('terminal replay artifact recovery', () => {
       .toBeNull();
     expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
       .toBe(current);
+  });
+});
+
+describe('selectPrimaryProjectFile', () => {
+  it('prefers explicit primary manifests over newer renderable files', () => {
+    const newer = projectFile('preview.html', 'html', 2_000);
+    const primary = projectFile('index.html', 'html', 1_000, {
+      entry: 'index.html',
+      exports: ['html'],
+      kind: 'html',
+      primary: true,
+      renderer: 'html',
+      title: 'Index',
+      version: 1,
+    });
+
+    expect(selectPrimaryProjectFile([newer, primary])).toBe(primary);
+  });
+
+  it('ignores sidecar manifest files when choosing a fallback', () => {
+    const sidecar = projectFile('index.html.artifact.json', 'text', 2_000);
+    const html = projectFile('index.html', 'html', 1_000);
+
+    expect(selectPrimaryProjectFile([sidecar, html])).toBe(html);
   });
 });
 

@@ -2470,6 +2470,141 @@ setInterval(() => {}, 1000);
     });
     expect(res.status).toBe(400);
   });
+
+  // Regression coverage for #2248: the daemon must return structured
+  // diagnostics next to the existing `kind`/`detail` strings so Settings
+  // and CLI consumers don't have to scrape the human-readable detail
+  // line to know what phase failed, which binary path was used, or what
+  // the child's exit metadata was. The legacy fields stay unchanged so
+  // older clients keep rendering.
+  it('attaches structured diagnostics on Claude smoke-test success (#2248)', async () => {
+    await withFakeClaude(
+      `
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({ ok: true, kind: 'success' });
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        // The binary path is whatever fake bin the test harness installed
+        // on PATH (a temp directory). All we want here is that the
+        // daemon actually fills it in, not that it matches an exact path.
+        expect(typeof result.diagnostics?.binaryPath).toBe('string');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/claude/);
+        expect(result.diagnostics?.exitCode).toBe(0);
+      },
+    );
+  });
+
+  it('attaches structured diagnostics on Claude exit-failed (#2248)', async () => {
+    await withFakeClaude(
+      `console.error('boom-on-stderr'); process.exit(7);`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result.ok).toBe(false);
+        // Back-compat: existing kind + detail keep their shape.
+        expect(typeof result.kind).toBe('string');
+        expect(typeof result.detail).toBe('string');
+        // New: structured fields are attached.
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics?.phase).toBe('spawn');
+        expect(result.diagnostics?.exitCode).toBe(7);
+        expect(result.diagnostics?.stderrTail ?? '').toContain('boom-on-stderr');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/claude/);
+      },
+    );
+  });
+
+  it('reports an early-phase diagnostics block when the agent CLI is missing (#2248)', async () => {
+    // Clear PATH so the daemon cannot locate `claude`. We restore the
+    // env in `finally` to avoid leaking the empty PATH to later tests.
+    // Depending on whether the resolver short-circuits or the spawn
+    // itself ENOENTs, the kind may be agent_not_installed or
+    // agent_spawn_failed and the phase may be 'binary_resolution' or
+    // 'spawn'. Both are valid "we never reached the smoke test" shapes
+    // — the actionable bit for the UI is that diagnostics arrived at
+    // all and that the phase is one of the two early values.
+    const oldPath = process.env.PATH;
+    process.env.PATH = '';
+    try {
+      const result = await testAgentConnection({ agentId: 'claude' });
+      expect(result.ok).toBe(false);
+      expect(['agent_not_installed', 'agent_spawn_failed']).toContain(result.kind);
+      expect(result.diagnostics).toBeDefined();
+      expect(['binary_resolution', 'spawn']).toContain(result.diagnostics?.phase);
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+
+  it('attaches diagnostics when the preflight auth probe reports missing auth (#2248)', async () => {
+    // Cursor Agent's preflight `cursor-agent status` check rejects the
+    // smoke run before the daemon ever spawns the smoke prompt. The
+    // initial #2248 pass forgot to stamp diagnostics on that return
+    // path, which contradicted the "Always set on local agent test
+    // responses" contract in packages/contracts. Lock the contract,
+    // and additionally lock the probe's own stderr/exit metadata —
+    // without those, the diagnostics block would drop the only context
+    // a caller has on a missing-auth failure (no smoke spawn ever ran,
+    // so the smoke sink is empty).
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.error('Not logged in');
+  process.exit(1);
+}
+console.error('smoke prompt should not run when status reports missing auth');
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'cursor-agent' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+        });
+        expect(result.diagnostics).toBeDefined();
+        // Preflight runs after binary resolution but before the smoke
+        // spawn, so phase should still be 'binary_resolution'.
+        expect(result.diagnostics?.phase).toBe('binary_resolution');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/cursor-agent/);
+        // The probe child wrote "Not logged in" on stderr and exited
+        // 1; both must propagate into diagnostics so Settings/CLI can
+        // render the structured auth-failure context.
+        expect(result.diagnostics?.stderrTail ?? '').toContain('Not logged in');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
 });
 
 describe('connection test helpers', () => {

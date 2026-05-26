@@ -6,8 +6,25 @@ separate nginx container.
 
 ## Local compose
 
+Before starting:
+
+1. Copy the environment template:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Generate a secure token:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+
+Then pull and start the service:
+
 ```bash
-cd deploy
 OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose pull
 OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose up -d --no-build
 ```

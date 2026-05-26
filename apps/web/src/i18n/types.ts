@@ -193,6 +193,7 @@ export interface Dict {
   'settings.modeDaemonInstalledMeta': string;
   'settings.modeApi': string;
   'settings.modeApiMeta': string;
+  'settings.byokNoFileToolsNotice': string;
   'settings.codeAgent': string;
   'settings.codeAgentHint': string;
   'settings.rescan': string;
@@ -795,6 +796,9 @@ export interface Dict {
   'workingDirPicker.replace': string;
   'workingDirPicker.recent': string;
   'handoff.toTarget': string;
+  'handoff.openInTarget': string;
+  'handoff.openAction': string;
+  'handoff.menuTitle': string;
   'handoff.action': string;
   'handoff.fallbackTitle': string;
   'handoff.chooseTargetAria': string;
@@ -1664,6 +1668,10 @@ export interface Dict {
   'chat.comments.pinAtCoords': string;
   'chat.comments.capturedItems': string;
   'chat.comments.clear': string;
+  'chat.inspect.noEditableTargets': string;
+  'chat.inspect.noCommentTargets': string;
+  'chat.inspect.editHint': string;
+  'chat.inspect.commentHint': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
@@ -1704,6 +1712,14 @@ export interface Dict {
   'chat.linkedFolderNotFound': string;
   'chat.linkedFolderAlready': string;
   'chat.linkedFolderPickError': string;
+  'chat.queuedHeader': string;
+  'chat.queuedToSend': string;
+  'chat.queuedEditQueuedTaskAria': string;
+  'chat.queuedSave': string;
+  'chat.queuedCancel': string;
+  'chat.queuedEdit': string;
+  'chat.queuedMore': string;
+  'chat.queuedFollowUpFallback': string;
   'chat.send': string;
   'chat.stop': string;
   'chat.removeAria': string;

@@ -120,7 +120,7 @@ export type ToolPackConfig = {
 function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | undefined): ToolPackBuildOutput {
   if (value == null || value.length === 0) return platform === "win" ? "nsis" : "all";
   if (platform === "mac" && (value === "all" || value === "app" || value === "dmg" || value === "zip")) return value;
-  if (platform === "win" && (value === "all" || value === "dir" || value === "nsis")) return value;
+  if (platform === "win" && (value === "all" || value === "dir" || value === "nsis" || value === "zip")) return value;
   if (platform === "linux" && (value === "all" || value === "appimage" || value === "dir")) return value;
   throw new Error(`unsupported ${platform} --to target: ${value}`);
 }

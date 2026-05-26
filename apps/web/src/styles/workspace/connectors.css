@@ -1,0 +1,1757 @@
+/* -------- Design system picker (custom popover dropdown) ------------ */
+.ds-picker { position: relative; }
+.ds-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+/* New project panel triggers run a tighter 38px row so the dropdowns sit
+   close to the project-name input and the Companion toggle. Other call
+   sites (Settings dialog, model picker) keep their own sizing. */
+.newproj-section .ds-picker-trigger {
+  min-height: 38px;
+  padding: 2px 10px;
+}
+.ds-picker-trigger:hover { border-color: var(--border-strong); }
+.ds-picker-trigger.open {
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+.ds-picker-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ds-picker-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-picker-extra-pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+}
+.ds-picker-sub {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-picker-chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 160ms ease;
+}
+.ds-picker-trigger.empty .ds-picker-title { color: var(--text-muted); font-weight: 500; }
+
+/* Avatar — square with 2x2 swatch grid (or "none" diagonal slash). */
+.ds-avatar {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-avatar-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  width: 100%;
+  height: 100%;
+}
+.ds-avatar-cell { display: block; }
+.ds-avatar-stack {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 5px;
+  background: var(--text-strong);
+  color: #fff;
+  border-radius: 999px;
+  border: 2px solid var(--bg-panel);
+}
+.ds-avatar-none {
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+}
+
+/* Popover */
+.ds-picker-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: ds-pop-in 140ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+@keyframes ds-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ds-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.ds-picker-search {
+  flex: 1;
+  padding: 6px 10px !important;
+  font-size: 12.5px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+}
+/* Mirror the `.subtab-pill` segmented control so all left/right toggles in
+   the app share one visual language — gray container, white raised tab for
+   active. Density stays popover-tight (smaller padding than the toolbar
+   variant). */
+.ds-picker-mode {
+  flex: none;
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ds-picker-mode-btn {
+  padding: 3px 12px !important;
+  font-size: 11px !important;
+  font-weight: 500;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+.ds-picker-mode-btn:hover:not(.active) {
+  color: var(--text) !important;
+}
+.ds-picker-mode-btn.active {
+  background: var(--bg-panel) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+.ds-picker-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.ds-picker-list-design-systems {
+  min-height: 120px;
+}
+.ds-picker-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.ds-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+.ds-picker-item:hover { background: var(--bg-subtle); }
+.ds-picker-item.active {
+  border-color: var(--border-strong);
+}
+.ds-picker-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ds-picker-item-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-picker-item-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.ds-picker-item-sub {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selection mark — a circle for single-select, a square for multi.
+   In multi mode the active state shows the pick order (1 = primary). */
+.ds-picker-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  font-weight: 600;
+  color: transparent;
+}
+.ds-picker-mark.radio {
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-panel);
+  position: relative;
+}
+.ds-picker-mark.radio.active {
+  border-color: var(--text);
+}
+.ds-picker-mark.radio.active::after {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.ds-picker-mark.check {
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--bg-panel);
+}
+.ds-picker-mark.check.active {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg-panel);
+}
+
+.ds-picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.ds-picker-foot-text { flex: 1; min-width: 0; }
+.ds-picker-foot-text strong { color: var(--text); font-weight: 600; }
+.ds-picker-clear {
+  flex: none;
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  background: var(--bg-panel) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+.ds-picker-clear:hover { border-color: var(--border-strong) !important; }
+
+.entry-side-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px 24px 20px;
+}
+.entry-side-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.entry-side-foot .foot-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 8px;
+  min-height: 24px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  align-self: flex-start;
+  cursor: pointer;
+  text-decoration: none;
+}
+.entry-side-foot-row .foot-pill {
+  min-width: 0;
+}
+.entry-side-foot-row .foot-pill-follow {
+  flex: 0 1 auto;
+}
+/* Social cluster (Discord + X) — sits at the right end of the bottom row
+   via `margin-left: auto`, which opens flex space between the left
+   "your stuff" group (Language, Pet) and the right "follow us" group. */
+.entry-side-foot-social {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.entry-side-foot-row .foot-pill-pet-label,
+.entry-side-foot-row .foot-pill-follow-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-side-foot .foot-pill:hover { background: var(--bg-panel); border-color: var(--border-strong); color: var(--text); }
+.entry-side-foot .foot-pill .ico { font-size: 12px; opacity: 0.7; }
+/* The Icon component renders inline SVG with `stroke: currentColor`, so by
+   default it tracks the pill's text color exactly. Override via opacity to
+   keep the glyph muted relative to the label — on hover the icon "lifts"
+   just enough to feel active without going full black, which would make
+   it compete with the label for attention. */
+.entry-side-foot .foot-pill svg {
+  width: 10px;
+  height: 10px;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+.entry-side-foot .foot-pill:hover svg {
+  opacity: 0.75;
+}
+
+/* Language switcher pill + popover (entry sidebar foot). */
+.lang-menu-wrap {
+  position: relative;
+  align-self: flex-start;
+}
+.lang-menu-wrap .lang-pill {
+  font-variant-numeric: tabular-nums;
+}
+.lang-menu-popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 180px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+.lang-menu-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.lang-menu-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lang-menu-item:hover { background: var(--bg-subtle); }
+.lang-menu-item.active { background: var(--bg-subtle); }
+.lang-menu-item .lang-menu-code {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.lang-menu-item .lang-menu-check {
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Right side */
+.entry-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.entry-header-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.entry-tabs {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.entry-tabs::-webkit-scrollbar { display: none; }
+.entry-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 6px 4px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  transition: none;
+}
+.entry-tab:focus,
+.entry-tab:active {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: transparent;
+  outline: none;
+  color: var(--text-muted);
+}
+.entry-tab:focus-visible {
+  outline: 2px solid var(--selected);
+  outline-offset: 2px;
+  border-radius: 4px;
+  color: var(--text);
+}
+.entry-tab:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: transparent;
+  outline: none;
+  color: var(--text);
+}
+.entry-tab.active,
+.entry-tab.active:hover:not(:disabled),
+.entry-tab.active:focus,
+.entry-tab.active:focus-visible {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+.entry-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.entry-tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 28px 32px;
+  background: var(--bg);
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.tab-panel-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  /* Older browsers ignore row-gap on flex with wrap — explicit row-gap keeps
+     the wrapped row visually separated rather than flush against the pill. */
+  row-gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--bg-panel);
+}
+.tab-panel-toolbar .toolbar-left {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.tab-panel-toolbar .toolbar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.tab-panel-toolbar .toolbar-search {
+  position: relative;
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 280px;
+}
+/* Narrow columns (entry tab content sometimes lands at ~570px wide) — keep
+   the segmented pill on its own row above the search/view toggle so the
+   search input never collapses into a tiny stub squeezed between two pills. */
+@media (max-width: 720px) {
+  .tab-panel-toolbar { flex-direction: column; align-items: stretch; }
+  .tab-panel-toolbar .toolbar-left { justify-content: flex-start; }
+  .tab-panel-toolbar .toolbar-right { justify-content: space-between; }
+  .tab-panel-toolbar .toolbar-search { max-width: none; }
+}
+.tab-panel-toolbar .toolbar-search input {
+  padding-left: 30px;
+  background: var(--bg-panel);
+}
+.tab-panel-toolbar .toolbar-search input[type='search']::-webkit-search-cancel-button {
+  /* Hide the native clear control; we render our own styled button. */
+  appearance: none;
+  -webkit-appearance: none;
+}
+.tab-panel-toolbar .toolbar-search input[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.tab-panel-toolbar.designs-toolbar {
+  background: transparent;
+}
+.tab-panel-toolbar .toolbar-search .toolbar-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.tab-panel-toolbar .toolbar-search .toolbar-search-clear:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.tab-panel-toolbar .toolbar-search .toolbar-search-clear:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.tab-panel-toolbar .toolbar-search .search-icon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  font-size: 13px;
+  pointer-events: none;
+}
+.tab-empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.connector-inline-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, #ff6b6b 45%, var(--line) 55%);
+  border-radius: 12px;
+  background: color-mix(in oklab, #ff6b6b 10%, var(--panel) 90%);
+  color: color-mix(in oklab, #ff6b6b 70%, var(--fg) 30%);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.connectors-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+.connectors-heading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.tab-panel-toolbar .toolbar-search.connectors-search {
+  flex: 0 1 320px;
+  width: min(320px, 100%);
+}
+.tab-panel-toolbar .toolbar-search.connectors-search input {
+  padding-right: 32px;
+}
+.connectors-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 64px 16px;
+  text-align: center;
+}
+.connectors-empty-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+  max-width: 480px;
+  word-break: break-word;
+}
+.connectors-empty-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 480px;
+}
+.connectors-empty-action {
+  margin-top: 8px;
+}
+.connector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 14px;
+}
+.connector-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 168px;
+  padding: 16px 16px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 180ms ease,
+    background 140ms ease;
+}
+.connector-card:hover:not(.is-locked) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--text) 28%, var(--border));
+  box-shadow: 0 8px 24px -14px rgba(0, 0, 0, 0.25), var(--shadow-xs);
+}
+.connector-card:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--text) 48%, var(--border));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--text) 14%, transparent),
+    0 8px 24px -14px rgba(0, 0, 0, 0.25);
+}
+.connector-card.status-connected {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--green) 5%, var(--bg-panel)) 0%,
+    var(--bg-panel) 60%
+  );
+}
+.connector-card.status-disabled { background: var(--bg-subtle); }
+.connector-card.status-error {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--border));
+}
+.connector-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.connector-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.connector-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  /* The title is now a flex row so a connection-status dot can sit
+     inline next to the connector name without breaking the title's
+     truncation. The name span owns the ellipsis; the dot stays at a
+     fixed size on the trailing edge of the row. */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.connector-card-title-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Inline title-anchored connection dot. Sized + offset so it visually
+   aligns with the title's cap-height rather than its full line-height,
+   and given a soft halo on the connected variant so the live state
+   reads as a small "online" pulse next to the connector name. The
+   halo collapses to nothing in non-connected variants because today
+   the dot is only rendered for `connected` (error/disabled use a
+   separate pill in the action column). */
+.connector-card-title-dot {
+  flex: 0 0 auto;
+  /* Optical alignment: pull the dot up by ~1px so it sits on the
+     baseline of an uppercase letter rather than the descender line. */
+  margin-top: -1px;
+}
+
+/* Connector brand mark. Used in two sizes: a compact 28px tile inside
+   catalog cards (`size-sm`) and a 44px mark in the detail drawer head
+   (`size-lg`). The wrapper also hosts the fallback initials tile so the
+   image fades over a stable, themed surface — there is no flash of empty
+   space while the network resolves and no broken-icon chrome if the
+   request fails. The remote logos come from `logos.composio.dev`, keyed
+   by the lowercased toolkit slug stripped of underscores; the URL is
+   built in `ConnectorsBrowser.tsx` so the daemon's friendlier ids
+   (`google_drive`) still resolve to the right CDN entry (`googledrive`). */
+.connector-logo {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: hidden;
+  isolation: isolate;
+  /* `var(--bg-panel)` already inverts in dark mode, so the logo's
+     transparent corners read cleanly on either theme. The remote SVGs
+     ship with theme-aware fills (we request `?theme=light|dark` to
+     match), but the soft border still gives them a tidy frame. */
+  box-shadow: var(--shadow-xs);
+  user-select: none;
+}
+.connector-logo.size-lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.connector-logo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* Inset the rendered image a hair so brand marks with no built-in
+     padding (small monograms, square photos) don't crash into the
+     border on the small tile. */
+  padding: 4px;
+  /* Fade the image in when it lands so a slow connection doesn't pop
+     content under the user's eye. The fallback underneath provides
+     instant visual presence in the meantime. */
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+  z-index: 1;
+}
+.connector-logo.size-lg .connector-logo-img {
+  padding: 6px;
+}
+.connector-logo.state-loaded .connector-logo-img {
+  opacity: 1;
+  transform: scale(1);
+}
+/* Fallback initials tile. Three jobs, in priority order:
+   1. While the image is pending, the tile is a *neutral skeleton* —
+      no color, no letters showing through. The user shouldn't see a
+      bright colored placeholder flash and then morph into a totally
+      different brand mark when the SVG lands; that mismatch reads as
+      "wrong logo" before it reads as "loading".
+   2. Once the image has loaded, the tile is fully hidden. Composio
+      SVGs frequently have transparent regions, and even a faint
+      colored backdrop bleeds through and tints the brand — exactly
+      the visual mixing we want to avoid. Hiding it (not just dimming)
+      guarantees the real image owns the slot.
+   3. Only when the network actually fails (`state-error`) — or when
+      no slug was derivable in the first place (`is-fallback`) — do we
+      promote the tile to a quiet brand mark with stable initials.
+      Even then it's deliberately *muted*: a single low-saturation
+      neutral surface, lighter weight type, and a subtle hue accent
+      from a hashed palette so two adjacent fallbacks don't read as
+      identical. The intent is "calm placeholder", never "louder than
+      the real logos one row up". */
+.connector-logo-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: transparent;
+  background: var(--bg-subtle);
+  text-transform: uppercase;
+  z-index: 0;
+  /* Default: skeleton mode. Initials are kept in the DOM (so a paint
+     of the error state doesn't have to re-flow text) but rendered
+     transparent. The only visible thing is the soft `--bg-subtle`
+     surface, which sits flush with the wrapper border and reads as a
+     quiet placeholder, not a brand. */
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out,
+    opacity 120ms ease-out;
+}
+.connector-logo.size-lg .connector-logo-fallback {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+/* Pending: gentle shimmer over the neutral surface so the user can
+   tell something is loading, without a colored tile suggesting a
+   particular brand. The shimmer only kicks in if the image takes
+   long enough to matter — short loads finish before the animation
+   even completes one cycle. */
+.connector-logo.state-pending .connector-logo-fallback {
+  background:
+    linear-gradient(
+      90deg,
+      var(--bg-subtle) 0%,
+      color-mix(in srgb, var(--bg-subtle) 60%, var(--bg-panel)) 50%,
+      var(--bg-subtle) 100%
+    );
+  background-size: 200% 100%;
+  animation: connector-logo-shimmer 1400ms ease-in-out infinite;
+}
+@keyframes connector-logo-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+/* Loaded: yank the fallback entirely. `visibility: hidden` keeps it
+   out of the paint pipeline so transparent regions in the SVG can't
+   composite over a colored backdrop. */
+.connector-logo.state-loaded .connector-logo-fallback {
+  visibility: hidden;
+  opacity: 0;
+}
+/* Error / no-slug: quiet brand mark. Initials become visible, but in
+   a muted neutral palette by default. The hashed palette below adds
+   a hint of hue so a row of fallbacks isn't monotone, but every
+   variant stays low-saturation and low-contrast against the card
+   surface so the real logos always read as the focal point. */
+.connector-logo.state-error .connector-logo-fallback,
+.connector-logo.is-fallback .connector-logo-fallback {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  animation: none;
+}
+.connector-logo.state-error[data-palette='0'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='0'] .connector-logo-fallback {
+  background: color-mix(in oklab, var(--accent) 6%, var(--bg-subtle));
+  color: color-mix(in oklab, var(--accent) 35%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='1'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='1'] .connector-logo-fallback {
+  background: color-mix(in oklab, #6b8afd 7%, var(--bg-subtle));
+  color: color-mix(in oklab, #6b8afd 38%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='2'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='2'] .connector-logo-fallback {
+  background: color-mix(in oklab, #2dbfa8 7%, var(--bg-subtle));
+  color: color-mix(in oklab, #2dbfa8 38%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='3'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='3'] .connector-logo-fallback {
+  background: color-mix(in oklab, #d18b3a 7%, var(--bg-subtle));
+  color: color-mix(in oklab, #d18b3a 40%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='4'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='4'] .connector-logo-fallback {
+  background: color-mix(in oklab, #c356b3 6%, var(--bg-subtle));
+  color: color-mix(in oklab, #c356b3 38%, var(--text-muted));
+}
+.connector-logo.state-error[data-palette='5'] .connector-logo-fallback,
+.connector-logo.is-fallback[data-palette='5'] .connector-logo-fallback {
+  background: color-mix(in oklab, #5d6b85 9%, var(--bg-subtle));
+  color: color-mix(in oklab, #5d6b85 42%, var(--text-muted));
+}
+/* The wrapper border is what visually frames the tile. When the real
+   image is loaded we keep it; in the fallback states we soften it a
+   step so the tile recedes further compared to a card with a real
+   logo on the same row. */
+.connector-logo.state-error,
+.connector-logo.is-fallback {
+  border-color: var(--border-soft, var(--border));
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .connector-logo-img {
+    transition: none;
+    transform: none;
+  }
+  .connector-logo.state-pending .connector-logo-fallback {
+    animation: none;
+    background: var(--bg-subtle);
+  }
+}
+
+/* Embedded catalog (Settings → Connectors). Cards are tighter here so
+   the logo shrinks to 24px and sheds a touch of border radius so it
+   reads as a quiet badge next to the connector name rather than a
+   prominent brand mark. The card-top gap (already 8px in the embedded
+   variant) keeps the logo close to the head copy. */
+.connectors-panel-embedded .connector-logo.size-sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.connectors-panel-embedded .connector-logo.size-sm .connector-logo-img {
+  padding: 3px;
+}
+.connectors-panel-embedded .connector-logo.size-sm .connector-logo-fallback {
+  font-size: 10px;
+}
+
+.connector-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.connector-meta-item {
+  white-space: nowrap;
+}
+.connector-meta-dot {
+  color: var(--text-faint);
+}
+.connector-tools-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  transform-origin: left center;
+  will-change: transform, opacity;
+}
+.connector-tools-badge svg {
+  opacity: 0.65;
+}
+.connector-tools-badge.is-ready {
+  animation: connector-tools-badge-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.connector-tools-badge.is-ready svg {
+  animation: connector-tools-badge-icon-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 120ms;
+}
+@keyframes connector-tools-badge-in {
+  0% {
+    opacity: 0;
+    transform: translateY(3px) scale(0.92);
+    border-color: color-mix(in srgb, var(--border) 40%, transparent);
+    background: color-mix(in srgb, var(--bg-subtle) 60%, transparent);
+  }
+  55% {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--accent, var(--text-muted)) 30%, var(--border));
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    border-color: var(--border);
+    background: var(--bg-subtle);
+  }
+}
+@keyframes connector-tools-badge-icon-in {
+  0% {
+    opacity: 0;
+    transform: rotate(-12deg) scale(0.8);
+  }
+  100% {
+    opacity: 0.65;
+    transform: rotate(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connector-tools-badge.is-ready {
+    animation: connector-tools-badge-fade 180ms ease-out both;
+  }
+  .connector-tools-badge.is-ready svg {
+    animation: none;
+  }
+  @keyframes connector-tools-badge-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+.connector-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+.connector-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
+}
+.connector-status.status-connected,
+.connector-status-pill.status-connected {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 32%, transparent);
+}
+.connector-status.status-error,
+.connector-status-pill.status-error {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 30%, transparent);
+}
+.connector-status.status-disabled,
+.connector-status-pill.status-disabled {
+  opacity: 0.7;
+}
+.connector-status.status-pending,
+.connector-status-pill.status-pending {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.connector-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.connector-description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.connector-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+button.connector-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius);
+  transition: transform 120ms ease, background 140ms ease, border-color 140ms ease;
+}
+button.connector-action.is-connect {
+  min-width: 92px;
+}
+button.connector-action.is-disconnect {
+  min-width: 106px;
+  color: var(--text-muted);
+}
+button.connector-action.is-disconnect:hover:not(:disabled) {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 35%, var(--border));
+}
+button.connector-action.is-cancel-authorization {
+  min-width: 74px;
+  color: var(--text-muted);
+}
+button.connector-action.is-loading {
+  cursor: wait;
+}
+.connector-authorization-hint {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.connector-panel-alerts {
+  display: grid;
+  gap: 6px;
+}
+.connector-panel-alert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--red) 8%, var(--bg-panel));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.connector-panel-alert-copy {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+.connector-panel-alert-copy strong {
+  min-width: 0;
+  max-width: min(160px, 34vw);
+  overflow: hidden;
+  color: var(--red);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connector-panel-alert-copy span {
+  display: -webkit-box;
+  max-height: calc(12px * 1.35 * 2);
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.connector-panel-alert-action {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 22%, var(--border));
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+}
+.connector-panel-alert-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--red) 42%, var(--border));
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.connector-authorization-block {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.connector-authorization-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.connector-card > .connector-authorization-link {
+  margin-top: -2px;
+}
+
+/* Connector gate — masks the grid when the Composio API key is missing. */
+.connector-grid-wrap {
+  position: relative;
+}
+.connector-grid-wrap.is-masked .connector-grid {
+  filter: blur(2px) saturate(0.85);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+  transition: filter 160ms ease, opacity 160ms ease;
+}
+/* When the gate is shown, anchor it to the visible first screen of the
+   connectors tab instead of centering across the full (potentially long)
+   connector list. We lift the tab-content into a flex column, let the
+   connectors panel and the masked grid wrap stretch to fill the remaining
+   viewport height, and hide overflow so the absolutely-positioned gate
+   card remains fixed in the first-screen center. */
+.entry-tab-content:has(> .tab-panel.connectors-panel > .connector-grid-wrap.is-masked) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tab-panel.connectors-panel:has(> .connector-grid-wrap.is-masked) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.connector-grid-wrap.is-masked {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.connector-grid-wrap.is-masked .connector-grid {
+  /* Prevent the blurred grid from introducing its own scroll height inside
+     the now-clipped wrap — the wrap is our visible viewport for the gate. */
+  max-height: 100%;
+  overflow: hidden;
+}
+.connector-card.is-locked {
+  cursor: not-allowed;
+}
+
+/* Embedded inside Settings → Connectors. The section-head already shows the
+   "Connectors" heading + hint, so suppress the inner panel heading and let
+   the toolbar collapse to just the search input. The masked gate keeps its
+   absolute positioning relative to .connector-grid-wrap (already set), but
+   we cap its height inside the modal so the gate stays visible without
+   blowing the dialog out vertically. */
+.tab-panel.connectors-panel.connectors-panel-embedded {
+  gap: 14px;
+  position: relative;
+}
+/* Toast anchor: positions the connector error toast at the center-top
+   of the settings panel rather than at the bottom of the viewport. */
+.connectors-toast-anchor {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+  width: max-content;
+}
+.connectors-toast-anchor .od-toast {
+  position: static;
+  transform: none;
+  pointer-events: auto;
+}
+.connectors-panel-embedded .tab-panel-toolbar {
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+.connectors-panel-embedded .toolbar-left.connectors-heading {
+  display: none;
+}
+.connectors-panel-embedded .toolbar-right {
+  flex: 1 1 auto;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.connectors-panel-embedded .tab-panel-toolbar .toolbar-search.connectors-search {
+  flex: 0 1 320px;
+  width: min(320px, 100%);
+  max-width: 320px;
+  min-width: 180px;
+}
+
+/* Provider tabs sit in the toolbar's left edge (right of the hidden inner
+   heading). Today there is only Composio, but the segmented control is
+   built so additional providers slot in without re-styling. */
+.connectors-provider-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+/* Hide the provider tabs when there is only one option — no choice = no need for a tab. */
+.connectors-provider-tabs:has(> :only-child) {
+  display: none;
+}
+.connectors-provider-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 180ms ease;
+}
+.connectors-provider-tab:hover:not(.is-active) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.connectors-provider-tab.is-active {
+  color: var(--text);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--text) 12%, var(--border));
+}
+.connectors-provider-tab:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--text) 14%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.connectors-panel-embedded .connector-grid-wrap.is-masked {
+  /* Cap the masked grid's height so the gate's centered card stays in the
+     visible portion of the settings dialog without forcing the modal body
+     to scroll past it. The grid below is blurred and intentionally clipped. */
+  min-height: clamp(320px, 45vh, 420px);
+  max-height: clamp(360px, 56vh, 560px);
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+.connectors-panel-embedded .connector-grid-wrap.is-masked .connector-grid {
+  max-height: 100%;
+  overflow: hidden;
+}
+/* Compact catalog density inside the modal: tighter tracks, no description
+   row, action collapsed to an icon-only button anchored top-right. */
+.connectors-panel-embedded .connector-grid {
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 10px;
+}
+.connectors-panel-embedded .connector-card {
+  min-height: 0;
+  padding: 10px 10px 10px 12px;
+  gap: 6px;
+}
+.connectors-panel-embedded .connector-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+/* Two-row meta layout for the embedded catalog. The previous single
+   row let long category labels wrap unpredictably, leaving cards in
+   a 3-column grid with mismatched heights. Stacking onto its own
+   rows fixes the height and gives the async tools-badge a stable
+   anchor to animate into without resizing the card. */
+.connectors-panel-embedded .connector-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  font-size: 11px;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+/* Category row: single line with ellipsis. The full label is still
+   reachable via the `title` attribute on the span and the card's
+   own openDetailsAria, so we never lose information. */
+.connectors-panel-embedded .connector-meta-category {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+/* Tools-badge slot. Reserves its own row and a fixed height even
+   while the discovery call is in flight (`aria-hidden` is set on the
+   span before the badge resolves), so the card doesn't grow when
+   the badge animates in. The fixed height matches the embedded
+   badge's pill (1px + 1px borders + 10px text + 2px padding × 2 ≈
+   18px). */
+.connectors-panel-embedded .connector-meta-tools {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  /* Hairline visual placeholder while the discovery request is in
+     flight — a 1px-tall faint baseline so the row reads as
+     intentionally reserved space rather than an empty gap. The
+     placeholder is dropped the moment the badge appears. */
+  position: relative;
+}
+.connectors-panel-embedded .connector-meta-tools[aria-hidden="true"]::after {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 1px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 999px;
+}
+/* The dot separator was only meaningful when the meta was a single
+   inline row; in the stacked layout it would float orphaned at the
+   start of the badge row. Hide it (the embedded card no longer
+   renders it in JSX, but keep the rule defensive in case a future
+   refactor reintroduces inline separators here). */
+.connectors-panel-embedded .connector-meta .connector-meta-dot {
+  display: none;
+}
+.connectors-panel-embedded .connector-tools-badge {
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 999px;
+}
+/* Anchor the action column to the top now that the meta block can be
+   one or two rows tall — center alignment used to make the action
+   drift down whenever the badge appeared. Keeping the action top-
+   aligned matches the title baseline and stops the eye from
+   tracking up and down across cards. */
+.connectors-panel-embedded .connector-card-top {
+  align-items: flex-start;
+  gap: 8px;
+}
+.connectors-panel-embedded .connector-card-actions {
+  /* Nudge the action button down a touch so it optically aligns with
+     the title's cap-height instead of its top edge. */
+  margin-top: 1px;
+}
+
+/* Icon-only connect/disconnect action: a 26px circular control anchored
+   at the card's top-right edge. We keep the same `connector-action`
+   class so loading/disabled state styling carries over from the
+   shared rules above, but the visual treatment is overridden here so
+   the catalog grid doesn't end up with a row of high-contrast filled
+   squares competing for attention. The default state is a subtle
+   ghost — almost recedes into the card — and the action picks up
+   accent weight only when the card or the button itself is hovered
+   or focused. The whole card is also clickable (it opens the
+   details drawer where Connect lives at full size), so this is a
+   secondary affordance, not the primary CTA. */
+.connectors-panel-embedded .connector-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.connectors-panel-embedded button.connector-action.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  /* Reset the min-width from the non-embedded `.is-connect` /
+     `.is-disconnect` pill rules above; in the compact catalog the
+     action collapses to a 26px circle and any `min-width` would
+     force it back into a wide pill that overlaps the card head
+     text. */
+  min-width: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 120ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+/* Soft default fill so the ghost button still has a visible target on
+   the lightest card backgrounds. We tint with `--text` rather than a
+   solid color so the control reads correctly in both dark and light
+   themes without per-theme overrides. */
+.connectors-panel-embedded button.connector-action.icon-only {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+/* When the parent card is hovered, the action gains a touch more weight
+   so it telegraphs interactivity without ever flashing to full white.
+   This applies whether the user is hovering the card or the button
+   directly, so reaching for the action never feels like the button
+   moves out from under them. */
+.connectors-panel-embedded .connector-card:hover:not(.is-locked) button.connector-action.icon-only:not(:disabled),
+.connectors-panel-embedded .connector-card:focus-visible button.connector-action.icon-only:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.connectors-panel-embedded button.connector-action.icon-only:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text) 24%, transparent);
+}
+.connectors-panel-embedded button.connector-action.icon-only:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.connectors-panel-embedded button.connector-action.icon-only:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.connectors-panel-embedded button.connector-action.icon-only:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .connectors-panel-embedded button.connector-action.icon-only {
+    transition: background 80ms linear, color 80ms linear;
+  }
+  .connectors-panel-embedded button.connector-action.icon-only:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Connect (the "+" affordance). Refined into an accent-tinted ghost so
+   the action reads as inviting rather than competing — the previous
+   "fill with var(--text)" rule produced a hard off-white square in
+   dark theme that fought every other card. Default state borrows a
+   whisper of the accent so the plus is visibly the accent action of
+   the card; hover/card-hover both lift the tint up while keeping the
+   button transparent enough to feel like part of the card surface,
+   not a stamped-on chip. */
+.connectors-panel-embedded button.connector-action.is-connect {
+  color: color-mix(in srgb, var(--accent) 76%, var(--text-muted));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.connectors-panel-embedded .connector-card:hover:not(.is-locked) button.connector-action.is-connect:not(:disabled),
+.connectors-panel-embedded .connector-card:focus-visible button.connector-action.is-connect:not(:disabled) {
+  color: var(--accent-strong, var(--accent));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.connectors-panel-embedded button.connector-action.is-connect:hover:not(:disabled) {
+  color: var(--accent-strong, var(--accent));
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 56%, transparent);
+  box-shadow: 0 4px 14px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.connectors-panel-embedded button.connector-action.is-connect:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+/* Disconnect stays neutral until the user actually points at it, then
+   warms to the destructive red so the "remove" intent is unambiguous.
+   Slightly de-emphasized at rest compared to Connect — the connected
+   row already carries a green status dot to communicate state, so
+   this control doesn't need to advertise itself. */
+.connectors-panel-embedded button.connector-action.is-disconnect {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.connectors-panel-embedded .connector-card:hover:not(.is-locked) button.connector-action.is-disconnect:not(:disabled),
+.connectors-panel-embedded .connector-card:focus-visible button.connector-action.is-disconnect:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.connectors-panel-embedded button.connector-action.is-disconnect:hover:not(:disabled) {
+  color: var(--red, var(--text));
+  background: color-mix(in srgb, var(--red, var(--text)) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red, var(--text)) 42%, transparent);
+}
+
+/* Connection-status pip. Lives inline next to the connector name in
+   the embedded catalog (anchored via `.connector-card-title-dot`),
+   and the same dot is reused in the drawer where the rules above
+   handle the larger non-embedded variant. The halo is a `box-shadow`
+   ring rather than a `border` so the dot's optical size stays at
+   7px even with the green pulse around it. */
+.connectors-panel-embedded .connector-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  flex: 0 0 auto;
+}
+.connectors-panel-embedded .connector-status-dot.status-connected {
+  background: var(--green, #22c55e);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #22c55e) 22%, transparent);
+}
+.connectors-panel-embedded .connector-status-dot.status-error {
+  background: var(--red, #ef4444);
+}
+.connectors-panel-embedded .connector-status-dot.status-disabled {
+  background: var(--text-faint);
+}
+/* Error/disabled pills inside the compact card stay legible but small. */
+.connectors-panel-embedded .connector-card .connector-status-pill {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+/* On very narrow modals, keep tabs and search on one row while letting the
+   search input absorb the squeeze. */
+@media (max-width: 540px) {
+  .connectors-provider-tabs {
+    flex-shrink: 0;
+  }
+  .connectors-panel-embedded .tab-panel-toolbar .toolbar-search.connectors-search {
+    min-width: 0;
+  }
+}
+.connector-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at top, color-mix(in srgb, var(--bg-panel) 78%, transparent) 0%, color-mix(in srgb, var(--bg) 72%, transparent) 65%),
+    color-mix(in srgb, var(--bg) 45%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: var(--radius);
+  animation: connector-gate-fade 220ms ease-out;
+  pointer-events: auto;
+}
+@keyframes connector-gate-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.connector-gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  padding: 28px 28px 24px;
+  text-align: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.18));
+}
+.connector-gate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.connector-gate-title {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.connector-gate-body {
+  margin: 0;
+  max-width: 340px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+/* ------------------------------------------------------------------ */
+/* Connector detail drawer                                             */

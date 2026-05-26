@@ -17,7 +17,7 @@ import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
-import { commentsToAttachments, simplePositionLabel } from '../comments';
+import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
 import {
   ChatComposer,
@@ -222,6 +222,10 @@ interface Props {
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
+  queuedItems?: QueuedSendItem[];
+  onRemoveQueuedSend?: (id: string) => void;
+  onUpdateQueuedSend?: (id: string, prompt: string) => void;
+  onSendQueuedNow?: (id: string) => void;
   // Names that exist in the project folder. Tool cards and chips use this
   // set to decide whether a path can be opened as a tab.
   projectFileNames?: Set<string>;
@@ -332,10 +336,18 @@ interface Props {
 
 type Tab = 'chat' | 'comments';
 
+interface QueuedSendItem {
+  id: string;
+  prompt: string;
+  attachments?: ChatAttachment[];
+  commentAttachments?: ChatCommentAttachment[];
+}
+
 export function ChatPane({
   messages,
   streaming,
   sendDisabled = false,
+  queuedItems = [],
   error,
   projectId,
   projectKindForTracking = null,
@@ -352,6 +364,9 @@ export function ChatPane({
   onSend,
   onRetry,
   onStop,
+  onRemoveQueuedSend,
+  onUpdateQueuedSend,
+  onSendQueuedNow,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths,
@@ -408,6 +423,7 @@ export function ChatPane({
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const pinnedTodoRef = useRef<HTMLDivElement | null>(null);
+  const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
   const didInitialScrollRef = useRef(false);
   // Tracks whether the user is glued close enough to the bottom that
   // streamed content should auto-follow. Distinct from the jump-button
@@ -430,6 +446,9 @@ export function ChatPane({
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
   const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
+  const composerDraftStorageKey = projectId && activeConversationId
+    ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
+    : undefined;
   // Only the first user message gets the active-plugin chip — the
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
@@ -673,6 +692,7 @@ export function ChatPane({
     // user drifts away from the bottom. Observe the pinned-todo div so
     // followLatestIfPinned fires whenever the card changes height.
     let observedPinnedTodo: Element | null = null;
+    let observedQueuedSendStrip: Element | null = null;
     const syncPinnedTodo = () => {
       if (!resizeObserver) return;
       const pinnedEl = pinnedTodoRef.current;
@@ -685,15 +705,31 @@ export function ChatPane({
         observedPinnedTodo = null;
       }
     };
+    const syncQueuedSendStrip = () => {
+      if (!resizeObserver) return;
+      const queuedEl = queuedSendStripRef.current;
+      if (queuedEl && observedQueuedSendStrip !== queuedEl) {
+        if (observedQueuedSendStrip) {
+          resizeObserver.unobserve(observedQueuedSendStrip);
+        }
+        resizeObserver.observe(queuedEl);
+        observedQueuedSendStrip = queuedEl;
+      } else if (!queuedEl && observedQueuedSendStrip) {
+        resizeObserver.unobserve(observedQueuedSendStrip);
+        observedQueuedSendStrip = null;
+      }
+    };
 
     syncObservedChildren();
     syncPinnedTodo();
+    syncQueuedSendStrip();
 
     const mutationObserver =
       typeof MutationObserver !== 'undefined'
         ? new MutationObserver(() => {
             syncObservedChildren();
             syncPinnedTodo();
+            syncQueuedSendStrip();
             followLatestIfPinned();
           })
         : null;
@@ -702,11 +738,11 @@ export function ChatPane({
       subtree: true,
       characterData: true,
     });
-    // PinnedTodoSlot lives outside the chat-log subtree (it is a sibling of
-    // .chat-log-wrap inside .pane). The MutationObserver above only fires for
-    // changes inside el, so it cannot detect the slot mounting or unmounting.
-    // Watch the nearest common ancestor (.pane) with childList-only to catch
-    // those transitions and keep syncPinnedTodo current.
+    // PinnedTodoSlot and QueuedSendStrip live outside the chat-log subtree
+    // (they are siblings of .chat-log-wrap inside .pane). The
+    // MutationObserver above only fires for changes inside el, so it cannot
+    // detect those surfaces mounting or unmounting. Watch the nearest common
+    // ancestor (.pane) with childList-only to keep their observers current.
     const paneEl = el.parentElement?.parentElement ?? null;
     if (paneEl && mutationObserver) {
       mutationObserver.observe(paneEl, { childList: true });
@@ -1148,6 +1184,13 @@ export function ChatPane({
             onDismiss={setDismissedPinnedTodoKey}
             containerRef={pinnedTodoRef}
           />
+          <QueuedSendStrip
+            containerRef={queuedSendStripRef}
+            items={queuedItems}
+            onRemove={onRemoveQueuedSend}
+            onUpdate={onUpdateQueuedSend}
+            onSendNow={onSendQueuedNow}
+          />
           <ChatComposer
             ref={composerRef}
             projectId={projectId}
@@ -1156,6 +1199,7 @@ export function ChatPane({
             streaming={streaming}
             sendDisabled={sendDisabled}
             initialDraft={initialDraft}
+            draftStorageKey={composerDraftStorageKey}
             onEnsureProject={onEnsureProject}
             commentAttachments={commentsToAttachments(attachedComments)}
             onRemoveCommentAttachment={onDetachComment}
@@ -1250,6 +1294,163 @@ function PinnedTodoSlot({
   );
 }
 
+function QueuedSendStrip({
+  containerRef,
+  items,
+  onRemove,
+  onSendNow,
+  onUpdate,
+}: {
+  containerRef?: MutableRefObject<HTMLDivElement | null>;
+  items: Array<{ id: string; prompt: string }>;
+  onRemove?: (id: string) => void;
+  onSendNow?: (id: string) => void;
+  onUpdate?: (id: string, prompt: string) => void;
+}) {
+  const t = useT();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDraft, setEditingDraft] = useState('');
+  if (items.length === 0) return null;
+  const visible = items.slice(0, QUEUED_SEND_VISIBLE_LIMIT);
+  const extra = items.length - visible.length;
+  const startEdit = (item: { id: string; prompt: string }) => {
+    setEditingId(item.id);
+    setEditingDraft(item.prompt);
+  };
+  const commitEdit = () => {
+    if (!editingId) return;
+    const next = editingDraft.trim();
+    if (next) onUpdate?.(editingId, next);
+    setEditingId(null);
+    setEditingDraft('');
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingDraft('');
+  };
+  return (
+    <div
+      ref={containerRef}
+      className="chat-queued-send-strip"
+      data-testid="chat-queued-send-strip"
+    >
+      <div className="chat-queued-send-header">
+        <div className="chat-queued-send-heading">
+          <strong>
+            {items.length} {t('chat.queuedHeader')}
+          </strong>
+          <span aria-hidden>↩</span>
+          <span>{t('chat.queuedToSend')}</span>
+        </div>
+      </div>
+      {visible.map((item, index) => (
+        <div
+          className={`chat-queued-send-row${index === 0 ? ' chat-queued-send-row-active' : ''}${
+            editingId === item.id ? ' chat-queued-send-row-editing' : ''
+          }`}
+          key={item.id}
+        >
+          {editingId === item.id ? (
+            <form
+              className="chat-queued-send-edit-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitEdit();
+              }}
+            >
+              <input
+                className="chat-queued-send-edit-input"
+                value={editingDraft}
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+                onChange={(event) => setEditingDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelEdit();
+                  }
+                }}
+                aria-label={t('chat.queuedEditQueuedTaskAria')}
+              />
+              <button
+                type="submit"
+                className="chat-queued-send-action"
+                title={t('chat.queuedSave')}
+                aria-label={t('chat.queuedSave')}
+                disabled={!editingDraft.trim()}
+              >
+                <Icon name="check" size={13} />
+              </button>
+              <button
+                type="button"
+                className="chat-queued-send-action"
+                title={t('chat.queuedCancel')}
+                aria-label={t('chat.queuedCancel')}
+                onClick={cancelEdit}
+              >
+                <Icon name="close" size={13} />
+              </button>
+            </form>
+          ) : (
+            <>
+              <span className="chat-queued-send-title">{summarizeQueuedPrompt(item.prompt, t)}</span>
+              <div className="chat-queued-send-actions">
+                {onUpdate ? (
+                  <button
+                    type="button"
+                    className="chat-queued-send-action"
+                    title={t('chat.queuedEdit')}
+                    aria-label={t('chat.queuedEdit')}
+                    onClick={() => startEdit(item)}
+                  >
+                    <Icon name="pencil" size={13} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="chat-queued-send-action"
+                  title={t('chat.send')}
+                  aria-label={t('chat.send')}
+                  onClick={() => onSendNow?.(item.id)}
+                  disabled={!onSendNow}
+                >
+                  <Icon name="arrow-up" size={13} />
+                </button>
+                {onRemove ? (
+                  <button
+                    type="button"
+                    className="chat-queued-send-action"
+                    onClick={() => onRemove(item.id)}
+                    title={t('chat.comments.remove')}
+                    aria-label={t('chat.comments.remove')}
+                  >
+                    <Icon name="trash" size={13} />
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
+      ))}
+      {extra > 0 ? (
+        <div className="chat-queued-send-overflow">
+          <span className="chat-queued-send-overflow-line" aria-hidden />
+          <span className="chat-queued-send-extra">+{extra}</span>
+          <span>{t('chat.queuedMore')}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const QUEUED_SEND_VISIBLE_LIMIT = 4;
+
+function summarizeQueuedPrompt(prompt: string, t: TranslateFn): string {
+  const normalized = prompt.replace(/\s+/g, ' ').trim();
+  if (!normalized) return t('chat.queuedFollowUpFallback');
+  return normalized.length > 58 ? `${normalized.slice(0, 57)}...` : normalized;
+}
+
 function CommentsPanel({
   comments,
   attachedComments,
@@ -1333,7 +1534,7 @@ function CommentSection({
             data-testid={`comment-card-${comment.elementId}`}
           >
             <div className="comment-card-top">
-              <strong>{comment.elementId}</strong>
+              <strong>{commentTargetDisplayName(comment)}</strong>
               <div className="comment-card-actions">
                 {secondaryActionLabel && onSecondaryAction ? (
                   <button
@@ -1353,7 +1554,7 @@ function CommentSection({
             <div className="comment-card-meta">
               <span>{comment.id}</span>
               <span>{comment.filePath}</span>
-              <span>{comment.label}</span>
+              <span>{commentTargetDisplayName(comment)}</span>
               <span>{simplePositionLabel(comment.position)}</span>
             </div>
           </article>
@@ -1598,8 +1799,8 @@ function UserMessage({
         <div className="user-attachments comment-history-attachments">
           {commentAttachments.filter((attachment) => attachment.selectionKind !== 'visual').map((a) => (
             <span key={a.id} className="user-attachment staged-comment">
-              <span className="staged-name" title={`${a.elementId}: ${a.comment}`}>
-                <strong>{a.selectionKind === 'visual' ? 'Visual mark' : a.elementId}</strong>
+              <span className="staged-name" title={`${commentTargetDisplayName(a)}: ${a.comment}`}>
+                <strong>{commentTargetDisplayName(a)}</strong>
                 <span>{a.comment}</span>
               </span>
             </span>

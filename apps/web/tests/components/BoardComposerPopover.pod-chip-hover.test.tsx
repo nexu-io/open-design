@@ -53,7 +53,6 @@ function renderPopover(overrides: {
       onClose={() => {}}
       onSaveComment={() => {}}
       onSendBatch={() => {}}
-      onRemove={() => {}}
       onRemoveMember={() => {}}
       onHoverMember={overrides.onHoverMember}
       sending={false}

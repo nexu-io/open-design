@@ -91,6 +91,7 @@ describe('RecentProjectsStrip', () => {
               <section class="slide active">First slide</section>
               <section class="slide">Second slide</section>
               <div class="deck-counter"><button id="deck-prev">‹</button><span>1 / 10</span><button id="deck-next">›</button></div>
+              <nav class="page-flip-controls" aria-label="Pagination">01 / 10</nav>
             </body>
           </html>
         `,
@@ -124,6 +125,8 @@ describe('RecentProjectsStrip', () => {
       const deckIframe = deckCard?.querySelector('iframe') as HTMLIFrameElement | null;
       expect(deckIframe?.getAttribute('srcdoc')).toContain('First slide');
       expect(deckIframe?.getAttribute('srcdoc')).toContain('od-recent-deck-real-preview');
+      expect(deckIframe?.getAttribute('srcdoc')).toContain('.page-flip-controls');
+      expect(deckIframe?.getAttribute('srcdoc')).toContain('[aria-label="Pagination"]');
       expect(deckIframe?.getAttribute('srcdoc')).not.toContain('<script');
       expect(deckIframe?.getAttribute('src')).toBeNull();
       expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(

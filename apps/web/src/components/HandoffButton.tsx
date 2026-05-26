@@ -93,6 +93,9 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
   const preferred = readPreferred();
   const primary =
     available.find((e) => e.id === preferred) ?? available[0] ?? null;
+  const primaryTitle = primary
+    ? t('handoff.openInTarget', { target: primary.label })
+    : t('handoff.action');
 
   async function launch(editor: HostEditor) {
     if (!editor.available) {
@@ -161,7 +164,8 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
           type="button"
           className="handoff-trigger"
           data-testid="handoff-trigger"
-          title={primary ? t('handoff.toTarget', { target: primary.label }) : t('handoff.action')}
+          title={primaryTitle}
+          aria-label={primaryTitle}
           onClick={() => {
             if (primary && busy !== primary.id) {
               void launch(primary);
@@ -174,14 +178,14 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
           {primary ? (
             <>
               <EditorIcon editorId={primary.id} size={20} />
-              <span className="handoff-trigger-label">
-                {t('handoff.toTarget', { target: primary.label })}
+              <span className="handoff-trigger-label sr-only">
+                {primaryTitle}
               </span>
             </>
           ) : (
             <>
               <EditorIcon editorId="finder" size={20} />
-              <span className="handoff-trigger-label">{t('handoff.action')}</span>
+              <span className="handoff-trigger-label sr-only">{primaryTitle}</span>
             </>
           )}
         </button>
@@ -198,6 +202,7 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
       </div>
       {open ? (
         <div className="handoff-menu" role="menu" data-testid="handoff-menu">
+          <div className="handoff-menu-title">{t('handoff.menuTitle')}</div>
           {available.map((editor) => (
             <button
               key={editor.id}

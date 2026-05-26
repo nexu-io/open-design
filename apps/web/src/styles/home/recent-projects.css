@@ -89,6 +89,11 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
+  /* Container for the HTML preview iframe's responsive scale (below): the
+   * iframe renders at a fixed desktop design width and is scaled by the
+   * card's own width so the page reads as a faithful thumbnail instead of
+   * collapsing at the narrow card width. */
+  container-type: inline-size;
 }
 .recent-projects__card-thumb-html,
 .recent-projects__card-thumb-image,
@@ -116,6 +121,17 @@
 .recent-projects__thumb-iframe {
   pointer-events: none;
   background: #fff;
+  /* Render the page at a desktop design width, then scale it down to the
+   * card width via a container query so non-responsive galleries don't
+   * collapse at the narrow card size. 1280x720 keeps the 16/9 thumb ratio,
+   * so the scaled iframe fills the thumb exactly. */
+  inset: auto;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform-origin: 0 0;
+  transform: scale(calc(100cqw / 1280px));
 }
 .recent-projects__deck-frame,
 .recent-projects__deck-iframe,

@@ -389,6 +389,33 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     ).toBe('https://platform.openai.com/api-keys');
   });
 
+  it('warns BYOK users that API mode cannot edit project files (issue #1106)', () => {
+    // Regression cover: switching from Local CLI to BYOK previously gave no
+    // signal that file-editing tools (`Read`/`Write`/`Edit`) are absent on the
+    // API path. Users typed "continue adjusting the design" expecting edits
+    // and got an HTML monologue back. The notice must be visible on every
+    // BYOK protocol tab so the missing tool surface is discoverable before
+    // the user wastes a turn.
+    renderSettingsDialog();
+
+    const notice = screen.getByTestId('settings-byok-no-file-tools-notice');
+    expect(notice.textContent).toContain('BYOK mode');
+    expect(notice.textContent).toContain("can't read, write, or edit files");
+    expect(notice.textContent).toContain('Local CLI mode');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    expect(screen.getByTestId('settings-byok-no-file-tools-notice')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Google Gemini' }));
+    expect(screen.getByTestId('settings-byok-no-file-tools-notice')).toBeTruthy();
+  });
+
+  it('hides the BYOK no-file-tools notice when Local CLI mode is selected', () => {
+    renderSettingsDialog({ mode: 'daemon' });
+
+    expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
+  });
+
   it('lets Anthropic and Google users customize the default base URL', () => {
     renderSettingsDialog();
 
@@ -1376,6 +1403,7 @@ describe('SettingsDialog media providers interactions', () => {
     expect(screen.queryByLabelText('Black Forest Labs API key')).toBeNull();
     expect(screen.queryByLabelText('Black Forest Labs Base URL')).toBeNull();
     expect(document.querySelector('.media-provider-coming-soon')).toBeTruthy();
+    expect(screen.getByText('ComfyUI')).toBeTruthy();
   });
 
   it('renders ElevenLabs as an integrated media provider with enabled inputs', () => {
