@@ -27,6 +27,9 @@ export function ManualEditPanel({
   draft,
   error,
   canUndo,
+  canRedo,
+  busy = false,
+  savedAt = null,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
@@ -35,6 +38,8 @@ export function ManualEditPanel({
   onExit,
   onApplyPatch,
   onPickImage,
+  onUndo,
+  onRedo,
   pageStylesEnabled = true,
 }: {
   targets: ManualEditTarget[];
@@ -58,16 +63,45 @@ export function ManualEditPanel({
   onCancelDraft: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  savedAt?: number | null;
 }) {
   const t = useT();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
+  useEffect(() => {
+    if (savedAt == null) {
+      setShowSaved(false);
+      return;
+    }
+    setShowSaved(true);
+    const timer = window.setTimeout(() => setShowSaved(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [savedAt]);
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (busy) return;
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || event.altKey) return;
+      if (event.key.toLowerCase() === 'z' && !event.shiftKey && canUndo) {
+        event.preventDefault();
+        onUndo();
+        return;
+      }
+      if (event.key.toLowerCase() === 'z' && event.shiftKey && canRedo) {
+        event.preventDefault();
+        onRedo();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [busy, canRedo, canUndo, onRedo, onUndo]);
 
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
@@ -89,7 +123,18 @@ export function ManualEditPanel({
     <aside className="manual-edit-right">
       <section className="manual-edit-modal cc-panel">
         <div className="manual-edit-titlebar">
-          <span>Edit</span>
+          <div className="manual-edit-titlebar-main">
+            <span>{t('manualEdit.title')}</span>
+            {busy ? (
+              <em className="manual-edit-status" data-testid="manual-edit-status">
+                Saving…
+              </em>
+            ) : showSaved ? (
+              <em className="manual-edit-status" data-testid="manual-edit-status">
+                Saved ✓
+              </em>
+            ) : null}
+          </div>
           {onExit ? (
             <button
               type="button"
@@ -101,6 +146,28 @@ export function ManualEditPanel({
               <Icon name="close" size={16} />
             </button>
           ) : null}
+        </div>
+        <div className="manual-edit-history-actions">
+          <button
+            type="button"
+            className="cc-action-btn"
+            data-testid="manual-edit-undo"
+            disabled={!canUndo || busy}
+            aria-label={t('manualEdit.undo')}
+            onClick={onUndo}
+          >
+            {t('manualEdit.undo')}
+          </button>
+          <button
+            type="button"
+            className="cc-action-btn"
+            data-testid="manual-edit-redo"
+            disabled={!canRedo || busy}
+            aria-label={t('manualEdit.redo')}
+            onClick={onRedo}
+          >
+            {t('manualEdit.redo')}
+          </button>
         </div>
         {targetForInspector ? (
           <StyleInspector

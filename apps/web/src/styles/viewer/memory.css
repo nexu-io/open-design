@@ -935,7 +935,22 @@
   padding: 14px 18px 10px;
 }
 
-.manual-edit-titlebar > span {
+.manual-edit-titlebar-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.manual-edit-status {
+  color: var(--accent);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.manual-edit-titlebar > span,
+.manual-edit-titlebar-main > span {
   min-width: 0;
   overflow: hidden;
   color: var(--text);

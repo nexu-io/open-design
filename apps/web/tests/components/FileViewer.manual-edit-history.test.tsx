@@ -293,6 +293,67 @@ describe('FileViewer manual edit history regressions', () => {
         .not.toContain('data-od-id="hero"');
     });
   });
+
+  it('restores a deleted element when the user clicks Undo (#2866)', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    let persistedSource = initialSource;
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        persistedSource = payload.content;
+        savedSources.push(payload.content);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(persistedSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+
+    await act(async () => {
+      await panelState.props?.onSelectTarget(heroTarget());
+    });
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { id: 'hero', kind: 'remove-element' },
+        'Delete element',
+      );
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).not.toContain('data-od-id="hero"');
+
+    act(() => {
+      panelState.props?.onUndo();
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toContain('data-od-id="hero"');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .toContain('data-od-id="hero"');
+    });
+  });
 });
 
 function htmlPreviewFile(): ProjectFile {

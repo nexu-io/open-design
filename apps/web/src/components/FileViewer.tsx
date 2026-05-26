@@ -3893,6 +3893,7 @@ function HtmlViewer({
       if (value !== prev && !value) {
         setManualEditFrozenSource(null);
         setManualEditViewportWidth(null);
+        setManualEditSavedAt(null);
       }
       return value;
     });
@@ -3998,6 +3999,7 @@ function HtmlViewer({
   const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
   const [manualEditError, setManualEditError] = useState<string | null>(null);
   const [manualEditSaving, setManualEditSaving] = useState(false);
+  const [manualEditSavedAt, setManualEditSavedAt] = useState<number | null>(null);
   const manualEditSavingRef = useRef(false);
   const manualEditPendingStyleRef = useRef<ManualEditPendingStyleSave | null>(null);
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -5111,6 +5113,7 @@ function HtmlViewer({
         reconcileManualEditStyleSave(patch.id, patch.styles, result.source);
       }
       setManualEditError(null);
+      setManualEditSavedAt(Date.now());
       await onFileSaved?.();
       return true;
     } finally {
@@ -5162,6 +5165,7 @@ function HtmlViewer({
       setManualEditHistory(rest);
       setManualEditUndone((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
+      setManualEditSavedAt(Date.now());
       await onFileSaved?.();
     } finally {
       manualEditSavingRef.current = false;
@@ -5194,6 +5198,7 @@ function HtmlViewer({
       setManualEditUndone(rest);
       setManualEditHistory((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
+      setManualEditSavedAt(Date.now());
       await onFileSaved?.();
     } finally {
       manualEditSavingRef.current = false;
@@ -6068,6 +6073,7 @@ function HtmlViewer({
       canUndo={manualEditHistory.length > 0}
       canRedo={manualEditUndone.length > 0}
       busy={manualEditSaving}
+      savedAt={manualEditSavedAt}
       pageStylesEnabled={manualEditPageStylesEnabled}
       onSelectTarget={selectManualEditTarget}
       onDraftChange={setManualEditDraft}
