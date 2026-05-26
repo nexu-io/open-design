@@ -10660,7 +10660,7 @@ export async function startServer({
       const message =
         `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
         'The model or CLI likely hung while generating. ' +
-        `Phase details: spawned agent binary ${resolvedBin}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
+        `Phase details: spawned ${def.name || def.id} agent; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
         `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
         'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));

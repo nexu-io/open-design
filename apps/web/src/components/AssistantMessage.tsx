@@ -46,6 +46,7 @@ import {
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
 import { agentDisplayName, exactAgentDisplayName } from "../utils/agentLabels";
+import { sanitizeStatusDetail } from "../utils/sanitizeStatusDetail";
 import {
   exactDateTime,
   messageTime,
@@ -1568,10 +1569,11 @@ function StatusPill({
   label: string;
   detail?: string | undefined;
 }) {
+  const sanitizedDetail = detail ? sanitizeStatusDetail(detail) : undefined;
   return (
     <div className="status-pill">
       <span className="status-label">{label}</span>
-      {detail ? <span className="status-detail">{detail}</span> : null}
+      {sanitizedDetail ? <span className="status-detail">{sanitizedDetail}</span> : null}
     </div>
   );
 }

@@ -42,6 +42,7 @@ import {
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
+import { sanitizeStatusDetail } from '../utils/sanitizeStatusDetail';
 import { randomUUID } from '../utils/uuid';
 import type {
   AgentEvent,
@@ -2243,11 +2244,12 @@ function WorkspaceActivityCard({
   const fileOps = deriveFileOps(events);
   const status = workspaceActivityStatus(message, active);
   const statusDetail = latestStatusDetail(events);
+  const sanitizedStatusDetail = statusDetail ? sanitizeStatusDetail(statusDetail) : null;
   const hasActivity =
     active
     || todos.length > 0
     || fileOps.length > 0
-    || statusDetail !== null
+    || sanitizedStatusDetail !== null
     || status === 'failed';
 
   if (!hasActivity) return null;
@@ -2265,7 +2267,7 @@ function WorkspaceActivityCard({
                 ? 'Workspace update needs attention'
                 : 'Workspace update ready'}
           </strong>
-          <small>{statusDetail ?? workspaceActivityFallbackDetail(status)}</small>
+          <small>{sanitizedStatusDetail ?? workspaceActivityFallbackDetail(status)}</small>
         </span>
       </div>
       <div

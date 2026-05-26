@@ -46,6 +46,7 @@
   "exclude": [
     "node_modules",
     "out",
-    ".next"
+    ".next",
+    "tests/**/*"
   ]
 }
