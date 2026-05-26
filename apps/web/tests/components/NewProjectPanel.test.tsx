@@ -635,6 +635,34 @@ describe('NewProjectPanel design system defaults', () => {
 });
 
 describe('NewProjectPanel folder import feedback', () => {
+  it('shows an error when Claude Design zip import resolves as failed', async () => {
+    const onImportClaudeDesign = vi.fn().mockResolvedValue({
+      ok: false,
+      message: 'unsupported zip contents',
+    });
+
+    const { container } = render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        onImportClaudeDesign={onImportClaudeDesign}
+      />,
+    );
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+    const file = new File(['zip'], 'relume.zip', { type: 'application/zip' });
+    expect(input).toBeTruthy();
+    fireEvent.change(input!, { target: { files: [file] } });
+
+    expect(onImportClaudeDesign).toHaveBeenCalledWith(file);
+    expect(await screen.findByText('Import failed: unsupported zip contents')).toBeTruthy();
+  });
+
   it('shows an error when manual folder import rejects with a daemon message', async () => {
     const onImportFolder = vi.fn().mockRejectedValue(new Error('folder not found'));
 
