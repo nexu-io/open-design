@@ -4,31 +4,116 @@
 
 Capture the integration-boundary decisions the product/pipeline team needs to
 make before any creative-memory implementation can land in the live generation
-loop. The engine prototype at
-[`packages/creative-memory-system/`](../../packages/creative-memory-system/)
-provides a deterministic local-first preference memory with a stable external
-surface (`retrieveForInjection`, `buildPromptBlock`, `ingestSignal`,
-`runDecay`, and the typed `on*` adapter handlers). What this doc covers is
-**not** that engine. It is the contract between memory and the rest of Open
-Design: where signals come from, where the prompt block goes, how users
-control it, and how the Section 11 raw-events / content-addressed-derivations
-contract reshapes the boundary.
+loop. What this doc covers is **not** the memory engine itself. It is the
+contract between memory and the rest of Open Design: where signals come from,
+where the prompt block goes, how users control it, and how the raw-events /
+content-addressed-derivations contract (background below) reshapes the
+boundary.
 
 This is doc-only. No code lands with this PR. Each section enumerates the
 option space, names a working lean, and flags the decision that needs an
 explicit product/pipeline call. The intent is to react against this doc rather
 than against committed code, so reversing a decision costs a doc edit instead
-of a refactor.
+of a refactor. The doc is written to apply to either implementation that
+might land — PR [#1746](https://github.com/nexu-io/open-design/pull/1746)'s
+RFC/prototype package or a team-internal implementation — per the resolved
+foundation-vs-reference question on the parent issue.
 
-Companion reading:
+Anchor threads:
 
-- [`packages/creative-memory-system/README.md`](../../packages/creative-memory-system/README.md)
-  for the engine's external API and storage shape.
-- [`packages/creative-memory-system/docs/open-questions.md`](../../packages/creative-memory-system/docs/open-questions.md)
-  for the full open-questions ledger; Section 11 is the raw-events contract
-  this doc references.
-- Issue [#1637](https://github.com/nexu-io/open-design/issues/1637) for the
-  product-direction thread.
+- Issue [#1637](https://github.com/nexu-io/open-design/issues/1637) — the
+  product-direction thread; carries the Section 11 raw-events contract
+  discussion in line.
+- PR [#1746](https://github.com/nexu-io/open-design/pull/1746) — the
+  RFC/prototype engine package, parked while this doc is reviewed.
+
+## Background
+
+This section inlines just enough of the engine's external shape that the
+later sections do not depend on any file outside `main`. Anyone who wants
+the full simulation suite, lifecycle rationale, or open-questions ledger
+can read PR [#1746](https://github.com/nexu-io/open-design/pull/1746); the
+material below is what this doc itself relies on.
+
+### Engine external API (current shape, subject to integration)
+
+The prototype exposes a deliberately small surface:
+
+- `retrieveForInjection(userId, context)` — pure function over stored state
+  plus request context. Returns a structured result describing the
+  preferences that should be injected, plus diagnostic events explaining
+  what was kept, dropped, capped, suppressed, or backfilled at each stage.
+- `buildPromptBlock(retrieved, projectId)` — formats the retrieval result
+  as a fixed `[MEMORY CONTEXT]` block (Prefer / Avoid sections per
+  confidence tier, plus an optional `Project override:` line).
+- `ingestSignal(userId, signal)` — accepts one classified signal at a time
+  (one of `generation_accepted`, `manual_refinement`, `explicit_tag`,
+  `thumbs`, `abandon`, `revert`).
+- `runDecay(userId)` — invoked by the host on a fixed schedule (typically
+  session start); decays untouched preferences and archives stale ones.
+- Typed adapter handlers — `onGenerationAccepted`, `onArtifactEditedAndSaved`,
+  `onExplicitTagApplied`, `onThumbsRated`, `onGenerationAbandoned`,
+  `onRevertAfterEdit`. Each wraps `ingestSignal` with the right signal type;
+  these are the integration touch points §1 of this doc decides on.
+
+The integration contract this doc defines does **not** require keeping
+those exact names or signatures. They are listed so the §1 / §2 decisions
+have a concrete starting point.
+
+### Engine storage shape (current shape, also subject to integration)
+
+The prototype stores plain JSON per user at
+`<storage_root>/<userId>/preferences.json`, schema-versioned, with:
+
+- `global_preferences[]` — preferences with no project scope.
+- `project_overrides{<project_id>: prefs[]}` — per-project preferences.
+- `refinement_log[]` — diff history; dormant today (nothing reads it),
+  preserved as the natural seed for the future raw-events log.
+- `memory_enabled` — soft kill switch; when `false`, ingestion no-ops and
+  retrieval returns empty.
+
+`<storage_root>` defaults to a package-local directory and is overridable
+via `MEMORY_STORAGE_ROOT`. §3 of this doc proposes aligning that with
+`OD_DATA_DIR` precedence per [`AGENTS.md`](../../AGENTS.md) FAQ "Where is
+data written?".
+
+### Raw-events / content-addressed-derivations contract
+
+The current engine is **write-time-derivation**: `ingestSignal` mutates
+preference records directly. Two failure modes were identified during PR
+[#1746](https://github.com/nexu-io/open-design/pull/1746) review:
+
+1. **Attribution.** A unary accept/reject is one bit; without contrastive
+   context, an extractor will attribute rejections to whatever it finds
+   most salient in each candidate, not what the user actually disliked.
+   After enough events, rejection memory hardens around extractor salience
+   rather than user intent.
+2. **Re-derivation impossible.** Derived features are written directly,
+   so an improved extractor or new contextual signals cannot retroactively
+   re-interpret older events.
+
+The agreed forward-looking contract:
+
+- **Raw events are canonical.** Every interaction event is persisted as an
+  append-only record with enough context to re-derive features later.
+- **Derived features are a cache.** What is currently the preference
+  records becomes a cached interpretation over the raw event log. Each
+  derived feature carries the derivation function version that produced it.
+- **Pairwise > unary for attribution.** Where the UX can support it, prefer
+  pairwise comparison over unary accept/reject. Unary signals stay
+  weaker/provisional unless reinforced by explicit tags, edits, or
+  contrastive evidence.
+- **Cache invalidation is content-addressed.** Cache key for a derived
+  feature is `hash(raw_event_set, derivation_fn_version)`. When either
+  side changes — new raw events arrive, the derivation function changes,
+  the version tag bumps — the key changes and the old derived value is
+  unreachable. Re-derivation happens on demand against whatever set of
+  raw events the new key resolves over. A derived feature can never be
+  stale, because if it were stale its key would have changed and the
+  lookup would miss.
+
+This is the "Section 11 contract" §4 of this doc maps onto integration
+boundaries.
 
 ## Non-goals
 
@@ -38,14 +123,15 @@ Companion reading:
 - Designing UI screens. Where user controls are needed, the doc names the
   surfaces and the dual-track UI/CLI obligations from
   [`AGENTS.md`](../../AGENTS.md), but stops short of pixel-level proposals.
-- Tuning normalizer values, reversal multipliers, or injection format. Those
-  live in `open-questions.md` §5–§7.
+- Tuning normalizer values, reversal multipliers, or injection format.
+  Those are engine-internal numerics, not integration boundaries.
 
 ## 1. Signal capture points
 
 The engine exposes six typed handlers. Each needs a concrete pipeline event to
-fire from. The questions below stay open in `open-questions.md` §1; the table
-captures the decision space.
+fire from. The decisions here are the integration form of the same questions
+called out in the Background section above; the table captures the decision
+space.
 
 | Handler | Engine assumption | Candidate trigger sites | Lean | Open product call |
 |---|---|---|---|---|
@@ -58,9 +144,9 @@ captures the decision space.
 
 ### Cross-cutting
 
-- **Debounce ownership.** Open question §3. Lean: host coalesces and calls
-  the handler once per coalesced window. Adapter stays simple.
-- **Classifier placement.** Open question §4. Lean: pipeline populates
+- **Debounce ownership.** Lean: host coalesces and calls the handler once per
+  coalesced window. Adapter stays simple.
+- **Classifier placement.** Lean: pipeline populates
   `artifact_meta.signals[]` upstream of the adapter call. The adapter remains
   a pass-through. ML classification, if any, belongs in the host, not in the
   memory subsystem.
@@ -184,12 +270,11 @@ control needs both UI and CLI from day one — not staged across PRs.
 
 ## 4. Section 11 contract shape
 
-Open question §11 in `open-questions.md` documents the agreed forward-looking
-contract: raw events canonical, derived features as a re-derivable cache,
-pairwise preferred over unary for attribution, with @Ilya0527's
-content-addressed-derivations refinement (cache key =
-`hash(raw_event_set, derivation_fn_version)`) replacing explicit invalidation
-bookkeeping. This section maps that contract onto integration boundaries.
+The Background section above states the raw-events / content-addressed-
+derivations contract: raw events canonical, derived features as a re-derivable
+cache keyed on `hash(raw_event_set, derivation_fn_version)`, pairwise
+preferred over unary for attribution. This section maps that contract onto
+integration boundaries.
 
 ### Ownership: who stores raw events?
 
@@ -226,9 +311,9 @@ Two modes for when re-derivation runs:
 | Background worker | Daemon job after each accepted batch of events | Read is always fast | Constant background cost, even when the user is idle |
 
 Lean: **lazy on read** for MVP, with the structured option to add a background
-worker behind a feature flag later. Per `open-questions.md` §11, this is the
-documented path: "lazy on read with a write-back cache. Background re-derivation
-is a follow-up once derivations grow heavy enough to dominate p99 latency."
+worker behind a feature flag later. Lazy-on-read with a write-back cache is
+the documented path; background re-derivation is a follow-up once derivations
+grow heavy enough to dominate p99 latency.
 
 ### Pairwise vs unary signal capture
 
