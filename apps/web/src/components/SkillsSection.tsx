@@ -198,20 +198,23 @@ export function SkillsSection({ cfg, setCfg }: Props) {
     [filesById],
   );
 
+  // Prefetch body + file tree whenever a row is expanded — including after
+  // create/save, which sets expandedId directly without a header click (#2974).
+  useEffect(() => {
+    if (!expandedId) return;
+    void ensureBody(expandedId);
+    void ensureFiles(expandedId);
+  }, [expandedId, ensureBody, ensureFiles]);
+
   const toggleExpanded = useCallback(
     (id: string) => {
-      setExpandedId((cur) => {
-        if (cur === id) return null;
-        void ensureBody(id);
-        void ensureFiles(id);
-        return id;
-      });
+      setExpandedId((cur) => (cur === id ? null : id));
       // Switching rows aborts any in-flight edit on the previous row.
       setEditingId((cur) => (cur === id ? cur : null));
       setConfirmDeleteId(null);
       setConfirmBuiltInEditId(null);
     },
-    [ensureBody, ensureFiles],
+    [],
   );
 
   const startCreate = useCallback(() => {

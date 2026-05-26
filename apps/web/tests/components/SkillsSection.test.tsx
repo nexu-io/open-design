@@ -155,4 +155,66 @@ describe('SkillsSection', () => {
     expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
     expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
   });
+
+  it('loads the skill file tree after creating a new skill (#2974)', async () => {
+    const created = makeSkill({
+      id: 'my-skill',
+      name: 'My skill',
+      source: 'user',
+    });
+    const setCfg = vi.fn();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/skills' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ skills: [created] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/skills/import' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ skill: created }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/skills/my-skill/files') {
+        return new Response(
+          JSON.stringify({
+            files: [{ path: 'SKILL.md', kind: 'file', size: 128 }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/skills/my-skill') {
+        return new Response(
+          JSON.stringify({ skill: created, body: '# My skill\n\nSteps.' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(
+      <SkillsSection
+        cfg={TEST_CONFIG}
+        setCfg={setCfg}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('skills-new'));
+    const form = await screen.findByTestId('skills-create-form');
+    fireEvent.change(within(form).getByPlaceholderText('my-skill'), {
+      target: { value: 'My skill' },
+    });
+    fireEvent.change(within(form).getByPlaceholderText(/Explain the workflow/), {
+      target: { value: '# My skill\n\nSteps.' },
+    });
+    fireEvent.click(within(form).getByTestId('skills-save'));
+
+    const row = await screen.findByTestId('skill-row-my-skill');
+    await waitFor(() => {
+      expect(within(row).queryByText('No files in this skill folder.')).toBeNull();
+      expect(within(row).getAllByText('SKILL.md').length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
