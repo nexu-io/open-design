@@ -107,6 +107,23 @@ const selectObjectForm = {
   ],
 } as QuestionForm;
 
+const duplicateValueForm = {
+  id: 'discovery',
+  title: 'Quick brief',
+  questions: [
+    {
+      id: 'language',
+      label: 'Language',
+      type: 'radio',
+      required: true,
+      options: [
+        { label: '普通话', value: 'Chinese' },
+        { label: '日语风格中文台词', value: 'Chinese' },
+      ],
+    },
+  ],
+} as QuestionForm;
+
 describe('QuestionFormView', () => {
   afterEach(() => cleanup());
 
@@ -241,5 +258,18 @@ describe('QuestionFormView', () => {
       '- Primary surface: Mobile (iOS/Android) [value: mobile]',
     );
     expect(onSubmit.mock.calls[0]?.[1]).toEqual({ platform: 'mobile' });
+  });
+
+  it('renders duplicate option values without React key warnings', () => {
+    const onSubmit = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      render(<QuestionFormView form={duplicateValueForm} interactive onSubmit={onSubmit} />);
+      const errorText = consoleError.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(errorText).not.toContain('Encountered two children with the same key');
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

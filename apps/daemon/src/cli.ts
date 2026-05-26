@@ -782,6 +782,9 @@ Required:
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
+                            For audio speech, pass only the final words to speak;
+                            keep tone, emotion, pacing, language, and voice
+                            descriptions out of --prompt.
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
   --size <WxH>              Exact image output size (e.g. 2048x1152). Provider-validated against the

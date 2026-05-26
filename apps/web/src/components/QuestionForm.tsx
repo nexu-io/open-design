@@ -101,9 +101,9 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
               {q.help ? <div className="qf-help">{q.help}</div> : null}
               {q.type === 'radio' && q.options ? (
                 <div className="qf-options">
-                  {q.options.map((opt) => (
+                  {q.options.map((opt, index) => (
                     <label
-                      key={opt.value}
+                      key={`${q.id}:${index}:${opt.value}`}
                       className={`qf-chip${value === opt.value ? ' qf-chip-on' : ''}`}
                       title={opt.description}
                     >
@@ -123,14 +123,14 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
               ) : null}
               {q.type === 'checkbox' && q.options ? (
                 <div className="qf-options">
-                  {q.options.map((opt) => {
+                  {q.options.map((opt, index) => {
                     const arr = Array.isArray(value) ? value : [];
                     const on = arr.includes(opt.value);
                     const maxed =
                       q.maxSelections !== undefined && !on && arr.length >= q.maxSelections;
                     return (
                       <label
-                        key={opt.value}
+                        key={`${q.id}:${index}:${opt.value}`}
                         title={opt.description}
                         className={`qf-chip${on ? ' qf-chip-on' : ''}${maxed ? ' qf-chip-disabled' : ''}`}
                       >
@@ -158,8 +158,8 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
                   <option value="" disabled>
                     {q.placeholder ?? t('qf.choose')}
                   </option>
-                  {q.options.map((opt) => (
-                    <option key={opt.value} value={opt.value} title={opt.description}>
+                  {q.options.map((opt, index) => (
+                    <option key={`${q.id}:${index}:${opt.value}`} value={opt.value} title={opt.description}>
                       {opt.label}
                     </option>
                   ))}

@@ -207,12 +207,12 @@ export const BYOK_MEDIA_TOOLS = [
           prompt: {
             type: 'string',
             description:
-              'The text to speak (TTS), the lyrics / style brief (music), or the sound description (SFX). Maximum 2000 characters.',
+              'The text to speak (TTS), the lyrics / style brief (music), or the sound description (SFX). For TTS, include only the final text to speak. Do not include language, tone, pacing, emotion, style, safety notes, or voice descriptions in this prompt. Maximum 2000 characters.',
           },
           voice: {
             type: 'string',
             description:
-              'Optional voice id for speech models (e.g. a SenseAudio voice like female_0038_a). Ignored for music / SFX.',
+              'Optional voice id for speech models (e.g. a SenseAudio voice like female_0038_a). Only pass this when you have a real provider voice id. Ignored for music / SFX.',
           },
           duration: {
             type: 'integer',
