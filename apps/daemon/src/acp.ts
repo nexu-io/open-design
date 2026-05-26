@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
 import path from 'node:path';
 
+import { sanitizeAgentErrorDetail } from './user-facing-agent-error.js';
+
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -392,7 +394,9 @@ export async function detectAcpModels({
     child.stderr.on('data', (chunk) => {
       stderrBuf = `${stderrBuf}${chunk}`.slice(-16_000);
     });
-    child.on('error', (err) => fail(`spawn failed: ${err.message}`));
+    child.on('error', (err) =>
+      fail(`spawn failed: ${sanitizeAgentErrorDetail(err.message)}`),
+    );
     child.on('close', (code, signal) => {
       parser.flush();
       if (!settled) {

@@ -193,6 +193,7 @@ import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { classifyAgentAuthFailure, cursorAuthGuidance } from './runtimes/auth.js';
+import { sanitizeAgentErrorDetail } from './user-facing-agent-error.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
@@ -11073,7 +11074,13 @@ export async function startServer({
     } catch (err) {
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
-      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      send(
+        'error',
+        createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          `spawn failed: ${sanitizeAgentErrorDetail(err.message)}`,
+        ),
+      );
       design.runs.finish(run, 'failed', 1, null);
       return;
     }
