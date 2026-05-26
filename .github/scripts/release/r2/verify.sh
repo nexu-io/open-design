@@ -134,6 +134,9 @@ if [ "$ENABLE_WIN" = "true" ]; then
   grep -F "version: \"$RELEASE_VERSION\"" "$downloaded_feed"
   grep -F "$R2_WIN_INSTALLER_URL" "$downloaded_feed"
   curl -fsSI "$R2_WIN_INSTALLER_URL" >/dev/null
+  if [ -n "${R2_WIN_PORTABLE_ZIP_URL:-}" ]; then
+    curl -fsSI "$R2_WIN_PORTABLE_ZIP_URL" >/dev/null
+  fi
   require_report_file "win/manifest.json"
   require_report_file "win/screenshots/open-design-win-smoke.png"
   require_report_file "win/suite-result.json"

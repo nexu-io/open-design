@@ -128,6 +128,37 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.project.metadata?.skipDiscoveryBrief).toBe(true);
   });
 
+  it('serves project files through raw and files path routes', async () => {
+    const projectId = `proj-raw-route-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Raw route fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const writeResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'index.html', content: '<!doctype html><h1>ok</h1>' }),
+    });
+    expect(writeResp.status).toBe(200);
+
+    const rawResp = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
+    expect(rawResp.status).toBe(200);
+    expect(rawResp.headers.get('content-type')).toContain('text/html');
+    expect(await rawResp.text()).toContain('<h1>ok</h1>');
+
+    const fileResp = await fetch(`${baseUrl}/api/projects/${projectId}/files/index.html`);
+    expect(fileResp.status).toBe(200);
+    expect(await fileResp.text()).toContain('<h1>ok</h1>');
+  });
+
   it('rejects non-boolean skipDiscoveryBrief on POST /api/projects', async () => {
     const projectId = `proj-skip-discovery-bad-${Date.now()}`;
     const resp = await fetch(`${baseUrl}/api/projects`, {

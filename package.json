@@ -14,7 +14,7 @@
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-serve": "pnpm exec tools-serve",
-    "nix:update-hash": "tsx ./scripts/update-nix-pnpm-deps-hash.ts",
+    "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
     "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/approve-fork-pr-workflows.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",

@@ -228,8 +228,8 @@ test('captures the settings BYOK surface', async ({ page }) => {
 });
 
 async function openAvatarMenu(page: Parameters<typeof configureVisualPage>[0]) {
-  await page.locator('.avatar-menu .settings-icon-btn').click();
-  const menu = page.locator('.avatar-popover[role="menu"]');
+  await page.locator('.avatar-menu .avatar-agent-trigger').click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
   return menu;
 }

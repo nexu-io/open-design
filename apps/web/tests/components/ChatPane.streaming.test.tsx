@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { forwardRef } from 'react';
+import { forwardRef, useImperativeHandle } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane, retryableAssistantMessage } from '../../src/components/ChatPane';
 import { DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX } from '../../src/design-system-auto-prompt';
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 import type { ChatMessage, Conversation, ProjectMetadata } from '../../src/types';
+
+const composerMocks = vi.hoisted(() => ({
+  focus: vi.fn(),
+  restoreDraft: vi.fn(),
+  setDraft: vi.fn(),
+}));
 
 const translations: Record<string, string> = {
   'chat.queuedHeader': 'Queued',
@@ -35,9 +42,14 @@ vi.mock('../../src/components/AssistantMessage', () => ({
 }));
 
 vi.mock('../../src/components/ChatComposer', () => ({
-  ChatComposer: forwardRef(({ streaming }: { streaming: boolean }, _ref) => (
-    <output data-testid="composer-streaming">{streaming ? 'streaming' : 'idle'}</output>
-  )),
+  ChatComposer: forwardRef(({ streaming }: { streaming: boolean }, ref) => {
+    useImperativeHandle(ref, () => ({
+      focus: composerMocks.focus,
+      restoreDraft: composerMocks.restoreDraft,
+      setDraft: composerMocks.setDraft,
+    }));
+    return <output data-testid="composer-streaming">{streaming ? 'streaming' : 'idle'}</output>;
+  }),
 }));
 
 class MockResizeObserver {
@@ -80,10 +92,25 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('ChatPane streaming state', () => {
+  it('keeps queued-send strip styles compact above the composer', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain('.chat-queued-send-strip');
+    expect(css).toContain('display: flex;');
+    expect(css).toContain('.chat-queued-send-row');
+    expect(css).toContain('align-items: center;');
+    expect(css).toContain('.chat-queued-send-title');
+    expect(css).toContain('text-overflow: ellipsis;');
+    expect(css).toContain('.chat-queued-send-action');
+    expect(css).toContain('width: 26px;');
+    expect(css).toContain('height: 26px;');
+  });
+
   it('exposes retry only for the last failed assistant when the pane is idle', () => {
     const failed: ChatMessage = {
       id: 'assistant-1',
@@ -135,6 +162,54 @@ describe('ChatPane streaming state', () => {
     const bubble = screen.getByText('Generate a simple sign-in page');
     expect(bubble.classList.contains('user-bubble')).toBe(true);
     expect(bubble.closest('.msg.user')).not.toBeNull();
+  });
+
+  it('hides internal path ids from comment attachment chips', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: '',
+        createdAt: 1,
+        commentAttachments: [
+          {
+            id: 'comment-1',
+            order: 1,
+            filePath: 'preview.html',
+            elementId: 'path-0-0-0-0-1',
+            selector: '[data-od-id="path-0-0-0-0-1"]',
+            label: '',
+            comment: '222',
+            currentText: '',
+            pagePosition: { x: 10, y: 20, width: 30, height: 40 },
+            htmlHint: '<div>',
+          },
+        ],
+      },
+    ];
+
+    render(
+      <ChatPane
+        projectKindForTracking="prototype"
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(screen.getByText('Annotation')).toBeTruthy();
+    expect(screen.getByText('222')).toBeTruthy();
+    expect(screen.queryByText('path-0-0-0-0-1')).toBeNull();
   });
 
   it('summarizes auto-sent design-system workspace prompts', () => {
@@ -273,7 +348,25 @@ Expected output:
         projectId="project-1"
         projectFiles={[]}
         queuedItems={[
-          { id: 'queued-1', prompt: 'Make the export button larger and use a warmer accent' },
+          {
+            id: 'queued-1',
+            prompt: 'Make the export button larger and use a warmer accent',
+            attachments: [{ path: 'brief.md', name: 'brief.md', kind: 'file' }],
+            commentAttachments: [
+              {
+                id: 'comment-1',
+                order: 1,
+                filePath: 'preview.html',
+                elementId: 'hero',
+                selector: '#hero',
+                label: 'Hero',
+                comment: 'Use a warmer accent',
+                currentText: 'Export',
+                pagePosition: { x: 10, y: 20, width: 30, height: 40 },
+                htmlHint: '<section id="hero">',
+              },
+            ],
+          },
           { id: 'queued-2', prompt: 'Then adjust the title spacing' },
           { id: 'queued-3', prompt: 'Reduce the subtitle size' },
           { id: 'queued-4', prompt: 'Switch to a lighter font weight' },
@@ -392,7 +485,6 @@ Expected output:
 
     expect(log!.scrollTop).toBe(600);
   });
-
 });
 
 const conversations: Conversation[] = [

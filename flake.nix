@@ -40,12 +40,34 @@
     perSystem = flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
       nodejs = pkgs.nodejs_24;
-      daemonSrc = filterProjectSource [
+      # Keep in sync with .github/workflows/ci.yml change_scopes
+      # nix_validation_required filter.
+      daemonWorkspacePaths = [
+        "packages/contracts"
+        "packages/registry-protocol"
+        "packages/agui-adapter"
+        "packages/plugin-runtime"
+        "packages/sidecar-proto"
+        "packages/sidecar"
+        "packages/platform"
+        "packages/diagnostics"
+        "apps/daemon"
+      ];
+      # Keep in sync with .github/workflows/ci.yml change_scopes
+      # nix_validation_required filter.
+      webWorkspacePaths = [
+        "packages/contracts"
+        "packages/host"
+        "packages/platform"
+        "packages/sidecar"
+        "packages/sidecar-proto"
+        "apps/web"
+      ];
+      daemonSrc = filterProjectSource ([
         "package.json"
         "pnpm-lock.yaml"
         "pnpm-workspace.yaml"
         "tsconfig.json"
-        "scripts"
         "assets"
         "plugins"
         "skills"
@@ -53,21 +75,15 @@
         "design-templates"
         "craft"
         "prompt-templates"
-        "apps/daemon"
-        "packages"
-      ];
-      webSrc = filterProjectSource [
+      ]
+      ++ daemonWorkspacePaths);
+      webSrc = filterProjectSource ([
         "package.json"
         "pnpm-lock.yaml"
         "pnpm-workspace.yaml"
         "tsconfig.json"
-        "apps/web"
-        "packages/contracts"
-        "packages/host"
-        "packages/platform"
-        "packages/sidecar"
-        "packages/sidecar-proto"
-      ];
+      ]
+      ++ webWorkspacePaths);
 
       # nixpkgs ships pnpm 10.33.0; the repo's package.json declares
       # `engines.pnpm: ">=10.33.2 <11"` and pnpm refuses to install
@@ -92,10 +108,12 @@
       daemon = pkgs.callPackage ./nix/package-daemon.nix {
         inherit dream2nix nixpkgs system nodejs pnpm_10;
         src = daemonSrc;
+        workspacePaths = daemonWorkspacePaths;
       };
       web = pkgs.callPackage ./nix/package-web.nix {
         inherit dream2nix nixpkgs system nodejs pnpm_10;
         src = webSrc;
+        workspacePaths = webWorkspacePaths;
       };
     in {
       packages = {

@@ -529,6 +529,118 @@
   margin: 0 8px;
 }
 
+.chat-queued-send-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow-xs);
+}
+
+.chat-queued-send-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+}
+
+.chat-queued-send-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.chat-queued-send-heading strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.chat-queued-send-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.chat-queued-send-row-active {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.chat-queued-send-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-queued-send-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.chat-queued-send-action {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.chat-queued-send-action:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.chat-queued-send-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.chat-queued-send-overflow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.chat-queued-send-overflow-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.chat-queued-send-extra {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .preview-draw-note-input::placeholder {
   color: rgba(255, 225, 210, 0.86);
 }

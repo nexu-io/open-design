@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -570,6 +571,9 @@ export function ProjectView({
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const [commentInspectorActive, setCommentInspectorActive] = useState(false);
+  const commentInspectorPortalId = useId();
+  const leftInspectorActive = commentInspectorActive;
   // Per-session override for the BYOK SenseAudio chat's generate_image
   // tool. Seeded once from Settings (config.byokImageModel) so the
   // composer dropdown opens on the user's chosen default; subsequent
@@ -595,6 +599,7 @@ export function ProjectView({
       setInstructionsMode('closed');
     }
   }, [project.customInstructions, instructionsMode]);
+
   // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
   // bumps on file-changed SSE events, live_artifact* events, and the
   // chat streaming-completion edge so the staleness chip stays in sync
@@ -642,6 +647,8 @@ export function ProjectView({
     active: null,
   });
   const tabsLoadedRef = useRef(false);
+  const tabsHydratedFromSavedStateRef = useRef(false);
+  const hasAppliedInitialPrimaryOpenRef = useRef(false);
   // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
   // tool card, an attachment chip, or a produced-file chip in chat. We
   // include a nonce so re-clicking the same name after the user closed the
@@ -726,7 +733,12 @@ export function ProjectView({
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
         .filter((item) => item.conversationId === activeConversationId)
-        .map((item) => ({ id: item.id, prompt: item.prompt }))
+        .map((item) => ({
+          id: item.id,
+          prompt: item.prompt,
+          attachments: item.attachments,
+          commentAttachments: item.commentAttachments,
+        }))
     : [];
   const newConversationDisabled = creatingConversation;
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
@@ -1011,9 +1023,12 @@ export function ProjectView({
   useEffect(() => {
     let cancelled = false;
     tabsLoadedRef.current = false;
+    tabsHydratedFromSavedStateRef.current = false;
+    hasAppliedInitialPrimaryOpenRef.current = false;
     (async () => {
       const state = await loadTabs(project.id);
       if (cancelled) return;
+      tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
       setOpenTabsState(state);
       tabsLoadedRef.current = true;
     })();
@@ -1079,6 +1094,24 @@ export function ProjectView({
     const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
     return nextFiles;
   }, [refreshLiveArtifacts, refreshProjectFiles]);
+
+  useEffect(() => {
+    if (!tabsLoadedRef.current) return;
+    if (hasAppliedInitialPrimaryOpenRef.current) return;
+    if (routeFileName) return;
+    if (openTabsState.active || openTabsState.tabs.length > 0) {
+      hasAppliedInitialPrimaryOpenRef.current = true;
+      return;
+    }
+    if (tabsHydratedFromSavedStateRef.current) {
+      hasAppliedInitialPrimaryOpenRef.current = true;
+      return;
+    }
+    const primaryFile = selectPrimaryProjectFile(projectFiles);
+    if (!primaryFile) return;
+    hasAppliedInitialPrimaryOpenRef.current = true;
+    persistTabsState({ tabs: [primaryFile.name], active: primaryFile.name });
+  }, [openTabsState.active, openTabsState.tabs.length, persistTabsState, projectFiles, routeFileName]);
 
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
@@ -2164,6 +2197,7 @@ export function ProjectView({
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
       meta?: ProjectChatSendMeta,
+      baseMessages?: ChatMessage[],
     ) => {
       if (!activeConversationId) return;
       if (messagesConversationIdRef.current !== activeConversationId) return;
@@ -2171,9 +2205,14 @@ export function ProjectView({
         ? resolveRetryTarget(messages, meta.retryOfAssistantId)
         : null;
       if (meta?.retryOfAssistantId && !retryTarget) return;
+      const historyBase = retryTarget ? retryTarget.priorMessages : baseMessages ?? messages;
+      if (
+        !retryTarget &&
+        !prompt.trim() &&
+        attachments.length === 0 &&
+        commentAttachments.length === 0
+      ) return;
       if (currentConversationBusy) {
-        if (meta?.retryOfAssistantId) return;
-        if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
         enqueueChatSend({
           id: randomUUID(),
           conversationId: activeConversationId,
@@ -2191,12 +2230,6 @@ export function ProjectView({
         }
         return;
       }
-      if (
-        !retryTarget &&
-        !prompt.trim() &&
-        attachments.length === 0 &&
-        commentAttachments.length === 0
-      ) return;
       setChatSeed(null);
       const runConversationId = activeConversationId;
       setError(null);
@@ -2274,7 +2307,7 @@ export function ProjectView({
       activeCompletionNotificationRunsRef.current.add(assistantId);
       const nextHistory = retryTarget
         ? [...retryTarget.priorMessages, userMsg]
-        : [...messages, userMsg];
+        : [...historyBase, userMsg];
       setMessages([...nextHistory, assistantMsg]);
       markStreamingConversation(runConversationId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
@@ -2299,7 +2332,7 @@ export function ProjectView({
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
-      if (!retryTarget && messages.length === 0) {
+      if (!retryTarget && historyBase.length === 0) {
         const title = isDesignSystemWorkspacePrompt(prompt)
           ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
           : prompt.slice(0, 60).trim();
@@ -2899,6 +2932,8 @@ export function ProjectView({
   const handleSendBoardCommentAttachments = useCallback(
     async (commentAttachments: ChatCommentAttachment[]) => {
       if (currentConversationActionDisabled || commentAttachments.length === 0) return;
+      setWorkspaceFocused(false);
+      setCommentInspectorActive(false);
       await handleSend('', [], commentAttachments);
     },
     [handleSend, currentConversationActionDisabled],
@@ -3360,6 +3395,20 @@ export function ProjectView({
       messagesConversationIdRef.current = fresh.id;
       setConversations((curr) => [fresh, ...curr]);
       setActiveConversationId(fresh.id);
+      // Push the new conversation id into the URL synchronously so the
+      // route-sync effect sees a matching `routeConversationId` before
+      // it can revert `activeConversationId`. Without this, the route-sync
+      // effect can fight the conversation switch, preventing users from
+      // switching back to older conversations after creating a new one.
+      navigate(
+        {
+          kind: 'project',
+          projectId: project.id,
+          conversationId: fresh.id,
+          fileName: openTabsState.active ?? null,
+        },
+        { replace: true },
+      );
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
@@ -3369,7 +3418,7 @@ export function ProjectView({
       creatingConversationRef.current = false;
       setCreatingConversation(false);
     }
-  }, [project.id, activeConversationId, messages.length]);
+  }, [project.id, activeConversationId, messages.length, navigate, openTabsState.active]);
 
   const handleSelectConversation = useCallback((id: string) => {
     if (id === activeConversationId && failedMessagesConversationId !== id) return;
@@ -4080,6 +4129,9 @@ export function ProjectView({
   // pipeline; this hook only governs whether the web layer renders the
   // resulting SSE stream.
   const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
+  const projectInstructions = (project.customInstructions ?? '').trim();
+  const hasProjectInstructions = projectInstructions.length > 0;
+  const projectInstructionsPreview = compactInlinePreview(projectInstructions);
 
   return (
     <div className="app">
@@ -4091,8 +4143,22 @@ export function ProjectView({
         showTrafficSpace={false}
         onBack={onBack}
         backLabel={t('project.backToProjects')}
-        actions={(
+        fileActionsBefore={(
           <>
+            <button
+              type="button"
+              className="settings-icon-btn"
+              data-testid="project-settings-trigger"
+              title={t('project.customInstructions')}
+              aria-label={t('project.customInstructions')}
+              aria-expanded={instructionsMode !== 'closed'}
+              onClick={() => {
+                setInstructionsDraft(project.customInstructions ?? '');
+                setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
+              }}
+            >
+              <Icon name="sliders" size={16} />
+            </button>
             <HandoffButton projectId={project.id} />
             <AvatarMenu
               config={config}
@@ -4105,7 +4171,14 @@ export function ProjectView({
               onRefreshAgents={onRefreshAgents}
               onBack={onBack}
             />
+            <div
+              className="app-chrome-file-actions-before workspace-tabs-file-actions"
+              data-app-chrome-file-actions="true"
+            />
           </>
+        )}
+        actions={(
+          null
         )}
       >
         <div className="app-project-title">
@@ -4128,39 +4201,28 @@ export function ProjectView({
             >
               {project.name}
             </span>
-            <span className="meta" data-testid="project-meta">{projectMeta}</span>
+            {projectMeta !== t('project.metaFreeform') ? (
+              <span className="meta" data-testid="project-meta">{projectMeta}</span>
+            ) : null}
             <ProjectDesignSystemPicker
               designSystems={designSystems}
               selectedId={project.designSystemId ?? null}
               onChange={handleChangeDesignSystemId}
             />
-            {(project.customInstructions ?? '').trim() ? (
+            {hasProjectInstructions ? (
               <button
                 type="button"
                 className={`project-instructions-chip${instructionsMode !== 'closed' ? ' is-open' : ''}`}
                 data-testid="project-instructions-chip"
-                title={t('project.customInstructions')}
+                title={projectInstructions}
+                aria-label={t('project.customInstructions')}
                 aria-expanded={instructionsMode !== 'closed'}
                 onClick={() => setInstructionsMode((m) => (m === 'closed' ? 'review' : 'closed'))}
               >
-                <Icon name="file" size={11} />
-                <span>{t('project.customInstructions')}</span>
+                <Icon name="sliders" size={11} />
+                <span>&quot;{projectInstructionsPreview}&quot;</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                className="project-instructions-toggle"
-                data-testid="project-instructions-add"
-                title={t('project.customInstructions')}
-                aria-expanded={instructionsMode !== 'closed'}
-                onClick={() => {
-                  setInstructionsDraft('');
-                  setInstructionsMode((m) => (m === 'closed' ? 'edit' : 'closed'));
-                }}
-              >
-                <Icon name="edit" size={13} />
-              </button>
-            )}
+            ) : null}
           </span>
         </div>
       </AppChromeHeader>
@@ -4232,6 +4294,7 @@ export function ProjectView({
         ref={splitRef}
         className={[
           projectSplitClassName(workspaceFocused),
+          leftInspectorActive && !workspaceFocused ? 'split-manual-edit' : '',
           resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
         ].filter(Boolean).join(' ')}
         style={workspaceFocused
@@ -4242,7 +4305,13 @@ export function ProjectView({
             }}
       >
         <div className="split-chat-slot" hidden={workspaceFocused}>
-          {activeConversationId || conversationLoadError ? (
+          {commentInspectorActive ? (
+            <div
+              id={commentInspectorPortalId}
+              className="comment-left-host"
+              aria-label="Comments"
+            />
+          ) : activeConversationId || conversationLoadError ? (
             <ChatPane
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
@@ -4322,20 +4391,24 @@ export function ProjectView({
           )}
         </div>
         {!workspaceFocused ? (
-          <div
-            className="split-resize-handle"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={chatResizeLabel}
-            aria-valuemin={chatPanelAriaMinWidth}
-            aria-valuemax={chatPanelMaxWidth}
-            aria-valuenow={chatPanelWidth}
-            tabIndex={0}
-            title={chatResizeLabel}
-            onPointerDown={handleChatResizePointerDown}
-            onKeyDown={handleChatResizeKeyDown}
-            onBlur={handleChatResizeBlur}
-          />
+          leftInspectorActive ? (
+            <div className="split-edit-divider" aria-hidden />
+          ) : (
+            <div
+              className="split-resize-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={chatResizeLabel}
+              aria-valuemin={chatPanelAriaMinWidth}
+              aria-valuemax={chatPanelMaxWidth}
+              aria-valuenow={chatPanelWidth}
+              tabIndex={0}
+              title={chatResizeLabel}
+              onPointerDown={handleChatResizePointerDown}
+              onKeyDown={handleChatResizeKeyDown}
+              onBlur={handleChatResizeBlur}
+            />
+          )
         ) : null}
         <FileWorkspace
           projectId={project.id}
@@ -4371,6 +4444,8 @@ export function ProjectView({
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
           onConnectRepo={handleConnectRepo}
           githubConnected={githubConnected}
+          commentPortalId={commentInspectorPortalId}
+          onCommentModeChange={setCommentInspectorActive}
         />
       </div>
       {projectActionsToast ? (
@@ -4441,6 +4516,68 @@ export function findExistingArtifactProjectFile(
   return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
 }
 
+export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | null {
+  const candidates = files
+    .filter((file) => !isProcessArtifactFile(file.name))
+    .map((file) => ({ file, rank: primaryProjectFileRank(file) }))
+    .filter((candidate) => Number.isFinite(candidate.rank));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.rank - b.rank || b.file.mtime - a.file.mtime);
+  return candidates[0]?.file ?? null;
+}
+
+function isProcessArtifactFile(name: string): boolean {
+  const base = name.split('/').pop()?.toLowerCase() ?? name.toLowerCase();
+  return (
+    base === 'critique.json'
+    || base.endsWith('.log')
+    || base.endsWith('.meta.json')
+    || base.endsWith('.artifact.json')
+    || base.endsWith('.map')
+  );
+}
+
+function primaryProjectFileRank(file: ProjectFile): number {
+  if (manifestDeclaresPrimary(file)) return 0;
+  if (file.artifactManifest && file.artifactManifest.metadata?.inferred !== true) return 1;
+  if (file.kind === 'html') return 2;
+  if (file.kind === 'image') return 3;
+  if (file.kind === 'video') return 4;
+  if (file.kind === 'sketch') return 5;
+  if (file.kind === 'pdf') return 6;
+  if (file.kind === 'presentation') return 7;
+  if (file.kind === 'document') return 8;
+  if (file.kind === 'spreadsheet') return 9;
+  return Number.POSITIVE_INFINITY;
+}
+
+function manifestDeclaresPrimary(file: ProjectFile): boolean {
+  const manifest = file.artifactManifest;
+  if (!manifest) return false;
+  if (primaryValueTargetsFile(manifest.primary, file.name)) return true;
+  const metadata = manifest.metadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  if (primaryValueTargetsFile(metadata.primary, file.name)) return true;
+  const outputs = metadata.outputs;
+  if (outputs && typeof outputs === 'object' && !Array.isArray(outputs)) {
+    return primaryValueTargetsFile(
+      (outputs as { primary?: unknown }).primary,
+      file.name,
+    );
+  }
+  return false;
+}
+
+function primaryValueTargetsFile(value: unknown, fileName: string): boolean {
+  if (value === true) return true;
+  if (typeof value !== 'string') return false;
+  return normalizeProjectFileName(value) === normalizeProjectFileName(fileName);
+}
+
+function normalizeProjectFileName(value: string): string {
+  return value.replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
+}
+
 function assistantAgentDisplayName(
   agentId: string | null,
   fallbackName?: string,
@@ -4454,6 +4591,10 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+function compactInlinePreview(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 export interface RetryTarget {

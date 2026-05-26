@@ -459,7 +459,7 @@ jobs:
             "--namespace", "release-beta-win",
             "--portable",
             "--app-version", "${{ needs.metadata.outputs.beta_version }}",
-            "--to", "nsis",
+            "--to", "all",
             "--json"
           )
           "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -477,7 +477,7 @@ jobs:
               --namespace release-beta-win `
               --portable `
               --app-version "${{ needs.metadata.outputs.beta_version }}" `
-              --to nsis `
+              --to all `
               --json
             if ($LASTEXITCODE -ne 0) {
               throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"

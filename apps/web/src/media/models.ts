@@ -35,6 +35,7 @@ export type MediaProviderId =
   | 'nanobanana'
   | 'imagerouter'
   | 'custom-image'
+  | 'comfyui'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -135,11 +136,19 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'custom-image',
     label: 'Custom Image API',
-    hint: 'OpenAI-compatible /v1/images/generations endpoint',
+    hint: 'OpenAI-compatible /v1/images/generations (local or cloud)',
     integrated: true,
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
     customModelPlaceholder: 'my-image-model',
+  },
+  {
+    id: 'comfyui',
+    label: 'ComfyUI',
+    hint: 'Local JSON workflow server (planned adapter)',
+    integrated: false,
+    defaultBaseUrl: 'http://127.0.0.1:8188',
+    docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow',
   },
   {
     id: 'bfl',

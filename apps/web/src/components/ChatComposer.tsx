@@ -35,7 +35,7 @@ import type {
   ResearchOptions,
   RunContextSelection,
 } from '@open-design/contracts';
-import { buildVisualAnnotationAttachment } from '../comments';
+import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
@@ -97,6 +97,7 @@ interface Props {
   streaming: boolean;
   sendDisabled?: boolean;
   initialDraft?: string;
+  draftStorageKey?: string;
   // Lazy ensure — the composer calls this before its first upload, so the
   // project folder exists on disk before files land in it. Returns the
   // project id when ready.
@@ -160,6 +161,11 @@ interface Props {
 // push text into the composer without owning its draft state.
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
+  restoreDraft: (draft: {
+    text: string;
+    attachments?: ChatAttachment[];
+    commentAttachments?: ChatCommentAttachment[];
+  }) => void;
   focus: () => void;
 }
 
@@ -190,6 +196,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       streaming,
       sendDisabled = false,
       initialDraft,
+      draftStorageKey,
       onEnsureProject,
       commentAttachments = [],
       onRemoveCommentAttachment,
@@ -216,7 +223,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
-    const [draft, setDraft] = useState(initialDraft ?? "");
+    const [draft, setDraft] = useState(() => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "");
 
     // chat_panel page_view fires from ProjectView (which outlives
     // conversation switches) so the event measures real chat-panel
@@ -294,6 +301,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         seededRef.current = true;
       }
     }, [initialDraft, draft]);
+
+    useEffect(() => {
+      saveComposerDraft(draftStorageKey, draft);
+    }, [draftStorageKey, draft]);
 
     useEffect(() => {
       if (!toolsOpen) return;
@@ -665,6 +676,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () => ({
         setDraft: (text: string) => {
           setDraft(text);
+          seededRef.current = true;
+          requestAnimationFrame(() => {
+            const ta = textareaRef.current;
+            if (!ta) return;
+            ta.focus();
+            const pos = text.length;
+            ta.setSelectionRange(pos, pos);
+          });
+        },
+        restoreDraft: ({ text, attachments = [], commentAttachments = [] }) => {
+          setDraft(text);
+          setStaged(attachments);
+          setStagedVisualComments(commentAttachments);
+          setStagedSkills([]);
+          setStagedMcpServers([]);
+          setStagedConnectors([]);
+          setUploadError(null);
+          setMention(null);
+          setSlash(null);
           seededRef.current = true;
           requestAnimationFrame(() => {
             const ta = textareaRef.current;
@@ -1959,8 +1989,8 @@ function StagedCommentAttachments({
     <div className="staged-row comment-staged-row" data-testid="staged-comment-attachments">
       {visibleAttachments.map((a) => (
         <div key={a.id} className="staged-chip staged-comment">
-          <span className="staged-name" title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${a.elementId}: ${a.comment}`}>
-            <strong>{a.selectionKind === 'visual' ? 'Visual mark' : a.elementId}</strong>
+          <span className="staged-name" title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${commentTargetDisplayName(a)}: ${a.comment}`}>
+            <strong>{commentTargetDisplayName(a)}</strong>
             <span>{a.comment}</span>
           </span>
           <button
@@ -2677,6 +2707,28 @@ function MentionPopover({
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function loadComposerDraft(key?: string): string | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function saveComposerDraft(key: string | undefined, draft: string) {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    if (draft) {
+      window.localStorage.setItem(key, draft);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be unavailable in privacy modes; the composer should still work.
+  }
 }
 
 function looksLikeImage(name: string): boolean {

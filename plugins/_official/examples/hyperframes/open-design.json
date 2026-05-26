@@ -42,10 +42,6 @@
     "mode": "video",
     "scenario": "video",
     "surface": "video",
-    "preview": {
-      "type": "html",
-      "entry": "./example.html"
-    },
     "useCase": {
       "query": {
         "en": "Create a premium product-studio {{duration}}-second {{format}} HyperFrames composition for {{subject}}: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing. Aspect: {{aspect}}. Visual style: {{style}}. Audio/captions: {{audioPlan}}. Use the HyperFrames HTML workflow, deterministic timelines, and the referenced motion guides.",

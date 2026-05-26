@@ -552,13 +552,23 @@
   gap: 6px;
   flex-shrink: 0;
 }
+.app-chrome-file-actions-before {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
 .app-chrome-file-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
-.app-chrome-file-actions:not(:empty) + .app-chrome-actions {
+.app-chrome-file-actions-before:not(:empty) + .app-chrome-file-actions:not(:empty) {
+  margin-left: 4px;
+}
+.app-chrome-file-actions:not(:empty) + .app-chrome-actions,
+.app-chrome-file-actions-before:not(:empty) + .app-chrome-file-actions:empty + .app-chrome-actions {
   margin-left: 4px;
   padding-left: 8px;
   border-left: 1px solid var(--border);
@@ -1005,6 +1015,29 @@
 
 /* -------- Avatar menu (replaces in-topbar agent picker) ------------- */
 .avatar-menu { position: relative; }
+.avatar-agent-trigger {
+  width: 58px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  grid-template-columns: 32px 24px;
+  align-items: center;
+  justify-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.avatar-agent-trigger:hover:not(:disabled) {
+  border-color: var(--border-strong, var(--border));
+}
+.avatar-agent-trigger > svg:last-child {
+  color: var(--text-muted);
+}
 .avatar-btn {
   width: 32px;
   height: 32px;
@@ -1209,6 +1242,48 @@ a.avatar-item:visited {
 .split-chat-slot > .pane {
   flex: 1 1 auto;
   min-width: 0;
+}
+.split-edit-divider {
+  width: 8px;
+  min-width: 8px;
+  height: 100%;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.comment-left-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.comment-left-host > .comment-side-panel {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  z-index: 20;
+}
+.comment-left-host .comment-side-header {
+  min-height: 40px;
+}
+.comment-left-host .comment-side-list {
+  padding: 16px 12px;
+}
+.comment-side-composer {
+  flex: 0 0 auto;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
 }
 .pane {
   display: flex;

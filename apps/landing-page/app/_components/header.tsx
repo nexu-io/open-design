@@ -33,6 +33,12 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'plugins'
+    /*
+     * `library` is kept as an alias for the dropdown trigger so older
+     * pages that still pass `active="library"` keep working. New pages
+     * should pass `active="plugins"`.
+     */
     | 'library'
     | 'skills'
     | 'systems'
@@ -177,8 +183,9 @@ export function Header({
             */}
             <li className='has-dropdown'>
               <a
-                href={href('/skills/')}
+                href={href('/plugins/')}
                 className={
+                  active === 'plugins' ||
                   active === 'library' ||
                   active === 'skills' ||
                   active === 'systems' ||
@@ -190,52 +197,44 @@ export function Header({
                 aria-haspopup='true'
                 aria-expanded='false'
               >
-                {headerCopy.nav.library}
+                Plugins
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
               <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href={href('/skills/')}
-                    className={linkClass('skills')}
-                  >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.skills}
-                    </span>
-                  </a>
-                </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/systems/')}
-                    className={linkClass('systems')}
-                  >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.systems}
-                    </span>
-                  </a>
-                </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/templates/')}
+                    href={href('/plugins/templates/')}
                     className={linkClass('templates')}
                   >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.templates}
-                    </span>
+                    <span className='dropdown-name'>Templates</span>
                   </a>
                 </li>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href={href('/craft/')}
+                    href={href('/plugins/skills/')}
+                    className={linkClass('skills')}
+                  >
+                    <span className='dropdown-name'>Skills</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/plugins/systems/')}
+                    className={linkClass('systems')}
+                  >
+                    <span className='dropdown-name'>Systems</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/plugins/craft/')}
                     className={linkClass('craft')}
                   >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.craft}
-                    </span>
+                    <span className='dropdown-name'>Craft</span>
                   </a>
                 </li>
               </ul>

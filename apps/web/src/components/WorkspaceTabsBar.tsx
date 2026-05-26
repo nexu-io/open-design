@@ -168,7 +168,31 @@ function uniqueIdForTab(tab: WorkspaceChromeTab): string {
 }
 
 function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
-  const sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
+  let sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
+
+  // Deduplicate Home tabs (singleton constraint)
+  const homeTabs = sourceTabs.filter((tab) => tab.kind === 'entry' && tab.view === 'home');
+  if (homeTabs.length > 1) {
+    // Find canonical Home tab:
+    // 1. Is one of them currently active?
+    // 2. Otherwise, pick the one with highest lastActiveAt.
+    // 3. Otherwise, pick the first one.
+    let canonicalHome = homeTabs.find((tab) => tab.id === state.activeTabId);
+    if (!canonicalHome) {
+      canonicalHome = homeTabs.reduce((newest, currentTab) =>
+        currentTab.lastActiveAt > newest.lastActiveAt ? currentTab : newest,
+        homeTabs[0]!
+      );
+    }
+    // Filter out all duplicate Home tabs except the canonical one
+    sourceTabs = sourceTabs.filter((tab) => {
+      if (tab.kind === 'entry' && tab.view === 'home') {
+        return tab.id === canonicalHome!.id;
+      }
+      return true;
+    });
+  }
+
   const usedIds = new Set<string>();
   let activeTabId = '';
   let activeClaimed = false;
@@ -216,6 +240,65 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
   const timestamp = Date.now();
   const current = normalizeTabsState(state);
   const currentActive = current.tabs.find((tab) => tab.id === current.activeTabId) ?? null;
+
+  // 1. If we are navigating to Home:
+  if (route.kind === 'home' && route.view === 'home') {
+    const existingHomeTab = current.tabs.find(
+      (tab) => tab.kind === 'entry' && tab.view === 'home',
+    );
+    if (existingHomeTab) {
+      return normalizeTabsState({
+        ...current,
+        tabs: current.tabs.map((tab) =>
+          tab.id === existingHomeTab.id
+            ? { ...tab, lastActiveAt: timestamp }
+            : tab,
+        ),
+        activeTabId: existingHomeTab.id,
+      });
+    } else {
+      const nextTab = tabFromRoute(route, timestamp);
+      return normalizeTabsState({
+        tabs: [...current.tabs, nextTab],
+        activeTabId: nextTab.id,
+      });
+    }
+  }
+
+  // 2. If we are navigating to a project, and that project tab already exists:
+  if (route.kind === 'project') {
+    const existingProjectTab = current.tabs.find(
+      (tab) => tab.kind === 'project' && tab.projectId === route.projectId,
+    );
+    if (existingProjectTab) {
+      return normalizeTabsState({
+        ...current,
+        tabs: current.tabs.map((tab) =>
+          tab.id === existingProjectTab.id
+            ? {
+                ...tab,
+                conversationId: route.conversationId ?? null,
+                fileName: route.fileName,
+                lastActiveAt: timestamp,
+              }
+            : tab,
+        ),
+        activeTabId: existingProjectTab.id,
+      });
+    }
+
+    // 3. If we are navigating to a project, and the project tab does NOT exist,
+    // but the current active tab is the Home tab, we should NOT replace the Home tab.
+    // Instead, we should append a new project tab!
+    if (currentActive && currentActive.kind === 'entry' && currentActive.view === 'home') {
+      const nextTab = tabFromRoute(route, timestamp);
+      return normalizeTabsState({
+        tabs: [...current.tabs, nextTab],
+        activeTabId: nextTab.id,
+      });
+    }
+  }
+
   if (!currentActive) {
     const nextTab = tabFromRoute(route, timestamp);
     return normalizeTabsState({
@@ -411,13 +494,25 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }
 
   function createNewTab() {
-    const tab = createEntryTab('home');
-    setState((current) => ({
-      tabs: [...normalizeTabsState(current).tabs, tab],
-      activeTabId: tab.id,
-    }));
+    const normalized = normalizeTabsState(state);
+    const existingHomeTab = normalized.tabs.find(
+      (tab) => tab.kind === 'entry' && tab.view === 'home',
+    );
+    if (existingHomeTab) {
+      setState({
+        ...normalized,
+        activeTabId: existingHomeTab.id,
+      });
+      navigate({ kind: 'home', view: 'home' });
+    } else {
+      const tab = createEntryTab('home');
+      setState({
+        tabs: [...normalized.tabs, tab],
+        activeTabId: tab.id,
+      });
+      navigate({ kind: 'home', view: 'home' });
+    }
     setTabsMenuOpen(false);
-    navigate({ kind: 'home', view: 'home' });
   }
 
   function closeTab(tabId: string) {

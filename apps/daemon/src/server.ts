@@ -1130,7 +1130,7 @@ export function resolveStaticSpaFallbackPath(req, staticDir) {
 }
 
 export function registerStaticSpaFallback(app, staticDir) {
-  app.get('*', (req, res, next) => {
+  app.get('/*splat', (req, res, next) => {
     const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
     if (indexPath == null) return next();
     res.sendFile(indexPath);
@@ -5722,7 +5722,8 @@ export async function startServer({
         res.setHeader('Access-Control-Allow-Origin', 'null');
       }
       res.setHeader('Cache-Control', 'no-store');
-      res.sendFile(sheet.absPath);
+      const buf = await fs.promises.readFile(sheet.absPath);
+      res.send(buf);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -6945,11 +6946,12 @@ export async function startServer({
     });
   });
 
-  app.get('/api/plugins/:id/asset/*', async (req, res) => {
+  app.get('/api/plugins/:id/asset/*splat', async (req, res) => {
     try {
       const plugin = getInstalledPlugin(db, req.params.id);
       if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const relpath = String(req.params[0] ?? '');
+      const splatParam = req.params.splat;
+      const relpath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
       // Reject obvious traversal up-front; the path resolution below
       // normalizes again, but this catches the easy cases without
       // touching disk.
@@ -6960,9 +6962,37 @@ export async function startServer({
       const fsp = await import('node:fs/promises');
       const resolved = path.resolve(plugin.fsPath, relpath);
       // Final containment check — `resolved` must stay under fsPath.
-      const root = path.resolve(plugin.fsPath) + path.sep;
-      if (!(resolved + path.sep).startsWith(root) && resolved !== path.resolve(plugin.fsPath)) {
+      const root = path.resolve(plugin.fsPath);
+      const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+      if (!(resolved + path.sep).startsWith(rootWithSep) && resolved !== root) {
         return res.status(400).json({ error: 'asset escape rejected' });
+      }
+      const relativeSegments = path.relative(root, resolved).split(path.sep).filter(Boolean);
+      let current = root;
+      try {
+        const rootStat = await fsp.lstat(current);
+        if (rootStat.isSymbolicLink()) {
+          return res.status(404).json({ error: 'asset not found' });
+        }
+        for (const segment of relativeSegments) {
+          current = path.join(current, segment);
+          const stat = await fsp.lstat(current);
+          if (stat.isSymbolicLink()) {
+            return res.status(404).json({ error: 'asset not found' });
+          }
+        }
+      } catch {
+        return res.status(404).json({ error: 'asset not found' });
+      }
+      try {
+        const rootReal = await fsp.realpath(plugin.fsPath);
+        const resolvedReal = await fsp.realpath(resolved);
+        const rootRealWithSep = rootReal.endsWith(path.sep) ? rootReal : `${rootReal}${path.sep}`;
+        if (resolvedReal !== rootReal && !resolvedReal.startsWith(rootRealWithSep)) {
+          return res.status(400).json({ error: 'asset escape rejected' });
+        }
+      } catch {
+        return res.status(404).json({ error: 'asset not found' });
       }
       let buf;
       try {
@@ -7749,14 +7779,15 @@ export async function startServer({
   // The example response above rewrites `./assets/<file>` into a request
   // against this route; we still keep the on-disk paths human-friendly so
   // contributors can preview `example.html` straight from disk.
-  app.get('/api/skills/:id/assets/*', async (req, res) => {
+  app.get('/api/skills/:id/assets/*splat', async (req, res) => {
     try {
       const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
-      const relPath = String(req.params[0] || '');
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
       const assetsRoot = path.resolve(skill.dir, 'assets');
       const target = path.resolve(assetsRoot, relPath);
       if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
@@ -7771,7 +7802,7 @@ export async function startServer({
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
-      res.type(mimeFor(target)).sendFile(target);
+      await res.type(mimeFor(target)).sendFile(target);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -8813,7 +8844,7 @@ export async function startServer({
   // Preflight for the raw file route. Current artifact fetches are simple GETs
   // (no preflight needed), but an explicit handler future-proofs the route if
   // artifacts ever add custom request headers.
-  app.options('/api/projects/:id/raw/*', (req, res) => {
+  app.options(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET');
@@ -8822,11 +8853,12 @@ export async function startServer({
     res.sendStatus(204);
   });
 
-  app.get('/api/projects/:id/raw/*', async (req, res) => {
+  app.get(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
     try {
-      const relPath = req.params[0];
-      const project = getProject(db, req.params.id);
-      const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      const projectId = String(req.params[0] ?? '');
+      const relPath = String(req.params[1] ?? '');
+      const project = getProject(db, projectId);
+      const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -8881,10 +8913,12 @@ export async function startServer({
     }
   });
 
-  app.delete('/api/projects/:id/raw/*', async (req, res) => {
+  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params[0], project?.metadata);
+      const projectId = String(req.params[0] ?? '');
+      const rawSplat = String(req.params[1] ?? '');
+      const project = getProject(db, projectId);
+      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -8926,13 +8960,15 @@ export async function startServer({
     }
   });
 
-  app.get('/api/projects/:id/files/*', async (req, res) => {
+  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)$/u, async (req, res) => {
     try {
-      const project = getProject(db, req.params.id);
+      const projectId = String(req.params[0] ?? '');
+      const fileSplat = String(req.params[1] ?? '');
+      const project = getProject(db, projectId);
       const file = await readProjectFile(
         PROJECTS_DIR,
-        req.params.id,
-        req.params[0],
+        projectId,
+        fileSplat,
         project?.metadata,
       );
       res.type(file.mime).send(file.buffer);
@@ -12403,6 +12439,32 @@ export async function startServer({
     let server;
     try {
       server = app.listen(port, host, () => {
+        // Widen the between-request idle window so kept-alive sockets
+        // belonging to chat/SSE clients survive the gaps between bursts.
+        //
+        // Node's `keepAliveTimeout` (default 5s) only arms *after* a
+        // response finishes writing, bounding the idle gap before the next
+        // request on the same socket — it does not fire while an SSE
+        // response is still streaming. A streaming `/api/runs/:id/events`
+        // response stays open until the agent finishes, so middlebox idle
+        // timers (nginx, socat/docker bridges, EC2 SG NAT) are typically
+        // the proximate cause when an SSE stream drops; this listener-
+        // side change cannot extend a connection past those middleboxes.
+        //
+        // What it *does* fix: chat clients that pipeline multiple requests
+        // on the same TCP socket (status polls, run-status fetches, the
+        // initial GET before the SSE upgrade). With the default 5s window
+        // a sluggish client can lose the connection between two normal
+        // calls and reconnect-storm. 120s aligns with the in-band
+        // SSE_KEEPALIVE_INTERVAL_MS (25s) so kept-alive sockets used
+        // around an SSE stream stay warm across reasonable client pauses.
+        //
+        // `headersTimeout` must exceed `keepAliveTimeout` per the Node
+        // docs; otherwise a slow-loris client can stall request parsing.
+        if (server) {
+          server.keepAliveTimeout = 120_000;
+          server.headersTimeout = 125_000;
+        }
         const address = server.address();
         // `address()` can in theory return `string | AddressInfo | null`. For
         // a TCP listener it's always `AddressInfo` with a `.port` — the guard

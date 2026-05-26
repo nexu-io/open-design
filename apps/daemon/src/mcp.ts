@@ -31,7 +31,7 @@ interface DesignSystemsPayload { designSystems?: CatalogItem[] }
 interface ResourcePayload { skill?: { body?: string; content?: string }; designSystem?: { body?: string; content?: string }; body?: string; content?: string }
 interface ProjectSummary { id: string; name: string; metadata?: JsonObject }
 interface ProjectsPayload { projects?: ProjectSummary[] }
-interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string; metadata?: JsonObject }
+interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string; metadata?: JsonObject; resolvedDir?: string }
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
@@ -127,7 +127,7 @@ const TOOL_DEFS = [
   {
     name: 'get_project',
     description:
-      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps.',
+      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps, resolvedDir.',
     inputSchema: {
       type: 'object',
       properties: { project: PROJECT_ARG },
@@ -510,12 +510,14 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
         const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
         const project = data?.project ?? data;
+        const resolvedDir = typeof data?.resolvedDir === 'string' ? data.resolvedDir : null;
         return ok(
           withActiveEcho(
             {
               ...project,
               entryFile: project?.metadata?.entryFile ?? null,
               kind: project?.metadata?.kind ?? null,
+              resolvedDir,
             },
             active,
             resolved,

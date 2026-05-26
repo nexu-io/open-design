@@ -7,7 +7,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { Conversation, ProjectMetadata } from '../../src/types';
 
-const composerMocks = vi.hoisted(() => ({ setDraft: vi.fn() }));
+const composerMocks = vi.hoisted(() => ({
+  focus: vi.fn(),
+  restoreDraft: vi.fn(),
+  setDraft: vi.fn(),
+}));
 
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: (key: string) => key }),
@@ -16,7 +20,11 @@ vi.mock('../../src/i18n', () => ({
 
 vi.mock('../../src/components/ChatComposer', () => ({
   ChatComposer: forwardRef((_props, ref) => {
-    useImperativeHandle(ref, () => ({ setDraft: composerMocks.setDraft }));
+    useImperativeHandle(ref, () => ({
+      focus: composerMocks.focus,
+      restoreDraft: composerMocks.restoreDraft,
+      setDraft: composerMocks.setDraft,
+    }));
     return <output data-testid="composer" />;
   }),
 }));

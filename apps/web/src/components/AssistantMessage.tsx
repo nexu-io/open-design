@@ -204,6 +204,64 @@ export function AssistantMessage({
         : [],
     [displayedProduced, fileOps, hiddenPluginActionPaths, isLast, message.content, projectFiles, projectId, streaming],
   );
+  // Plugin action state lives at the AssistantMessage level (not inside
+  // PluginActionPanel) so the success notice survives the unmount/remount
+  // cycle ProjectView triggers via `hiddenPluginActionPaths` during install
+  // (issue #2876). If state lived inside the panel the setNoticeByFolder
+  // call after `await onRequestPluginFolderAgentAction(...)` would land on
+  // a dead fiber and the user would see nothing change after "Sending...".
+  const [pluginBusyKey, setPluginBusyKey] = useState<string | null>(null);
+  const [pluginNoticeByFolder, setPluginNoticeByFolder] = useState<Record<string, ActionNotice>>({});
+  const runPluginAction = useCallback(
+    async (folder: PluginFolderCandidate, action: PluginFolderAgentAction) => {
+      if (pluginBusyKey || !onRequestPluginFolderAgentAction) return;
+      const key = `${action}:${folder.path}`;
+      setPluginBusyKey(key);
+      setPluginNoticeByFolder((prev) => {
+        if (!(folder.path in prev)) return prev;
+        const next = { ...prev };
+        delete next[folder.path];
+        return next;
+      });
+      try {
+        const outcome = await onRequestPluginFolderAgentAction(folder.path, action);
+        const url =
+          outcome && typeof outcome === "object" && typeof outcome.url === "string"
+            ? outcome.url
+            : "";
+        const message =
+          outcome && typeof outcome === "object" && typeof outcome.message === "string"
+            ? outcome.message
+            : "";
+        // The install endpoint's PluginInstallOutcome contract leaves
+        // `message` optional. When both message and url are absent we still
+        // need to confirm success — the bug report explicitly describes
+        // "the plugin was in fact added successfully, but the original
+        // screen did not communicate that outcome." Default to a short
+        // success label keyed off the action.
+        const notice: ActionNotice | null =
+          message || url
+            ? buildActionNotice(message || url, url)
+            : action === "install"
+              ? { message: "Added to My plugins." }
+              : null;
+        if (notice) {
+          setPluginNoticeByFolder((prev) => ({
+            ...prev,
+            [folder.path]: notice,
+          }));
+        }
+      } catch (err) {
+        setPluginNoticeByFolder((prev) => ({
+          ...prev,
+          [folder.path]: { message: err instanceof Error ? err.message : String(err) },
+        }));
+      } finally {
+        setPluginBusyKey(null);
+      }
+    },
+    [pluginBusyKey, onRequestPluginFolderAgentAction],
+  );
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
@@ -332,10 +390,36 @@ export function AssistantMessage({
         {!streaming && projectId && pluginActionFolders.length > 0 ? (
           <PluginActionPanel
             folders={pluginActionFolders}
+            notices={pluginNoticeByFolder}
+            busyKey={pluginBusyKey}
+            onRunAction={runPluginAction}
             onRequestOpenFile={onRequestOpenFile}
             onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
+            activePluginActionPaths={activePluginActionPaths}
           />
         ) : null}
+        {/*
+          Notices for folders that completed an action while the panel was
+          unmounted (the parent toggled `hiddenPluginActionPaths` during the
+          install) need a place to render once the panel goes away. Without
+          this fallback, a successful "Add to My plugins" that hides the
+          folder afterwards would silently swallow the confirmation
+          (issue #2876).
+         */}
+        {!streaming && projectId
+          ? Object.entries(pluginNoticeByFolder)
+              .filter(([path]) => !pluginActionFolders.some((folder) => folder.path === path))
+              .map(([path, notice]) => (
+                <div
+                  key={`plugin-orphan-notice-${path}`}
+                  className="plugin-action-orphan-notice"
+                  role="status"
+                  data-testid={`plugin-folder-notice-${path}`}
+                >
+                  <ActionNoticeView notice={notice} />
+                </div>
+              ))
+          : null}
         {!streaming && unfinishedTodos.length > 0 ? (
           <UnfinishedTodosPanel
             todos={unfinishedTodos}
@@ -1072,13 +1156,25 @@ function ProducedFiles({
   );
 }
 
+// Pure renderer. State (busyKey, notices) and the action runner live in the
+// AssistantMessage parent so they survive the panel's unmount/remount cycle
+// during install (issue #2876).
 function PluginActionPanel({
   folders,
+  notices,
+  busyKey,
+  onRunAction,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
 }: {
   folders: PluginFolderCandidate[];
+  notices: Record<string, ActionNotice>;
+  busyKey: string | null;
+  onRunAction: (
+    folder: PluginFolderCandidate,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
@@ -1086,46 +1182,8 @@ function PluginActionPanel({
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
 }) {
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [noticeByFolder, setNoticeByFolder] = useState<Record<string, ActionNotice>>(
-    {},
-  );
-
-  async function runAction(
-    folder: PluginFolderCandidate,
-    action: PluginFolderAgentAction,
-  ) {
-    if (busyKey || !onRequestPluginFolderAgentAction) return;
-    const key = `${action}:${folder.path}`;
-    setBusyKey(key);
-    setNoticeByFolder((prev) => {
-      const next = { ...prev };
-      delete next[folder.path];
-      return next;
-    });
-    try {
-      const outcome = await onRequestPluginFolderAgentAction(folder.path, action);
-      const url = outcome && typeof outcome === 'object' && typeof outcome.url === 'string'
-        ? outcome.url
-        : '';
-      const message = outcome && typeof outcome === 'object' && typeof outcome.message === 'string'
-        ? outcome.message
-        : '';
-      if (message || url) {
-        setNoticeByFolder((prev) => ({
-          ...prev,
-          [folder.path]: buildActionNotice(message || url, url),
-        }));
-      }
-    } catch (err) {
-      setNoticeByFolder((prev) => ({
-        ...prev,
-        [folder.path]: { message: err instanceof Error ? err.message : String(err) },
-      }));
-    } finally {
-      setBusyKey(null);
-    }
-  }
+  const noticeByFolder = notices;
+  const runAction = onRunAction;
 
   return (
     <div className="plugin-action-panel" aria-label="Plugin next actions">

@@ -640,22 +640,21 @@
 }
 /* Manual edit mode */
 .manual-edit-workspace {
-  display: grid;
-  grid-template-columns: 280px minmax(420px, 1fr) 280px;
-  gap: 10px;
+  position: relative;
+  width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 10px;
   background: var(--bg);
 }
-.manual-edit-workspace > .manual-edit-canvas { grid-column: 2; grid-row: 1; }
-.manual-edit-workspace > .manual-edit-layers { grid-column: 1; grid-row: 1; }
 .manual-edit-workspace > .manual-edit-right {
-  grid-column: 3;
-  grid-row: 1;
-  height: 100%;
-  min-height: 0;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: 320px;
+  max-width: calc(100% - 16px);
   overflow: hidden;
+  z-index: 30;
 }
 
 /* Claude Code-style edit inspector panel. */
@@ -810,17 +809,15 @@
 .cc-disclosure > summary { cursor: pointer; padding: 4px 0; }
 
 .manual-edit-workspace.preview-viewport:not(.preview-viewport-desktop) {
-  grid-template-columns: 240px calc(var(--preview-viewport-width) * var(--preview-scale, 1)) 344px;
-  justify-content: start;
+  justify-content: center;
 }
 
 .manual-edit-canvas {
-  position: relative;
+  position: absolute;
+  inset: 0;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  overflow: hidden;
   background: var(--bg-panel);
 }
 
@@ -927,6 +924,46 @@
   overscroll-behavior: contain;
   padding-bottom: 72px;
   scrollbar-gutter: stable;
+}
+
+.manual-edit-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 14px 18px 10px;
+}
+
+.manual-edit-titlebar > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-edit-titlebar-close {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+
+.manual-edit-titlebar-close:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
 }
 
 .manual-edit-modal-head {

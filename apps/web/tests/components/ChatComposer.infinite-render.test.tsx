@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,6 +50,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
   cleanup();
 });
 
@@ -78,6 +79,36 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     expect(onSend).toHaveBeenCalledWith('change the font', [], [], undefined);
   });
 
+  it('restores a saved draft for the active conversation', () => {
+    window.localStorage.setItem('od:chat-composer:draft:project-1:conv-1', 'draft before refresh');
+
+    renderComposer({
+      draftStorageKey: 'od:chat-composer:draft:project-1:conv-1',
+    });
+
+    expect((screen.getByTestId('chat-composer-input') as HTMLTextAreaElement).value).toBe(
+      'draft before refresh',
+    );
+  });
+
+  it('clears the saved draft after submitting it', async () => {
+    const key = 'od:chat-composer:draft:project-1:conv-1';
+    const onSend = vi.fn();
+    renderComposer({
+      draftStorageKey: key,
+      onSend,
+    });
+    const textarea = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: 'send then clear', selectionStart: 15, selectionEnd: 15 },
+    });
+
+    await waitFor(() => expect(window.localStorage.getItem(key)).toBe('send then clear'));
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true });
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(window.localStorage.getItem(key)).toBeNull());
+  });
   it('does not re-sync the composer scroll offset on every plain-text keystroke', () => {
     const scrollTopGetter = vi.fn(() => 0);
     const original = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollTop');

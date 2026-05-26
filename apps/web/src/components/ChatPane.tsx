@@ -17,7 +17,7 @@ import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
-import { commentsToAttachments, simplePositionLabel } from '../comments';
+import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
 import {
   ChatComposer,
@@ -222,7 +222,7 @@ interface Props {
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
-  queuedItems?: Array<{ id: string; prompt: string }>;
+  queuedItems?: QueuedSendItem[];
   onRemoveQueuedSend?: (id: string) => void;
   onUpdateQueuedSend?: (id: string, prompt: string) => void;
   onSendQueuedNow?: (id: string) => void;
@@ -323,6 +323,13 @@ interface Props {
 
 type Tab = 'chat' | 'comments';
 
+interface QueuedSendItem {
+  id: string;
+  prompt: string;
+  attachments?: ChatAttachment[];
+  commentAttachments?: ChatCommentAttachment[];
+}
+
 export function ChatPane({
   messages,
   streaming,
@@ -415,6 +422,9 @@ export function ChatPane({
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
   const retryAssistant = retryableAssistantMessage(messages, lastAssistantId, streaming);
+  const composerDraftStorageKey = projectId && activeConversationId
+    ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
+    : undefined;
   // Only the first user message gets the active-plugin chip — the
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
@@ -1165,6 +1175,7 @@ export function ChatPane({
             streaming={streaming}
             sendDisabled={sendDisabled}
             initialDraft={initialDraft}
+            draftStorageKey={composerDraftStorageKey}
             onEnsureProject={onEnsureProject}
             commentAttachments={commentsToAttachments(attachedComments)}
             onRemoveCommentAttachment={onDetachComment}
@@ -1488,7 +1499,7 @@ function CommentSection({
             data-testid={`comment-card-${comment.elementId}`}
           >
             <div className="comment-card-top">
-              <strong>{comment.elementId}</strong>
+              <strong>{commentTargetDisplayName(comment)}</strong>
               <div className="comment-card-actions">
                 {secondaryActionLabel && onSecondaryAction ? (
                   <button
@@ -1508,7 +1519,7 @@ function CommentSection({
             <div className="comment-card-meta">
               <span>{comment.id}</span>
               <span>{comment.filePath}</span>
-              <span>{comment.label}</span>
+              <span>{commentTargetDisplayName(comment)}</span>
               <span>{simplePositionLabel(comment.position)}</span>
             </div>
           </article>
@@ -1753,8 +1764,8 @@ function UserMessage({
         <div className="user-attachments comment-history-attachments">
           {commentAttachments.filter((attachment) => attachment.selectionKind !== 'visual').map((a) => (
             <span key={a.id} className="user-attachment staged-comment">
-              <span className="staged-name" title={`${a.elementId}: ${a.comment}`}>
-                <strong>{a.selectionKind === 'visual' ? 'Visual mark' : a.elementId}</strong>
+              <span className="staged-name" title={`${commentTargetDisplayName(a)}: ${a.comment}`}>
+                <strong>{commentTargetDisplayName(a)}</strong>
                 <span>{a.comment}</span>
               </span>
             </span>
