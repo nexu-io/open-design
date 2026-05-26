@@ -1,0 +1,325 @@
+# Creative Memory Integration Shape
+
+## Purpose
+
+Capture the integration-boundary decisions the product/pipeline team needs to
+make before any creative-memory implementation can land in the live generation
+loop. The engine prototype at
+[`packages/creative-memory-system/`](../../packages/creative-memory-system/)
+provides a deterministic local-first preference memory with a stable external
+surface (`retrieveForInjection`, `buildPromptBlock`, `ingestSignal`,
+`runDecay`, and the typed `on*` adapter handlers). What this doc covers is
+**not** that engine. It is the contract between memory and the rest of Open
+Design: where signals come from, where the prompt block goes, how users
+control it, and how the Section 11 raw-events / content-addressed-derivations
+contract reshapes the boundary.
+
+This is doc-only. No code lands with this PR. Each section enumerates the
+option space, names a working lean, and flags the decision that needs an
+explicit product/pipeline call. The intent is to react against this doc rather
+than against committed code, so reversing a decision costs a doc edit instead
+of a refactor.
+
+Companion reading:
+
+- [`packages/creative-memory-system/README.md`](../../packages/creative-memory-system/README.md)
+  for the engine's external API and storage shape.
+- [`packages/creative-memory-system/docs/open-questions.md`](../../packages/creative-memory-system/docs/open-questions.md)
+  for the full open-questions ledger; Section 11 is the raw-events contract
+  this doc references.
+- Issue [#1637](https://github.com/nexu-io/open-design/issues/1637) for the
+  product-direction thread.
+
+## Non-goals
+
+- Choosing between PR #1746's package and an internal team implementation as
+  "the" foundation. The product call has been made: PR #1746 is RFC/prototype
+  input. This doc is written to apply to either implementation.
+- Designing UI screens. Where user controls are needed, the doc names the
+  surfaces and the dual-track UI/CLI obligations from
+  [`AGENTS.md`](../../AGENTS.md), but stops short of pixel-level proposals.
+- Tuning normalizer values, reversal multipliers, or injection format. Those
+  live in `open-questions.md` §5–§7.
+
+## 1. Signal capture points
+
+The engine exposes six typed handlers. Each needs a concrete pipeline event to
+fire from. The questions below stay open in `open-questions.md` §1; the table
+captures the decision space.
+
+| Handler | Engine assumption | Candidate trigger sites | Lean | Open product call |
+|---|---|---|---|---|
+| `onGenerationAccepted` | One signal per acceptance event. | (a) Explicit "Use this" button. (b) Tab/run promotion to the active artifact. (c) Idle timeout after preview opens with no edit. | (a) only. (b) and (c) inflate the confidence ladder by treating non-rejection as approval. | Is there an explicit-accept affordance today, or should we add one before wiring this handler? |
+| `onArtifactEditedAndSaved` | One signal per saved diff. | Manual-edit panel save, srcdoc bridge save, finalize-design save. | All three, host coalesces by `(artifactId, session)` window before calling. | Coalesce window. 30s feels conservative; longer windows risk dropping intent shifts within a single edit session. |
+| `onExplicitTagApplied` | One signal per tag. | A "tag this" / "I like the spacing here" affordance that does not exist today. | Defer until the affordance exists; do not synthesize tags from chat NLP. | Is the surface area for this UI in scope, or should the handler stay dormant? |
+| `onThumbsRated` | One signal per click. | Critique theater rating, comment-mode reaction. | Critique theater first, comment-mode if/when it ships ratings. Host debounces double-click. | Whether thumbs are unary or pairwise (see §4 below). |
+| `onGenerationAbandoned` | One signal per abandon. | (a) Explicit discard. (b) Inactivity timeout. (c) New generation started with previous unaccepted. | (a) + (c). (b) is too noisy across multitasking. | Whether (c) requires the previous run to be the active tab, or just any pending one. |
+| `onRevertAfterEdit` | One signal per revert. | History panel revert, `git revert` on artifact dir, `Cmd-Z` rapid-undo. | History-panel revert only. The other two are noisy and context-free. | Whether to surface a "revert as feedback" affordance distinct from undo. |
+
+### Cross-cutting
+
+- **Debounce ownership.** Open question §3. Lean: host coalesces and calls
+  the handler once per coalesced window. Adapter stays simple.
+- **Classifier placement.** Open question §4. Lean: pipeline populates
+  `artifact_meta.signals[]` upstream of the adapter call. The adapter remains
+  a pass-through. ML classification, if any, belongs in the host, not in the
+  memory subsystem.
+- **Headless / CLI parity.** Per the dual-track rule, every signal capture
+  surface in the UI must have a CLI equivalent that emits the same event
+  shape. `od memory ingest` (or similar) is the contract; without it,
+  external agents driving Open Design through `od` cannot contribute to the
+  user's preference memory and the memory becomes UI-only.
+
+## 2. Retrieval insertion into generation / critique
+
+The engine returns a structured retrieval result and `buildPromptBlock` formats
+it as a fixed `[MEMORY CONTEXT]` block. The decision is where in prompt
+composition that block lands, and whether critique sees the same block.
+
+Generation prompt today (per `apps/daemon/src/prompts/system.ts`) composes
+roughly as:
+
+```
+[system identity]
+[active DESIGN.md, pruned per od.design_system.sections]
+[craft references, per od.craft.requires]
+[skill body]
+[user prompt + project files]
+```
+
+### Insertion options
+
+| Option | Where | Effect | Lean |
+|---|---|---|---|
+| A. Above DESIGN.md | First in the system block | Memory shapes which DESIGN.md sections matter. Strongest influence. | Too aggressive — preference memory should not override the active brand. |
+| B. Between DESIGN.md and craft | Mid-system | Brand wins on conflict, craft applies universally, memory layers on top of both. | **Lean.** Mirrors how craft already sits between DESIGN.md and the skill body. |
+| C. Between craft and skill body | Late-system | Memory becomes a skill-prefix nudge. Weakest influence; easy to ignore for skills with strong opinions. | Reasonable fallback if (B) shows the model overweighting memory. |
+| D. As a separate user-role turn | Outside system | Treats memory like a runtime hint, not a system constraint. | Worth A/B testing once integration ships, not the default. |
+
+### Critique path
+
+Critique runs (existing critique theater + future critique-conformance work)
+should also see the memory block, but the contract is different:
+
+- **Generation:** memory is *aspirational* — what the user prefers.
+- **Critique:** memory is *evaluative* — what the user rejected.
+
+Lean: same retrieval call (`retrieveForInjection`) but a different
+`buildPromptBlock` variant that flips emphasis (Avoid items first, Prefer
+items as supporting context). The structured retrieval result is sufficient
+for either format; only the formatter changes. This is the open-question §7
+question, scoped to two surfaces.
+
+### Project-override semantics
+
+The engine already returns project-scoped overrides separately. Two surfaces
+to confirm:
+
+- **Generation block.** Project line appended after global Prefer/Avoid, as
+  the engine already produces.
+- **Critique block.** Project overrides should be presented as harder
+  constraints than global preferences ("project says X", not "user prefers
+  X"), because critique is project-scoped by definition.
+
+### Failure modes
+
+- **Memory disabled.** Engine short-circuits and returns empty. The composer
+  must tolerate an empty block without a stray separator.
+- **Empty retrieval.** No invariants violated; same handling as disabled.
+- **Token budget exceeded.** Engine drops at cut and emits a diagnostic. The
+  composer should not see a half-formed block — engine already prevents this.
+- **Latency.** `retrieveForInjection` is local-file IO, but worst case (50+
+  patterns, multi-stage balancing) should still complete well under 50ms.
+  Open question: budget alarm threshold.
+
+## 3. User controls and escape hatches
+
+The engine exposes a `memory_enabled` boolean kill switch in stored state and
+no other user surface. Everything else needs to be designed.
+
+### Required surfaces (UI/CLI dual-track)
+
+| Surface | UI | CLI | Why required |
+|---|---|---|---|
+| Master enable/disable | Settings → Memory toggle | `od memory disable` / `od memory enable` | Trust posture; users must be able to turn it off. |
+| Per-project override | Project settings → "this project ignores global memory" | `od memory project-disable <project>` | Sensitive projects (client work, NDAs) should not leak general preference memory. |
+| "What's in my memory right now" inspector | Settings → Memory → Inspect | `od memory inspect --json` | Trust requires legibility. The engine emits diagnostics; this surface reads them. |
+| Forget a specific pattern | Inspector row → Forget | `od memory forget <type> <pattern>` | GDPR-shaped escape hatch and recovery from ingestion errors. |
+| Wipe all memory | Settings → Memory → Reset | `od memory reset --confirm` | Recovery from corruption, account handover, fresh start. |
+| Pause without forgetting | Settings → Memory → Pause | `od memory pause [--until <date>]` | Useful when the user knows they're working in an atypical mode (client work, exploration) without wanting to lose the existing model. |
+
+### Surfaces to consider
+
+- **Diagnostic feed in chat.** The engine emits typed diagnostics on every
+  retrieval (`hard_cap_applied`, `polarity_ceiling_applied`, etc.). Surfacing
+  these as a collapsed "memory adjusted X" line in chat is high-trust but
+  also potentially noisy. Lean: off by default, opt-in via Settings.
+- **Per-conversation override.** "Don't use memory in this conversation"
+  toggle. Defer until usage data shows it's needed.
+- **Edit a pattern's strength.** The engine's deterministic ranking would
+  break if users edited strengths directly. Lean: do not expose. Forget +
+  re-ingest is the supported workflow.
+
+### Storage location and portability
+
+The engine defaults to `<package install dir>/memory/<userId>/preferences.json`
+overridable via `MEMORY_STORAGE_ROOT`. For Open Design integration, two
+decisions:
+
+- **Default location.** Lean: `<OD_DATA_DIR>/memory/<userId>/preferences.json`
+  so memory follows the same `OD_DATA_DIR` precedence as other daemon state
+  (`AGENTS.md` FAQ "Where is data written?"). Packaged installs and Home
+  Manager / NixOS modules already point `OD_DATA_DIR` at a writable directory;
+  memory should ride that contract.
+- **Portability.** `od memory export --to <path>` and `od memory import <path>`
+  for moving memory across machines without a cloud sync layer. The engine's
+  storage is already plain JSON; this is just CLI plumbing.
+
+### Trust boundary
+
+The engine deliberately has no UI of its own and no API surface beyond
+function exports. That is the right boundary for the engine. The integration
+layer is where trust controls live, and the dual-track rule means every
+control needs both UI and CLI from day one — not staged across PRs.
+
+## 4. Section 11 contract shape
+
+Open question §11 in `open-questions.md` documents the agreed forward-looking
+contract: raw events canonical, derived features as a re-derivable cache,
+pairwise preferred over unary for attribution, with @Ilya0527's
+content-addressed-derivations refinement (cache key =
+`hash(raw_event_set, derivation_fn_version)`) replacing explicit invalidation
+bookkeeping. This section maps that contract onto integration boundaries.
+
+### Ownership: who stores raw events?
+
+| Option | Where raw events live | Implication |
+|---|---|---|
+| A. Engine package owns raw events | `<storage_root>/<userId>/raw_events.jsonl` alongside `preferences.json` | Engine boundary expands to include event log. Re-derivation runs inside the package. |
+| B. Daemon owns raw events | `.od/memory/raw_events.jsonl` or SQLite table in `app.sqlite` | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
+| C. Hybrid — daemon writes, engine reads | Daemon appends; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
+
+Lean: **C**. Event capture is intrinsically a host concern — the daemon is
+where the pipeline events fire from, where debounce/coalesce happens, and where
+sensitivity/redaction policy applies (a chat transcript can carry PII; raw
+events should respect redaction before they hit disk). Derivation is
+intrinsically a memory-package concern. Splitting the responsibilities along
+that axis matches the existing daemon ↔ package boundary in the repo.
+
+### Where does the derivation function version live?
+
+The content-addressed key is `hash(raw_event_set, derivation_fn_version)`. The
+version tag has to live somewhere both the writer and reader agree on.
+
+Lean: as an exported constant in `@open-design/creative-memory-system`,
+imported by the daemon when computing the cache key. Bumping the version is a
+package release. This matches how the package already exports
+`schema_version: "1.0"` in `preferences.json`.
+
+### Read-time vs background derivation
+
+Two modes for when re-derivation runs:
+
+| Mode | Trigger | Latency | Cost |
+|---|---|---|---|
+| Lazy on read | First call to `retrieveForInjection` after raw events change | Adds derivation cost to first call | Small if events are batched, can spike if a session's events are large |
+| Background worker | Daemon job after each accepted batch of events | Read is always fast | Constant background cost, even when the user is idle |
+
+Lean: **lazy on read** for MVP, with the structured option to add a background
+worker behind a feature flag later. Per `open-questions.md` §11, this is the
+documented path: "lazy on read with a write-back cache. Background re-derivation
+is a follow-up once derivations grow heavy enough to dominate p99 latency."
+
+### Pairwise vs unary signal capture
+
+The engine accepts unary signals today (accept / reject / edit / tag). The
+contract favors pairwise where the UX can support it.
+
+Pairwise candidate surfaces:
+
+- **Critique theater.** Naturally pairwise — the user is comparing variants.
+  Lowest-friction place to introduce a `comparison` event type.
+- **Tab promotion.** When a user switches the active artifact between two
+  open generations, the implicit comparison signal is "I prefer this one
+  right now." High noise, but also high volume.
+- **Live-artifact refresh.** When a refresh produces a new variant of a
+  saved artifact, accepting the new one over the old is pairwise.
+
+Lean: ship pairwise for critique theater first, leave the other two as
+follow-ups. Adding pairwise means a new event shape (`{ chose: artifactA, over: artifactB, dimensions?: [...] }`)
+and a new handler (`onPairwiseComparison`); the engine's existing handlers
+stay valid for unary cases. The weighting policy between pairwise and unary
+aggregates lives in `derivation_fn_version` and is auditable per derived
+record, per the §11 contract.
+
+### Cache eviction
+
+Content-addressed cache → eviction is by capacity, not by age. Decision:
+
+- **Cap.** Lean: 1000 derived feature entries per user, evicted LRU. Worst
+  case is a single `preferences.json` storing 1000 records, which is well
+  under any practical token or memory limit.
+- **Persistence.** Cache survives daemon restarts (it is a file on disk).
+  Engine handles cold start by computing on first read.
+
+### Migration from the current write-time-derivation engine
+
+The current engine writes derived features directly. Migration path:
+
+1. Land raw-events writer in the daemon (this PR's contract gates it).
+2. Backfill: each existing `preferences.json` record becomes a synthetic
+   "v0" raw event. Ugly but bounded.
+3. Switch derivation to read from raw events, content-addressed cache fills
+   on demand.
+4. Old write-time derivation paths in `ingestSignal` / `_applyReversal` /
+   `runDecay` deprecate behind a `derivation_mode: "raw" | "write-time"`
+   flag for one release, then remove.
+
+Lean: this migration belongs to whichever implementation lands as the
+foundation, not to PR #1746. The package and daemon contracts in this doc
+should be agnostic to which side does the work.
+
+## 5. Decision summary
+
+For maintainer review, the explicit calls this doc surfaces:
+
+1. **Acceptance trigger** for `onGenerationAccepted`. (§1)
+2. **Edit-coalesce window.** (§1)
+3. **Whether explicit-tag UI is in scope.** (§1)
+4. **Memory block insertion point.** (§2; lean B)
+5. **Critique-side memory format.** (§2)
+6. **Default storage path** under `OD_DATA_DIR`. (§3; lean yes)
+7. **Diagnostic feed surface** in chat. (§3; lean off by default)
+8. **Raw-events ownership** between daemon and engine package. (§4; lean C)
+9. **Derivation-version exporter.** (§4)
+10. **Pairwise rollout sequencing.** (§4)
+11. **Cache eviction cap.** (§4; lean 1000/user)
+
+None of these require a decision today. They are surfaced so that when the
+memory roadmap moves, the conversation has a concrete option space rather
+than starting from a blank page.
+
+## What this doc does not commit to
+
+- A specific pairwise event shape. The lean is `{ chose, over, dimensions? }`,
+  but UX details (does the user pick one, or pick + dimension annotation?)
+  belong to the surface that actually ships pairwise first (critique theater).
+- A specific CLI subcommand layout for `od memory`. The dual-track rule says
+  every UI control needs a CLI peer; the names in §3 are illustrative, the
+  actual subcommand grammar follows whatever pattern the existing
+  `od automation`, `od plugin`, `od ui` family establishes.
+- A rollout schedule. The decisions above are independent and can land in
+  any order behind a `memory_enabled: false` default.
+
+## Open follow-ups
+
+- Confirm that `OD_DATA_DIR` precedence applies to the memory storage root
+  (it should, per AGENTS.md FAQ, but the integration code has not been
+  written yet).
+- Decide whether memory state is part of `od project export` /
+  per-project portability flows, or strictly user-scoped.
+- Sketch the `od memory inspect --json` output shape — likely just a passthrough
+  of the engine's diagnostic events plus the current preference list.
+
+These are tractable doc edits once the §5 decisions land; flagged here so
+they are not forgotten when implementation work resumes.
