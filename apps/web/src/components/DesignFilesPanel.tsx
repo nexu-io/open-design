@@ -5,6 +5,11 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import {
+  createFileSystemReadError,
+  FILE_SYSTEM_READ_ERROR_MESSAGE,
+  isFileSystemReadError,
+} from '../utils/fileSystemErrors';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -133,6 +138,7 @@ export function DesignFilesPanel({
   const analytics = useAnalytics();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
@@ -816,8 +822,14 @@ export function DesignFilesPanel({
     ev.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
-    const dropped = await filesFromDataTransfer(ev.dataTransfer);
-    if (dropped.length > 0) onUploadFiles(dropped);
+    setDropReadError(null);
+    try {
+      const dropped = await filesFromDataTransfer(ev.dataTransfer);
+      if (dropped.length > 0) onUploadFiles(dropped);
+    } catch (error) {
+      if (!isFileSystemReadError(error)) throw error;
+      setDropReadError(FILE_SYSTEM_READ_ERROR_MESSAGE);
+    }
   }
 
   async function handlePluginFolderAgentAction(
@@ -1018,18 +1030,23 @@ export function DesignFilesPanel({
       </div>
     ) : null;
 
+  const visibleUploadError = uploadError ?? dropReadError;
+
   return (
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
         <div className="df-body">
-          {uploadError && !preview ? (
+          {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
-              <span>{uploadError}</span>
-              {onClearUploadError ? (
+              <span>{visibleUploadError}</span>
+              {onClearUploadError || dropReadError ? (
                 <button
                   type="button"
                   data-testid="upload-error-dismiss"
-                  onClick={onClearUploadError}
+                  onClick={() => {
+                    setDropReadError(null);
+                    onClearUploadError?.();
+                  }}
                 >
                   Dismiss
                 </button>
@@ -1594,11 +1611,17 @@ function dateDaysBefore(date: Date, days: number): Date {
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
   const items = Array.from(dataTransfer.items ?? []);
-  if (items.length === 0) return Array.from(dataTransfer.files ?? []);
+  const fallbackFiles = Array.from(dataTransfer.files ?? []);
+  if (items.length === 0) return fallbackFiles;
 
-  const files = await Promise.all(items.map(filesFromDataTransferItem));
-  const flattened = files.flat();
-  return flattened.length > 0 ? flattened : Array.from(dataTransfer.files ?? []);
+  const results = await Promise.allSettled(items.map(filesFromDataTransferItem));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) {
+    if (fallbackFiles.length > 0) return fallbackFiles;
+    throw rejected.reason;
+  }
+  const files = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return files.length > 0 ? files : fallbackFiles;
 }
 
 async function filesFromDataTransferItem(item: DataTransferItem): Promise<File[]> {
@@ -1628,11 +1651,19 @@ async function filesFromFileSystemEntry(entry: FileSystemEntry): Promise<File[]>
 }
 
 function fileFromEntry(entry: FileSystemFileEntryWithFile): Promise<File> {
-  return new Promise((resolve, reject) => entry.file(resolve, reject));
+  return new Promise((resolve, reject) => {
+    entry.file(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped file', error));
+    });
+  });
 }
 
 function readEntryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
-  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+  return new Promise((resolve, reject) => {
+    reader.readEntries(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped folder', error));
+    });
+  });
 }
 
 function kindGlyph(kind: ProjectFileKind): string {

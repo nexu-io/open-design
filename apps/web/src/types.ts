@@ -53,6 +53,7 @@ import type {
   ProjectLocationPrefs,
   ProjectPlatform,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
@@ -88,6 +89,7 @@ export type {
   OrbitStatusResponse,
   ProjectLocation,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewVisualMarkKind,
 } from '@open-design/contracts';

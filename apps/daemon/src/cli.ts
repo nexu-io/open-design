@@ -6,6 +6,8 @@ import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
+import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-cli-help.js';
+import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
@@ -5067,8 +5069,52 @@ async function runLibraryList(name, args) {
 }
 
 async function runSkills(args)        { return runLibraryList('skills', args); }
-async function runDesignSystems(args) { return runLibraryList('design-systems', args); }
 async function runCraft(args)         { return runLibraryList('craft', args); }
+
+async function runDesignSystems(args) {
+  if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (!args[0] || isDesignSystemsHelpArg(args[0])) {
+    console.log(DESIGN_SYSTEMS_USAGE);
+    process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
+  }
+  return runLibraryList('design-systems', args);
+}
+
+// od design-systems rename <id> --title <new-title> [--json]
+// Renames an editable (user-created) design system via PATCH
+// /api/design-systems/:id. Built-in systems are read-only and the daemon
+// returns 404, surfaced here as a structured failure. Arg parsing lives in
+// design-system-rename-args.ts so it can be unit-tested.
+async function runDesignSystemRename(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems rename <id> --title <new-title> [--json] [--daemon-url <url>]
+  od design-systems rename <id> "<new title>" [--json]
+
+Renames an editable (user-created) design system. Built-in systems are read-only.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const parsed = parseDesignSystemRenameArgs(args);
+  if (!parsed) {
+    console.error('Usage: od design-systems rename <id> --title <new-title>');
+    process.exit(2);
+  }
+  const flags = parseFlags(args, {
+    string: new Set([...LIBRARY_STRING_FLAGS, 'title']),
+    boolean: LIBRARY_BOOLEAN_FLAGS,
+  });
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(parsed.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: parsed.title }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const renamed = data.designSystem ?? data;
+  console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
+}
 
 async function runStatus(args) {
   // Alias of `od daemon status`.

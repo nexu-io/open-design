@@ -39,10 +39,14 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "LANG",
   "LC_ALL",
   "LOGNAME",
+  "NODE_USE_ENV_PROXY",
   "NO_PROXY",
   "TMPDIR",
   "USER",
   "VP_HOME",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
 ] as const;
 
 function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = false): boolean {

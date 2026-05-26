@@ -2,6 +2,7 @@ import type {
   ChatCommentAttachment,
   ChatCommentSelectionKind,
   ChatMessage,
+  PreviewAnnotationStyle,
   PreviewCommentMember,
   PreviewComment,
   PreviewCommentSelectionKind,
@@ -16,7 +17,9 @@ export interface PreviewCommentSnapshot {
   label: string;
   text: string;
   position: { x: number; y: number; width: number; height: number };
+  hoverPoint?: { x: number; y: number };
   htmlHint: string;
+  style?: PreviewAnnotationStyle;
   selectionKind?: PreviewCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
@@ -37,6 +40,7 @@ export interface VisualAnnotationTarget {
   text?: string;
   position?: { x: number; y: number; width: number; height: number };
   htmlHint?: string;
+  style?: PreviewAnnotationStyle;
 }
 
 export interface VisualAnnotationAttachmentInput {
@@ -59,6 +63,7 @@ export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCom
     text: trimContextText(snapshot.text),
     position: normalizePosition(snapshot.position),
     htmlHint: trimHtmlHint(snapshot.htmlHint),
+    style: normalizeStyle(snapshot.style),
     selectionKind: snapshot.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount:
       snapshot.selectionKind === 'pod'
@@ -101,6 +106,7 @@ export function liveSnapshotForComment(
     text: trimContextText(comment.text),
     position: normalizePosition(comment.position),
     htmlHint: trimHtmlHint(comment.htmlHint),
+    style: normalizeStyle(comment.style),
     selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount: comment.memberCount,
     podMembers: normalizeMembers(comment.podMembers),
@@ -123,6 +129,7 @@ export function commentToAttachment(
     currentText: trimContextText(comment.text),
     pagePosition: normalizePosition(comment.position),
     htmlHint: trimHtmlHint(comment.htmlHint),
+    style: normalizeStyle(comment.style),
     selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount:
       comment.selectionKind === 'pod'
@@ -169,6 +176,7 @@ export function buildBoardCommentAttachments(input: {
       currentText: trimContextText(input.target.text),
       pagePosition: normalizePosition(input.target.position),
       htmlHint: trimHtmlHint(input.target.htmlHint),
+      style: normalizeStyle(input.target.style),
       selectionKind,
       memberCount,
       podMembers: podMembers.length > 0 ? podMembers : undefined,
@@ -194,6 +202,7 @@ export function buildVisualAnnotationAttachment(input: VisualAnnotationAttachmen
     currentText: trimContextText(target?.text || ''),
     pagePosition: normalizePosition(target?.position ?? input.bounds),
     htmlHint: trimHtmlHint(target?.htmlHint || ''),
+    style: normalizeStyle(target?.style),
     selectionKind: 'visual',
     screenshotPath: input.screenshotPath,
     markKind: input.markKind,
@@ -292,6 +301,7 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
       `position: x${position.x} y${position.y} ${position.width}x${position.height}`,
       `currentText: ${trimContextText(item.currentText || '') || '(empty)'}`,
       `htmlHint: ${trimHtmlHint(item.htmlHint || '') || '(none)'}`,
+      `computedStyle: ${formatAnnotationStyle(item.style) || '(none)'}`,
       `comment: ${item.comment}`,
     );
     if (selectionKind === 'visual') {
@@ -310,6 +320,8 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
         lines.push(
           `member.${memberIndex + 1}: ${member.elementId} | ${member.label || '(unlabeled)'} | ${member.selector}`,
         );
+        const memberStyle = formatAnnotationStyle(member.style);
+        if (memberStyle) lines.push(`member.${memberIndex + 1}.computedStyle: ${memberStyle}`);
       });
     }
   });
@@ -350,6 +362,46 @@ function normalizeMembers(input: PreviewCommentMember[] | undefined): PreviewCom
       text: trimContextText(String(member.text || '')),
       position: normalizePosition(member.position),
       htmlHint: trimHtmlHint(String(member.htmlHint || '')),
+      style: normalizeStyle(member.style),
     }))
     .filter((member) => member.elementId && member.selector);
 }
+
+function normalizeStyle(input: unknown): PreviewAnnotationStyle | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const raw = input as Record<string, unknown>;
+  const style: PreviewAnnotationStyle = {};
+  for (const key of ANNOTATION_STYLE_KEYS) {
+    const value = raw[key];
+    if (typeof value !== 'string') continue;
+    const trimmed = value.replace(/\s+/g, ' ').trim();
+    if (trimmed) style[key] = trimmed.slice(0, 120);
+  }
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
+function formatAnnotationStyle(style: PreviewAnnotationStyle | undefined): string {
+  if (!style) return '';
+  return ANNOTATION_STYLE_KEYS
+    .map((key) => {
+      const value = style[key];
+      return value ? `${key}: ${value}` : null;
+    })
+    .filter((item): item is string => Boolean(item))
+    .join('; ');
+}
+
+const ANNOTATION_STYLE_KEYS = [
+  'color',
+  'backgroundColor',
+  'fontSize',
+  'fontWeight',
+  'lineHeight',
+  'textAlign',
+  'fontFamily',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'borderRadius',
+] as const;

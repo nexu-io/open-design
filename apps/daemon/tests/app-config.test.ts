@@ -317,6 +317,9 @@ describe('app-config', () => {
             CODEX_BIN: '~/bin/codex-next',
             OPENAI_API_KEY: '  sk-proxy-openai  ',
           },
+          'trae-cli': {
+            TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
+          },
           gemini: {
             GEMINI_API_KEY: 'should-not-persist',
           },
@@ -331,6 +334,7 @@ describe('app-config', () => {
       expect(cfg.agentCliEnv).toEqual({
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_API_KEY: 'sk-proxy-anthropic' },
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_API_KEY: 'sk-proxy-openai' },
+        'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
       });
     });
 

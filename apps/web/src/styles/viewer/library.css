@@ -1,0 +1,2223 @@
+/* --- Codex hatch-pet atlas import + AI generation panels ------------ */
+
+.pet-atlas-preview {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  display: grid;
+  gap: 12px;
+}
+
+.pet-atlas-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pet-atlas-head strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pet-atlas-thumb {
+  width: 100%;
+  aspect-ratio: 1536 / 1872;
+  max-height: 240px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-color: var(--surface-2, #f6f4ee);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  image-rendering: pixelated;
+}
+
+.pet-atlas-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.pet-atlas-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pet-atlas-row:hover {
+  border-color: var(--accent);
+}
+
+.pet-atlas-row.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.pet-atlas-row[disabled] {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.pet-atlas-row-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pet-atlas-row-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.pet-atlas-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* "Hatch with AI" panel */
+
+.pet-hatch {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  display: grid;
+  gap: 10px;
+}
+
+.pet-hatch-head h4 {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pet-hatch-prompt {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pet-hatch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pet-hatch-foot {
+  margin: 0;
+}
+
+/* "Recently hatched" — Codex pets discovered under ~/.codex/pets/ */
+
+.pet-codex {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  display: grid;
+  gap: 10px;
+}
+
+.pet-codex-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pet-codex-head h4 {
+  margin: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Right-aligned button cluster in the codex head — keeps the
+   "Download community pets" + "Refresh" buttons on a single row even
+   when the section title wraps. */
+.pet-codex-head-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pet-codex-empty {
+  margin: 4px 0 0 0;
+}
+
+/* Inline status line shown after a community sync completes. Stays in
+   the section flow so the result reads as part of the same control
+   group as the trigger button. The error variant tints toward the
+   accent without screaming red — sync errors are usually transient
+   network blips. */
+.pet-codex-sync-status {
+  margin: 6px 0 8px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pet-codex-sync-status.error {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--text-strong);
+}
+
+.pet-codex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.pet-codex-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.pet-codex-thumb {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--surface-2, #f6f4ee);
+  background-image: var(--pet-codex-src);
+  background-repeat: no-repeat;
+  /* Show only the top-left cell of the 8x9 atlas — that is the
+     `idle` row, frame 0, and reads as a recognizable still even
+     before adoption. */
+  background-position: 0 0;
+  background-size: 800% 900%;
+  image-rendering: pixelated;
+}
+
+/* Hover preview — a larger floating overlay that plays through every
+   cell of the 8x9 Codex atlas so users can see what animations (idle,
+   running, waving, jumping, failed, waiting, …) the pet has before they
+   adopt it. The overlay is purely decorative: pointer-events: none
+   prevents it from stealing hover from the card, and aria-hidden keeps
+   it out of the accessibility tree. */
+.pet-codex-thumb-preview {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: 128px;
+  /* 128 * (208/192) ≈ 138.7 — matches a single atlas cell aspect. */
+  height: 139px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--surface-2, #f6f4ee);
+  background-image: var(--pet-codex-src);
+  background-repeat: no-repeat;
+  background-position: 0% 0%;
+  background-size: 800% 900%;
+  image-rendering: pixelated;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px) scale(0.82);
+  transform-origin: 50% 100%;
+  transition:
+    opacity 140ms ease,
+    transform 160ms ease;
+  z-index: 20;
+}
+
+.pet-codex-card:hover .pet-codex-thumb-preview,
+.pet-codex-card:focus-within .pet-codex-thumb-preview {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  /* 8 column steps (1 row) in 0.6s → ~13 fps per animation, then the row
+     index advances every 0.6s for a full 5.4s sweep through all 9 rows.
+     Animating background-position-x + -y as two independent animations
+     keeps the nested loop in pure CSS. */
+  animation:
+    pet-codex-preview-col 0.6s steps(8, jump-none) infinite,
+    pet-codex-preview-row 5.4s steps(9, jump-none) infinite;
+}
+
+@keyframes pet-codex-preview-col {
+  from { background-position-x: 0%; }
+  to { background-position-x: 100%; }
+}
+
+@keyframes pet-codex-preview-row {
+  from { background-position-y: 0%; }
+  to { background-position-y: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-codex-card:hover .pet-codex-thumb-preview,
+  .pet-codex-card:focus-within .pet-codex-thumb-preview {
+    animation: none;
+    background-position: 0% 0%;
+  }
+}
+
+.pet-codex-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.pet-codex-title-row {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pet-codex-meta strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pet-codex-default-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-strong);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.pet-codex-description {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Adopt button: absolutely positioned at card's right edge so the
+   meta text always fills the full remaining width. Hidden until hover;
+   adopted (active) icon-only check stays visible at all times. */
+.pet-codex-adopt-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.pet-codex-adopt-btn:not(.active) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.pet-codex-card:hover .pet-codex-adopt-btn:not(.active),
+.pet-codex-card:focus-within .pet-codex-adopt-btn:not(.active) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Slash-command popover in the chat composer */
+
+.slash-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  padding: 6px;
+}
+
+.slash-popover-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px 6px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.slash-popover-hint {
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.slash-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.slash-item:hover,
+.slash-item.active {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
+.slash-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.slash-item-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.slash-item-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.slash-item-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  padding: 0;
+}
+
+.slash-item-arg {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.slash-item-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* --- CJK (Chinese / Japanese / Korean) Comfort Pass --- */
+:lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(ja), :lang(ko) {
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", "Source Han Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* --- Arabic & Persian Comfort Pass --- */
+[dir="rtl"] {
+  --sans: "Cairo", "Inter", "Vazirmatn", "Noto Sans Arabic", "Segoe UI Arabic", "Tahoma", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Scope line-height increase to prose and chat to avoid breaking compact UI chrome */
+[dir="rtl"] .prose,
+[dir="rtl"] .chat-message,
+[dir="rtl"] .msg .user-text {
+  line-height: 1.7;
+}
+
+[dir="rtl"] .avatar-item,
+[dir="rtl"] .settings-tab,
+[dir="rtl"] .ds-item-name {
+  text-align: right;
+}
+
+[dir="rtl"] .app-chrome-back svg,
+[dir="rtl"] .back-btn svg,
+[dir="rtl"] .icon-btn svg[data-lucide="chevron-left"],
+[dir="rtl"] .icon-btn svg[data-lucide="chevron-right"],
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-left"],
+[dir="rtl"] .icon-btn svg[data-lucide="arrow-right"],
+[dir="rtl"] .newproj-tabs-arrow svg,
+[dir="rtl"] .icon-only svg[data-lucide="chevron-left"],
+[dir="rtl"] .icon-only svg[data-lucide="chevron-right"],
+[dir="rtl"] .icon-only svg[data-lucide="arrow-left"],
+[dir="rtl"] .icon-only svg[data-lucide="arrow-right"],
+[dir="rtl"] .welcome-pet-teaser svg {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .title,
+[dir="rtl"] .meta {
+  text-align: right;
+}
+
+/* ============================================================
+   Quick Switcher (Cmd/Ctrl+P file palette)
+   ============================================================ */
+.qs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 12, 10, 0.32);
+  /* Sits in the modal tier (alongside prompt-template-modal-overlay) so
+   * the palette renders above any open context menus or popovers. */
+  z-index: 1500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.qs-palette {
+  width: min(560px, 92vw);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text);
+}
+.qs-input {
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+}
+.qs-input::placeholder {
+  color: var(--text-faint);
+}
+.qs-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.qs-empty {
+  padding: 20px 16px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.qs-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.qs-row-active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+.qs-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qs-path {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.qs-kind {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+.qs-row-active .qs-kind {
+  color: var(--accent-strong);
+}
+.qs-footer {
+  display: flex;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.qs-footer kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 2px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Library section (Skills & Design Systems management) */
+
+.library-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+/* Skills toolbar: two-row layout.
+   Row 1: search (grows) + New skill button (right, 12px gap).
+   Row 2: filter dropdowns with inline labels. */
+.library-toolbar.skills-toolbar {
+  flex-direction: column;
+  gap: 10px;
+}
+.skills-toolbar-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skills-toolbar-top .library-search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Variant: filter pills on the left, primary action on the right.
+   Used by Memory's toolbar where there is no search input above. */
+.library-toolbar.is-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.library-toolbar.is-row .library-filters {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Primary action button positioned at the right edge of `.library-toolbar`.
+   The default button line-height makes the icon and label vertically off
+   when sitting next to filter pills; tightening the line-height aligns the
+   plus icon with the text baseline. */
+.library-toolbar-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.library-search {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--bg-panel);
+  color: var(--text);
+  outline: none;
+  box-shadow: var(--shadow-xs);
+  cursor: text;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.library-search:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+
+.library-search:focus {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft), var(--shadow-xs);
+}
+
+.library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/*
+ * Compact dropdown row for Skills "Type" + "Category" filters.
+ * Pills don't scale once the option set crosses ~10 entries (Skills'
+ * Category list has 14 today and is growing); they wrap to 2-3 rows
+ * and push the actual cards far below the fold. A labelled <select>
+ * each keeps the same filter affordances in a single fixed-height
+ * row. Source filter (3 options total) keeps its pill row above
+ * because pills are still cheaper for a one-click toggle.
+ */
+.library-filter-selects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.library-filter-select {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.library-filter-select-label {
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+.library-filter-select select {
+  padding: 5px 28px 5px 10px;
+  font-size: 12px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  min-width: 100px;
+  max-width: 180px;
+  cursor: pointer;
+}
+
+.library-toolbar.library-toolbar-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-toolbar.library-toolbar-row .library-search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.library-toolbar.library-toolbar-row .library-filter-select {
+  flex: 0 0 auto;
+}
+
+.library-toolbar.library-toolbar-row .library-filter-select select {
+  min-height: 36px;
+}
+
+.library-filter-select select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+/* Active = something other than "All" is selected. The darker border
+   tells the user at a glance that a filter is in effect, without
+   relying on the user remembering what the dropdown's idle state
+   looked like. */
+.library-filter-select select[data-active='true'] {
+  border-color: var(--text);
+  background-color: var(--bg-subtle);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.library-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.library-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-group-count {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.library-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+/* Icon-only action buttons inside a library-card.
+   The chevron/edit/close buttons used different sizes (.library-card-expand
+   was 4px padding, .ghost was 6px 12px), which made them look misaligned
+   horizontally and stretched the card vertically. Force a uniform 28x28
+   square so they line up like a proper action group. */
+.library-card .library-card-action {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.library-card.disabled {
+  opacity: 0.45;
+}
+
+.library-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.library-card-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.library-card-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.library-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.library-card-expand {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-radius: 6px;
+}
+
+.library-card-expand:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.library-card-badge-user {
+  background: color-mix(in oklab, var(--accent) 16%, var(--bg-subtle));
+  color: var(--text);
+}
+
+.library-card-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+.library-card-delete:hover {
+  background: color-mix(in oklab, #ef4444 18%, transparent);
+  color: #ef4444;
+}
+
+.library-import-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-import-form {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  display: grid;
+  gap: 10px;
+}
+.library-import-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.library-import-row label,
+.library-import-block {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.library-import-row input,
+.library-import-block input,
+.library-import-block textarea {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-family: inherit;
+  resize: vertical;
+}
+.library-import-block textarea {
+  min-height: 60px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.library-import-error {
+  color: #ef4444;
+  font-size: 12px;
+}
+.library-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.library-ds-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 10px;
+  gap: 10px;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.library-ds-card.disabled {
+  opacity: 0.45;
+}
+
+.library-ds-card.highlighted {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.library-ds-card-content {
+  min-width: 0;
+  padding: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.library-ds-card-content:hover {
+  background: var(--bg-hover);
+}
+
+.library-ds-card-content:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--selected-soft);
+  background: var(--bg-hover);
+}
+
+/* Hover-reveal pencil to rename an editable (user-created) design system in
+   Settings. Sits inline after the title; only rendered for editable cards, so
+   built-in cards are unchanged. Issue #2811. */
+.library-ds-edit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.library-ds-card-content:hover .library-ds-edit,
+.library-ds-edit:focus-visible {
+  opacity: 1;
+}
+.library-ds-edit:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.library-ds-swatches {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.library-ds-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.library-ds-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.library-ds-summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.library-ds-toggle-cell {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-subtle);
+  cursor: default;
+}
+
+.library-ds-toggle-cell .toggle-switch {
+  margin-top: 1px;
+}
+
+.library-preview {
+  width: 100%;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.library-preview-body {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.library-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  /* Tinted fill so the empty state reads as its own slot inside the
+     card. Without it the message floats in the same white as the card
+     itself and looks like a layout gap rather than an intentional
+     "you have nothing here yet" panel. */
+  padding: 28px 24px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md, 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.library-empty-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.library-empty-hint {
+  margin: 0;
+  font-size: 12px;
+  max-width: 420px;
+  line-height: 1.5;
+}
+.library-empty-hint code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 1px 6px;
+  background: var(--bg-subtle);
+  border-radius: 4px;
+}
+
+/* Memory section: warning banner shown when the memory feature is
+   disabled. Padded so it reads as a full callout rather than inline text,
+   and tinted with the same warning hue used elsewhere in settings. */
+.memory-disabled-banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 159, 64, 0.12);
+  color: var(--text-muted, #b06a00);
+  border: 1px solid rgba(255, 159, 64, 0.32);
+  font-size: 12px;
+  margin: 8px 0 12px;
+}
+
+/* Memory section: red callout shown when the LLM extractor is silent
+   because no API key is configured. Same shape as `memory-disabled-banner`
+   but tuned to a stronger warning hue so the user reads it as
+   "something is wrong" rather than "FYI". */
+.memory-noprovider-banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(220, 53, 69, 0.10);
+  color: var(--text-danger, #b02a37);
+  border: 1px solid rgba(220, 53, 69, 0.32);
+  font-size: 12px;
+  margin: 8px 0 12px;
+}
+
+.memory-source-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.memory-source-tabs button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-source-tabs button:hover {
+  background: var(--bg-muted);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.memory-source-tabs button.active {
+  background: var(--bg-panel);
+  border-color: color-mix(in oklab, var(--accent) 26%, var(--border-strong));
+  color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--accent) 10%, transparent),
+    var(--shadow-xs);
+}
+
+.memory-source-tab-icon,
+.memory-block-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+.memory-source-tabs button.active .memory-source-tab-icon,
+.memory-block-icon {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-panel));
+}
+
+.memory-source-tab-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.memory-source-tab-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.memory-source-tab-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.memory-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.memory-management-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.memory-records-section .memory-management-panel {
+  gap: 14px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.memory-records-section .memory-subsection-head {
+  align-items: center;
+  padding-top: 0;
+}
+
+.memory-records-section .memory-subsection-head h4 {
+  font-size: 14px;
+}
+
+.memory-records-section .memory-subsection-head .hint {
+  max-width: 560px;
+}
+
+.memory-records-section .memory-source-badge {
+  min-height: 28px;
+  padding: 4px 10px;
+  background: color-mix(in oklab, var(--bg-subtle) 74%, var(--bg-panel));
+}
+
+.memory-records-section .library-toolbar.is-row {
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.memory-management-counts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.memory-management-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.memory-clear-extractions,
+.memory-refresh-extractions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.memory-unified-list {
+  gap: 14px;
+  padding-top: 2px;
+}
+
+.memory-extraction-card {
+  align-items: flex-start;
+  background: var(--bg-panel);
+}
+
+.memory-records-section .library-group {
+  gap: 7px;
+}
+
+.memory-records-section .library-group-title {
+  display: grid;
+  grid-template-columns: auto auto minmax(24px, 1fr);
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 1px;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+}
+
+.memory-records-section .library-group-title::after {
+  content: '';
+  height: 1px;
+  background: var(--border-soft);
+}
+
+.memory-records-section .library-group-count {
+  font-size: 11px;
+}
+
+.memory-records-section .library-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 30px);
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 10px 12px 10px 14px;
+  border-color: var(--border-soft);
+  background: var(--bg-panel);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-records-section .library-card:hover {
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--bg-panel) 76%, var(--bg-subtle));
+}
+
+.memory-records-section .library-card-info {
+  display: grid;
+  gap: 4px;
+}
+
+.memory-records-section .library-card-title-row {
+  gap: 7px;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.memory-records-section .library-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.memory-records-section .library-card-badge {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-records-section .library-card-desc {
+  -webkit-line-clamp: 1;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.memory-records-section .library-card-expand,
+.memory-records-section .library-card .library-card-action {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.memory-records-section .library-card-expand:hover,
+.memory-records-section .library-card .library-card-action:hover {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.memory-records-section .library-preview {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+
+.memory-records-section .memory-extraction-card {
+  grid-template-columns: minmax(0, 1fr) 30px;
+}
+
+.memory-extraction-card.is-running {
+  border-color: rgba(64, 137, 255, 0.28);
+}
+
+.memory-extraction-card.is-success {
+  border-color: rgba(34, 139, 90, 0.24);
+}
+
+.memory-extraction-card.is-failed {
+  border-color: rgba(220, 53, 69, 0.22);
+}
+
+.memory-extraction-card .library-card-title-row {
+  flex-wrap: wrap;
+}
+
+.memory-extraction-card .memory-extraction-counts {
+  margin-top: 6px;
+}
+
+.memory-manual-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(190px, 0.75fr);
+  gap: 12px;
+}
+
+.memory-field-block,
+.memory-action-block,
+.memory-source-summary {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-field-block {
+  padding: 12px;
+}
+
+.memory-action-block,
+.memory-source-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+
+.memory-action-block {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: space-between;
+  background: var(--bg-subtle);
+}
+
+.memory-block-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.memory-block-head h4,
+.memory-source-summary h4,
+.memory-subsection-head h4 {
+  margin: 0 0 3px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.memory-block-head .hint,
+.memory-source-summary .hint,
+.memory-subsection-head .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.memory-global-rules-input {
+  min-height: 78px;
+  margin-top: 10px;
+  resize: vertical;
+}
+
+.instructions-rules-card .memory-block-head {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.instructions-rules-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.memory-source-summary > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-connected-summary {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--bg-panel) 92%, var(--accent) 8%),
+    var(--bg-panel)
+  );
+}
+
+.memory-subsection-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.memory-source-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.memory-source-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 8px 4px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.memory-source-toggle:has(input:checked) {
+  color: var(--text);
+}
+
+.memory-source-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.memory-chat-learning-toggle,
+.modal label.memory-chat-learning-toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.memory-chat-learning-toggle:has(input:checked) {
+  color: var(--text);
+}
+
+.memory-chat-learning-toggle > span:first-child {
+  min-width: 20px;
+  text-align: right;
+}
+
+.memory-source-action {
+  justify-content: center;
+  min-width: 136px;
+  white-space: nowrap;
+}
+
+.memory-connector-workbench {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-connector-picker-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.memory-connector-picker-head h4 {
+  margin: 0 0 3px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.memory-connector-picker-head .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.memory-connector-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 7px;
+  overflow: visible;
+}
+
+.memory-connector-row,
+.modal label.memory-connector-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 50px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.memory-connector-row.is-selected {
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--border-soft));
+  background: color-mix(in oklab, var(--accent) 4%, var(--bg-panel));
+}
+
+.memory-connector-row.is-disabled {
+  background: color-mix(in oklab, var(--bg-subtle) 76%, var(--bg-panel));
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.memory-connector-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.memory-connector-row:has(.memory-connector-input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.memory-connector-brand {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+}
+
+.memory-connector-brand .connector-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.memory-connector-brand .connector-logo-img {
+  padding: 4px;
+}
+
+.memory-connector-row.is-disabled .memory-connector-brand .connector-logo {
+  filter: saturate(0.7);
+  opacity: 0.68;
+}
+
+.memory-connector-selected-mark {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--bg-panel);
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-connector-brand.is-selected .memory-connector-selected-mark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.memory-connector-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.memory-connector-row:not(.is-disabled):hover .memory-connector-picker {
+  border-color: color-mix(in oklab, var(--accent) 28%, var(--border));
+  color: var(--text);
+}
+
+.memory-connector-picker.is-selected {
+  border-color: color-mix(in oklab, var(--accent) 34%, var(--border));
+  background: color-mix(in oklab, var(--accent) 9%, var(--bg-panel));
+  color: var(--accent);
+}
+
+.memory-connector-picker-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+
+.memory-connector-picker.is-selected .memory-connector-picker-box {
+  background: var(--accent);
+  color: white;
+}
+
+.memory-connector-connect-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border-soft));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-panel));
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.memory-connector-connect-button:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--accent) 42%, var(--border));
+  background: color-mix(in oklab, var(--accent) 12%, var(--bg-panel));
+  color: var(--accent);
+}
+
+.memory-connector-connect-button:disabled {
+  border-color: var(--border-soft);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.memory-connector-check {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.memory-connector-check input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+}
+
+.memory-connector-check > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--accent);
+}
+
+.memory-connector-row.is-disabled .memory-connector-check > span {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+.memory-connector-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.memory-connector-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.memory-connector-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.memory-connector-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.memory-connector-state.is-connected {
+  background: color-mix(in oklab, var(--accent) 12%, var(--bg-panel));
+  color: var(--accent);
+}
+
+.memory-connector-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.memory-connector-runbar {
+  width: 100%;
+  justify-content: space-between;
+  padding-top: 2px;
+}
+
+.memory-connector-runbar .hint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.memory-connector-runbar .memory-source-action {
+  margin-left: auto;
+}
+
+.memory-connector-actions .primary:disabled {
+  border-color: var(--border-soft);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.memory-connector-result {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.memory-connector-result.is-success {
+  border: 1px solid rgba(34, 139, 90, 0.24);
+  background: rgba(34, 139, 90, 0.08);
+  color: var(--text);
+}
+
+.memory-connector-result.is-error {
+  border: 1px solid rgba(220, 53, 69, 0.24);
+  background: rgba(220, 53, 69, 0.08);
+  color: var(--text-danger, #b02a37);
+}
+
+.memory-connector-run-history {
+  display: grid;
+  gap: 7px;
+}
+
+.memory-connector-run-history .memory-extraction-card {
+  padding: 11px 12px;
+  border-color: var(--border-soft);
+  background: var(--bg-panel);
+}
+
+.memory-connector-run-history .memory-extraction-card.is-success {
+  border-color: rgba(34, 139, 90, 0.18);
+}
+
+.memory-connector-run-history .memory-extraction-card.is-failed {
+  border-color: rgba(220, 53, 69, 0.18);
+}
+
+.memory-connector-diagnostics {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.memory-connector-diagnostics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.memory-connector-diagnostics-head span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.memory-connector-diagnostics-list {
+  display: grid;
+  gap: 6px;
+}
+
+.memory-connector-diagnostic-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: flex-start;
+  min-height: 32px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--bg-panel);
+}
+
+.memory-connector-diagnostic-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+
+.memory-connector-diagnostic-row.is-succeeded .memory-connector-diagnostic-dot {
+  background: #228b5a;
+}
+
+.memory-connector-diagnostic-row.is-failed .memory-connector-diagnostic-dot {
+  background: #dc3545;
+}
+
+.memory-connector-diagnostic-row.is-skipped .memory-connector-diagnostic-dot {
+  background: #9aa3ad;
+}
+
+.memory-connector-diagnostic-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.memory-connector-diagnostic-copy strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.memory-connector-diagnostic-copy small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-suggestion-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--accent) 5%, var(--bg-panel));
+}
+
+.memory-scan-history {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.memory-scan-history summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px 0 28px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.memory-scan-history summary::-webkit-details-marker {
+  display: none;
+}
+
+.memory-scan-history summary::before {
+  content: '›';
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  transform: rotate(0deg);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.memory-scan-history[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.memory-scan-history summary span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.memory-scan-history summary span:last-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.memory-scan-history .memory-connector-run-history {
+  padding: 0 12px 12px;
+}
+
+.memory-suggestion-list {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-suggestion-card,
+.modal label.memory-suggestion-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.memory-suggestion-card.is-selected {
+  border-color: color-mix(in oklab, var(--accent) 34%, var(--border-soft));
+  background: color-mix(in oklab, var(--accent) 7%, var(--bg-panel));
+}
+
+.memory-suggestion-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.memory-suggestion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.memory-suggestion-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.memory-type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.memory-suggestion-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.memory-suggestion-body {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .memory-source-tabs,
+  .memory-manual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-source-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .memory-subsection-head,
+  .memory-management-counts,
+  .memory-management-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .memory-source-action {
+    width: 100%;
+  }
+
+  .memory-suggestion-card,
+  .modal label.memory-suggestion-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .memory-suggestion-card .memory-connector-state {
+    grid-column: 2;
+    width: fit-content;
+  }
+
+  .memory-connector-row,
+  .modal label.memory-connector-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .memory-connector-picker,
+  .memory-connector-connect-button,
+  .memory-connector-state {
+    grid-column: 2;
+    width: fit-content;
+  }
+}
+
+/* Memory section: monospace path showing where the memory files live on
+   disk. `break-all` so even long absolute paths fit inside the panel. */
+.memory-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

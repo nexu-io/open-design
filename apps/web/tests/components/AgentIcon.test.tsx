@@ -47,6 +47,31 @@ describe('AgentIcon', () => {
     expect(markup).toContain('src="/agent-icons/devin.png"');
   });
 
+  it('renders Aider as a PNG (Aider only ships a rasterised avatar)', () => {
+    const markup = renderToStaticMarkup(<AgentIcon id="aider" size={24} />);
+
+    expect(markup).toContain('src="/agent-icons/aider.png"');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
+  it('renders Trae CLI as a PNG keyed on the trae-cli runtime id', () => {
+    // The daemon runtime def id is `trae-cli`, so the icon file and the
+    // ICON_EXT key must match that id exactly (not a bare `trae`).
+    const markup = renderToStaticMarkup(<AgentIcon id="trae-cli" size={24} />);
+
+    expect(markup).toContain('src="/agent-icons/trae-cli.png"');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
+  it('renders Pi as a color-baked <img>, not a CSS mask', () => {
+    // pi.svg is a dark tile (#09090b) with a white glyph — baked colors, so
+    // masking it with `currentColor` would flatten it to a solid square.
+    const markup = renderToStaticMarkup(<AgentIcon id="pi" size={24} />);
+
+    expect(markup).toContain('src="/agent-icons/pi.svg"');
+    expect(markup).not.toContain('agent-icon-mono');
+  });
+
   it('renders monochrome SVGs as a CSS-masked <span> so they pick up theme color', () => {
     // cursor-agent.svg ships with `fill="currentColor"` and would lose its
     // ink under a dark theme if loaded through `<img>` (which would make

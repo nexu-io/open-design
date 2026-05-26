@@ -660,7 +660,7 @@ describe('HomeView prompt handoff', () => {
     ))).toBe(false);
     expect(
       screen.getByTestId('home-hero-footer-option-designSystem').textContent,
-    ).toContain('Auto');
+    ).toContain('Refly Design System');
     expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
     expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
@@ -752,7 +752,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
     expect(
       screen.getByTestId('home-hero-footer-option-designSystem').textContent,
-    ).toContain('Auto');
+    ).toContain('Refly Design System');
     expect(screen.getByTestId('home-hero-footer-option-fidelity').textContent).toContain('High fidelity');
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();

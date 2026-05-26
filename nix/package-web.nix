@@ -9,6 +9,7 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
+  workspacePaths,
 }:
 # Builds the @open-design/web Next.js static export.
 #
@@ -27,9 +28,13 @@ let
   version = (lib.importJSON ../package.json).version;
 
   pnpmDepsHash = (import ./pnpm-deps.nix).webHash;
+  pnpmWorkspaceFilters = map (workspacePath: "./${workspacePath}") workspacePaths;
+  dependencyBuildPaths = lib.filter (workspacePath: workspacePath != "apps/web") workspacePaths;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;
+
+    pnpmWorkspaces = pnpmWorkspaceFilters;
 
     nativeBuildInputs = [
       nodejs
@@ -40,6 +45,7 @@ in
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
+      pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };
 
@@ -50,13 +56,7 @@ in
 
     buildPhase = ''
       runHook preBuild
-      for target in \
-        packages/contracts \
-        packages/host \
-        packages/sidecar-proto \
-        packages/sidecar \
-        packages/platform
-      do
+      for target in ${lib.escapeShellArgs dependencyBuildPaths}; do
         pnpm -C "$target" run --if-present build
       done
 

@@ -19,7 +19,7 @@ interface TextContent {
 
 function makeDaemonApp(text: string, contentType = 'text/plain'): Express {
   const app = express();
-  app.get('/api/projects/:id/raw/*', (_req, res) => {
+  app.get('/api/projects/:id/raw/*splat', (_req, res) => {
     res.set({ 'content-type': contentType }).send(text);
   });
   return app;

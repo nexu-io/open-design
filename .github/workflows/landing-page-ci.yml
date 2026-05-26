@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v5.0.5
         with:
           path: apps/landing-page/public/previews
-          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
           restore-keys: |
             landing-page-previews-${{ runner.os }}-
 

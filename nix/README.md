@@ -220,27 +220,42 @@ Never inline a secret with `pkgs.writeText` or `home.file`.
 
 ## First-build hash pinning
 
-`nix/pnpm-deps.nix` is the single source of truth for the vendored pnpm
-store hash used by both `nix/package-daemon.nix` and
-`nix/package-web.nix`. If `pnpm-lock.yaml` changes, run:
+`nix/pnpm-deps.nix` is the generated single source of truth for the
+vendored pnpm store hash used by both `nix/package-daemon.nix` and
+`nix/package-web.nix`. Treat it like a lock artifact, not a hand-edited
+source file. If `pnpm-lock.yaml` changes and you are intentionally
+maintaining the Nix packaging, run:
 
 ```bash
 pnpm nix:update-hash
 ```
 
-The script temporarily swaps one consumer to `lib.fakeHash`, runs
-`nix build .#web --print-build-logs`, extracts the expected hash from the
-failure output, writes it back into `nix/pnpm-deps.nix`, and restores the
-consumer file.
+The script temporarily swaps one consumer to `lib.fakeHash`, runs the
+matching `nix build .#<consumer> --print-build-logs`, extracts the
+expected hash from the failure output, writes it back into
+`nix/pnpm-deps.nix`, and restores the consumer file. The script runs via
+`node --experimental-strip-types`, so CI can invoke it without first
+installing the workspace.
 
 ## CI
 
 `.github/workflows/nix-check.yml` runs `nix flake check` on pushes to
 `main` and can also be started manually with `workflow_dispatch`.
 
-Pull requests that touch Nix or dependency inputs are validated earlier in
+Pull requests that touch Nix inputs, daemon/web Nix build closures, or the
+generated hash maintenance workflows are validated earlier in
 `.github/workflows/ci.yml` via the required `Validate workspace` gate.
-That PR path runs `nix flake check` when `pnpm-lock.yaml`, package
-manifests, `flake.*`, `nix/**`, or the Nix workflows change, so fixed-
-output hash drift is caught before merge while keeping unrelated PRs off
-the slower Nix path.
+That PR path runs `nix flake check` for `flake.*`, `nix/**`, root lock and
+workspace manifests, and files that are actually in the daemon/web Nix
+closures. The flake also filters each derivation down to only the workspace
+packages it actually installs, so unrelated package/tool changes stay off the
+slower Nix path and do not churn the other derivation's pnpm store hash.
+
+When a PR run fails because `nix/pnpm-deps.nix` is stale, the CI job also
+tries to regenerate a hash-only patch:
+
+- same-repo PRs get a bot-authored commit pushed back to the PR branch when
+  the generated patch only touches `nix/pnpm-deps.nix`;
+- fork PRs get a PR comment plus a workflow artifact containing the patch;
+- the failing run still stays red until the generated patch lands and a
+  fresh validation run passes.

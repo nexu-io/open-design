@@ -163,6 +163,94 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
     expect(codex?.version).toBe('codex 1.2.3');
   });
 
+  it('honors Trae CLI adapter-specific version probe timeout', async () => {
+    execAgentFileMock.mockResolvedValue({ stdout: 'agent 1.2.3\n', stderr: '' });
+    resolveAgentLaunchMock.mockImplementation((def: { id: string }) => ({
+      configuredOverridePath: null,
+      pathResolvedPath: `/fake/bin/${def.id}`,
+      selectedPath: `/fake/bin/${def.id}`,
+      launchPath: `/fake/bin/${def.id}`,
+      launchKind: 'selected' as const,
+      childPathPrepend: ['/fake/bin'],
+      diagnostic: null,
+    }));
+    const { detectAgents } = await import('../../src/runtimes/detection.js');
+
+    await detectAgents();
+
+    const traeVersionCall = execAgentFileMock.mock.calls.find(
+      ([command, args]) =>
+        command === '/fake/bin/trae-cli' &&
+        Array.isArray(args) &&
+        args.join('\0') === '--version',
+    );
+
+    expect(traeVersionCall).toBeDefined();
+    expect(traeVersionCall?.[2]).toMatchObject({ timeout: 10_000 });
+  });
+
+  it('keeps the default version probe timeout for other runtimes', async () => {
+    execAgentFileMock.mockResolvedValue({ stdout: 'agent 1.2.3\n', stderr: '' });
+    resolveAgentLaunchMock.mockImplementation((def: { id: string }) => ({
+      configuredOverridePath: null,
+      pathResolvedPath: `/fake/bin/${def.id}`,
+      selectedPath: `/fake/bin/${def.id}`,
+      launchPath: `/fake/bin/${def.id}`,
+      launchKind: 'selected' as const,
+      childPathPrepend: ['/fake/bin'],
+      diagnostic: null,
+    }));
+    const { detectAgents } = await import('../../src/runtimes/detection.js');
+
+    await detectAgents();
+
+    const codexVersionCall = execAgentFileMock.mock.calls.find(
+      ([command, args]) =>
+        command === '/fake/bin/codex' &&
+        Array.isArray(args) &&
+        args.join('\0') === '--version',
+    );
+
+    expect(codexVersionCall).toBeDefined();
+    expect(codexVersionCall?.[2]).toMatchObject({ timeout: 3000 });
+  });
+
+  it('reports missing Trae CLI as unavailable without breaking full detection', async () => {
+    resolveAgentLaunchMock.mockImplementation((def: { id: string }) => {
+      if (def.id === 'trae-cli') {
+        return {
+          configuredOverridePath: null,
+          pathResolvedPath: null,
+          selectedPath: null,
+          launchPath: null,
+          launchKind: 'unresolved' as const,
+          childPathPrepend: [],
+          diagnostic: null,
+        };
+      }
+      return {
+        configuredOverridePath: null,
+        pathResolvedPath: `/fake/bin/${def.id}`,
+        selectedPath: `/fake/bin/${def.id}`,
+        launchPath: `/fake/bin/${def.id}`,
+        launchKind: 'selected' as const,
+        childPathPrepend: ['/fake/bin'],
+        diagnostic: null,
+      };
+    });
+    execAgentFileMock.mockResolvedValue({ stdout: 'agent 1.2.3\n', stderr: '' });
+    const { detectAgents } = await import('../../src/runtimes/detection.js');
+
+    const agents = await detectAgents();
+    const traeCli = agents.find((agent) => agent.id === 'trae-cli');
+    const codex = agents.find((agent) => agent.id === 'codex');
+
+    expect(traeCli).toBeDefined();
+    expect(traeCli?.available).toBe(false);
+    expect(codex).toBeDefined();
+    expect(codex?.available).toBe(true);
+  });
+
   it('reports unavailable for a stale configured override even when a different PATH binary exists', async () => {
     // Regression for Siri-Ray's #1301 review: an earlier revision tried
     // to fall back to a PATH candidate when the configured override

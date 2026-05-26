@@ -248,6 +248,15 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('**platformTargets**');
   });
 
+  it('tells artifact generation to summarize instead of dumping raw HTML source into chat', () => {
+    const prompt = composeSystemPrompt({
+      metadata: { kind: 'prototype', fidelity: 'production' } as any,
+    });
+
+    expect(prompt).toContain('Do not dump the full raw HTML source back into chat');
+    expect(prompt).toContain('the assistant message should only summarize the result');
+  });
+
   it('uses the primary skill surface when composed skill modes conflict', () => {
     const prompt = composeSystemPrompt({
       skillMode: 'image',

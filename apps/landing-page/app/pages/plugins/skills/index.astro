@@ -1,0 +1,64 @@
+---
+/*
+ * /plugins/skills/ — instruction skills.
+ *
+ * Reads `plugins/_official/`, filters to entries that don't fit any
+ * of the seven artifact kinds (i.e. `categorizePlugin` returns null).
+ * These are scenarios, atoms-style helpers, and miscellaneous mode
+ * values that the agent loads mid-task — copywriting, color theory,
+ * creative direction, brainstorming. The output depends on the
+ * user's input, so there's no static preview to embed.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import PluginRow from '../../../_components/plugin-row.astro';
+import { getBundledPlugins } from '../../../_lib/bundled-plugins';
+import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+const skills = getBundledPlugins()
+  .filter((p) => p.bucket !== 'design-systems')
+  .filter((p) => categorizePlugin(bundledRecordOf(p)) === null);
+
+const title = `Skills · ${skills.length} · Open Design`;
+const description = `${skills.length} instruction skills the agent loads mid-task — copywriting, color theory, creative direction, brainstorming. Each detail page surfaces the manifest's full description.`;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL('/plugins/skills/', Astro.site).toString(),
+  numberOfItems: skills.length,
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>Plugins</a>
+    <span>/</span>
+    <span aria-current="page">Skills</span>
+  </nav>
+
+  <header class="catalog-head">
+    <span class="label">Plugins · Skills</span>
+    <h1 class="display">{skills.length} instruction skills<span class="dot">.</span></h1>
+    <p class="lead">
+      Skills the agent loads mid-task — copywriting, color theory, creative direction,
+      brainstorming. There's no static demo because the outcome depends on your input, so each
+      detail page reads like a brief: title, description, triggers, attribution.
+    </p>
+  </header>
+
+  <section class="catalog-grid catalog-grid-skills" aria-label="All instruction skills">
+    <ol>
+      {skills.map((s, idx) => (
+        <PluginRow item={{ kind: 'bundled', record: s }} index={idx} />
+      ))}
+    </ol>
+  </section>
+</Layout>

@@ -45,6 +45,54 @@ function stringifyContent(value: unknown): string {
   }
 }
 
+function parseJsonObjectsFromContent(value: string): JsonObject[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const direct = safeParseJson(trimmed);
+  if (isRecord(direct)) return [direct];
+  const objects: JsonObject[] = [];
+  for (const line of trimmed.split(/\r?\n/u)) {
+    const parsedLine = safeParseJson(line.trim());
+    if (isRecord(parsedLine)) objects.push(parsedLine);
+  }
+  return objects;
+}
+
+function extractConnectorApiError(value: JsonObject): JsonObject | null {
+  if (isRecord(value.error)) {
+    if (typeof value.error.code === 'string') return value.error;
+    if (isRecord(value.error.data) && isRecord(value.error.data.error)) {
+      const wrappedError = value.error.data.error;
+      if (typeof wrappedError.code === 'string') return wrappedError;
+    }
+  }
+  return null;
+}
+
+function connectorToolSelectionErrorMessage(content: string): string | null {
+  if (!content.includes('CONNECTOR_TOOL_NOT_FOUND')) return null;
+  let error: JsonObject | null = null;
+  for (const parsed of parseJsonObjectsFromContent(content)) {
+    const parsedError = extractConnectorApiError(parsed);
+    if (parsedError?.code === 'CONNECTOR_TOOL_NOT_FOUND') {
+      error = parsedError;
+      break;
+    }
+  }
+  if (!error) return null;
+  const details = isRecord(error.details) ? error.details : {};
+  const connectorId = typeof details.connectorId === 'string' && details.connectorId
+    ? details.connectorId
+    : undefined;
+  const toolName = typeof details.toolName === 'string' && details.toolName
+    ? details.toolName
+    : 'the requested connector tool';
+  const target = connectorId
+    ? `Connector tool ${toolName} is not allowed for connector ${connectorId}.`
+    : `Connector tool ${toolName} is not allowed.`;
+  return `${target} Re-list the connector catalog and choose one of the currently allowed read-only tools.`;
+}
+
 function extractErrorMessage(value: unknown, fallback: string): string {
   if (typeof value === 'string') {
     const parsed = safeParseJson(value);
@@ -352,12 +400,18 @@ if (obj.type === 'error') {
           },
         });
       }
+      const content = stringifyContent(item.aggregated_output ?? '');
       onEvent({
         type: 'tool_result',
         toolUseId: item.id,
-        content: stringifyContent(item.aggregated_output ?? ''),
+        content,
         isError: typeof item.exit_code === 'number' ? item.exit_code !== 0 : item.status === 'failed',
       });
+      const connectorToolError = connectorToolSelectionErrorMessage(content);
+      if (connectorToolError && !state.codexErrorEmitted) {
+        state.codexErrorEmitted = true;
+        onEvent({ type: 'error', message: connectorToolError });
+      }
       return true;
     }
   }

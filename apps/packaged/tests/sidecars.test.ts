@@ -81,20 +81,28 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
-  it('forwards standard proxy variables to packaged sidecars', () => {
+  it('forwards standard Node proxy variables to packaged sidecars', () => {
     const env = resolvePackagedChildBaseEnv({
       HOME: '/Users/tester',
       HTTP_PROXY: 'http://127.0.0.1:7890',
       HTTPS_PROXY: 'http://127.0.0.1:7890',
+      NODE_USE_ENV_PROXY: '1',
       NO_PROXY: 'localhost,127.0.0.1',
       RANDOM_INTERNAL_FLAG: 'drop-me',
+      http_proxy: 'http://127.0.0.1:7891',
+      https_proxy: 'http://127.0.0.1:7891',
+      no_proxy: 'localhost,127.0.0.1,::1',
     });
 
     expect(env).toMatchObject({
       HOME: '/Users/tester',
       HTTP_PROXY: 'http://127.0.0.1:7890',
       HTTPS_PROXY: 'http://127.0.0.1:7890',
+      NODE_USE_ENV_PROXY: '1',
       NO_PROXY: 'localhost,127.0.0.1',
+      http_proxy: 'http://127.0.0.1:7891',
+      https_proxy: 'http://127.0.0.1:7891',
+      no_proxy: 'localhost,127.0.0.1,::1',
     });
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });

@@ -1,0 +1,241 @@
+---
+/*
+ * /plugins/templates/<kind>/ — focused list for one artifact category.
+ *
+ * Reads from `plugins/_official/` (bundled-plugin registry). Same
+ * filter the parent flat index applies, narrowed to one of the seven
+ * artifact kinds. Subcategory chips are anchored on the page so a
+ * single tap inside Prototype / Slides / Image / Video jumps to a
+ * scene cluster without leaving the page.
+ */
+import Layout from '../../../../_components/sub-page-layout.astro';
+import PluginRow from '../../../../_components/plugin-row.astro';
+import {
+  getBundledPlugins,
+  type BundledPluginRecord,
+} from '../../../../_lib/bundled-plugins';
+import {
+  PLUGIN_CATEGORIES,
+  bundledRecordOf,
+  categorizePlugin,
+  categorizeSubcategory,
+  getSubcategoriesFor,
+  type PluginCategorySlug,
+} from '../../../../_lib/plugin-facets';
+import { localeFromPath, localizedHref } from '../../../../i18n';
+
+export async function getStaticPaths() {
+  return PLUGIN_CATEGORIES.map((cat) => ({
+    params: { kind: cat.slug },
+    props: { categorySlug: cat.slug },
+  }));
+}
+
+interface Props {
+  categorySlug: PluginCategorySlug;
+}
+
+const { categorySlug } = Astro.props as Props;
+const category = PLUGIN_CATEGORIES.find((c) => c.slug === categorySlug)!;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+const all = getBundledPlugins().filter((p) => p.bucket !== 'design-systems');
+
+interface Item {
+  record: BundledPluginRecord;
+  subcategory: string | null;
+}
+
+const items: Item[] = [];
+for (const record of all) {
+  const matchable = bundledRecordOf(record);
+  if (categorizePlugin(matchable) !== categorySlug) continue;
+  items.push({
+    record,
+    subcategory: categorizeSubcategory(matchable, categorySlug),
+  });
+}
+
+const subcategories = getSubcategoriesFor(categorySlug);
+const subCounts = new Map<string, number>();
+for (const i of items) {
+  if (i.subcategory) subCounts.set(i.subcategory, (subCounts.get(i.subcategory) ?? 0) + 1);
+}
+
+const totalCount = items.length;
+const title = `${category.label} templates · ${totalCount} · Open Design`;
+const description = category.description;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL(`/plugins/templates/${category.slug}/`, Astro.site).toString(),
+  numberOfItems: totalCount,
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>Plugins</a>
+    <span>/</span>
+    <a href={href('/plugins/templates/')}>Templates</a>
+    <span>/</span>
+    <span aria-current="page">{category.label}</span>
+  </nav>
+
+  <header class="catalog-head">
+    <span class="label">Templates · {category.label}</span>
+    <h1 class="display">{totalCount} {category.label.toLowerCase()} templates<span class="dot">.</span></h1>
+    <p class="lead">{category.description}</p>
+  </header>
+
+  {/*
+    Render the artifact-kind chip rail on every category page so the
+    other six kinds stay one click away. Each chip URL ends in
+    `#filter-strip` so cross-page navigation keeps the chip rail in
+    view instead of scrolling back to the header.
+  */}
+  <section class="filter-strip" id="filter-strip" aria-label="Artifact kinds">
+    <div class="filter-group">
+      <span class="filter-label">Artifact kind</span>
+      <ul>
+        <li>
+          <a class="chip chip-link" href={href('/plugins/templates/#filter-strip')}>All</a>
+        </li>
+        {PLUGIN_CATEGORIES.map((cat) => (
+          <li>
+            <a
+              class={cat.slug === categorySlug ? 'chip chip-link is-active' : 'chip chip-link'}
+              href={href(`/plugins/templates/${cat.slug}/#filter-strip`)}
+              aria-current={cat.slug === categorySlug ? 'page' : undefined}
+            >
+              {cat.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  {subcategories.length > 0 && (
+    <section class="filter-strip" aria-label="Scenes" data-scene-strip>
+      <div class="filter-group">
+        <span class="filter-label">Scene</span>
+        <ul>
+          <li>
+            <button type="button" class="chip chip-link is-active" data-scene-pick="all">
+              All<span class="chip-num">{totalCount}</span>
+            </button>
+          </li>
+          {subcategories.map((sub) => {
+            const count = subCounts.get(sub.slug) ?? 0;
+            if (count === 0) return null;
+            return (
+              <li>
+                <button
+                  type="button"
+                  class="chip chip-link"
+                  data-scene-pick={sub.slug}
+                  title={sub.description}
+                >
+                  {sub.label}<span class="chip-num">{count}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
+  )}
+
+  <section class="catalog-grid catalog-grid-skills" aria-label={`All ${category.label} templates`}>
+    <ol data-scene-list>
+      {items.map((item, idx) => (
+        <PluginRow
+          item={{ kind: 'bundled', record: item.record }}
+          index={idx}
+          dataScene={item.subcategory ?? 'none'}
+        />
+      ))}
+    </ol>
+  </section>
+
+  {/*
+   * Client-side scene filter for /plugins/templates/<kind>/. Plain
+   * `<script>` (no `is:inline`) so Astro processes it as a typed
+   * client script and bundles it in the page bundle — the inline
+   * variant was getting elided by the build for reasons we couldn't
+   * trace from the rendered HTML.
+   *
+   * Rather than route to a separate URL per scene (would multiply
+   * static pages by ~25 across 18 locales), we render every row once
+   * and toggle visibility via a `data-scene-hidden` attribute the
+   * CSS reacts to. Falls back gracefully when JS is off: every row
+   * stays visible and the chip rail still reads naturally — the All
+   * chip stays in its `is-active` state.
+   */}
+  <script>
+    (() => {
+      const strip = document.querySelector('[data-scene-strip]');
+      const list = document.querySelector('[data-scene-list]');
+      if (!strip || !list) return;
+      const buttons = strip.querySelectorAll('[data-scene-pick]');
+      const items = list.querySelectorAll('[data-scene]');
+      strip.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const pick = target.closest('[data-scene-pick]');
+        if (!(pick instanceof HTMLElement)) return;
+        const want = pick.getAttribute('data-scene-pick');
+        buttons.forEach((b) => b.classList.toggle('is-active', b === pick));
+        // Toggle inline `display` instead of relying on a scoped CSS
+        // rule keyed off `[data-scene-hidden]`. Astro's scoper adds
+        // `[data-astro-cid-...]` to the selector — but the `<li>` is
+        // rendered by the PluginRow component, which carries its own
+        // cid, so the page-scoped rule misses. Inline style avoids
+        // the cross-component scoping mismatch entirely.
+        items.forEach((li) => {
+          const has = li.getAttribute('data-scene');
+          const hide = want !== 'all' && has !== want;
+          (li as HTMLElement).style.display = hide ? 'none' : '';
+        });
+      });
+    })();
+  </script>
+</Layout>
+
+<style>
+  /*
+   * Scene-pick chips are rendered as <button> so we can attach a
+   * single delegated click handler without worrying about anchor
+   * default-href behaviour (which would otherwise try to scroll to
+   * a non-existent #anchor when the JS no-ops).
+   *
+   * Resetting only the user-agent decorations (appearance, the bold
+   * font shorthand defaults that override .chip's mono/11px, the
+   * narrow button padding) — explicitly NOT inheriting font/color,
+   * so .chip's `font-family: var(--mono)` and `font-size: 11px`
+   * stay authoritative and the chip reads identical to the anchor
+   * chips on the same rail.
+   */
+  [data-scene-strip] .chip-link[data-scene-pick] {
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    /* Wipe button-default font shorthand explicitly. We can't
+       `font: inherit` because that pulls in the outer 16px Inter; we
+       want the .chip rule (mono / 11px / bold-ish) to win, which it
+       does once the user-agent declaration is gone. */
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: none;
+    color: var(--ink);
+  }
+</style>

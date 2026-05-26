@@ -77,7 +77,7 @@ function addSharedOptions(command: CacCommand) {
 const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
   linux: "build target: all|appimage|dir (default: all)",
   mac: "build target: all|app|dmg|zip (default: all)",
-  win: "build target: all|dir|nsis (default: nsis)",
+  win: "build target: all|dir|nsis|zip (default: nsis). `zip` produces a portable zip from the unpacked build; `all` produces dir+nsis+zip.",
 };
 
 function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {

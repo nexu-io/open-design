@@ -26,6 +26,7 @@ import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   deletePreviewComment,
+  fetchConnectorStatuses,
   fetchPreviewComments,
   fetchDesignSystem,
   fetchDesignTemplate,
@@ -145,6 +146,7 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
+import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon } from './Icon';
@@ -152,6 +154,7 @@ import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
 import { CenteredLoader } from './Loading';
+import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -203,7 +206,7 @@ interface Props {
     choice: { model?: string; reasoning?: string },
   ) => void;
   onRefreshAgents: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: SettingsSection) => void;
   onOpenMcpSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
@@ -215,6 +218,18 @@ interface Props {
   onTouchProject: () => void;
   onProjectChange: (next: Project) => void;
   onProjectsRefresh: () => void;
+  onChangeDefaultDesignSystem?: (designSystemId: string | null) => void;
+  onDesignSystemsRefresh?: () => Promise<void> | void;
+}
+
+interface QueuedChatSend {
+  id: string;
+  conversationId: string;
+  prompt: string;
+  attachments: ChatAttachment[];
+  commentAttachments: ChatCommentAttachment[];
+  meta?: ProjectChatSendMeta;
+  createdAt: number;
 }
 
 let liveArtifactEventSequence = 0;
@@ -483,6 +498,8 @@ export function ProjectView({
   onTouchProject,
   onProjectChange,
   onProjectsRefresh,
+  onChangeDefaultDesignSystem,
+  onDesignSystemsRefresh,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -633,6 +650,8 @@ export function ProjectView({
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
+  const [queuedChatSends, setQueuedChatSends] = useState<QueuedChatSend[]>([]);
+  const queuedChatSendsRef = useRef<QueuedChatSend[]>([]);
   const sendTextBufferRef = useRef<BufferedTextUpdates | null>(null);
   const reattachTextBuffersRef = useRef<Set<BufferedTextUpdates>>(new Set());
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -671,6 +690,8 @@ export function ProjectView({
   useEffect(() => {
     setChatSeed(null);
     setAutoAuditRepairSeed(null);
+    queuedChatSendsRef.current = [];
+    setQueuedChatSends([]);
   }, [project.id]);
   // Monotonic token bumped on every `conversation-created` refresh dispatch.
   // Two rapid events (e.g. concurrent routine runs against the same reused
@@ -696,10 +717,17 @@ export function ProjectView({
   const currentConversationBusy = currentConversationLoading
     || currentConversationStreaming
     || currentConversationHasActiveRun;
+  const currentConversationAwaitingActiveRunAttach =
+    currentConversationHasActiveRun && !currentConversationStreaming;
   const currentConversationSendDisabled = currentConversationLoading
-    || currentConversationHasActiveRun
-    || failedMessagesConversationId === activeConversationId;
+    || failedMessagesConversationId === activeConversationId
+    || currentConversationAwaitingActiveRunAttach;
   const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
+  const currentConversationQueuedItems = activeConversationId
+    ? queuedChatSends
+        .filter((item) => item.conversationId === activeConversationId)
+        .map((item) => ({ id: item.id, prompt: item.prompt }))
+    : [];
   const newConversationDisabled = creatingConversation;
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
@@ -2102,6 +2130,34 @@ export function ProjectView({
     onProjectsRefresh,
   ]);
 
+  const enqueueChatSend = useCallback((item: QueuedChatSend) => {
+    const next = [...queuedChatSendsRef.current, item];
+    queuedChatSendsRef.current = next;
+    setQueuedChatSends(next);
+  }, []);
+
+  const removeQueuedChatSend = useCallback((id: string) => {
+    const next = queuedChatSendsRef.current.filter((item) => item.id !== id);
+    queuedChatSendsRef.current = next;
+    setQueuedChatSends(next);
+  }, []);
+
+  const updateQueuedChatSend = useCallback((id: string, prompt: string) => {
+    const next = queuedChatSendsRef.current.map((item) =>
+      item.id === id ? { ...item, prompt } : item,
+    );
+    queuedChatSendsRef.current = next;
+    setQueuedChatSends(next);
+  }, []);
+
+  const prioritizeQueuedChatSend = useCallback((id: string) => {
+    const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
+    if (!item) return;
+    const next = [item, ...queuedChatSendsRef.current.filter((candidate) => candidate.id !== id)];
+    queuedChatSendsRef.current = next;
+    setQueuedChatSends(next);
+  }, []);
+
   const handleSend = useCallback(
     async (
       prompt: string,
@@ -2111,11 +2167,30 @@ export function ProjectView({
     ) => {
       if (!activeConversationId) return;
       if (messagesConversationIdRef.current !== activeConversationId) return;
-      if (currentConversationBusy) return;
       const retryTarget = meta?.retryOfAssistantId
         ? resolveRetryTarget(messages, meta.retryOfAssistantId)
         : null;
       if (meta?.retryOfAssistantId && !retryTarget) return;
+      if (currentConversationBusy) {
+        if (meta?.retryOfAssistantId) return;
+        if (!prompt.trim() && attachments.length === 0 && commentAttachments.length === 0) return;
+        enqueueChatSend({
+          id: randomUUID(),
+          conversationId: activeConversationId,
+          prompt,
+          attachments,
+          commentAttachments,
+          ...(meta === undefined ? {} : { meta }),
+          createdAt: Date.now(),
+        });
+        if (commentAttachments.length > 0) {
+          const reservedCommentIds = new Set(commentAttachments.map((attachment) => attachment.id));
+          setAttachedComments((current) =>
+            current.filter((comment) => !reservedCommentIds.has(comment.id)),
+          );
+        }
+        return;
+      }
       if (
         !retryTarget &&
         !prompt.trim() &&
@@ -2216,7 +2291,10 @@ export function ProjectView({
       persistMessage(assistantMsg);
       if (runCommentAttachments.length > 0) {
         void patchAttachedStatuses(runCommentAttachments, 'applying');
-        setAttachedComments([]);
+        const consumedCommentIds = new Set(runCommentAttachments.map((attachment) => attachment.id));
+        setAttachedComments((current) =>
+          current.filter((comment) => !consumedCommentIds.has(comment.id)),
+        );
       }
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
@@ -2728,6 +2806,7 @@ export function ProjectView({
       attachedComments,
       activeConversationId,
       currentConversationBusy,
+      enqueueChatSend,
       messages,
       config,
       locale,
@@ -2752,6 +2831,45 @@ export function ProjectView({
       onProjectChange,
     ],
   );
+
+  const sendQueuedChatSendNow = useCallback((id: string) => {
+    const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
+    if (!item) return;
+    if (currentConversationBusy) {
+      prioritizeQueuedChatSend(id);
+      return;
+    }
+    removeQueuedChatSend(id);
+    void handleSend(
+      item.prompt,
+      item.attachments,
+      item.commentAttachments,
+      item.meta,
+    );
+  }, [currentConversationBusy, handleSend, prioritizeQueuedChatSend, removeQueuedChatSend]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    if (currentConversationBusy) return;
+    if (messagesConversationIdRef.current !== activeConversationId) return;
+    const next = queuedChatSendsRef.current.find(
+      (item) => item.conversationId === activeConversationId,
+    );
+    if (!next) return;
+    removeQueuedChatSend(next.id);
+    void handleSend(
+      next.prompt,
+      next.attachments,
+      next.commentAttachments,
+      next.meta,
+    );
+  }, [
+    activeConversationId,
+    currentConversationBusy,
+    queuedChatSends,
+    handleSend,
+    removeQueuedChatSend,
+  ]);
 
   const handleRetry = useCallback(
     (assistantMessage: ChatMessage) => {
@@ -3242,6 +3360,20 @@ export function ProjectView({
       messagesConversationIdRef.current = fresh.id;
       setConversations((curr) => [fresh, ...curr]);
       setActiveConversationId(fresh.id);
+      // Push the new conversation id into the URL synchronously so the
+      // route-sync effect sees a matching `routeConversationId` before
+      // it can revert `activeConversationId`. Without this, the route-sync
+      // effect can fight the conversation switch, preventing users from
+      // switching back to older conversations after creating a new one.
+      navigate(
+        {
+          kind: 'project',
+          projectId: project.id,
+          conversationId: fresh.id,
+          fileName: openTabsState.active ?? null,
+        },
+        { replace: true },
+      );
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not create a conversation for this project.';
@@ -3251,7 +3383,7 @@ export function ProjectView({
       creatingConversationRef.current = false;
       setCreatingConversation(false);
     }
-  }, [project.id, activeConversationId, messages.length]);
+  }, [project.id, activeConversationId, messages.length, navigate, openTabsState.active]);
 
   const handleSelectConversation = useCallback((id: string) => {
     if (id === activeConversationId && failedMessagesConversationId !== id) return;
@@ -3462,6 +3594,60 @@ export function ProjectView({
     () => designSystemProject ? latestDesignSystemActivityEvents(messages) : [],
     [designSystemProject, messages],
   );
+  const connectRepoNeeded = useMemo(
+    () => designSystemNeedsRepoConnect(designSystemProject, projectFiles.map((file) => file.name)),
+    [designSystemProject, projectFiles],
+  );
+  // Only the connect-repo CTA copy depends on this (connect vs re-import), so
+  // resolve it lazily and only while the CTA is actually showing. Tri-state:
+  // `undefined` means the status fetch has not resolved yet, which keeps the
+  // CTA neutral and disabled so a fast click can't fire the wrong action.
+  const [githubConnected, setGithubConnected] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (!connectRepoNeeded) {
+      setGithubConnected(undefined);
+      return;
+    }
+    let aborted = false;
+    const controller = new AbortController();
+    const refresh = () => {
+      void fetchConnectorStatuses({ signal: controller.signal }).then((statuses) => {
+        if (!aborted) setGithubConnected(statuses.github?.status === 'connected');
+      });
+    };
+    refresh();
+    // Connecting GitHub happens in the Connectors dialog or an external OAuth
+    // window, neither of which changes connectRepoNeeded. Re-check on focus so
+    // the CTA flips from "Connect GitHub" to "Import repo" when the user returns.
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      aborted = true;
+      controller.abort();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [connectRepoNeeded]);
+
+  // Signal that pushes a draft into the chat composer (the "Import repo" CTA).
+  const [composerDraftSignal, setComposerDraftSignal] = useState<{ text: string; nonce: number }>();
+  // One handler for both the review banner and the chat CTA. When GitHub is
+  // not connected it opens Connectors; once connected it prefills the composer
+  // with the import instruction so the user can review and send it.
+  const handleConnectRepo = useCallback(() => {
+    // Status not resolved yet; the CTA is disabled in this window, but guard
+    // anyway so a stray call can't route a connected account to Connectors.
+    if (githubConnected === undefined) return;
+    if (githubConnected) {
+      setComposerDraftSignal({
+        text: buildRepoImportPrompt(designSystemProject, projectFiles.map((file) => file.name)),
+        nonce: Date.now(),
+      });
+    } else {
+      onOpenSettings('composio');
+    }
+  }, [githubConnected, onOpenSettings, designSystemProject, projectFiles]);
 
   const isDeck = useMemo(
     () =>
@@ -4078,6 +4264,7 @@ export function ProjectView({
               messages={messages}
               streaming={currentConversationStreaming}
               sendDisabled={currentConversationSendDisabled}
+              queuedItems={currentConversationQueuedItems}
               error={conversationLoadError ?? error ?? audioVoiceOptionsError}
               projectId={project.id}
               projectKindForTracking={projectKindToTracking(project.metadata?.kind)}
@@ -4095,6 +4282,9 @@ export function ProjectView({
               onSend={handleSend}
               onRetry={handleRetry}
               onStop={handleStop}
+              onRemoveQueuedSend={removeQueuedChatSend}
+              onUpdateQueuedSend={updateQueuedChatSend}
+              onSendQueuedNow={sendQueuedChatSendNow}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               activePluginActionPaths={activePluginActionPaths}
@@ -4116,6 +4306,10 @@ export function ProjectView({
               onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
               onOpenMcpSettings={onOpenMcpSettings}
+              connectRepoNeeded={connectRepoNeeded}
+              githubConnected={githubConnected}
+              onConnectRepo={handleConnectRepo}
+              composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}
@@ -4183,9 +4377,14 @@ export function ProjectView({
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
+          defaultDesignSystemId={config.designSystemId}
+          onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
+          onDesignSystemsRefresh={onDesignSystemsRefresh}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
           designSystemReview={project.metadata?.designSystemReview}
           onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
+          onConnectRepo={handleConnectRepo}
+          githubConnected={githubConnected}
         />
       </div>
       {projectActionsToast ? (

@@ -708,6 +708,7 @@
   transition: background-color 120ms ease, border-color 120ms ease,
     color 120ms ease;
   max-width: 360px;
+  overflow: hidden;
 }
 .inline-switcher__chip:hover {
   background: var(--bg-subtle);
@@ -747,6 +748,10 @@
   white-space: nowrap;
 }
 .inline-switcher__chip-mode {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -754,9 +759,14 @@
   color: var(--text-faint);
 }
 .inline-switcher__chip-primary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
 }
 .inline-switcher__chip-model {
+  min-width: 0;
   color: var(--text-muted);
   max-width: 160px;
   overflow: hidden;
