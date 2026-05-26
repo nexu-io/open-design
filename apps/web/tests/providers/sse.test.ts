@@ -481,6 +481,69 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('preserves streamed output when a run ends as canceled', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stdout',
+              'data: {"chunk":"partial output"}',
+              '',
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"canceled"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('partial output');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('does not call onDone when a canceled run produced no output', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"canceled"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).not.toHaveBeenCalled();
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
   it('keeps the daemon run alive when the browser-side stream aborts', async () => {
     const handlers = createDaemonHandlers();
     const controller = new AbortController();

@@ -592,7 +592,16 @@ async function consumeDaemonRun({
       }
     }
 
-    if (endStatus === 'canceled') return;
+    if (endStatus === 'canceled') {
+      // OpenCode and other agents can emit useful output before the daemon
+      // SIGTERM's the child (shutdown, user cancel, long-run timeout). The
+      // run status is still `canceled`, but abandoning `acc` here drops the
+      // assistant text and skips the onDone file-diff path in ProjectView.
+      if (acc.trim()) {
+        handlers.onDone(acc);
+      }
+      return;
+    }
 
     // Trust the server's authoritative success declaration. When the server
     // explicitly sets `status: 'succeeded'` (either in the SSE end payload
