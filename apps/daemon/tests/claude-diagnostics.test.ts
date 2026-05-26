@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { diagnoseClaudeCliFailure } from '../src/claude-diagnostics.js';
 
 describe('diagnoseClaudeCliFailure', () => {
+  it('maps Claude Not logged in stdout to /login guidance (#1928)', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stdoutTail: 'Not logged in · Please run /login.',
+      env: {},
+    });
+
+    expect(diagnostic?.message).toContain('/login');
+    expect(diagnostic?.detail).toContain('CLAUDE_CONFIG_DIR');
+  });
+
   it('maps Claude auth failures to /login guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'claude',

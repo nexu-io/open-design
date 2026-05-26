@@ -78,6 +78,8 @@ export function diagnoseClaudeCliFailure(
   const authFailure =
     /\b401\b/.test(text) ||
     /apikeysource["'\s:]+none/i.test(text) ||
+    /not logged in/i.test(text) ||
+    /please run \/login/i.test(text) ||
     /(auth|oauth|credential|token).*(fail|invalid|missing|expired|not found|none|unauthorized)/i.test(text) ||
     /(unauthorized|invalid api key|missing api key|could not authenticate|authentication failed)/i.test(text);
   if (authFailure && hasCustomBaseUrl) {
