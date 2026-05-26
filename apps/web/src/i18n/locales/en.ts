@@ -627,6 +627,7 @@ export const en: Dict = {
   'integrations.skillsFilterDesignSystem': 'Design system',
   'integrations.skillsFilterAll': 'All',
   'integrations.skillsLoading': 'Loading skills...',
+  'integrations.skillsLoadFailed': 'Could not load skills. Make sure the local daemon is running, then try again.',
   'integrations.skillsNoResults': 'No skills match your search.',
   'integrations.skillsNoFilterResults': 'No skills match these filters.',
   'integrations.skillsTreeEmpty': 'Select a skill node to inspect it.',

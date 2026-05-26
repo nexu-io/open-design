@@ -938,6 +938,7 @@ export interface Dict {
   'integrations.skillsFilterDesignSystem': string;
   'integrations.skillsFilterAll': string;
   'integrations.skillsLoading': string;
+  'integrations.skillsLoadFailed': string;
   'integrations.skillsNoResults': string;
   'integrations.skillsNoFilterResults': string;
   'integrations.skillsTreeEmpty': string;

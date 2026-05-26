@@ -100,13 +100,21 @@ export async function fetchAgents(options?: { throwOnError?: boolean }): Promise
   }
 }
 
-export async function fetchSkills(): Promise<SkillSummary[]> {
+export async function fetchSkills(options?: { throwOnError?: boolean }): Promise<SkillSummary[]> {
   try {
     const resp = await fetch('/api/skills');
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { skills: SkillSummary[] };
-    return json.skills ?? [];
-  } catch {
+    if (!resp.ok) {
+      if (options?.throwOnError) throw new Error(`skills ${resp.status}`);
+      return [];
+    }
+    const json = (await resp.json()) as { skills?: SkillSummary[] };
+    if (!Array.isArray(json.skills)) {
+      if (options?.throwOnError) throw new Error('skills response malformed');
+      return [];
+    }
+    return json.skills;
+  } catch (err) {
+    if (options?.throwOnError) throw err;
     return [];
   }
 }

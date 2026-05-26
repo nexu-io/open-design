@@ -178,6 +178,7 @@ function SkillsCatalogTreePanel() {
   const { locale } = useI18n();
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<SkillCatalogViewMode>('tree');
   const [filters, setFilters] = useState<SkillCatalogFilters>(DEFAULT_SKILL_CATALOG_FILTERS);
@@ -186,10 +187,16 @@ function SkillsCatalogTreePanel() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void fetchSkills()
+    setLoadError(false);
+    void fetchSkills({ throwOnError: true })
       .then((list) => {
         if (cancelled) return;
         setSkills(list);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSkills([]);
+        setLoadError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -298,6 +305,10 @@ function SkillsCatalogTreePanel() {
       {loading ? (
         <div className="integrations-skills-tree__empty">
           {t('integrations.skillsLoading')}
+        </div>
+      ) : loadError ? (
+        <div className="integrations-skills-tree__empty">
+          {t('integrations.skillsLoadFailed')}
         </div>
       ) : tree.total === 0 ? (
         <div className="integrations-skills-tree__empty">

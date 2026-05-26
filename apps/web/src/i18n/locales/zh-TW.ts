@@ -567,6 +567,7 @@ export const zhTW: Dict = {
   'integrations.skillsFilterDesignSystem': '設計系統',
   'integrations.skillsFilterAll': '全部',
   'integrations.skillsLoading': '正在載入技能...',
+  'integrations.skillsLoadFailed': '無法載入技能。請確認本機 daemon 正在執行，然後再試一次。',
   'integrations.skillsNoResults': '沒有符合的技能。',
   'integrations.skillsNoFilterResults': '沒有符合這些篩選條件的技能。',
   'integrations.skillsTreeEmpty': '選取一個技能節點以查看詳細資訊。',

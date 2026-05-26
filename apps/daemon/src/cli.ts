@@ -5086,8 +5086,15 @@ async function runSkillsTree(args) {
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const resp = await fetch(`${base}/api/skills`);
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
-  const tree = buildSkillCatalogTree(data?.skills ?? []);
+  const data = await resp.json().catch(() => null);
+  if (!data || !Array.isArray(data.skills)) {
+    return exitWithStructuredError({
+      code: 'daemon-not-running',
+      message: 'Malformed /api/skills response: expected { skills: SkillSummary[] }',
+      data: { endpoint: '/api/skills' },
+    });
+  }
+  const tree = buildSkillCatalogTree(data.skills);
   if (flags.json) return process.stdout.write(JSON.stringify(tree, null, 2) + '\n');
   console.log(`Skills tree (${tree.total})`);
   for (const mode of tree.modes) {

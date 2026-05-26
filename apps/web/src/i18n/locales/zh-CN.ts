@@ -627,6 +627,7 @@ export const zhCN: Dict = {
   'integrations.skillsFilterDesignSystem': '设计系统',
   'integrations.skillsFilterAll': '全部',
   'integrations.skillsLoading': '正在加载技能...',
+  'integrations.skillsLoadFailed': '无法加载技能。请确认本地 daemon 正在运行，然后重试。',
   'integrations.skillsNoResults': '没有匹配的技能。',
   'integrations.skillsNoFilterResults': '没有匹配这些筛选条件的技能。',
   'integrations.skillsTreeEmpty': '选择一个技能节点查看详情。',

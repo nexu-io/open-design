@@ -37,12 +37,15 @@ function skill(overrides: Partial<SkillSummary>): SkillSummary {
   };
 }
 
-function renderSkillsIntegration(skills: SkillSummary[]) {
+function renderSkillsIntegration(
+  skills: SkillSummary[],
+  options: { skillsStatus?: number; skillsBody?: unknown } = {},
+) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = input.toString();
     if (url === '/api/skills') {
-      return new Response(JSON.stringify({ skills }), {
-        status: 200,
+      return new Response(JSON.stringify(options.skillsBody ?? { skills }), {
+        status: options.skillsStatus ?? 200,
         headers: { 'content-type': 'application/json' },
       });
     }
@@ -231,5 +234,15 @@ describe('IntegrationsView skills tree', () => {
 
     expect(await screen.findByText('No skills match these filters.')).toBeTruthy();
     expect(screen.queryByTestId('integrations-skill-detail')).toBeNull();
+  });
+
+  it('shows a load failure instead of an empty filter state when skills fail to load', async () => {
+    renderSkillsIntegration([], {
+      skillsStatus: 500,
+      skillsBody: { error: { message: 'boom' } },
+    });
+
+    expect(await screen.findByText('Could not load skills. Make sure the local daemon is running, then try again.')).toBeTruthy();
+    expect(screen.queryByText('No skills match these filters.')).toBeNull();
   });
 });
