@@ -12,6 +12,7 @@ import type {
 import { Icon } from './Icon';
 import { navigate } from '../router';
 import { useT } from '../i18n';
+import { localizeRunFailureReason } from '../i18n/runErrors';
 import type { Dict } from '../i18n/types';
 
 // Shared translator signature: every sub-component in this file is module-scoped,
@@ -172,14 +173,16 @@ function formatRunTimestamp(ts: number): string {
   });
 }
 
-function runFailureReason(run: {
-  status: RoutineRun['status'];
-  error?: string | null;
-  summary?: string | null;
-} | null | undefined): string | null {
+function runFailureReason(
+  run: {
+    status: RoutineRun['status'];
+    error?: string | null;
+    summary?: string | null;
+  } | null | undefined,
+  t: TranslateFn,
+): string | null {
   if (!run || run.status !== 'failed') return null;
-  const reason = (run.error || run.summary || '').trim();
-  return reason || null;
+  return localizeRunFailureReason(run.error || run.summary || '', t);
 }
 
 type FormState = {
@@ -412,7 +415,7 @@ function RunHistory({
   return (
     <ul className="routines-history">
       {runs.map((r) => {
-        const failureReason = runFailureReason(r);
+        const failureReason = runFailureReason(r, t);
         return (
           <li key={r.id} className="routines-history-row">
             <StatusPill status={r.status} t={t} />
@@ -754,7 +757,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 : t('routines.targetCreate');
             const isBusy = busyId === r.id;
             const isExpanded = expandedId === r.id;
-            const failureReason = runFailureReason(r.lastRun);
+            const failureReason = runFailureReason(r.lastRun, t);
             return (
               <li key={r.id} className={`routines-card routines-item${r.enabled ? '' : ' is-disabled'}`}>
                 <div className="routines-item-head">
