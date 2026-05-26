@@ -481,6 +481,15 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'grok'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderXAITTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'nanobanana' && surface === 'image') {
       const result = await renderNanoBananaImage(ctx, credentials);
       bytes = result.bytes;
@@ -1348,7 +1357,7 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
 async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI API key — configure it in Settings or set XAI_API_KEY',
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
@@ -1650,7 +1659,7 @@ async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfi
 async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI API key — configure it in Settings or set XAI_API_KEY',
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
@@ -1796,6 +1805,71 @@ function grokAspectFor(aspect?: string): string {
     return aspect;
   }
   return '16:9';
+}
+
+// ---------------------------------------------------------------------------
+// Provider: xAI Grok TTS — POST /v1/tts.
+//
+// xAI exposes a dedicated /tts endpoint that returns audio bytes directly,
+// not the OpenAI /audio/speech shape. Docs:
+//   https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+// Credentials come through the same OAuth-aware path as Grok image / video,
+// so a SuperGrok subscriber gets TTS for free once they have authorized.
+// ---------------------------------------------------------------------------
+
+const XAI_TTS_DEFAULT_BASE_URL = 'https://api.x.ai/v1';
+const XAI_TTS_DEFAULT_VOICE_ID = 'eve';
+const XAI_TTS_DEFAULT_LANGUAGE = 'en';
+
+async function renderXAITTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || XAI_TTS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voiceId = (ctx.voice && ctx.voice.trim()) || XAI_TTS_DEFAULT_VOICE_ID;
+  const language =
+    typeof ctx.language === 'string' && ctx.language.trim()
+      ? ctx.language.trim()
+      : XAI_TTS_DEFAULT_LANGUAGE;
+
+  // Stick to the documented minimal POST /v1/tts shape; the server
+  // defaults output_format to mp3 / 24kHz / 128kbps which matches what
+  // we want. Future work: surface sample_rate / bit_rate / codec via
+  // ctx so the agent can request wav for high-fidelity workflows.
+  const body = {
+    text,
+    voice_id: voiceId,
+    language,
+  };
+
+  const resp = await fetch(`${baseUrl}/tts`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`xai tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arrayBuffer = await resp.arrayBuffer();
+  const bytes = Buffer.from(arrayBuffer);
+  if (bytes.length === 0) {
+    throw new Error('xai tts response had zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `xai/${ctx.wireModel} · voice=${voiceId} · ${language} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
 }
 
 // ---------------------------------------------------------------------------

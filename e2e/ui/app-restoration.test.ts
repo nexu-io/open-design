@@ -2491,11 +2491,13 @@ async function gotoEntryHome(page: Page) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
-  await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
 async function openNewProjectModal(page: Page) {
   await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 

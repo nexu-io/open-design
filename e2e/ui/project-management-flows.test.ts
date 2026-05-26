@@ -346,6 +346,434 @@ test('home designs search filters projects and recovers from no results', async 
   await expect(homeDesignCard(page, betaName)).toBeVisible();
 });
 
+test('projects sub tabs switch between Recent and Your designs ordering', async ({ page }) => {
+  const now = Date.now();
+  const projects = [
+    makeProjectsTabProject({
+      id: 'proj-alpha',
+      name: 'Sort Alpha',
+      createdAt: now - 3 * 60_000,
+      updatedAt: now - 1 * 60_000,
+    }),
+    makeProjectsTabProject({
+      id: 'proj-beta',
+      name: 'Sort Beta',
+      createdAt: now - 1 * 60_000,
+      updatedAt: now - 3 * 60_000,
+    }),
+    makeProjectsTabProject({
+      id: 'proj-gamma',
+      name: 'Sort Gamma',
+      createdAt: now - 2 * 60_000,
+      updatedAt: now - 2 * 60_000,
+    }),
+  ];
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/live-artifacts?projectId=*', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+
+  await page.goto('/projects');
+  await expectDesignsView(page);
+
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(0)).toContainText(
+    'Sort Alpha',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(1)).toContainText(
+    'Sort Gamma',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(2)).toContainText(
+    'Sort Beta',
+  );
+
+  await page.getByRole('button', { name: 'Your designs' }).click();
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(0)).toContainText(
+    'Sort Beta',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(1)).toContainText(
+    'Sort Gamma',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(2)).toContainText(
+    'Sort Alpha',
+  );
+});
+
+test('projects grid card rename updates the card title and persists after reload', async ({ page }) => {
+  const originalName = `Projects rename flow ${Date.now()}`;
+  const renamedName = `${originalName} renamed`;
+  await page.goto('/');
+  await createProject(page, originalName);
+  await expectWorkspaceReady(page);
+
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await expectDesignsView(page);
+
+  const card = homeDesignCard(page, originalName);
+  await card.hover();
+  await card.getByRole('button', { name: /more actions/i }).click();
+  await page.getByRole('menuitem', { name: /^rename$/i }).click();
+
+  const renameModal = page.locator('.modal-rename');
+  await expect(renameModal).toBeVisible();
+  const renameInput = renameModal.getByRole('textbox');
+  await expect(renameInput).toHaveValue(originalName);
+  await renameInput.fill(renamedName);
+  await renameModal.locator('button.primary').click();
+
+  await expect(homeDesignCard(page, renamedName)).toBeVisible();
+  await expect(homeDesignCard(page, originalName)).toHaveCount(0);
+
+  await page.reload();
+  await expectDesignsView(page);
+  await expect(homeDesignCard(page, renamedName)).toBeVisible();
+});
+
+test('projects select mode supports multi-select delete with cancel and confirm', async ({ page }) => {
+  const firstName = `Batch delete A ${Date.now()}`;
+  const secondName = `Batch delete B ${Date.now()}`;
+  await page.goto('/');
+
+  await createProject(page, firstName);
+  await expectWorkspaceReady(page);
+  const firstProjectId = getProjectContextFromUrl(page).projectId;
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await expectDesignsView(page);
+
+  await createProject(page, secondName);
+  await expectWorkspaceReady(page);
+  const secondProjectId = getProjectContextFromUrl(page).projectId;
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await expectDesignsView(page);
+
+  await page.locator('.designs-select-toggle').click();
+  await homeDesignCard(page, firstName).click();
+  await homeDesignCard(page, secondName).click();
+  await expect(page.locator('.designs-select-bar')).toBeVisible();
+  await expect(page.locator('.design-card.is-selected')).toHaveCount(2);
+
+  await page.getByRole('button', { name: /Delete selected/i }).click();
+  const confirmDialog = page.locator('.modal-confirm');
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: /^cancel$/i }).click();
+  await expect(confirmDialog).toHaveCount(0);
+  await expect(homeDesignCard(page, firstName)).toBeVisible();
+  await expect(homeDesignCard(page, secondName)).toBeVisible();
+
+  await page.getByRole('button', { name: /Delete selected/i }).click();
+  const confirmDialog2 = page.locator('.modal-confirm');
+  await expect(confirmDialog2).toBeVisible();
+  await confirmDialog2.getByRole('button', { name: /^delete/i }).click();
+  await expect(homeDesignCard(page, firstName)).toHaveCount(0);
+  await expect(homeDesignCard(page, secondName)).toHaveCount(0);
+  await expect(page.locator('.designs-select-bar')).toHaveCount(0);
+
+  const firstResponse = await page.request.get(`/api/projects/${firstProjectId}`);
+  const secondResponse = await page.request.get(`/api/projects/${secondProjectId}`);
+  expect(firstResponse.status()).toBe(404);
+  expect(secondResponse.status()).toBe(404);
+});
+
+test('projects kanban cards open projects and support delete cancel and confirm', async ({ page }) => {
+  const projectName = `Kanban flow ${Date.now()}`;
+  await page.goto('/');
+  await createProject(page, projectName);
+  await expectWorkspaceReady(page);
+
+  const { projectId } = getProjectContextFromUrl(page);
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await expectDesignsView(page);
+
+  await page.getByTestId('designs-view-kanban').click();
+  await expect(page.locator('.design-kanban-board')).toBeVisible();
+
+  const kanbanCard = page.locator('.design-kanban-card', { hasText: projectName });
+  await expect(kanbanCard).toBeVisible();
+
+  await kanbanCard.click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+  await expect(page.getByTestId('project-title')).toContainText(projectName);
+
+  await page.getByRole('button', { name: /back to projects/i }).click();
+  await expectDesignsView(page);
+  await expect(page.locator('.design-kanban-board')).toBeVisible();
+
+  const kanbanCardAgain = page.locator('.design-kanban-card', { hasText: projectName });
+  await kanbanCardAgain.locator('.design-card-close').click();
+  const confirmDialog = page.locator('.modal-confirm');
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: /^cancel$/i }).click();
+  await expect(kanbanCardAgain).toBeVisible();
+
+  await kanbanCardAgain.locator('.design-card-close').click();
+  const confirmDialog2 = page.locator('.modal-confirm');
+  await expect(confirmDialog2).toBeVisible();
+  await confirmDialog2.getByRole('button', { name: /^delete/i }).click();
+  await expect(page.locator('.design-kanban-card', { hasText: projectName })).toHaveCount(0);
+
+  const response = await page.request.get(`/api/projects/${projectId}`);
+  expect(response.status()).toBe(404);
+});
+
+test('projects page shows the empty state when there are no projects', async ({ page }) => {
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/projects');
+  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page.locator('.tab-empty')).toBeVisible();
+  await expect(page.locator('.tab-empty')).toContainText('No projects yet');
+  await expect(page.locator('.design-grid')).toHaveCount(0);
+  await expect(page.locator('.design-kanban-board')).toHaveCount(0);
+});
+
+test('projects page shows the no-results state and recovers when search is cleared', async ({ page }) => {
+  const projects = [
+    makeProjectsTabProject({
+      id: 'proj-search-1',
+      name: 'Searchable Prototype',
+      createdAt: Date.now() - 10_000,
+      updatedAt: Date.now() - 5_000,
+    }),
+  ];
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/live-artifacts?projectId=*', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+
+  await page.goto('/projects');
+  await expectDesignsView(page);
+  await expect(homeDesignCard(page, 'Searchable Prototype')).toBeVisible();
+
+  const search = page.locator('.tab-panel-toolbar .toolbar-search input');
+  await search.fill('does-not-exist');
+  await expect(page.locator('.tab-empty')).toBeVisible();
+  await expect(page.locator('.tab-empty')).toContainText('No projects match your search');
+  await expect(homeDesignCard(page, 'Searchable Prototype')).toHaveCount(0);
+
+  await search.fill('');
+  await expect(homeDesignCard(page, 'Searchable Prototype')).toBeVisible();
+});
+
+test('projects grid overflow menu closes on outside click and Escape', async ({ page }) => {
+  const projects = [
+    makeProjectsTabProject({
+      id: 'proj-menu-1',
+      name: 'Menu Close Project',
+      createdAt: Date.now() - 10_000,
+      updatedAt: Date.now() - 5_000,
+    }),
+  ];
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/live-artifacts?projectId=*', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+
+  await page.goto('/projects');
+  await expectDesignsView(page);
+
+  const card = homeDesignCard(page, 'Menu Close Project');
+  await card.hover();
+  await card.getByRole('button', { name: /more actions/i }).click();
+  const menu = page.locator('.design-card-menu');
+  await expect(menu).toBeVisible();
+
+  await page.mouse.click(20, 20);
+  await expect(menu).toHaveCount(0);
+
+  await card.hover();
+  await card.getByRole('button', { name: /more actions/i }).click();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+});
+
+test('projects kanban view groups cards into status columns', async ({ page }) => {
+  const now = Date.now();
+  const projects = [
+    makeProjectsTabProject({
+      id: 'proj-not-started',
+      name: 'Not Started Card',
+      createdAt: now - 50_000,
+      updatedAt: now - 45_000,
+      status: { value: 'not_started' },
+    }),
+    makeProjectsTabProject({
+      id: 'proj-running',
+      name: 'Running Card',
+      createdAt: now - 40_000,
+      updatedAt: now - 35_000,
+      status: { value: 'running' },
+    }),
+    makeProjectsTabProject({
+      id: 'proj-awaiting',
+      name: 'Awaiting Input Card',
+      createdAt: now - 30_000,
+      updatedAt: now - 25_000,
+      status: { value: 'awaiting_input' },
+    }),
+    makeProjectsTabProject({
+      id: 'proj-succeeded',
+      name: 'Succeeded Card',
+      createdAt: now - 20_000,
+      updatedAt: now - 15_000,
+      status: { value: 'succeeded' },
+    }),
+    makeProjectsTabProject({
+      id: 'proj-failed',
+      name: 'Failed Card',
+      createdAt: now - 10_000,
+      updatedAt: now - 5_000,
+      status: { value: 'failed' },
+    }),
+  ];
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/live-artifacts?projectId=*', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+
+  await page.goto('/projects');
+  await expectDesignsView(page);
+  await page.getByTestId('designs-view-kanban').click();
+  await expect(page.locator('.design-kanban-board')).toBeVisible();
+
+  await expect(page.locator('.design-kanban-card.status-not_started')).toHaveCount(1);
+  await expect(page.locator('.design-kanban-card.status-running')).toHaveCount(1);
+  await expect(page.locator('.design-kanban-card.status-awaiting_input')).toHaveCount(1);
+  await expect(page.locator('.design-kanban-card.status-succeeded')).toHaveCount(1);
+  await expect(page.locator('.design-kanban-card.status-failed')).toHaveCount(1);
+  await expect(page.locator('.design-kanban-empty')).toHaveCount(1);
+
+  await expect(page.locator('.design-kanban-card.status-running')).toContainText('Running Card');
+  await expect(page.locator('.design-kanban-card.status-awaiting_input')).toContainText(
+    'Awaiting Input Card',
+  );
+  await expect(page.locator('.design-kanban-card.status-succeeded')).toContainText(
+    'Succeeded Card',
+  );
+});
+
+test('projects page shows live artifact cards, supports search, and opens the live artifact project', async ({ page }) => {
+  const liveProject = makeProjectsTabProject({
+    id: 'proj-live',
+    name: 'Orbit Daily Digest',
+    createdAt: Date.now() - 60_000,
+    updatedAt: Date.now() - 30_000,
+    skillId: 'live-artifact',
+    metadata: { kind: 'orbit', intent: 'live-artifact' },
+    status: { value: 'succeeded' },
+  });
+  const regularProject = makeProjectsTabProject({
+    id: 'proj-regular',
+    name: 'Regular Prototype',
+    createdAt: Date.now() - 120_000,
+    updatedAt: Date.now() - 90_000,
+  });
+  const liveArtifact = {
+    id: 'artifact-1',
+    projectId: 'proj-live',
+    title: 'Orbit Daily Digest — 2026-05-15',
+    slug: 'orbit-daily-digest',
+    status: 'ready',
+    refreshStatus: 'succeeded',
+    pinned: false,
+    hasDocument: true,
+    updatedAt: new Date(Date.now() - 20_000).toISOString(),
+    createdAt: new Date(Date.now() - 50_000).toISOString(),
+    preview: {
+      kind: 'rendered',
+      url: '',
+    },
+  };
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: [liveProject, regularProject] } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/projects/proj-live', async (route) => {
+    await route.fulfill({ json: { project: liveProject } });
+  });
+  await page.route('**/api/projects/proj-live/files', async (route) => {
+    await route.fulfill({ json: { files: [] } });
+  });
+  await page.route('**/api/live-artifacts?projectId=*', async (route) => {
+    const url = new URL(route.request().url());
+    const projectId = url.searchParams.get('projectId');
+    await route.fulfill({
+      json: {
+        liveArtifacts: projectId === 'proj-live' ? [liveArtifact] : [],
+      },
+    });
+  });
+  await page.route('**/api/live-artifacts/artifact-1', async (route) => {
+    await route.fulfill({ json: { liveArtifact } });
+  });
+  await page.route('**/api/live-artifacts/artifact-1/refreshes?projectId=*', async (route) => {
+    await route.fulfill({ json: { refreshes: [] } });
+  });
+  await page.route('**/api/live-artifacts/artifact-1/preview?projectId=*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><h1>Orbit Daily Digest</h1></body></html>',
+    });
+  });
+
+  await page.goto('/projects');
+  await expectDesignsView(page);
+
+  const liveCard = page.locator('.live-artifact-card', {
+    has: page.locator('.design-card-name', { hasText: 'Orbit Daily Digest' }),
+  });
+  await expect(liveCard).toBeVisible();
+  await expect(liveCard).toContainText(/Live Artifact/i);
+  await expect(liveCard).toContainText(/LIVE|Refreshed/i);
+
+  const search = page.locator('.tab-panel-toolbar .toolbar-search input');
+  await search.fill('digest');
+  await expect(liveCard).toBeVisible();
+  await expect(homeDesignCard(page, 'Regular Prototype')).toHaveCount(0);
+
+  await liveCard.click();
+  await expect(page).toHaveURL(/\/projects\/proj-live$/);
+  await expect(page.getByTestId('project-title')).toContainText('Orbit Daily Digest');
+});
+
 test('change pet opens pet settings and updates the custom companion draft', async ({ page }) => {
   await seedAdoptedPet(page);
   await page.route('**/api/codex-pets', async (route) => {
@@ -368,49 +796,6 @@ test('change pet opens pet settings and updates the custom companion draft', asy
 
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-});
-
-test.skip('project actions toolbar enables Continue in CLI after DESIGN.md and surfaces stale provenance fallback', async ({ page }) => {
-  // Skipped: the project-actions toolbar (Finalize design package + Continue
-  // in CLI) was removed from the project header. Reinstate this test once
-  // those entry points have a new home.
-  await page.goto('/');
-  await createProject(page, `Project actions toolbar flow ${Date.now()}`);
-  await expectWorkspaceReady(page);
-
-  await expect(page.getByRole('button', { name: 'Finalize design package' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continue in CLI' })).toBeDisabled();
-  await expect(page.locator('.project-actions-disabled-hint')).toContainText(
-    'Finalize the design package first.',
-  );
-
-  const { projectId } = getProjectContextFromUrl(page);
-  await seedProjectFile(page, projectId, 'DESIGN.md', malformedProvenanceDesignMd());
-
-  await page.reload();
-  await expectWorkspaceReady(page);
-
-  const continueButton = page.getByRole('button', { name: 'Continue in CLI' });
-  await expect(continueButton).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Re-finalize (spec is stale)' })).toBeVisible();
-  await expect(page.locator('.project-actions-chip')).toContainText(
-    'Spec freshness unknown — regenerate to refresh signal',
-  );
-
-  const expectedDir = await fetchResolvedProjectDir(page, projectId);
-  await continueButton.click();
-
-  const toast = page.locator('.od-toast');
-  await expect(toast).toBeVisible();
-  if (expectedDir) {
-    await expect(toast).toContainText(
-      `Open your terminal at ${expectedDir}, run \`claude\`, and paste the prompt.`,
-    );
-  } else {
-    await expect(toast).toContainText(
-      'Working directory unavailable. Update the daemon to enable Continue in CLI.',
-    );
-  }
 });
 
 async function createProject(
@@ -511,7 +896,9 @@ function menuByFileName(page: Page, name: string): Locator {
 
 function homeDesignCard(page: Page, name: string): Locator {
   return page.locator('.design-card', {
-    has: page.locator('.design-card-name', { hasText: name }),
+    has: page.locator('.design-card-name', {
+      hasText: new RegExp(`^${escapeRegExp(name)}$`),
+    }),
   });
 }
 
@@ -568,31 +955,6 @@ async function listProjectFiles(page: Page, projectId: string) {
   return body.files;
 }
 
-async function seedProjectFile(
-  page: Page,
-  projectId: string,
-  name: string,
-  content: string,
-) {
-  const response = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: { name, content },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
-async function fetchResolvedProjectDir(
-  page: Page,
-  projectId: string,
-): Promise<string | null> {
-  const response = await page.request.get(`/api/projects/${projectId}`);
-  expect(response.ok()).toBeTruthy();
-  const body = (await response.json()) as {
-    resolvedDir?: string | null;
-    project?: { metadata?: { baseDir?: string | null } };
-  };
-  return body.resolvedDir ?? body.project?.metadata?.baseDir ?? null;
-}
-
 function getProjectContextFromUrl(page: Page) {
   const url = new URL(page.url());
   const [, projectId] = url.pathname.match(/\/projects\/([^/]+)/) ?? [];
@@ -604,17 +966,35 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function malformedProvenanceDesignMd(): string {
-  return `# DESIGN.md
-
-## Provenance
-
-- Project ID: qa-project
-- Design system: nexu-soft-tech
-- Current artifact: mock-artifact.html
-- Transcript message count: 7
-- Generated UTC timestamp: not-a-real-date
-`;
+function makeProjectsTabProject({
+  id,
+  name,
+  createdAt,
+  updatedAt,
+  skillId = null,
+  metadata = { kind: 'prototype' as const },
+  status = { value: 'succeeded' as const },
+}: {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  skillId?: string | null;
+  metadata?: Record<string, unknown>;
+  status?: { value: string };
+}) {
+  return {
+    id,
+    name,
+    createdAt,
+    updatedAt,
+    skillId,
+    designSystemId: null,
+    pendingPrompt: '',
+    customInstructions: null,
+    metadata,
+    status,
+  };
 }
 
 function skillSummary(

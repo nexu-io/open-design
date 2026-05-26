@@ -483,6 +483,7 @@ export function NewProjectPanel({
             ? videoPromptTemplate
             : null
         : null;
+    const trimmedName = name.trim();
     const metadata = buildMetadata({
       tab,
       mediaSurface,
@@ -524,10 +525,13 @@ export function NewProjectPanel({
       { requestId },
     );
     onCreate({
-      name: name.trim() || autoName(tab, mediaSurface, t),
+      name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
-      metadata,
+      metadata: {
+        ...metadata,
+        nameSource: trimmedName ? 'user' : 'generated',
+      },
       requestId,
     });
   }

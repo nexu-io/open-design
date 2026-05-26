@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // indirectly through legacy or future project-creation routes.
   openPath: (projectId: string): Promise<string> =>
     ipcRenderer.invoke('shell:open-path', projectId),
+  setDesktopPetVisible: (visible: boolean): void =>
+    ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
 });
 
 contextBridge.exposeInMainWorld('__odDesktop', {

@@ -20,6 +20,13 @@ interface Props {
   setCfg: Dispatch<SetStateAction<AppConfig>>;
 }
 
+function toggleCraftSlug(current: string[], slug: string, enabled: boolean): string[] {
+  const next = new Set(current);
+  if (enabled) next.add(slug);
+  else next.delete(slug);
+  return Array.from(next);
+}
+
 export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const t = useT();
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
@@ -29,7 +36,9 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [importPath, setImportPath] = useState('');
-  const [importMode, setImportMode] = useState<'local' | 'github'>('local');
+  const [importSource, setImportSource] = useState<'local' | 'github'>('local');
+  const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
+  const [craftApplies, setCraftApplies] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -119,10 +128,14 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     setImporting(true);
     setImportError(null);
     setImportMessage(null);
+    const importOptions = {
+      importMode: packageImportMode,
+      craftApplies,
+    };
     const result =
-      importMode === 'github'
-        ? await importGitHubDesignSystem({ githubUrl: importTarget })
-        : await importLocalDesignSystem({ baseDir: importTarget });
+      importSource === 'github'
+        ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions })
+        : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
     setImporting(false);
     if ('error' in result) {
       setImportError(result.error.message);
@@ -145,24 +158,73 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
         <div className="seg-control">
           <button
             type="button"
-            className={importMode === 'local' ? 'active' : ''}
-            onClick={() => setImportMode('local')}
+            className={importSource === 'local' ? 'active' : ''}
+            onClick={() => setImportSource('local')}
           >
             Local
           </button>
           <button
             type="button"
-            className={importMode === 'github' ? 'active' : ''}
-            onClick={() => setImportMode('github')}
+            className={importSource === 'github' ? 'active' : ''}
+            onClick={() => setImportSource('github')}
           >
             GitHub
           </button>
+        </div>
+        <div className="library-import-options">
+          <div className="library-import-option-group">
+            <span className="library-import-option-label">Structure</span>
+            <div className="seg-control library-import-mode-control">
+              <button
+                type="button"
+                className={packageImportMode === 'hybrid' ? 'active' : ''}
+                onClick={() => setPackageImportMode('hybrid')}
+              >
+                Hybrid
+              </button>
+              <button
+                type="button"
+                className={packageImportMode === 'normalized' ? 'active' : ''}
+                onClick={() => setPackageImportMode('normalized')}
+              >
+                Normalized
+              </button>
+              <button
+                type="button"
+                className={packageImportMode === 'verbatim' ? 'active' : ''}
+                onClick={() => setPackageImportMode('verbatim')}
+              >
+                Verbatim
+              </button>
+            </div>
+          </div>
+          <div className="library-import-option-group">
+            <span className="library-import-option-label">Craft</span>
+            <label className="library-import-checkbox">
+              <input
+                type="checkbox"
+                checked={craftApplies.includes('color')}
+                onChange={(e) => setCraftApplies((current) => toggleCraftSlug(current, 'color', e.target.checked))}
+              />
+              <span>Color</span>
+            </label>
+            <label className="library-import-checkbox">
+              <input
+                type="checkbox"
+                checked={craftApplies.includes('accessibility-baseline')}
+                onChange={(e) =>
+                  setCraftApplies((current) => toggleCraftSlug(current, 'accessibility-baseline', e.target.checked))
+                }
+              />
+              <span>Accessibility</span>
+            </label>
+          </div>
         </div>
         <div className="library-install-row">
           <input
             type="text"
             className="library-search"
-            placeholder={importMode === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
+            placeholder={importSource === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
             value={importPath}
             onChange={(e) => setImportPath(e.target.value)}
           />
