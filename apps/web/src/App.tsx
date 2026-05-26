@@ -1088,8 +1088,17 @@ export function App() {
   }, []);
 
   const handleBack = useCallback(() => {
+    const projectId = route.kind === 'project' ? route.projectId : null;
+    if (projectId) {
+      setProjects((curr) =>
+        curr.map((p) =>
+          p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
+        ),
+      );
+      void patchProject(projectId, { pendingPrompt: null });
+    }
     navigate({ kind: 'home', view: 'home' });
-  }, []);
+  }, [route]);
 
   const handleClearPendingPrompt = useCallback(() => {
     const projectId = route.kind === 'project' ? route.projectId : null;
