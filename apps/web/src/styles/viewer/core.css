@@ -998,7 +998,8 @@
   will-change: transform;
 }
 .preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
-.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip {
+.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip,
+.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas {
   position: relative;
   inset: auto;
 }

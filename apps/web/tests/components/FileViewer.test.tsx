@@ -91,6 +91,17 @@ describe('FileViewer preview scale', () => {
     expect(css).toContain('.viewer-action');
   });
 
+  it('keeps manual edit canvas layout aligned with comment preview on device viewports (#2960)', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain(
+      '.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas',
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\) \.comment-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
+    );
+  });
+
   it('keeps the manual edit titlebar from overlapping the close button', () => {
     const css = readExpandedIndexCss();
 
