@@ -64,6 +64,7 @@ import {
   waitForWebRuntime,
 } from "./sidecar-client.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
+import { formatSourceInstallCliHints } from "./cli-hints.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
@@ -183,12 +184,28 @@ function printStartSection(result: Partial<Record<ToolDevAppName, unknown>>, hea
   }
 }
 
-function printStartResult(result: Partial<Record<ToolDevAppName, unknown>>, options: CliOptions, heading = "tools-dev start"): void {
+function printSourceInstallCliHints(config: ToolDevConfig, daemonUrl: string | null): void {
+  for (const line of formatSourceInstallCliHints({
+    daemonUrl,
+    odBinPath: path.join(config.workspaceRoot, "node_modules/.bin/od"),
+  })) {
+    process.stdout.write(`${line}\n`);
+  }
+}
+
+function printStartResult(
+  result: Partial<Record<ToolDevAppName, unknown>>,
+  options: CliOptions,
+  config: ToolDevConfig,
+  heading = "tools-dev start",
+): void {
   if (options.json === true) {
     printJson(result);
     return;
   }
   printStartSection(result, heading);
+  const daemonStatus = asRecord(asRecord(result.daemon)?.status);
+  printSourceInstallCliHints(config, stringField(daemonStatus ?? {}, "url"));
 }
 
 function printStopSection(result: Partial<Record<ToolDevAppName, unknown>>, heading: string): void {
@@ -254,7 +271,11 @@ function printStatusResult(result: unknown, options: CliOptions, appName: string
   process.stdout.write(`- ${appName ?? ALL_APPS.join("/")}: ${formatStatusSummary(result)}\n`);
 }
 
-function printRunForegroundResult(started: Partial<Record<ToolDevAppName, unknown>>, options: CliOptions): void {
+function printRunForegroundResult(
+  started: Partial<Record<ToolDevAppName, unknown>>,
+  options: CliOptions,
+  config: ToolDevConfig,
+): void {
   if (options.json === true) {
     printJson({ mode: "foreground", started });
     return;
@@ -269,7 +290,8 @@ function printRunForegroundResult(started: Partial<Record<ToolDevAppName, unknow
     process.stdout.write("\n  Open Design dev server ready\n\n");
     if (webUrl != null) process.stdout.write(`  ➜  Web:    ${colorizeLink(normalizeDisplayUrl(webUrl))}\n`);
     if (daemonUrl != null) process.stdout.write(`  ➜  Daemon: ${colorizeLink(normalizeDisplayUrl(daemonUrl))}\n`);
-    process.stdout.write("\n  Press Ctrl+C to stop\n\n");
+    printSourceInstallCliHints(config, daemonUrl);
+    process.stdout.write("  Press Ctrl+C to stop\n\n");
     return;
   }
 
@@ -1044,7 +1066,7 @@ async function runForeground(config: ToolDevConfig, appName: string | undefined,
     webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
   });
   const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions, { targets }));
-  printRunForegroundResult(started, options);
+  printRunForegroundResult(started, options, config);
 
   let shuttingDown = false;
   const keepAlive = setInterval(() => undefined, 60_000);
@@ -1094,7 +1116,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
       webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
     });
     const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
-    printStartResult(result, options);
+    printStartResult(result, options, config);
   },
 );
 
