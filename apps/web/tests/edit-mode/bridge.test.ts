@@ -392,6 +392,28 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('suppresses click handlers when picking direct-text targets in manual edit mode', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]') as HTMLElement;
+    let clicks = 0;
+    title.onclick = () => {
+      clicks += 1;
+    };
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(clicks).toBe(0);
+
+    dom.window.close();
+  });
+
   it('does not enable inline text editing for targets with nested child elements', () => {
     const dom = new JSDOM(
       `<main>

@@ -6289,10 +6289,10 @@ function HtmlViewer({
         if (selectedManualEditTarget) selectManualEditTarget(selectedManualEditTarget);
       }}
       onUndo={() => {
-        void undoManualEdit();
+        void handleManualEditHistoryShortcut('undo');
       }}
       onRedo={() => {
-        void redoManualEdit();
+        void handleManualEditHistoryShortcut('redo');
       }}
       onPickImage={async (pickedFile) => {
         const result = await uploadProjectFiles(projectId, [pickedFile]);

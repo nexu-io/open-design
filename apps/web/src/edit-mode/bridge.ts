@@ -631,33 +631,25 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!enabled) return;
     var el = closestTarget(ev);
     if (!el) return;
-    var editableText = isDirectTextEditable(el);
     debug('bridge:pointer-pick', { eventType: ev.type, id: stableId(el), tag: el.tagName ? el.tagName.toLowerCase() : null, text: el.textContent || '' });
     if (activeTextEdit && activeTextEdit.el === el) {
       ensureInlineTextEditActive();
-      if (!editableText) {
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
+      ev.preventDefault();
+      ev.stopPropagation();
       return;
     }
     if (activeTextEdit) clearInlineTextEdit(true);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     beginInlineTextEdit(el);
-    if (!editableText) {
-      ev.preventDefault();
-      ev.stopPropagation();
-    }
+    ev.preventDefault();
+    ev.stopPropagation();
   }
   function preventManualEditActivation(ev){
     if (!enabled) return;
     var el = closestTarget(ev);
     if (!el) return;
-    var tag = el.tagName ? el.tagName.toLowerCase() : '';
-    if (tag === 'a' || tag === 'button' || !isDirectTextEditable(el)) {
-      ev.preventDefault();
-      ev.stopPropagation();
-    }
+    ev.preventDefault();
+    ev.stopPropagation();
   }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }
