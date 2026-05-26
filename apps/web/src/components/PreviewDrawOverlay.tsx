@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 import { Icon } from './Icon';
 import type { PreviewVisualMarkKind } from '../types';
 import { requestPreviewSnapshot } from '../runtime/exports';
+import { isImeComposing } from '../utils/imeComposing';
 
 export type PreviewDrawMode = 'click' | 'draw';
 
@@ -62,6 +63,7 @@ export function PreviewDrawOverlay({
   const [note, setNote] = useState('');
   const strokesRef = useRef<Stroke[]>([]);
   const drawingRef = useRef<Stroke | null>(null);
+  const composingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
   const [pendingAction, setPendingAction] = useState<'queue' | 'send' | null>(null);
   const sending = pendingAction !== null;
@@ -460,7 +462,16 @@ export function PreviewDrawOverlay({
               fontSize: 13,
               transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') void send('queue'); }}
+            onCompositionStart={() => {
+              composingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (isImeComposing(e, composingRef.current)) return;
+              if (e.key === 'Enter') void send('send');
+            }}
           />
           <button
             type="button"
