@@ -21,6 +21,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   qwen: 'svg',
   qoder: 'svg',
   deepseek: 'svg',
+  reasonix: 'svg',
   mimo: 'svg',
   hermes: 'svg',
   'grok-build': 'svg',

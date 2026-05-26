@@ -22,12 +22,19 @@ const CURSOR_AUTH_GUIDANCE =
 const DEEPSEEK_AUTH_GUIDANCE =
   'DeepSeek TUI is installed but is not authenticated. Add or verify your API key in `~/.deepseek/config.toml` as `api_key = "..."`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
+const REASONIX_AUTH_GUIDANCE =
+  'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
+
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
 }
 
 export function deepseekAuthGuidance(): string {
   return DEEPSEEK_AUTH_GUIDANCE;
+}
+
+export function reasonixAuthGuidance(): string {
+  return REASONIX_AUTH_GUIDANCE;
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -55,6 +62,18 @@ export function isDeepSeekAuthFailureText(text: string): boolean {
   );
 }
 
+export function isReasonixAuthFailureText(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  return (
+    /api[_ -]?key/i.test(value) &&
+    (/missing|not set|required|unauthorized|invalid/i.test(value))
+  ) || (
+    /DEEPSEEK_API_KEY/i.test(value) &&
+    /auth|api[_ -]?key|missing|not set|required|unauthorized/i.test(value)
+  );
+}
+
 export function classifyAgentAuthFailure(
   agentId: string,
   text: string,
@@ -71,6 +90,13 @@ export function classifyAgentAuthFailure(
     return {
       status: 'missing',
       message: deepseekAuthGuidance(),
+    };
+  }
+  if (agentId === 'reasonix') {
+    if (!isReasonixAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: reasonixAuthGuidance(),
     };
   }
   return null;
