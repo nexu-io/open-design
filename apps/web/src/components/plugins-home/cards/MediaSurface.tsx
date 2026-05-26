@@ -6,7 +6,7 @@
 // home view. Until then the poster image is the only thing the
 // browser fetches — keeps a 50-tile gallery cheap.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { MediaPreviewSpec } from '../preview';
 import { Icon } from '../../Icon';
 
@@ -18,9 +18,16 @@ interface Props {
 
 export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   const [hovering, setHovering] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
   const showVideo =
     inView && hovering && preview.mediaType === 'video' && Boolean(preview.videoUrl);
-  const hasPoster = Boolean(preview.poster);
+  const poster = preview.poster;
+  const hasPoster = Boolean(poster);
+  const showFallback = !hasPoster || posterFailed;
+
+  useEffect(() => {
+    setPosterFailed(false);
+  }, [poster]);
 
   return (
     <div
@@ -28,16 +35,17 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {inView && preview.poster ? (
+      {inView && poster && !posterFailed ? (
         <img
           className="plugins-home__media-img"
-          src={preview.poster}
+          src={poster}
           alt={`${pluginTitle} preview`}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
+          onError={() => setPosterFailed(true)}
         />
-      ) : !hasPoster ? (
+      ) : showFallback ? (
         <MediaFallback pluginTitle={pluginTitle} mediaType={preview.mediaType} />
       ) : (
         <div

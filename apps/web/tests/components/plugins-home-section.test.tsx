@@ -27,6 +27,13 @@ function makePlugin(overrides: {
   featured?: boolean;
   mode?: string;
   kind?: 'scenario' | 'atom';
+  preview?: {
+    type?: string;
+    poster?: string;
+    video?: string;
+    gif?: string;
+    audio?: string;
+  };
 }): InstalledPluginRecord {
   return {
     id: overrides.id,
@@ -48,6 +55,7 @@ function makePlugin(overrides: {
         kind: overrides.kind ?? 'scenario',
         ...(overrides.mode ? { mode: overrides.mode } : {}),
         ...(overrides.featured ? { featured: true } : {}),
+        ...(overrides.preview ? { preview: overrides.preview } : {}),
       },
     },
     fsPath: '/tmp',
@@ -240,6 +248,27 @@ describe('PluginsHomeSection (category bar)', () => {
 
     fireEvent.click(screen.getByTestId('plugins-home-save-localized-deck'));
     expect(screen.getByRole('status').textContent).toContain('Saved 瑞士国际主义 Deck.');
+  });
+
+  it('falls back when a community card poster image fails to load', async () => {
+    const { container } = renderSection([
+      makePlugin({
+        id: 'official-image-template',
+        title: 'Official Image Template',
+        mode: 'image',
+        preview: {
+          type: 'image',
+          poster: 'https://example.invalid/missing-preview.png',
+        },
+      }),
+    ], { preferDefaultFacet: false });
+
+    const img = await screen.findByRole('img', { name: 'Official Image Template preview' });
+    fireEvent.error(img);
+
+    expect(container.querySelector('.plugins-home__media-img')).toBeNull();
+    expect(container.querySelector('.plugins-home__media-fallback')).toBeTruthy();
+    expect(container.querySelector('.plugins-home__media-fallback-glyph')?.textContent).toBe('O');
   });
 
   it('shows the normal empty-filter state for planned empty buckets', () => {
