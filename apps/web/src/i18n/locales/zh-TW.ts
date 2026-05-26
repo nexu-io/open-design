@@ -643,6 +643,8 @@ export const zhTW: Dict = {
   'routines.status.canceled': '已取消',
   'routines.confirmDelete': '刪除此自動化？過往執行記錄及其專案將予以保留。',
   'routines.errorPickProject': '請選擇要重複使用的專案，或切換為「每次執行建立新專案」。',
+  'routines.error.agentEmptyOutput':
+    '代理執行完成但未產生任何輸出。模型或服務商可能傳回了空回應——請查看代理日誌以排查上游錯誤。',
 
   'newproj.tabPrototype': '原型',
   'newproj.tabLiveArtifact': '即時成品',

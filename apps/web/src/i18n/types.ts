@@ -1210,6 +1210,12 @@ export interface Dict {
   'routines.status.canceled': string;
   'routines.confirmDelete': string;
   'routines.errorPickProject': string;
+  // Routine run failure messages surfaced from the daemon. Each key
+  // corresponds to a well-known daemon-side error string we recognize
+  // and localize in `localizeRoutineError` (apps/web/src/components/
+  // RoutinesSection.tsx). Unknown daemon errors keep their raw string
+  // so untranslated failures still surface, just in English.
+  'routines.error.agentEmptyOutput': string;
   // Bottom-of-rail help menu
   'entry.helpAria': string;
   'entry.helpMenuAria': string;

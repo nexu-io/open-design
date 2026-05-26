@@ -172,14 +172,56 @@ function formatRunTimestamp(ts: number): string {
   });
 }
 
-function runFailureReason(run: {
-  status: RoutineRun['status'];
-  error?: string | null;
-  summary?: string | null;
-} | null | undefined): string | null {
+// Maps known daemon-surfaced failure message prefixes onto i18n keys, so
+// users running the app in a non-English locale see a translated reason
+// instead of the raw English string the daemon ships to web (see e.g.
+// `apps/daemon/src/server.ts` `createSseErrorPayload` callsites). We match
+// on a stable prefix rather than the full string so any trailing context
+// the daemon may append (e.g. `: <provider detail>`) is preserved verbatim
+// after the localized prefix — losing it would hide debugging context the
+// caller may rely on. Anything not in this list passes through untouched —
+// untranslated failures continue to surface so behavior never regresses,
+// they just stay in English until a matching i18n key is added here.
+// Each entry is the *full current daemon message* (copied verbatim from
+// the corresponding `createSseErrorPayload` call) paired with the i18n
+// key that translates it. We match on full-string prefix so the current
+// contract resolves to `t(key)` exactly; if the daemon later appends
+// extra context (e.g. `: <provider detail>`), the extra text is
+// preserved as a suffix on the translated message rather than dropped.
+const KNOWN_DAEMON_ERROR_PREFIXES: ReadonlyArray<readonly [string, keyof Dict]> = [
+  [
+    // Source: apps/daemon/src/server.ts `AGENT_EXECUTION_FAILED` payload.
+    'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+    'routines.error.agentEmptyOutput',
+  ],
+];
+
+function localizeRoutineError(t: TranslateFn, raw: string): string {
+  for (const [prefix, key] of KNOWN_DAEMON_ERROR_PREFIXES) {
+    if (raw.startsWith(prefix)) {
+      // Preserve any suffix the daemon may have appended (e.g. provider
+      // detail after the known prefix). When the daemon emits exactly
+      // the prefix string today, `suffix` is empty and the result is
+      // just `t(key)`; nothing changes for the current contract.
+      const suffix = raw.slice(prefix.length);
+      return `${t(key)}${suffix}`;
+    }
+  }
+  return raw;
+}
+
+function runFailureReason(
+  t: TranslateFn,
+  run: {
+    status: RoutineRun['status'];
+    error?: string | null;
+    summary?: string | null;
+  } | null | undefined,
+): string | null {
   if (!run || run.status !== 'failed') return null;
   const reason = (run.error || run.summary || '').trim();
-  return reason || null;
+  if (!reason) return null;
+  return localizeRoutineError(t, reason);
 }
 
 type FormState = {
@@ -412,7 +454,7 @@ function RunHistory({
   return (
     <ul className="routines-history">
       {runs.map((r) => {
-        const failureReason = runFailureReason(r);
+        const failureReason = runFailureReason(t, r);
         return (
           <li key={r.id} className="routines-history-row">
             <StatusPill status={r.status} t={t} />
@@ -754,7 +796,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 : t('routines.targetCreate');
             const isBusy = busyId === r.id;
             const isExpanded = expandedId === r.id;
-            const failureReason = runFailureReason(r.lastRun);
+            const failureReason = runFailureReason(t, r.lastRun);
             return (
               <li key={r.id} className={`routines-card routines-item${r.enabled ? '' : ' is-disabled'}`}>
                 <div className="routines-item-head">
