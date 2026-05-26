@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1240" />
+    <title>{{data.page.title}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ===========================================================
+         Mono Crimson Operations Brief — design tokens.
+         See ./DESIGN.md for the full specification. CSS custom-property
+         names mirror the DESIGN.md frontmatter token names so any
+         downstream styling can rely on the same grammar.
+         =========================================================== */
+      :root {
+        --color-surface: #ffffff;
+        --color-surface-muted: #f4f5f7;
+        --color-canvas: #fafafb;
+        --color-border: #e6e7eb;
+        --color-hairline: #eeeff2;
+        --color-text-primary: #0b1220;
+        --color-text-secondary: #4b5563;
+        --color-text-tertiary: #6b7280;
+        --color-text-quiet: #9ca3af;
+        --color-accent-crimson: #c2272d;
+        --color-data-ink: #0f1b2e;
+        --color-data-track: #e6e7eb;
+        --color-tier-low: #f1f2f4;
+        --color-tier-mid: #dddfe3;
+        --color-tier-high: #c9cbd0;
+        --color-pill-bg: #f1f2f4;
+        --color-pill-fg: #4b5563;
+
+        --rounded-xs: 3px;
+        --rounded-sm: 4px;
+        --rounded-md: 6px;
+
+        --shadow-card: 0 1px 0 rgba(11, 18, 32, 0.02);
+
+        --font-sans: "Inter", "IBM Plex Sans", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular",
+          monospace;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--color-canvas);
+        color: var(--color-text-primary);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+        font-feature-settings: "tnum", "lnum";
+      }
+
+      .shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 22px 24px 28px;
+      }
+
+      /* Header ---------------------------------------------------- */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 12px;
+      }
+      .header__title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.005em;
+        color: var(--color-text-primary);
+      }
+      .header__filters {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pill {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: var(--color-pill-fg);
+        background: var(--color-pill-bg);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--rounded-sm);
+        padding: 3px 8px;
+        white-space: nowrap;
+      }
+
+      /* KPI strip ------------------------------------------------- */
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        padding-bottom: 14px;
+      }
+      .kpi {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--rounded-md);
+        padding: 14px 16px;
+        box-shadow: var(--shadow-card);
+        min-height: 102px;
+      }
+      .kpi__label {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-text-secondary);
+        margin: 0 0 6px;
+      }
+      .kpi__number {
+        font-size: 34px;
+        font-weight: 700;
+        line-height: 1.05;
+        letter-spacing: -0.018em;
+        color: var(--color-text-primary);
+        font-feature-settings: "tnum", "lnum";
+      }
+      .kpi__number--negative {
+        color: var(--color-accent-crimson);
+      }
+      .kpi__caption {
+        margin-top: 6px;
+        font-size: 11.5px;
+        font-weight: 500;
+        line-height: 1.4;
+        color: var(--color-text-tertiary);
+        font-feature-settings: "tnum", "lnum";
+      }
+
+      /* Body grid ------------------------------------------------- */
+      .body {
+        display: grid;
+        grid-template-columns: 5fr 3fr;
+        gap: 12px;
+      }
+
+      .card {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--rounded-md);
+        padding: 16px 18px 14px;
+        box-shadow: var(--shadow-card);
+      }
+      .card__title {
+        margin: 0 0 12px;
+        font-size: 12.5px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--color-text-primary);
+      }
+
+      /* Bar chart ------------------------------------------------- */
+      .bars {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 4px 0 12px;
+      }
+      .bar {
+        display: grid;
+        grid-template-columns: 150px 1fr 130px;
+        align-items: center;
+        gap: 12px;
+      }
+      .bar__label {
+        font-size: 12.5px;
+        font-weight: 400;
+        color: var(--color-text-secondary);
+        text-align: right;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bar__track {
+        position: relative;
+        height: 12px;
+        background: var(--color-data-track);
+        border-radius: var(--rounded-xs);
+      }
+      .bar__fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        background: var(--color-data-ink);
+        border-radius: var(--rounded-xs);
+      }
+      .bar__tick {
+        position: absolute;
+        top: -2px;
+        bottom: -2px;
+        width: 2px;
+        background: var(--color-accent-crimson);
+        transform: translateX(-1px);
+      }
+      .bar__value {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--color-text-quiet);
+        font-feature-settings: "tnum", "lnum";
+      }
+
+      /* Legend ---------------------------------------------------- */
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding-top: 12px;
+        border-top: 1px solid var(--color-hairline);
+        font-size: 11.5px;
+        color: var(--color-text-tertiary);
+      }
+      .legend__item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .legend__sw-bar {
+        width: 18px;
+        height: 10px;
+        background: var(--color-data-ink);
+        border-radius: var(--rounded-xs);
+      }
+      .legend__sw-tick {
+        width: 2px;
+        height: 12px;
+        background: var(--color-accent-crimson);
+      }
+      .legend__sw-tier {
+        width: 22px;
+        height: 10px;
+        border-radius: var(--rounded-xs);
+      }
+      .legend__sw-tier--low {
+        background: var(--color-tier-low);
+      }
+      .legend__sw-tier--mid {
+        background: var(--color-tier-mid);
+      }
+      .legend__sw-tier--high {
+        background: var(--color-tier-high);
+      }
+
+      /* Lowest table ---------------------------------------------- */
+      .table {
+        display: grid;
+        grid-template-columns: 28px 1fr 130px 60px;
+        column-gap: 12px;
+      }
+      .table__head > div {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--color-text-quiet);
+        padding: 0 0 8px;
+        border-bottom: 1px solid var(--color-hairline);
+      }
+      .table__head .col-otdl {
+        text-align: right;
+      }
+      .table__head,
+      .table__row {
+        display: contents;
+      }
+      .table__row > div {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--color-hairline);
+        align-self: center;
+        display: flex;
+        align-items: center;
+      }
+      .table__rank {
+        font-size: 12px;
+        color: var(--color-text-quiet);
+        justify-content: flex-start;
+        font-feature-settings: "tnum", "lnum";
+      }
+      .table__name {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--color-text-primary);
+        line-height: 1.25;
+        word-break: normal;
+        overflow-wrap: anywhere;
+        max-width: 100%;
+      }
+      .table__bar-cell {
+        position: relative;
+      }
+      .table__bar-track {
+        position: relative;
+        flex: 1;
+        height: 18px;
+        background: var(--color-surface-muted);
+        border-radius: var(--rounded-xs);
+        overflow: hidden;
+      }
+      .table__bar-fill {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        background: var(--color-accent-crimson);
+        border-radius: var(--rounded-xs);
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 6px;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #ffffff;
+        font-feature-settings: "tnum", "lnum";
+      }
+      .table__lines {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--color-text-quiet);
+        justify-content: flex-end;
+        font-feature-settings: "tnum", "lnum";
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <!-- ============================================================
+           NOTE on bindings.
+           Open Design's html_template_v1 renderer (apps/daemon/src/
+           live-artifacts/render.ts) does scalar-only {{data.X}}
+           interpolation: bindings must start with `data`, must resolve
+           to a scalar, and there is no array repeat directive. The
+           template is therefore fully unrolled — KPI 0..3, bar 0..13,
+           lowest 0..7. Refresh callers should keep the same shape and
+           cardinality in data.json.
+           ============================================================ -->
+
+      <header class="header">
+        <h1 class="header__title">{{data.page.title}}</h1>
+        <div class="header__filters">
+          <span class="pill">{{data.page.filters.0.label}}</span>
+          <span class="pill">{{data.page.filters.1.label}}</span>
+        </div>
+      </header>
+
+      <!-- KPI strip ----------------------------------------------------- -->
+      <section class="kpis" aria-label="Key performance indicators">
+        <article class="kpi">
+          <p class="kpi__label">{{data.kpis.0.label}}</p>
+          <div class="{{data.kpis.0.numberClass}}">{{data.kpis.0.value}}</div>
+          <p class="kpi__caption">{{data.kpis.0.caption}}</p>
+        </article>
+        <article class="kpi">
+          <p class="kpi__label">{{data.kpis.1.label}}</p>
+          <div class="{{data.kpis.1.numberClass}}">{{data.kpis.1.value}}</div>
+          <p class="kpi__caption">{{data.kpis.1.caption}}</p>
+        </article>
+        <article class="kpi">
+          <p class="kpi__label">{{data.kpis.2.label}}</p>
+          <div class="{{data.kpis.2.numberClass}}">{{data.kpis.2.value}}</div>
+          <p class="kpi__caption">{{data.kpis.2.caption}}</p>
+        </article>
+        <article class="kpi">
+          <p class="kpi__label">{{data.kpis.3.label}}</p>
+          <div class="{{data.kpis.3.numberClass}}">{{data.kpis.3.value}}</div>
+          <p class="kpi__caption">{{data.kpis.3.caption}}</p>
+        </article>
+      </section>
+
+      <!-- Body --------------------------------------------------------- -->
+      <section class="body">
+        <!-- Bar-by-account card ---------------------------------- -->
+        <article class="card">
+          <h2 class="card__title">{{data.byKeyAccount.title}}</h2>
+          <div class="bars">
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.0.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.0.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.0.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.0.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.1.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.1.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.1.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.1.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.2.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.2.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.2.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.2.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.3.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.3.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.3.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.3.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.4.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.4.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.4.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.4.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.5.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.5.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.5.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.5.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.6.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.6.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.6.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.6.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.7.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.7.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.7.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.7.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.8.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.8.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.8.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.8.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.9.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.9.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.9.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.9.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.10.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.10.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.10.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.10.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.11.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.11.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.11.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.11.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.12.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.12.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.12.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.12.valueLabel}}</div>
+            </div>
+            <div class="bar">
+              <div class="bar__label">{{data.byKeyAccount.rows.13.name}}</div>
+              <div class="bar__track">
+                <div class="bar__fill" style="width: {{data.byKeyAccount.rows.13.barFillPct}}%"></div>
+                <div class="bar__tick" style="left: {{data.byKeyAccount.rows.13.priorTickPct}}%"></div>
+              </div>
+              <div class="bar__value">{{data.byKeyAccount.rows.13.valueLabel}}</div>
+            </div>
+          </div>
+          <div class="legend" aria-label="Chart legend">
+            <span class="legend__item">
+              <span class="legend__sw-bar"></span>
+              <span>{{data.byKeyAccount.legend.bar}}</span>
+            </span>
+            <span class="legend__item">
+              <span class="legend__sw-tick"></span>
+              <span>{{data.byKeyAccount.legend.tick}}</span>
+            </span>
+            <span class="legend__item">
+              <span class="legend__sw-tier legend__sw-tier--low"></span>
+              <span>{{data.byKeyAccount.legend.tierLow}}</span>
+            </span>
+            <span class="legend__item">
+              <span class="legend__sw-tier legend__sw-tier--mid"></span>
+              <span>{{data.byKeyAccount.legend.tierMid}}</span>
+            </span>
+            <span class="legend__item">
+              <span class="legend__sw-tier legend__sw-tier--high"></span>
+              <span>{{data.byKeyAccount.legend.tierHigh}}</span>
+            </span>
+          </div>
+        </article>
+
+        <!-- Lowest-OTD table -------------------------------------- -->
+        <article class="card">
+          <h2 class="card__title">{{data.lowestAccounts.title}}</h2>
+          <div class="table">
+            <div class="table__head">
+              <div>#</div>
+              <div>ACCOUNT NAME</div>
+              <div>OTD %</div>
+              <div class="col-otdl">OTD (LINES)</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.0.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.0.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.0.barFillPct}}%">{{data.lowestAccounts.rows.0.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.0.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.1.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.1.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.1.barFillPct}}%">{{data.lowestAccounts.rows.1.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.1.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.2.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.2.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.2.barFillPct}}%">{{data.lowestAccounts.rows.2.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.2.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.3.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.3.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.3.barFillPct}}%">{{data.lowestAccounts.rows.3.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.3.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.4.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.4.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.4.barFillPct}}%">{{data.lowestAccounts.rows.4.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.4.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.5.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.5.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.5.barFillPct}}%">{{data.lowestAccounts.rows.5.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.5.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.6.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.6.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.6.barFillPct}}%">{{data.lowestAccounts.rows.6.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.6.lines}}</div>
+            </div>
+            <div class="table__row">
+              <div class="table__rank">{{data.lowestAccounts.rows.7.rank}}</div>
+              <div class="table__name">{{data.lowestAccounts.rows.7.name}}</div>
+              <div class="table__bar-cell">
+                <div class="table__bar-track">
+                  <div class="table__bar-fill" style="width: {{data.lowestAccounts.rows.7.barFillPct}}%">{{data.lowestAccounts.rows.7.otdLabel}}</div>
+                </div>
+              </div>
+              <div class="table__lines">{{data.lowestAccounts.rows.7.lines}}</div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

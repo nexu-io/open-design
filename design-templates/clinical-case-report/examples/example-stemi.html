@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinical Case Report — Inferior STEMI with Cardiogenic Shock</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #111;
+      background: #fff;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 48px;
+    }
+
+    /* ── Document Header ───────────────────────────────────────────── */
+    .doc-header {
+      border-top: 3px solid #111;
+      border-bottom: 1px solid #111;
+      padding: 16px 0 14px;
+      margin-bottom: 28px;
+    }
+    .doc-header h1 {
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .doc-header .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px 16px;
+      margin-top: 10px;
+    }
+    .doc-header .meta-item {
+      font-size: 12.5px;
+    }
+    .doc-header .meta-item .label {
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 10px;
+      color: #555;
+      display: block;
+    }
+
+    /* ── Section Headings ──────────────────────────────────────────── */
+    h2 {
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #333;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 4px;
+      margin: 28px 0 12px;
+    }
+
+    /* ── Body Text ─────────────────────────────────────────────────── */
+    p { margin-bottom: 10px; }
+    ul, ol { padding-left: 22px; margin-bottom: 10px; }
+    li { margin-bottom: 5px; }
+    strong { font-weight: bold; }
+
+    /* ── Critical Alert Box ────────────────────────────────────────── */
+    .alert {
+      background: #fff8f8;
+      border-left: 4px solid #c00;
+      border: 1px solid #f5c6c6;
+      border-left: 4px solid #c00;
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    .alert .alert-label {
+      font-weight: bold;
+      color: #c00;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.6px;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* ── Tables ────────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+    th {
+      background: #f4f4f4;
+      font-weight: bold;
+      text-align: left;
+      padding: 7px 10px;
+      border: 1px solid #ccc;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    td {
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    .val-high { color: #c00; font-weight: bold; }
+    .val-low  { color: #c00; font-weight: bold; }
+    .val-normal { color: #1a6b1a; }
+
+    /* ── Differential List ─────────────────────────────────────────── */
+    .differential-item {
+      margin-bottom: 12px;
+      padding-left: 14px;
+      border-left: 3px solid #e0e0e0;
+    }
+    .differential-item .dx-title {
+      font-weight: bold;
+      font-size: 13.5px;
+    }
+    .differential-item .dx-likelihood {
+      display: inline-block;
+      font-size: 10.5px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 1px 6px;
+      border-radius: 2px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .likely   { background: #fce8e8; color: #c00; }
+    .possible { background: #fff4e0; color: #a06000; }
+    .unlikely { background: #f0f0f0; color: #555; }
+
+    /* ── Plan Items ────────────────────────────────────────────────── */
+    .plan-block {
+      margin-bottom: 18px;
+    }
+    .plan-block .plan-title {
+      font-weight: bold;
+      font-size: 13.5px;
+      margin-bottom: 6px;
+      padding: 5px 10px;
+      background: #f4f4f4;
+      border-left: 3px solid #555;
+    }
+
+    /* ── Risk Score ────────────────────────────────────────────────── */
+    .risk-score {
+      display: inline-block;
+      background: #fff3f3;
+      border: 1px solid #f5c6c6;
+      border-radius: 3px;
+      padding: 6px 12px;
+      font-size: 13px;
+      margin: 8px 0 12px;
+    }
+    .risk-score strong { color: #c00; }
+
+    /* ── Footer ────────────────────────────────────────────────────── */
+    .doc-footer {
+      margin-top: 40px;
+      padding-top: 12px;
+      border-top: 1px solid #ccc;
+      font-size: 11px;
+      color: #777;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ── Print ─────────────────────────────────────────────────────── */
+    @media print {
+      body { padding: 16px 20px; font-size: 12px; }
+      .alert { border-left: 3px solid #c00; }
+      .plan-block .plan-title { background: none; border-left: 2px solid #333; }
+      h2 { margin-top: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Document Header ─────────────────────────────────────── -->
+  <div class="doc-header" data-od-id="header">
+    <h1>Clinical Case Report</h1>
+    <div class="meta-grid">
+      <div class="meta-item">
+        <span class="label">Patient</span>
+        58-year-old Male
+      </div>
+      <div class="meta-item">
+        <span class="label">Setting</span>
+        Emergency Department
+      </div>
+      <div class="meta-item">
+        <span class="label">Specialty</span>
+        Emergency / Cardiology
+      </div>
+      <div class="meta-item">
+        <span class="label">Format</span>
+        SOAP
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chief Complaint ──────────────────────────────────────── -->
+  <section data-od-id="chief-complaint">
+    <h2>Chief Complaint</h2>
+    <p>
+      Severe substernal chest pain for 2 hours with radiation to the left arm
+      and jaw, associated with profuse diaphoresis and nausea.
+    </p>
+  </section>
+
+  <!-- ── History of Present Illness ──────────────────────────── -->
+  <section data-od-id="hpi">
+    <h2>History of Present Illness</h2>
+    <p>
+      This is a 58-year-old male with a background history of hypertension,
+      type 2 diabetes mellitus, and hyperlipidaemia who presents to the
+      emergency department with a 2-hour history of severe, 9/10 intensity,
+      pressure-like chest pain localised substernally. The pain began abruptly
+      at rest at approximately 14:30 and radiates to the left arm and jaw.
+    </p>
+    <p>
+      The pain is associated with profuse diaphoresis, nausea, and one episode
+      of non-bloody vomiting. The patient reports no dyspnoea, no palpitations,
+      and no pre-syncopal symptoms. There is no pleuritic component, no
+      positional variation, and no relief with antacids.
+    </p>
+    <p>
+      The patient has never experienced this type of pain before. He denies
+      recent travel, prolonged immobility, or lower limb swelling. He has not
+      taken any nitrates prior to arrival. His regular medications were taken
+      this morning. He has a 30 pack-year smoking history (10 cigarettes/day,
+      ongoing) and drinks alcohol occasionally. His father died of a myocardial
+      infarction at age 62.
+    </p>
+  </section>
+
+  <!-- ── PMH / Medications / Allergies ────────────────────────── -->
+  <section data-od-id="pmh">
+    <h2>Past Medical History</h2>
+    <ul>
+      <li>Hypertension — diagnosed 8 years ago, on treatment</li>
+      <li>Type 2 Diabetes Mellitus — diagnosed 5 years ago, on oral hypoglycaemics</li>
+      <li>Hyperlipidaemia — diagnosed 5 years ago, on statin therapy</li>
+      <li>No prior cardiac history. No previous myocardial infarction.</li>
+      <li>No history of stroke, peripheral vascular disease, or renal disease</li>
+    </ul>
+
+    <p style="margin-top:14px"><strong>Current Medications:</strong></p>
+    <ul>
+      <li>Metformin 1g PO twice daily</li>
+      <li>Amlodipine 5mg PO once daily</li>
+      <li>Atorvastatin 40mg PO at night</li>
+    </ul>
+
+    <p style="margin-top:14px"><strong>Allergies:</strong>
+      No known drug allergies. No known food allergies.
+    </p>
+
+    <p style="margin-top:14px"><strong>Social History:</strong>
+      Lives with family and has good home supports.
+      Current smoker — 10 cigarettes/day, 30 pack-years.
+      Alcohol: occasional, less than 14 units/week.
+    </p>
+  </section>
+
+  <!-- ── Vital Signs ───────────────────────────────────────────── -->
+  <section data-od-id="vitals">
+    <h2>Vital Signs</h2>
+
+    <div class="alert">
+      <span class="alert-label">⚠ Critical — Activate Cath Lab</span>
+      ST elevation ≥3mm in leads II, III, aVF with reciprocal changes in I and aVL.
+      Patient meets STEMI criteria. Door-to-balloon time target: &lt;90 minutes.
+    </div>
+
+    <table>
+      <caption>Vital Signs</caption>
+      <thead>
+        <tr>
+          <th scope="col">Parameter</th>
+          <th scope="col">Value</th>
+          <th scope="col">Reference Range</th>
+          <th scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Blood Pressure (Systolic/Diastolic)</td>
+          <td class="val-low">88 / 60 mmHg</td>
+          <td>90–140 / 60–90 mmHg</td>
+          <td class="val-low">⬇ Hypotensive</td>
+        </tr>
+        <tr>
+          <td>Heart Rate</td>
+          <td class="val-high">112 bpm</td>
+          <td>60–100 bpm</td>
+          <td class="val-high">⬆ Tachycardia</td>
+        </tr>
+        <tr>
+          <td>Respiratory Rate</td>
+          <td class="val-high">22 breaths/min</td>
+          <td>12–20 breaths/min</td>
+          <td class="val-high">⬆ Elevated</td>
+        </tr>
+        <tr>
+          <td>Oxygen Saturation (SpO₂) — room air</td>
+          <td class="val-low">94%</td>
+          <td>≥96%</td>
+          <td class="val-low">⬇ Low</td>
+        </tr>
+        <tr>
+          <td>Temperature</td>
+          <td class="val-normal">37.1°C</td>
+          <td>36.5–37.5°C</td>
+          <td class="val-normal">Normal</td>
+        </tr>
+        <tr>
+          <td>Glasgow Coma Scale</td>
+          <td class="val-normal">15 / 15</td>
+          <td>15</td>
+          <td class="val-normal">Normal</td>
+        </tr>
+        <tr>
+          <td>Capillary Refill Time</td>
+          <td class="val-high">3 seconds</td>
+          <td>&lt;2 seconds</td>
+          <td class="val-high">⬆ Prolonged</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Physical Examination ──────────────────────────────────── -->
+  <section data-od-id="examination">
+    <h2>Physical Examination</h2>
+
+    <p><strong>General:</strong>
+      Diaphoretic, pale, and in obvious discomfort. Alert and oriented to
+      person, place, and time. Appears acutely unwell.
+    </p>
+    <p><strong>Cardiovascular:</strong>
+      Jugular venous pressure elevated at approximately 4cm above the sternal
+      angle. Heart sounds S1 + S2 present, no murmurs, no added sounds.
+      Peripheral pulses palpable but weak bilaterally. Capillary refill
+      3 seconds peripherally. No peripheral oedema.
+    </p>
+    <p><strong>Respiratory:</strong>
+      Respiratory rate 22/min. Air entry bilaterally. Fine bibasal
+      crepitations present, right greater than left. No wheeze. Dull to
+      percussion at right base. No use of accessory muscles.
+    </p>
+    <p><strong>Abdomen:</strong>
+      Soft, non-distended, non-tender. No organomegaly. Bowel sounds present
+      and normal. No renal angle tenderness.
+    </p>
+    <p><strong>Neurological:</strong>
+      GCS 15/15. Pupils equal and reactive 3mm bilaterally. No focal
+      neurological deficits. Cranial nerves grossly intact.
+    </p>
+    <p><strong>Skin / Peripheries:</strong>
+      Pallor and diaphoresis. No rash, no jaundice, no cyanosis.
+    </p>
+  </section>
+
+  <!-- ── Investigations ────────────────────────────────────────── -->
+  <section data-od-id="investigations">
+    <h2>Investigations</h2>
+
+    <p><strong>12-Lead ECG:</strong></p>
+    <div class="alert">
+      <span class="alert-label">ECG — STEMI Criteria Met</span>
+      Sinus tachycardia at 112 bpm. ST elevation 3mm in leads II, III, aVF.
+      Reciprocal ST depression in leads I and aVL. PR interval and QRS
+      morphology otherwise normal. No left bundle branch block.
+      Right-sided leads (V3R–V6R) ordered to exclude RV infarction.
+    </div>
+
+    <p style="margin-top:14px"><strong>Laboratory Results:</strong></p>
+    <table>
+      <caption>Laboratory Results</caption>
+      <thead>
+        <tr>
+          <th scope="col">Investigation</th>
+          <th scope="col">Result</th>
+          <th scope="col">Reference Range</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Troponin I (high-sensitivity)</td>
+          <td class="val-high">2400 ng/L ⬆</td>
+          <td>&lt;40 ng/L</td>
+        </tr>
+        <tr>
+          <td>CK-MB</td>
+          <td class="val-high">48 U/L ⬆</td>
+          <td>&lt;25 U/L</td>
+        </tr>
+        <tr>
+          <td>BNP (B-type Natriuretic Peptide)</td>
+          <td class="val-high">520 pg/mL ⬆</td>
+          <td>&lt;100 pg/mL</td>
+        </tr>
+        <tr>
+          <td>Haemoglobin</td>
+          <td class="val-normal">13.8 g/dL</td>
+          <td>13.5–17.5 g/dL</td>
+        </tr>
+        <tr>
+          <td>White Blood Cells</td>
+          <td>11.2 × 10⁹/L</td>
+          <td>4.0–11.0 × 10⁹/L</td>
+        </tr>
+        <tr>
+          <td>Platelets</td>
+          <td class="val-normal">224 × 10⁹/L</td>
+          <td>150–400 × 10⁹/L</td>
+        </tr>
+        <tr>
+          <td>Sodium</td>
+          <td class="val-normal">138 mmol/L</td>
+          <td>135–145 mmol/L</td>
+        </tr>
+        <tr>
+          <td>Potassium</td>
+          <td class="val-normal">4.1 mmol/L</td>
+          <td>3.5–5.0 mmol/L</td>
+        </tr>
+        <tr>
+          <td>Creatinine</td>
+          <td class="val-normal">98 µmol/L</td>
+          <td>62–106 µmol/L</td>
+        </tr>
+        <tr>
+          <td>eGFR</td>
+          <td class="val-normal">72 mL/min/1.73m²</td>
+          <td>≥60 mL/min/1.73m²</td>
+        </tr>
+        <tr>
+          <td>Glucose (random)</td>
+          <td class="val-high">9.4 mmol/L ⬆</td>
+          <td>4.0–7.8 mmol/L</td>
+        </tr>
+        <tr>
+          <td>HbA1c</td>
+          <td class="val-high">7.8% ⬆</td>
+          <td>&lt;7.0% (diabetic target)</td>
+        </tr>
+        <tr>
+          <td>Total Cholesterol</td>
+          <td class="val-high">5.9 mmol/L ⬆</td>
+          <td>&lt;5.2 mmol/L</td>
+        </tr>
+        <tr>
+          <td>LDL Cholesterol</td>
+          <td class="val-high">3.8 mmol/L ⬆</td>
+          <td>&lt;2.0 mmol/L (high-risk target)</td>
+        </tr>
+        <tr>
+          <td>INR</td>
+          <td class="val-normal">1.1</td>
+          <td>0.8–1.2</td>
+        </tr>
+        <tr>
+          <td>Lactate</td>
+          <td class="val-high">2.8 mmol/L ⬆</td>
+          <td>&lt;2.0 mmol/L</td>
+        </tr>
+        <tr>
+          <td>Arterial pH</td>
+          <td class="val-low">7.31 ⬇</td>
+          <td>7.35–7.45</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p><strong>Chest X-Ray (Portable AP):</strong>
+      Mild cardiomegaly. Pulmonary vascular congestion with upper lobe
+      diversion. Small right pleural effusion. No pneumothorax.
+      No mediastinal widening.
+    </p>
+    <p><strong>Bedside Echocardiogram (Emergency):</strong>
+      Inferior and inferolateral wall hypokinesia. Estimated ejection fraction
+      40%. No pericardial effusion. No obvious valvular pathology on this
+      limited study. Right ventricle appears mildly dilated — formal
+      right-sided assessment pending.
+    </p>
+  </section>
+
+  <!-- ── Assessment ────────────────────────────────────────────── -->
+  <section data-od-id="assessment">
+    <h2>Assessment</h2>
+
+    <p>
+      <strong>Primary Diagnosis:</strong>
+      Inferior ST-Elevation Myocardial Infarction (STEMI) complicated by
+      cardiogenic shock. Most likely culprit vessel: Right Coronary Artery
+      (RCA) based on inferior lead involvement.
+    </p>
+
+    <div class="risk-score">
+      <strong>Killip Class: IV</strong> — Cardiogenic shock (hypotension + end-organ hypoperfusion).
+      &nbsp;|&nbsp;
+      <strong>Shock Index: 1.27</strong> (HR/SBP — normal &lt;0.7)
+    </div>
+
+    <p style="margin-top:4px"><strong>Differential Diagnosis:</strong></p>
+
+    <div class="differential-item">
+      <span class="dx-title">1. Inferior STEMI — RCA Territory</span>
+      <span class="dx-likelihood likely">Most Likely</span>
+      <p style="margin-top:6px; font-size:13px;">
+        ST elevation in leads II, III, aVF with reciprocal depression in I
+        and aVL is the hallmark ECG pattern of inferior STEMI. Elevated
+        troponin I (60× upper limit of normal) and inferior wall hypokinesia
+        on bedside echo confirm ongoing myocardial injury. Cardiogenic shock
+        (SBP 88, elevated lactate 2.8, BNP 520) indicates significant
+        haemodynamic compromise. Right ventricular involvement must be
+        excluded with right-sided leads before initiating fluid therapy.
+      </p>
+    </div>
+
+    <div class="differential-item">
+      <span class="dx-title">2. Type A Aortic Dissection</span>
+      <span class="dx-likelihood possible">Considered, Less Likely</span>
+      <p style="margin-top:6px; font-size:13px;">
+        Severe chest pain with radiation to the jaw raises dissection in the
+        differential. However, the pain character is pressure-like rather
+        than tearing, there is no pulse deficit, no limb ischaemia, and no
+        mediastinal widening on CXR. The ECG and troponin pattern is more
+        consistent with primary ACS. Dissection is lower probability but
+        cannot be fully excluded without CT aortogram if clinical doubt
+        persists after ECG correlation.
+      </p>
+    </div>
+
+    <div class="differential-item">
+      <span class="dx-title">3. Massive Pulmonary Embolism</span>
+      <span class="dx-likelihood unlikely">Unlikely</span>
+      <p style="margin-top:6px; font-size:13px;">
+        Haemodynamic instability and low SpO₂ are consistent with massive PE.
+        However, the patient has no PE risk factors (no recent travel,
+        immobility, or DVT history), the ECG shows inferior ST elevation
+        rather than right heart strain or S1Q3T3 pattern, and the troponin
+        rise matches ACS kinetics. Bedside echo shows inferior wall
+        hypokinesia rather than RV dilation as the dominant finding.
+        PE is considered unlikely.
+      </p>
+    </div>
+
+    <div class="differential-item">
+      <span class="dx-title">4. NSTEMI / Unstable Angina</span>
+      <span class="dx-likelihood unlikely">Excluded</span>
+      <p style="margin-top:6px; font-size:13px;">
+        The presence of ≥1mm ST elevation in two contiguous inferior leads,
+        combined with the degree of troponin elevation, meets full STEMI
+        criteria. NSTEMI is excluded by the ECG findings.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Management Plan ───────────────────────────────────────── -->
+  <section data-od-id="plan">
+    <h2>Management Plan</h2>
+
+    <div class="plan-block">
+      <div class="plan-title">1. Immediate — Revascularisation (Priority)</div>
+      <ul>
+        <li>Activate cardiac catheterisation laboratory — target
+            door-to-balloon time &lt;90 minutes</li>
+        <li>Primary Percutaneous Coronary Intervention (PCI) of culprit
+            lesion (RCA) — preferred strategy over thrombolysis</li>
+        <li>Urgent cardiology consult — notify interventional cardiologist
+            immediately</li>
+        <li>Obtain right-sided leads (V3R–V6R) before any fluid
+            administration to exclude RV MI</li>
+      </ul>
+    </div>
+
+    <div class="plan-block" style="border-left:3px solid #e6a817;padding-left:12px;">
+      <div class="plan-title" style="color:#b07a00;">⚠ Medication Safety Checks — confirm before prescribing</div>
+      <ul>
+        <li><strong>Known (from this case):</strong> No documented drug allergies; eGFR 72 mL/min/1.73m² (renal function currently preserved — monitor closely around contrast and acute illness); no current anticoagulants documented; patient is male, age 58</li>
+        <li><strong>Weight not provided</strong> — weight-based dosing (e.g. heparin bolus) should follow <em>local formulary/protocol</em> once weight is confirmed</li>
+        <li><strong>Bleeding risk not assessed</strong> — confirm no active bleeding, recent surgery, or prior intracranial haemorrhage before dual antiplatelet therapy</li>
+        <li><strong>Hepatic function not documented</strong> — review prior to high-dose statin and ACE inhibitor initiation</li>
+        <li><strong>Pregnancy status not applicable</strong> (patient is male, age 58)</li>
+        <li><em>All doses below are educational/simulated. Verify against your local formulary, current guidelines, and full patient context before administering.</em></li>
+      </ul>
+    </div>
+
+    <div class="plan-block">
+      <div class="plan-title">2. Antiplatelet and Anticoagulation</div>
+      <ul>
+        <li>Aspirin 300mg PO loading dose — stat, then 75mg PO once daily</li>
+        <li>Ticagrelor 180mg PO loading dose — stat, then 90mg PO twice daily
+            (preferred over clopidogrel for STEMI per ESC guidelines)</li>
+        <li>Unfractionated heparin — IV bolus per cath lab protocol prior to PCI</li>
+        <li>Do not administer GPIIb/IIIa inhibitor pre-PCI; consider
+            intra-procedure per operator discretion</li>
+      </ul>
+    </div>
+
+    <div class="plan-block">
+      <div class="plan-title">3. Cardiogenic Shock</div>
+      <ul>
+        <li>Hold IV fluids until right-sided leads reviewed — if RV infarct
+            present, cautious fluid challenge 250mL normal saline</li>
+        <li>If MAP &lt;65mmHg despite fluids: commence norepinephrine infusion
+            per local vasoactive-infusion protocol once weight and concentration
+            are confirmed; titrate to MAP ≥65mmHg</li>
+        <li>ICU/CCU bed request — post-PCI high-dependency monitoring</li>
+        <li>Consider intra-aortic balloon pump or Impella device if shock
+            refractory post-PCI — per cardiology discretion</li>
+      </ul>
+    </div>
+
+    <div class="plan-block">
+      <div class="plan-title">4. Respiratory / Oxygenation</div>
+      <ul>
+        <li>Supplemental O₂ only if hypoxaemic (SpO₂ &lt;94%) or in
+            respiratory distress — use the lowest-flow device (nasal cannula
+            or simple face mask) needed to maintain SpO₂ 94–98%; do not give
+            routine high-flow oxygen in normoxic STEMI (may worsen
+            ischaemia)</li>
+        <li>If pulmonary oedema worsens and haemodynamics permit:
+            Furosemide 40mg IV once</li>
+        <li>Escalate to non-rebreather mask, CPAP, or intubation per local
+            protocol if SpO₂ falls below 90% or respiratory distress
+            worsens despite initial measures</li>
+      </ul>
+    </div>
+
+    <div class="plan-block">
+      <div class="plan-title">5. Monitoring</div>
+      <ul>
+        <li>Continuous 12-lead ECG monitoring and pulse oximetry</li>
+        <li>Arterial line for continuous BP monitoring given haemodynamic
+            instability</li>
+        <li>Repeat troponin at 3 hours and 6 hours post-admission</li>
+        <li>Repeat ECG immediately post-PCI and at 1 hour</li>
+        <li>Hourly urine output via urinary catheter — target ≥0.5mL/kg/hr</li>
+        <li>Strict fluid balance chart</li>
+        <li>Blood glucose monitoring q2h — target 6–10 mmol/L</li>
+      </ul>
+    </div>
+
+    <div class="plan-block">
+      <div class="plan-title">6. Secondary Prevention (commence post-stabilisation)</div>
+      <ul>
+        <li>Beta-blocker: Bisoprolol — <strong>defer until fully stabilised</strong>:
+            shock resolved, off vasopressors/inotropes, euvolaemic, no
+            bradycardia or heart block, SBP &gt;100mmHg and HR &lt;110bpm;
+            early beta-blockade in cardiogenic shock/Killip IV can worsen
+            haemodynamics. Initiate at 1.25mg PO once daily per cardiology
+            review post-stabilisation.</li>
+        <li>ACE inhibitor: Ramipril 1.25mg PO once daily — commence within
+            24 hours if tolerated; uptitrate over weeks</li>
+        <li>Statin: Atorvastatin 80mg PO at night — high-intensity statin
+            regardless of baseline cholesterol</li>
+        <li>Diabetes: Hold Metformin — renal function and contrast exposure
+            risk. Resume 48 hours post-procedure if creatinine stable</li>
+        <li>Dual antiplatelet therapy: Aspirin 75mg + Ticagrelor 90mg BD
+            for minimum 12 months post-PCI</li>
+        <li>Cardiac rehabilitation referral before discharge</li>
+        <li>Smoking cessation counselling and pharmacotherapy referral</li>
+        <li>Repeat echocardiogram at 6–8 weeks to reassess ejection fraction</li>
+      </ul>
+    </div>
+
+    <div class="plan-block">
+      <div class="plan-title">7. Disposition</div>
+      <ul>
+        <li>Admit to Coronary Care Unit (CCU) post-PCI</li>
+        <li>Expected length of stay: 3–5 days if uncomplicated post-PCI course</li>
+        <li>Notify next of kin — serious illness discussion</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Footer ────────────────────────────────────────────────── -->
+  <div class="doc-footer">
+    <span>Generated using Open Design — clinical-case-report skill</span>
+    <span>For educational and documentation purposes only</span>
+  </div>
+
+</body>
+</html>

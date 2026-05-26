@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cyberpunk-game-trailer-script",
+  "title": "Cyberpunk Game Trailer Script",
+  "version": "0.1.0",
+  "description": "An extensive video generation prompt for a cyberpunk game trailer, detailing character design, UI animations, and environmental transitions from a white void to a favela.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Larus Canus",
+    "url": "https://x.com/MrLarus/status/2049004278908330226"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general",
+    "cinematic",
+    "cyberpunk",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/b6af40bfbe9ab029c5385fe3cdcf2893/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/b6af40bfbe9ab029c5385fe3cdcf2893/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "INK INDUSTRIES : GAME TRAILER\nCHARACTERYoung athletic male, dark curly hair, shirtless, full chest and back tattoos, gold hoop earring, cigarette in mouth, black cybernetic prosthetic arms with cyan LED nodes at joints. Black shorts with white stripe, white socks, beige chunky sneakers. Seated cross-legged on white void floor.\nCINEMATIC SETUPOpens on clean white void environment with minimal game UI. Camera high angle looking down at character. Hyper-realistic CGI rendering, clean white background transitioning to dense cyberpunk favela environment.\nSEQUENCE [0s–15s]\n[0s–2s] High angle shot looking down. Character seated on white floor, looking up at camera with cigarette smoke rising. Game menu UI on left: START NEW GAME, CONTINUE highlighted, SETTINGS, EXIT GAME. Player profile top right showing INK_NOMAD LVL 23. A cursor clicks CONTINUE. The button pulses. Subtle bass hit.\n[2s–4s] Smooth zoom-in toward his left arm. UI panels slide in from left LEFT ARM EQUIPMENT panel appears. Selection highlights PHANTOM GRIP, then slides to CHRONOS CLAW. His left hand mechanically reconfigures fingers split apart, new claw-like digits lock into place, cyan LEDs pulse brighter. Stats bars animate on right panel. Servo click sounds.\n[4s–7s] Camera orbits smoothly around to his right side. New UI slides in ARMAMENT CUSTOMIZATION grid showing HAND, FOREARM, ELBOW, UPPER ARM components. Selection cycles through parts rapidly. His right arm disassembles section by section forearm plates detach, new plating slides on, elbow joint swaps, hand reconfigures with exposed wiring and pistons visible mid-swap. Each component locks with a mechanical snap. Tech Points counter ticks up.\n[7s–8.5s] Camera pulls back to medium shot. CONFIRM CONFIG button pulses. Click. All UI panels collapse inward. Character uncrosses legs, shifts position, now sitting relaxed, one knee up, cybernetic hand bringing cigarette to mouth. Smoke curls.\n[8.5s–10s] LOADING bar appears at bottom. Fills rapidly 0 to 100%. White environment begins darkening shadows creep in from edges, warm golden light bleeds through. The white void dissolves like fog burning off. Character starts standing up in one fluid motion.\n[10s–15s] Full environment loads around him as he rises to his feet. Dense cyberpunk favela materializes, neon signs flickering on, wet streets reflecting light, crowds populating, motorcycles, tangled power lines, stacked buildings climbing toward futuristic skyscrapers in the distance. Camera settles into third-person view behind him, showing his full tattooed back. HUD elements fade in, minimap top left, health bar, ammo counter bottom right. Quest marker appears. He takes a step forward into the street, puddle splashing under his shoe. Golden hour light cuts through the alley. Ambient city noise floods in, chatter, distant music, neon buzz.\nSTYLEHyper-realistic CGI. White void sections: clean, mini",
+        "zh-CN": "使用这个插件完成以下任务：INK INDUSTRIES : GAME TRAILER\nCHARACTERYoung athletic male, dark curly hair, shirtless, full chest and back tattoos, gold hoop earring, cigarette in mouth, black cybernetic prosthetic arms with cyan LED nodes at joints. Black shorts with white stripe, white socks, beige chunky sneakers. Seated cross-legged on white void floor.\nCINEMATIC SETUPOpens on clean white void environment with minimal game UI. Camera high angle looking down at character. Hyper-realistic CGI rendering, clean white background transitioning to dense cyberpunk favela environment.\nSEQUENCE [0s–15s]\n[0s–2s] High angle shot looking down. Character seated on white floor, looking up at camera with cigarette smoke rising. Game menu UI on left: START NEW GAME, CONTINUE highlighted, SETTINGS, EXIT GAME. Player profile top right showing INK_NOMAD LVL 23. A cursor clicks CONTINUE. The button pulses. Subtle bass hit.\n[2s–4s] Smooth zoom-in toward his left arm. UI panels slide in from left LEFT ARM EQUIPMENT panel appears. Selection highlights PHANTOM GRIP, then slides to CHRONOS CLAW. His left hand mechanically reconfigures fingers split apart, new claw-like digits lock into place, cyan LEDs pulse brighter. Stats bars animate on right panel. Servo click sounds.\n[4s–7s] Camera orbits smoothly around to his right side. New UI slides in ARMAMENT CUSTOMIZATION grid showing HAND, FOREARM, ELBOW, UPPER ARM components. Selection cycles through parts rapidly. His right arm disassembles section by section forearm plates detach, new plating slides on, elbow joint swaps, hand reconfigures with exposed wiring and pistons visible mid-swap. Each component locks with a mechanical snap. Tech Points counter ticks up.\n[7s–8.5s] Camera pulls back to medium shot. CONFIRM CONFIG button pulses. Click. All UI panels collapse inward. Character uncrosses legs, shifts position, now sitting relaxed, one knee up, cybernetic hand bringing cigarette to mouth. Smoke curls.\n[8.5s–10s] LOADING bar appears at bottom. Fills rapidly 0 to 100%. White environment begins darkening shadows creep in from edges, warm golden light bleeds through. The white void dissolves like fog burning off. Character starts standing up in one fluid motion.\n[10s–15s] Full environment loads around him as he rises to his feet. Dense cyberpunk favela materializes, neon signs flickering on, wet streets reflecting light, crowds populating, motorcycles, tangled power lines, stacked buildings climbing toward futuristic skyscrapers in the distance. Camera settles into third-person view behind him, showing his full tattooed back. HUD elements fade in, minimap top left, health bar, ammo counter bottom right. Quest marker appears. He takes a step forward into the street, puddle splashing under his shoe. Golden hour light cuts through the alley. Ambient city noise floods in, chatter, distant music, neon buzz.\nSTYLEHyper-realistic CGI. White void sections: clean, mini"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

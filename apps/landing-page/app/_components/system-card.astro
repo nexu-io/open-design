@@ -1,0 +1,34 @@
+---
+/*
+ * Shared system card used on `/systems/` and
+ * `/systems/category/<slug>/`. Displays palette swatches, name,
+ * category, and tagline as a clickable card.
+ */
+import type { SystemRecord } from '../_lib/catalog';
+import { localeFromPath, localizedHref } from '../i18n';
+
+export interface Props {
+  system: SystemRecord;
+}
+
+const { system } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+---
+
+<li class="system-card">
+  <a href={href(`/systems/${system.slug}/`)}>
+    <div class="system-swatches" aria-hidden="true">
+      {system.palette.length > 0 ? (
+        system.palette.slice(0, 4).map((hex) => (
+          <span class="swatch" style={`background:${hex}`} />
+        ))
+      ) : (
+        <span class="swatch placeholder" />
+      )}
+    </div>
+    <span class="system-name">{system.name}</span>
+    <span class="system-cat">{system.categoryLabel}</span>
+    {system.tagline && <p class="system-tagline">{system.tagline}</p>}
+  </a>
+</li>

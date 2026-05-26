@@ -1,15 +1,18 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  atomicCopyFile,
   createCommandInvocation,
   createPackageManagerInvocation,
   createProcessStampArgs,
   matchesStampedProcess,
+  pathContains,
   readProcessStampFromCommand,
+  removePathBestEffort,
   wellKnownUserToolchainBins,
   type ProcessStampContract,
 } from "../src/index.js";
@@ -85,6 +88,64 @@ describe("generic process stamp primitives", () => {
     expect(matchesStampedProcess({ command }, { app: "ui", namespace: stamp.namespace, source: "tool" }, fakeContract)).toBe(true);
     expect(matchesStampedProcess({ command }, { namespace: "stamp-boundary-b" }, fakeContract)).toBe(false);
     expect(matchesStampedProcess({ command }, { source: "pack" }, fakeContract)).toBe(false);
+  });
+});
+
+describe("generic filesystem primitives", () => {
+  it("recognizes paths contained by a resolved root", () => {
+    const root = join(tmpdir(), "platform-path-root");
+
+    expect(pathContains(root, join(root, "child", "file.txt"))).toBe(true);
+    expect(pathContains(root, root)).toBe(true);
+    expect(pathContains(root, join(root, "..", "outside.txt"))).toBe(false);
+  });
+
+  it("copies through a destination-local temporary file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "platform-atomic-copy-"));
+    try {
+      const source = join(root, "source.bin");
+      const destination = join(root, "nested", "destination.bin");
+      writeFileSync(source, "atomic copy payload");
+
+      const result = await atomicCopyFile(source, destination);
+
+      expect(result).toEqual({ bytesCopied: "atomic copy payload".length, replaced: false });
+      expect(readFileSync(destination, "utf8")).toBe("atomic copy payload");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to replace an existing destination unless overwrite is explicit", async () => {
+    const root = mkdtempSync(join(tmpdir(), "platform-atomic-copy-exists-"));
+    try {
+      const source = join(root, "source.bin");
+      const destination = join(root, "destination.bin");
+      writeFileSync(source, "new payload");
+      writeFileSync(destination, "old payload");
+
+      await expect(atomicCopyFile(source, destination)).rejects.toMatchObject({ code: "EEXIST" });
+      expect(readFileSync(destination, "utf8")).toBe("old payload");
+
+      const overwritten = await atomicCopyFile(source, destination, { overwrite: true });
+      expect(overwritten.replaced).toBe(true);
+      expect(readFileSync(destination, "utf8")).toBe("new payload");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes paths best-effort without throwing on missing paths", async () => {
+    const root = mkdtempSync(join(tmpdir(), "platform-best-effort-rm-"));
+    const target = join(root, "target");
+    mkdirSync(target);
+    try {
+      expect((await removePathBestEffort(target)).removed).toBe(true);
+      expect(existsSync(target)).toBe(false);
+      expect((await removePathBestEffort(target)).removed).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -271,7 +332,7 @@ describe("createPackageManagerInvocation", () => {
     Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
   });
 
-  it("uses npm_execpath via process.execPath when set, regardless of platform", () => {
+  it("uses Node-loadable npm_execpath via process.execPath when set", () => {
     setPlatform("win32");
     const invocation = createPackageManagerInvocation(["install"], {
       npm_execpath: "C:\\Users\\u\\.nvm\\pnpm.cjs",
@@ -280,6 +341,33 @@ describe("createPackageManagerInvocation", () => {
     expect(invocation.args[0]).toBe("C:\\Users\\u\\.nvm\\pnpm.cjs");
     expect(invocation.args.slice(1)).toEqual(["install"]);
     expect(invocation.windowsVerbatimArguments).toBeUndefined();
+  });
+
+  it("uses binary npm_execpath directly on POSIX", () => {
+    setPlatform("linux");
+    const invocation = createPackageManagerInvocation(["install"], {
+      npm_execpath: "/home/runner/setup-pnpm/node_modules/.bin/pnpm",
+    } as NodeJS.ProcessEnv);
+    expect(invocation).toEqual({
+      args: ["install"],
+      command: "/home/runner/setup-pnpm/node_modules/.bin/pnpm",
+    });
+  });
+
+  it("wraps binary npm_execpath shims through cmd.exe on Windows", () => {
+    setPlatform("win32");
+    const invocation = createPackageManagerInvocation(["install"], {
+      ComSpec: "cmd.exe",
+      npm_execpath: "C:\\Users\\u\\setup-pnpm\\pnpm.cmd",
+    } as NodeJS.ProcessEnv);
+    expect(invocation.command).toBe("cmd.exe");
+    expect(invocation.windowsVerbatimArguments).toBe(true);
+    expect(invocation.args).toEqual([
+      "/d",
+      "/s",
+      "/c",
+      '"C:\\Users\\u\\setup-pnpm\\pnpm.cmd install"',
+    ]);
   });
 
   it("returns plain pnpm invocation on POSIX without npm_execpath", () => {
@@ -338,6 +426,16 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes ~/.vite-plus/bin so vp-managed global shims resolve under GUI launchers", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".vite-plus", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("appends $NPM_CONFIG_PREFIX/bin when set so corporate prefixes resolve", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-"));
@@ -370,6 +468,41 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("prepends $VP_HOME/bin and expands ~/ so custom Vite+ homes outrank the default", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-home-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { VP_HOME: "~/custom-vp-home" },
+        includeSystemBins: false,
+      });
+      expect(dirs[0]).toBe(join(home, "custom-vp-home", "bin"));
+      expect(dirs).toContain(join(home, ".vite-plus", "bin"));
+      expect(dirs.indexOf(join(home, ".vite-plus", "bin"))).toBeGreaterThan(0);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("places $VP_HOME/bin before $NPM_CONFIG_PREFIX/bin when both explicit homes are set", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-vp-npm-order-"));
+    const npmPrefix = mkdtempSync(join(tmpdir(), "wkutb-vp-npm-prefix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { NPM_CONFIG_PREFIX: npmPrefix, VP_HOME: "~/custom-vp-home" },
+        includeSystemBins: false,
+      });
+      const vpIdx = dirs.indexOf(join(home, "custom-vp-home", "bin"));
+      const npmIdx = dirs.indexOf(join(npmPrefix, "bin"));
+      expect(vpIdx).toBe(0);
+      expect(npmIdx).toBeGreaterThan(vpIdx);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(npmPrefix, { recursive: true, force: true });
+    }
+  });
+
   it("does not append a prefix entry when neither env var is set", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-noprefix-"));
     try {
@@ -390,7 +523,7 @@ describe("wellKnownUserToolchainBins", () => {
   // including ~/.local/bin (which is also a shared pip --user / cargo
   // install dumping ground). Conventional locations frequently retain
   // *stale* binaries from an older prefix.
-  it("places $NPM_CONFIG_PREFIX/bin before every conventional location, including ~/.local/bin", () => {
+  it("places $NPM_CONFIG_PREFIX/bin before every conventional location when VP_HOME is unset", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-prefix-order-"));
     const customPrefix = mkdtempSync(join(tmpdir(), "wkutb-custom-order-"));
     try {
@@ -457,26 +590,67 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
-  it("expands per-version Node toolchains for mise / nvm / fnm", () => {
+  it("surfaces GUI-safe PATH additions and sorts versioned Node bins by highest semver first", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-versioned-"));
     try {
       const miseBin = join(home, ".local", "share", "mise", "installs", "node", "24.14.1", "bin");
-      const nvmBin = join(home, ".nvm", "versions", "node", "v22.10.0", "bin");
+      const miseNpmCodexBin = join(
+        home,
+        ".local",
+        "share",
+        "mise",
+        "installs",
+        "npm-openai-codex",
+        "latest",
+        "bin",
+      );
+      const miseNpmCodexVersionBin = join(
+        home,
+        ".local",
+        "share",
+        "mise",
+        "installs",
+        "npm-openai-codex",
+        "0.1.0",
+        "bin",
+      );
+      const newestNvmBin = join(home, ".nvm", "versions", "node", "v24.1.0", "bin");
+      const olderNvmBin = join(home, ".nvm", "versions", "node", "v22.10.0", "bin");
       const fnmBin = join(home, ".local", "share", "fnm", "node-versions", "v20.11.1", "installation", "bin");
       mkdirSync(miseBin, { recursive: true });
-      mkdirSync(nvmBin, { recursive: true });
+      mkdirSync(miseNpmCodexVersionBin, { recursive: true });
+      symlinkSync("0.1.0", join(home, ".local", "share", "mise", "installs", "npm-openai-codex", "latest"), "dir");
+      mkdirSync(newestNvmBin, { recursive: true });
+      mkdirSync(olderNvmBin, { recursive: true });
       mkdirSync(fnmBin, { recursive: true });
       writeFileSync(join(miseBin, "marker"), "");
-      writeFileSync(join(nvmBin, "marker"), "");
+      writeFileSync(join(miseNpmCodexBin, "codex"), "");
+      writeFileSync(join(newestNvmBin, "marker"), "");
+      writeFileSync(join(olderNvmBin, "marker"), "");
       writeFileSync(join(fnmBin, "marker"), "");
       chmodSync(join(miseBin, "marker"), 0o644);
-      chmodSync(join(nvmBin, "marker"), 0o644);
+      chmodSync(join(miseNpmCodexBin, "codex"), 0o755);
+      chmodSync(join(newestNvmBin, "marker"), 0o644);
+      chmodSync(join(olderNvmBin, "marker"), 0o644);
       chmodSync(join(fnmBin, "marker"), 0o644);
 
-      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+        includeSystemBins: true,
+      });
+      const newestNvmIdx = dirs.indexOf(newestNvmBin);
+      const olderNvmIdx = dirs.indexOf(olderNvmBin);
+
+      expect(dirs).toContain("/opt/homebrew/bin");
+      expect(dirs).toContain("/usr/local/bin");
       expect(dirs).toContain(miseBin);
-      expect(dirs).toContain(nvmBin);
+      expect(dirs).toContain(miseNpmCodexBin);
+      expect(dirs).toContain(newestNvmBin);
+      expect(dirs).toContain(olderNvmBin);
       expect(dirs).toContain(fnmBin);
+      expect(newestNvmIdx).toBeGreaterThan(-1);
+      expect(olderNvmIdx).toBeGreaterThan(newestNvmIdx);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

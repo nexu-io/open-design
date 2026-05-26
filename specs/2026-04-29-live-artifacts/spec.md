@@ -903,7 +903,7 @@ apps/web/src/components/FileWorkspace.tsx
 apps/web/src/components/FileViewer.tsx
 apps/web/src/components/PreviewModal.tsx
 apps/web/src/types.ts
-apps/web/src/prompts/system.ts
+apps/daemon/src/prompts/system.ts
 ```
 
 Keep the first implementation small: current daemon route handlers live in `apps/daemon/src/server.ts`, so either mount live artifact routes there first or add small TypeScript route modules that are imported by `server.ts`. Do not add project-owned `.js` source files; JavaScript should only be generated build output or an explicitly documented compatibility artifact.

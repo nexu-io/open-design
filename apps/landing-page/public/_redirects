@@ -1,0 +1,23 @@
+# Cloudflare Pages redirects.
+#
+# Blog slug changes must add explicit redirects here so Google and
+# inbound links do not see a 404. The CI guard accepts either:
+#
+#   /blog/old-slug/ /blog/new-slug/ 301
+#   /blog/old-slug/ /blog/ 301
+#
+# Keep this file committed even when empty; it documents the contract.
+
+/sitemap.xml /sitemap-index.xml 301
+
+# Locale-code migration: the previous OD landing-page stack used BCP-47
+# region-qualified codes (zh-CN, zh-TW, pt-BR, es-ES) whereas the
+# current bundle adopts the simpler codes the @astrojs/sitemap plugin
+# and most CDN tooling default to (zh, zh-tw, pt-br, es). Anything
+# Google or external links resolved against the old prefixes still
+# arrives — these 301s send them to the new canonical URL with the
+# rest of the path preserved.
+/zh-CN/*  /zh/:splat     301
+/zh-TW/*  /zh-tw/:splat  301
+/pt-BR/*  /pt-br/:splat  301
+/es-ES/*  /es/:splat     301

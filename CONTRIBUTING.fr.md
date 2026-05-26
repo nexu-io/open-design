@@ -422,6 +422,37 @@ discussion avant d'écrire le code.
 
 ---
 
+<!-- Machine-translated section; native-speaker review welcome via PR. -->
+## Devenir Mainteneur
+
+Si vous contribuez régulièrement et que vous souhaitez savoir à quoi
+ressemble le chemin pour devenir Mainteneur, les règles se trouvent dans
+**[`MAINTAINERS.md`](MAINTAINERS.md)**. La version courte :
+
+- Un Mainteneur peut examiner, approuver et fermer des issues. Le bouton
+  de merge reste à la Core Team — votre approbation compte tout de même
+  comme l'approbation requise pour le merge.
+- Le seuil est de **≥ 20 merged PRs** plus une vérification publiée de la
+  qualité du compte (anti-bot, anti-sock-puppet) plus un jugement de la
+  Core Team sur la qualité des contributions. Il n'y a pas de formulaire
+  de candidature ; la Core Team identifie les candidats en interne et
+  prend contact.
+- Il n'y a **aucun quota, aucun SLAs, et aucun mandat fixe.** Se retirer
+  est facile et réversible (Emeritus → retour quand la vie se calme).
+- Tous les seuils, le flux de nomination, les règles de retrait et la
+  dérogation pour les projets en phase initiale se trouvent dans
+  [`MAINTAINERS.md`](MAINTAINERS.md). Lisez ce document si l'un des
+  points ci-dessus vous intéresse.
+
+Le tl;dr : livrez de bonnes PR, faites des reviews réfléchies, traînez
+dans les [Discussions][discussions] / sur [Discord][discord], et le reste
+se fait tout seul.
+
+[discussions]: https://github.com/nexu-io/open-design/discussions
+[discord]: https://discord.gg/qhbcCH8Am4
+
+---
+
 ## Licence
 
 En contribuant, vous acceptez que votre contribution soit licenciée sous la

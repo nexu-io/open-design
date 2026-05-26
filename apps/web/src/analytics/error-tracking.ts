@@ -1,0 +1,332 @@
+// Direct-fetch safety telemetry transport.
+//
+// Why this exists alongside posthog-js's autocapture
+// ---------------------------------------------------
+// Two design constraints make posthog-js's normal capture path insufficient
+// for safety / reliability telemetry:
+//
+//   1. **Consent gate.** `posthog.opt_out_capturing()` silences ALL captures.
+//      Product policy is that *safety* telemetry — exceptions, white
+//      screens, dropped chunks, long tasks, stuck runs — flows
+//      unconditionally so we don't lose ground truth on stability when a
+//      user opts out of general analytics. The user-facing copy in
+//      Settings → Privacy must reflect this.
+//
+//   2. **Lazy-load window.** posthog-js is dynamically `import()`-ed only
+//      after `/api/analytics/config` returns AND the user has consented.
+//      Errors / metrics that fire during the first 1-2 seconds (React
+//      hydration, early effects, route init) are lost. We hook the
+//      relevant browser events synchronously at module load, before any
+//      of that, and buffer until we have credentials.
+//
+// This module exposes two surfaces:
+//
+//   - `reportHandledException` / `installErrorHandlers` — emit shaped
+//     `$exception` events (used directly + via `window.error` /
+//     `unhandledrejection`).
+//   - `reportSafetyEvent(eventName, properties)` — generic transport for
+//     non-exception observability events (long tasks, white screens,
+//     resource errors, boot timing, etc.) that need the same
+//     consent-bypass + early-buffer guarantees.
+//
+// To avoid duplicate `$exception` events, `client.ts` sets
+// `capture_exceptions: false` on the posthog-js init — this module is the
+// single source of truth for browser exception capture.
+
+import { scrubExceptionList, scrubFilePath } from './scrub';
+
+interface ExceptionTrackingContext {
+  apiKey: string;
+  host: string;
+  distinctId: string;
+  appVersion?: string;
+  sessionId?: string;
+}
+
+interface BufferedSafetyEvent {
+  eventName: string;
+  body: { properties: Record<string, unknown> };
+  timestamp: string;
+}
+
+// Cap the buffer so a chain of early errors (e.g. infinite render loop
+// before posthog-js loads) cannot grow indefinitely. 50 is enough to
+// capture the burst that usually surrounds a real bug while keeping the
+// memory footprint trivial.
+const MAX_BUFFER_SIZE = 50;
+
+let context: ExceptionTrackingContext | null = null;
+const buffer: BufferedSafetyEvent[] = [];
+let installed = false;
+
+export function setExceptionTrackingContext(next: ExceptionTrackingContext): void {
+  context = next;
+  if (buffer.length === 0) return;
+  const drain = buffer.splice(0, buffer.length);
+  for (const item of drain) {
+    dispatch(item);
+  }
+}
+
+export function clearExceptionTrackingContext(): void {
+  // Called when /api/analytics/config returns `key: null` (no build-time
+  // POSTHOG_KEY, e.g. a fork build). The buffered events stay in memory
+  // until the page unloads — no key, nowhere to send them, but also
+  // nothing leaks.
+  context = null;
+}
+
+// Called once at app boot. Idempotent — repeated calls are no-ops.
+export function installErrorHandlers(): void {
+  if (installed) return;
+  if (typeof window === 'undefined') return;
+  installed = true;
+
+  window.addEventListener('error', (event) => {
+    captureException(event.error, event.message ?? 'Uncaught error', {
+      filename: typeof event.filename === 'string' ? event.filename : undefined,
+      lineno: typeof event.lineno === 'number' ? event.lineno : undefined,
+      colno: typeof event.colno === 'number' ? event.colno : undefined,
+    });
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const fallback =
+      typeof reason === 'string' ? reason : 'Unhandled promise rejection';
+    captureException(reason, fallback);
+  });
+}
+
+// Public entry point for code paths that catch their own error but still
+// want it visible in PostHog (e.g. an ErrorBoundary's componentDidCatch).
+// Unhandled errors go through the window listeners above.
+export function reportHandledException(error: unknown, message?: string): void {
+  captureException(error, message ?? defaultMessage(error), { handled: true });
+}
+
+interface CaptureMetadata {
+  filename?: string;
+  lineno?: number;
+  colno?: number;
+  handled?: boolean;
+}
+
+function captureException(
+  error: unknown,
+  fallbackMessage: string,
+  metadata: CaptureMetadata = {},
+): void {
+  const list = buildExceptionList(error, fallbackMessage, metadata);
+  const scrubbed = scrubExceptionList(list);
+  const properties: Record<string, unknown> = {
+    $exception_list: scrubbed,
+    $exception_type: scrubbed[0]?.type,
+    $exception_message: scrubbed[0]?.value,
+    $exception_source: scrubFirstFrameSource(scrubbed),
+    $current_url: scrubUrl(typeof window !== 'undefined' ? window.location.href : ''),
+    $insert_id: randomId(),
+    capture_source: 'web/error-tracking',
+    handled: metadata.handled === true,
+  };
+
+  enqueue('$exception', properties);
+}
+
+// Generic safety-telemetry surface for non-exception observability events
+// (long tasks, white screens, resource errors, boot timing, stuck runs,
+// visibility changes, etc.). Goes through the same buffer + direct-fetch
+// transport as `$exception` so the same consent-bypass + early-firing
+// guarantees apply. Callers should namespace event names with `client_*`
+// (or `desktop_*` / `daemon_*` for cross-process forwards) so they're
+// easy to filter against posthog-js-captured product events.
+export function reportSafetyEvent(
+  eventName: string,
+  properties: Record<string, unknown> = {},
+): void {
+  const merged: Record<string, unknown> = {
+    ...properties,
+    $current_url: scrubUrl(typeof window !== 'undefined' ? window.location.href : ''),
+    $insert_id: randomId(),
+    capture_source: 'web/error-tracking',
+  };
+  enqueue(eventName, merged);
+}
+
+function enqueue(eventName: string, properties: Record<string, unknown>): void {
+  const timestamp = new Date().toISOString();
+  const item: BufferedSafetyEvent = {
+    eventName,
+    body: { properties },
+    timestamp,
+  };
+  if (context == null) {
+    if (buffer.length >= MAX_BUFFER_SIZE) buffer.shift();
+    buffer.push(item);
+    return;
+  }
+  dispatch(item);
+}
+
+function dispatch(item: BufferedSafetyEvent): void {
+  if (context == null) return;
+  const payload = {
+    api_key: context.apiKey,
+    event: item.eventName,
+    distinct_id: context.distinctId,
+    properties: {
+      ...item.body.properties,
+      $lib: 'web/error-tracking',
+      ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
+      ...(context.sessionId ? { session_id: context.sessionId } : {}),
+    },
+    timestamp: item.timestamp,
+  };
+  // `keepalive` ensures the request survives an immediate window unload —
+  // important for events that fire during navigation that are followed by
+  // a route change a millisecond later.
+  try {
+    void fetch(`${context.host.replace(/\/+$/, '')}/i/v0/e/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+      // No credentials — PostHog ingest uses the public `phc_` key as the
+      // auth surface; cookies are irrelevant and sending them would just
+      // add CORS preflight friction.
+      credentials: 'omit',
+    });
+  } catch {
+    // best-effort: safety telemetry must never propagate
+  }
+}
+
+function buildExceptionList(
+  error: unknown,
+  fallbackMessage: string,
+  metadata: CaptureMetadata,
+): Array<Record<string, unknown>> {
+  const isError = error instanceof Error;
+  const type = isError ? error.name : typeof error === 'string' ? 'Error' : 'NonError';
+  const value = isError
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : fallbackMessage;
+  const stack = isError && typeof error.stack === 'string' ? error.stack : '';
+  const frames = parseStack(stack, metadata);
+  return [
+    {
+      type,
+      value,
+      stacktrace: { type: 'raw', frames },
+      mechanism: {
+        type: metadata.handled === true ? 'handled' : 'generic',
+        handled: metadata.handled === true,
+      },
+    },
+  ];
+}
+
+// Minimal stack parser. Covers V8 (`at Foo (url:1:2)` and `at url:1:2`)
+// and the SpiderMonkey-style `Foo@url:1:2`. Lines we cannot parse are
+// kept as a raw line so the report stays useful even without symbolicated
+// frames.
+const STACK_RE_V8 = /^\s*at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?$/;
+const STACK_RE_SPIDERMONKEY = /^(.*?)@(.+?):(\d+):(\d+)$/;
+
+function parseStack(stack: string, metadata: CaptureMetadata): Array<Record<string, unknown>> {
+  if (!stack) {
+    if (metadata.filename) {
+      return [
+        {
+          function: '<anonymous>',
+          filename: metadata.filename,
+          abs_path: metadata.filename,
+          lineno: metadata.lineno ?? 0,
+          colno: metadata.colno ?? 0,
+          in_app: true,
+        },
+      ];
+    }
+    return [];
+  }
+  const lines = stack.split('\n');
+  // The first line is usually the message (e.g. "TypeError: foo is not a
+  // function") rather than a frame — skip it when it doesn't start with
+  // `at` or contain `@`.
+  const frameLines = lines[0]?.match(/^\s*at\b|@/) ? lines : lines.slice(1);
+  return frameLines
+    .map((line) => parseFrame(line))
+    .filter((frame): frame is Record<string, unknown> => frame != null);
+}
+
+function parseFrame(line: string): Record<string, unknown> | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  const v8 = STACK_RE_V8.exec(trimmed);
+  if (v8) {
+    return {
+      function: v8[1] ?? '<anonymous>',
+      filename: v8[2],
+      abs_path: v8[2],
+      lineno: Number(v8[3]),
+      colno: Number(v8[4]),
+      in_app: true,
+    };
+  }
+  const sm = STACK_RE_SPIDERMONKEY.exec(trimmed);
+  if (sm) {
+    return {
+      function: sm[1] || '<anonymous>',
+      filename: sm[2],
+      abs_path: sm[2],
+      lineno: Number(sm[3]),
+      colno: Number(sm[4]),
+      in_app: true,
+    };
+  }
+  return { raw: trimmed, in_app: true };
+}
+
+function scrubFirstFrameSource(list: Array<Record<string, unknown>>): string | undefined {
+  const first = list[0];
+  if (!first) return undefined;
+  const stacktrace = first.stacktrace as
+    | { frames?: Array<{ abs_path?: unknown }> }
+    | undefined;
+  const frame = stacktrace?.frames?.[0];
+  if (frame == null || typeof frame.abs_path !== 'string') return undefined;
+  // Already scrubbed by scrubExceptionList; just narrow the type.
+  return frame.abs_path;
+}
+
+function scrubUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function defaultMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  return 'Unknown error';
+}
+
+function randomId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers / SSR — collision risk is negligible
+  // because $insert_id only needs to dedupe within a single user-session
+  // window on the PostHog ingest side.
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// Re-exported helpers for the file-path scrub so callers that hand-build
+// frames (e.g. legacy code paths) can apply the same redaction without
+// reaching into scrub.ts directly.
+export { scrubFilePath };

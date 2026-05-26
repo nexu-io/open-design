@@ -1,0 +1,2141 @@
+/* ---------- Composio API key skeleton ----------
+   The Composio config is daemon-backed, so on first paint after a
+   restart there is a window where the section renders empty even
+   though a saved key exists. Rather than show a misleading "no key
+   saved" state, we overlay a skeleton on the input + chip + buttons
+   so the user understands the field is still resolving.
+   We intentionally keep the real input mounted underneath the shimmer
+   so focus, autofill, and accessibility nodes are not torn down on
+   resolve — the parent label gets aria-busy and the disabled flags
+   on the buttons are the structural safety net. */
+.field-status-badge-skeleton {
+  /* Same footprint as the saved-state chip so the row geometry
+     doesn't shift when hydration completes. The width is a
+     calibrated guess for a "Saved · ••••XXXX" string; close enough
+     that the swap-in feels stable without depending on the actual
+     tail length. */
+  width: 86px;
+  height: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--text-soft) 8%, var(--bg-subtle)) 0%,
+      color-mix(in srgb, var(--text-soft) 18%, var(--bg-subtle)) 50%,
+      color-mix(in srgb, var(--text-soft) 8%, var(--bg-subtle)) 100%
+    );
+  background-size: 200% 100%;
+  animation: settingsSkeletonShimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-pill);
+  padding: 0;
+  color: transparent;
+}
+
+.field-input-skeleton-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.field-input-skeleton-wrap > input {
+  flex: 1;
+  min-width: 0;
+}
+.field-input-skeleton-shimmer {
+  position: absolute;
+  inset: 1px;
+  border-radius: var(--radius);
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--text-soft) 14%, transparent) 50%,
+      transparent 100%
+    );
+  background-size: 220% 100%;
+  animation: settingsSkeletonShimmer 1.6s ease-in-out infinite;
+}
+
+/* The whole credentials field gets a softened, "we're checking" feel
+   while loading: muted label, slightly desaturated input chrome.
+   Matches the broader Settings shimmer language. */
+.settings-section-connectors-credentials.is-loading .field-label {
+  color: var(--text-muted);
+}
+.settings-section-connectors-credentials.is-loading input:disabled {
+  cursor: progress;
+  background: color-mix(in srgb, var(--text-soft) 4%, var(--bg-subtle));
+  /* Preserve readable placeholder color even when disabled — the
+     placeholder doubles as the "Checking for a saved key…" cue. */
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+.settings-section-connectors-credentials.is-loading input:disabled::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Inline status hint variant — the help line below the input becomes
+   a small spinner + status string while loading. Sits in the same
+   slot as the regular hint so layout doesn't jump. */
+.field-hint-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.field-hint-loading svg {
+  color: var(--accent-strong);
+  flex-shrink: 0;
+}
+
+@keyframes settingsSkeletonShimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .field-status-badge-skeleton,
+  .field-input-skeleton-shimmer {
+    animation: none;
+  }
+  .field-input-skeleton-shimmer {
+    background: color-mix(in srgb, var(--text-soft) 8%, transparent);
+  }
+}
+.deploy-form input,
+.deploy-form select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+}
+.deploy-config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.deploy-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.cloudflare-domain-grid {
+  grid-template-columns: minmax(180px, 0.85fr) minmax(220px, 1.15fr);
+}
+.deploy-field-grid.single-field {
+  grid-template-columns: minmax(0, 1fr);
+}
+.deploy-field-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.deploy-error {
+  margin: 0;
+  color: var(--red);
+}
+.deploy-result-block {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.deploy-result-block.ready {
+  border-color: color-mix(in srgb, var(--green) 26%, var(--border));
+}
+.deploy-result-block.delayed {
+  border-color: color-mix(in srgb, #b7791f 34%, var(--border));
+}
+.deploy-result-block.protected,
+.deploy-result-block.failed {
+  border-color: color-mix(in srgb, #c96442 38%, var(--border));
+}
+.deploy-result-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px 12px;
+  background: color-mix(in srgb, var(--bg-subtle) 64%, var(--bg-panel));
+}
+.deploy-result-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.deploy-result-link-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.deploy-result-badge,
+.deploy-result-link-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.deploy-result-badge.ready,
+.deploy-result-link-state.ready {
+  color: #137a3d;
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 28%, var(--border));
+}
+.deploy-result-badge.delayed,
+.deploy-result-link-state.delayed {
+  color: #9a5b12;
+  background: color-mix(in srgb, #b7791f 14%, transparent);
+  border: 1px solid color-mix(in srgb, #b7791f 28%, var(--border));
+}
+.deploy-result-badge.protected,
+.deploy-result-badge.failed,
+.deploy-result-link-state.protected,
+.deploy-result-link-state.failed {
+  color: #a34828;
+  background: color-mix(in srgb, #c96442 14%, transparent);
+  border: 1px solid color-mix(in srgb, #c96442 30%, var(--border));
+}
+.deploy-result-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.deploy-result-message {
+  margin: 0;
+  color: var(--text-muted);
+}
+.deploy-result-links {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+.deploy-result-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  background: var(--bg-panel);
+}
+.deploy-result-link + .deploy-result-link {
+  border-top: 1px solid var(--border);
+}
+.deploy-result-link-main {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.deploy-result-link-label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.deploy-result-link-message {
+  margin: 0;
+  color: var(--text-muted);
+}
+.deploy-result-url {
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.deploy-result-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.deploy-result-actions .viewer-action,
+.deploy-result-actions .ghost-link {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+}
+.deploy-result-actions .viewer-action:hover:not(:disabled),
+.deploy-result-actions .ghost-link:hover {
+  background: var(--bg-panel);
+}
+@media (max-width: 640px) {
+  .deploy-form .field-label-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .deploy-form .field-label-note {
+    align-items: flex-start;
+    max-width: none;
+    text-align: left;
+  }
+  .deploy-field-grid,
+  .cloudflare-domain-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploy-result-link {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deploy-result-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    width: fit-content;
+  }
+}
+.ghost-link.disabled,
+.ghost-link[aria-disabled='true'] {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.present-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: black;
+  display: flex;
+}
+.present-overlay iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
+}
+.present-exit {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 20px);
+  right: calc(env(safe-area-inset-right, 0px) + 20px);
+  z-index: 1001;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.present-exit:hover { background: white; }
+
+/* Picker (legacy in some surfaces) */
+.picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.picker-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.picker select {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  width: auto;
+  min-width: 120px;
+  box-shadow: none;
+}
+.picker select:focus { outline: none; box-shadow: none; }
+.picker.agent-picker select { min-width: 140px; }
+.picker.agent-picker .icon-btn {
+  padding: 2px 8px;
+  background: transparent;
+  border: none;
+}
+
+/* Preview pane (legacy single-iframe path; kept for fallbacks) */
+.preview {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-subtle);
+  min-height: 0;
+}
+.preview-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.preview-title {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+}
+.preview-actions { display: flex; gap: 8px; align-items: center; }
+.preview-actions .muted { font-size: 11px; }
+.preview-actions button { padding: 4px 10px; font-size: 12px; }
+.preview-body { flex: 1; min-height: 0; position: relative; }
+.preview-body iframe {
+  width: 100%; height: 100%; border: none; background: white;
+}
+.preview-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* ============================================================
+   Merged from main — persistence-era additions: editable project
+   title, conversations dropdown, examples filters + preview modal,
+   question form, design-system modal, system reminder collapse,
+   operations todo card.
+   ============================================================ */
+
+/* Editable project title (inline rename in topbar) */
+.topbar-title .title.editable,
+.app-project-title .title.editable {
+  outline: none;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0px;
+  max-width: min(100%, 420px);
+}
+.topbar-title .title.editable:focus,
+.app-project-title .title.editable:focus {
+  background: var(--bg-subtle);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Conversations dropdown — pill in the project topbar */
+.conv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+  user-select: none;
+  max-width: 220px;
+}
+.conv-pill:hover { background: var(--bg-subtle); }
+.conv-pill.open { background: var(--bg-subtle); border-color: var(--accent); }
+.conv-pill-icon { font-size: 13px; line-height: 1; }
+.conv-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.conv-menu {
+  position: fixed;
+  width: 320px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  z-index: 200;
+  padding: 8px;
+}
+.conv-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.conv-add-btn { padding: 2px 8px; font-size: 11px; }
+.conv-menu-empty {
+  padding: 16px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.conv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.conv-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 6px;
+}
+.conv-item.active { background: var(--bg-subtle); }
+.conv-item-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.conv-item-button:hover { background: var(--bg-subtle); }
+.conv-item-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-item-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.conv-item-del {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  width: 24px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.conv-item-del:hover { background: var(--bg-subtle); color: var(--text); }
+.conv-rename-input {
+  flex: 1;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+/* Collapsible system-reminder block in chat */
+.system-reminder-block {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 6px 0;
+}
+.system-reminder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.system-reminder-toggle:hover { background: rgba(0, 0, 0, 0.03); }
+.system-reminder-icon { color: var(--text-muted); }
+.system-reminder-label { font-weight: 500; color: var(--text); }
+.system-reminder-preview {
+  flex: 1;
+  color: var(--text-muted);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.system-reminder-chev { color: var(--text-muted); font-size: 10px; }
+.system-reminder-body {
+  margin: 0;
+  padding: 0 12px 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Waiting-on-input pill (richer than the simple italic version above). */
+.op-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: normal;
+}
+.op-waiting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.op-waiting-label {
+  font-weight: 500;
+  color: var(--text);
+}
+.op-waiting-detail {
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg-panel);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.op-waiting-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--text-soft);
+  font-style: italic;
+}
+
+/* op-todo card variant (the .op-todo .todo-list rule already exists above) */
+.op-todo {
+  border-color: var(--accent-soft);
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 60%);
+}
+.op-todo .op-card-head {
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  background: transparent;
+}
+.op-todo .op-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.op-todo .op-title {
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--text-strong);
+}
+.op-todo .op-meta {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-strong);
+}
+
+/*
+ * Pinned task list above the chat composer. The card sits just above the
+ * prompt input, persistent for the whole conversation rather than buried
+ * in a single assistant message. It mirrors the Cursor / Codex / Claude
+ * Code TTY pattern where the todo list is always one click away while you
+ * are typing the next prompt. The card is collapsible via its own
+ * header — see `.op-todo-toggle` below.
+ */
+.chat-pinned-todo {
+  position: relative;
+  padding: 0 10px;
+  transition:
+    transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Slide-down dismiss: matches the global animation philosophy
+ * (strong ease-out, ~200ms). The wrapper animates away while the
+ * Done click still resolves the snapshot key. */
+.chat-pinned-todo-exit {
+  transform: translateY(24px);
+  opacity: 0;
+  pointer-events: none;
+}
+/* Soft fade above the pinned card so chat text scrolling beneath it
+ * dissolves into the panel background instead of getting hard-clipped
+ * at the card's top edge. Sits in the gutter directly above the card,
+ * pulled up by negative bottom so it overlaps the chat scroll area. */
+.chat-pinned-todo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 28px;
+  background: linear-gradient(to top, var(--bg-panel), transparent);
+  pointer-events: none;
+}
+.chat-pinned-todo .op-card.op-todo {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  /* Square the bottom corners so the card reads as tucked under the
+   * composer below it, rather than as a floating pill with a gap. */
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom: 0;
+}
+
+/*
+ * Shared accordion expand/collapse motion. `grid-template-rows: 0fr -> 1fr`
+ * is the modern way to animate auto-height content; pair it with a
+ * fade so the body doesn't pop in flat. Strong ease-out curve, with
+ * asymmetric timing (enter 200ms, exit 140ms) per Emil Kowalski's
+ * framework — entrance reads as considered, exit is decisive.
+ */
+.accordion-collapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 100ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.accordion-collapsible.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.accordion-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * Make the todo card header a clickable expand/collapse affordance.
+ * Default is expanded while work is in flight; the user can flip it via
+ * the chevron at the right. Removing the bottom border in the collapsed
+ * state keeps the card looking like a single pill rather than an empty
+ * disclosure with a hanging line.
+ */
+.op-todo .op-todo-head {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+}
+.op-todo .op-todo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.op-todo .op-todo-done {
+  display: inline-flex;
+  align-items: center;
+  margin: 6px 10px 6px 0;
+  padding: 2px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-pill);
+  background: var(--green-bg);
+  color: var(--green);
+  cursor: pointer;
+}
+.op-todo .op-todo-done:hover {
+  filter: brightness(1.05);
+}
+.op-todo-collapsed .op-card-head {
+  border-bottom-color: transparent;
+}
+.op-todo-current {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.op-todo-chev {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform 120ms ease;
+}
+
+/* Question form — interactive form a planning agent can post into chat */
+.question-form {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.question-form-locked {
+  background: var(--bg-subtle);
+  box-shadow: none;
+  opacity: 0.92;
+}
+.question-form-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 100%);
+}
+.question-form-locked .question-form-head {
+  background: var(--bg-subtle);
+}
+.question-form-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.question-form-titles {
+  flex: 1;
+  min-width: 0;
+}
+.question-form-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.question-form-desc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.question-form-pill {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.question-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
+.qf-field { display: flex; flex-direction: column; gap: 6px; }
+.qf-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.qf-required { color: var(--accent); }
+.qf-help {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: -2px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
+.qf-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.qf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+.qf-chip input { width: auto; margin: 0; display: none; }
+.qf-chip-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+.qf-chip-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.qf-chip-on .qf-chip-desc {
+  color: inherit;
+  opacity: 0.72;
+}
+.qf-chip:hover { border-color: var(--border-strong); }
+.qf-chip-disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+.qf-chip-disabled:hover { border-color: var(--border); }
+.qf-chip-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 500;
+}
+.question-form-locked .qf-chip { cursor: not-allowed; }
+.qf-input,
+.qf-select,
+.qf-textarea {
+  font-size: 13px;
+}
+.question-form-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.qf-hint,
+.qf-locked-note {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Direction-cards picker — used by the second discovery form when the user
+   selects "Pick a direction for me". Each card carries a palette swatch
+   row, a serif/sans type sample, a mood blurb, and a real-world refs
+   line so the user can scan visually instead of squinting at radio labels. */
+.qf-direction-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+.qf-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    transform 0.06s ease;
+}
+.qf-card input { display: none; }
+.qf-card:hover { border-color: var(--border-strong); }
+.qf-card:active { transform: translateY(1px); }
+.qf-card-on {
+  border-color: var(--accent, #c96442);
+  background: color-mix(in oklch, var(--accent, #c96442) 4%, var(--bg));
+  box-shadow: 0 0 0 1px var(--accent, #c96442) inset;
+}
+.qf-card-disabled { cursor: not-allowed; opacity: 0.6; }
+.qf-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.qf-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  line-height: 1.3;
+}
+.qf-card-pill {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: var(--accent, #c96442);
+  color: #fff;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.qf-card-swatches {
+  display: flex;
+  gap: 4px;
+  height: 18px;
+}
+.qf-card-swatch {
+  flex: 1;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  min-width: 0;
+}
+.qf-card-types {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.qf-card-type-display {
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.qf-card-type-body {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qf-card-mood {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.qf-card-refs {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.qf-card-refs-label {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Design-system preview modal */
+.ds-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(28, 27, 26, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 32px;
+}
+.ds-modal {
+  width: 100%;
+  max-width: 1320px;
+  background: var(--bg);
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.ds-modal-fullscreen {
+  max-width: none;
+  border-radius: 0;
+}
+/* Two-row header: title row keeps the title/subtitle + close together at
+   the top; toolbar row hosts tabs (left) and the action cluster (right).
+   This split lets the title breathe even when the toolbar carries a busy
+   set of controls (Use plugin + sidebar + Fullscreen + Share + plugin
+   share + ...), and keeps the close button anchored in its expected
+   top-right corner. */
+.ds-modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.ds-modal-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.ds-modal-header-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ds-modal-title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ds-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-strong, var(--text));
+}
+.ds-modal-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  /* Allow up to two lines for long descriptions (e.g. Chinese plugin
+     subtitles) instead of clipping at the first word — keeps the
+     vertical footprint bounded but readable. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.ds-modal-tabs {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.ds-modal-tab {
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ds-modal-tab:hover { color: var(--text); }
+.ds-modal-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.ds-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+/* Keep individual action labels (Use plugin / DESIGN.md / Fullscreen /
+   Share / etc.) on a single line; the toolbar row itself can wrap to a
+   second visual line only at very narrow widths via flex-wrap above. */
+.ds-modal-actions > button,
+.ds-modal-actions .share-menu > button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ds-modal-stage {
+  flex: 1;
+  min-height: 0;
+  background: white;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.ds-modal-stage-iframe {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: white;
+}
+.ds-modal-stage-iframe-scaler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  background: white;
+  /* Prevent the GPU layer from blurring the scaled iframe on Retina. */
+  will-change: transform;
+}
+.ds-modal-stage-iframe-scaler iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: white;
+}
+.ds-modal-stage.has-sidebar .ds-modal-stage-iframe {
+  flex: 1 1 60%;
+}
+.ds-modal-sidebar {
+  position: relative;
+  flex: 1 1 40%;
+  min-width: 320px;
+  max-width: 560px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+}
+.ds-modal-stage-handle {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 56px;
+  transform: translateY(-50%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  z-index: 3;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: color 120ms ease, background 120ms ease;
+}
+.ds-modal-stage-handle:hover { color: var(--text); background: var(--bg-subtle); }
+.ds-modal-stage-handle.is-expand {
+  right: 0;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+}
+.ds-modal-stage-handle.is-collapse {
+  position: sticky;
+  left: 0;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+}
+.ds-modal-fullscreen .ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler,
+.ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler {
+  height: 100vh;
+}
+
+/* Custom (non-iframe) stage container — used by the plugin media
+   detail variant so image / video / audio plugins share the
+   same modal chrome (header, sidebar toggle, fullscreen, share)
+   as HTML and design-system plugins. The container fills the
+   stage frame and centers its child media element. */
+.ds-modal-stage-custom {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: var(--bg-subtle, #f6f5f1);
+}
+.plugin-media-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+  min-height: 0;
+}
+.plugin-media-stage__empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.plugin-media-stage__image,
+.plugin-media-stage__video,
+.plugin-media-stage__audio-poster {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16);
+  background: white;
+}
+.plugin-media-stage__video {
+  width: auto;
+  height: auto;
+}
+.plugin-media-stage__audio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+  max-width: 480px;
+}
+.plugin-media-stage__audio-poster {
+  width: 320px;
+  height: 320px;
+  object-fit: cover;
+}
+.plugin-media-stage__audio-glyph {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 18%, transparent),
+    color-mix(in srgb, var(--accent) 4%, transparent)
+  );
+  color: var(--accent);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+}
+.plugin-media-stage__audio-player {
+  width: 100%;
+}
+
+/* Sidebar prompt block — top of the right pane, mirrors the
+   PROMPT BODY card in the previous bespoke media modal so users
+   still get the prompt + copy affordance, just inside the
+   unified PreviewModal chrome. */
+.plugin-media-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.plugin-media-sidebar__prompt {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--surface-1, var(--bg-panel));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugin-media-sidebar__prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.plugin-media-sidebar__prompt-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.plugin-media-sidebar__prompt-copy {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.plugin-media-sidebar__prompt-copy:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.plugin-media-sidebar__prompt-body {
+  margin: 0;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+}
+.ds-modal-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+/* Error state extends .ds-modal-empty: stacks a title, body, and Retry
+   button instead of a single line, so a fetch failure no longer leaves
+   the modal stuck at "Loading…" with disabled toolbar buttons and no
+   recovery path. Issue #860. */
+.ds-modal-error {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+}
+.ds-modal-error-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-modal-error-body {
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 48ch;
+  line-height: 1.5;
+}
+.ds-modal-actions .ghost.is-active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* Accent CTA used by plugin detail wrappers to surface a "Use plugin"
+   action without forking the whole modal layout. Sits before the
+   ghost actions, mirroring the accent button used in NewProjectModal
+   so the affordance reads consistently across surfaces. */
+.ds-modal-primary-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    transform 120ms ease;
+}
+.ds-modal-primary-action:hover:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+  border-color: var(--accent-strong, var(--accent));
+}
+.ds-modal-primary-action:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.ds-modal-primary-action:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+/* Dedicated icon-button shape for the modal close affordance. Matches the
+   visual language used by plugin-media-detail__close and
+   new-project-modal__close so every modal closes with the same control. */
+.ds-modal-close {
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 120ms ease, color 120ms ease,
+    border-color 120ms ease;
+}
+.ds-modal-close svg {
+  display: block;
+  width: 14px !important;
+  height: 14px !important;
+  stroke-width: 1.9;
+}
+.ds-modal-close:hover,
+.ds-modal-close:focus-visible {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+
+/* DESIGN.md side panel — monospace source view with light syntax tints,
+   echoing the styles.refero.design "compact" markdown source pane. */
+.design-spec-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.design-spec-pre {
+  margin: 0;
+  padding: 16px 18px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  /* Wrap long lines instead of forcing the side pane to scroll horizontally —
+     DESIGN.md prose can have 200+ char paragraphs that otherwise produce a
+     scrollbar inside the modal. `overflow-wrap: anywhere` keeps long
+     hyphenated tokens (URLs, file paths) from blowing out the column. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: var(--text);
+  background: var(--bg-panel);
+  flex: 1;
+}
+.design-spec-pre code { font: inherit; color: inherit; background: transparent; }
+.design-spec-line { display: inline; }
+.design-spec-line.is-h1 { color: #2563eb; font-weight: 700; }
+.design-spec-line.is-h2 { color: #0891b2; font-weight: 700; }
+.design-spec-line.is-h3 { color: #0d9488; font-weight: 600; }
+.design-spec-line.is-h4 { color: #16a34a; font-weight: 600; }
+.design-spec-line.is-quote { color: #6b7280; font-style: italic; }
+.design-spec-line.is-list { color: var(--text); }
+.design-spec-line.is-table { color: #7c3aed; }
+.design-spec-line.is-fence { color: #dc2626; }
+.design-spec-line.is-blank { color: var(--text-muted); }
+.md-tk-bold { font-weight: 700; color: var(--text); }
+.md-tk-em { font-style: italic; color: var(--text); }
+.md-tk-code {
+  background: var(--bg-subtle);
+  padding: 0 4px;
+  border-radius: 3px;
+  color: #0f766e;
+}
+.md-tk-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #be185d;
+}
+.md-tk-color-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  vertical-align: middle;
+}
+@media (max-width: 760px) {
+  .ds-modal-backdrop { padding: 0; }
+  .ds-modal { border-radius: 0; }
+  .ds-modal-header { gap: 10px; padding: 12px 14px; }
+  .ds-modal-actions { justify-content: flex-start; }
+  .ds-modal-stage { flex-direction: column; }
+  .ds-modal-stage.has-sidebar .ds-modal-stage-iframe { flex: 1 1 50%; }
+  .ds-modal-sidebar {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    flex: 1 1 50%;
+    min-width: 0;
+    max-width: none;
+  }
+  /* On stacked layout the side handles (which assume horizontal split)
+     would float over content awkwardly — fall back to the header toggle. */
+  .ds-modal-stage-handle { display: none; }
+}
+
+/* Examples gallery toolbar — filter pills + richer card metadata */
+.examples-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  /* Sit above example preview iframes while scrolling (iframes get their own
+     compositor layer; z-index: 2 was not always enough for a clean mask). */
+  z-index: 20;
+  isolation: isolate;
+  margin: 0;
+  padding: 0 0 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+}
+.examples-search {
+  position: relative;
+  /* Full-width band so scrolling previews cannot show through beside a narrow
+     search field on wide layouts (toolbar stays sticky; iframes layer high). */
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+  background: var(--bg);
+}
+.examples-search input {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  padding: 7px 12px 7px 32px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.examples-search input::placeholder { color: var(--text-faint); }
+.examples-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.examples-search .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+}
+.examples-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.examples-filter-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-right: 6px;
+  font-weight: 500;
+}
+.filter-pill {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+button.filter-pill:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+/*
+  Selected filter pill — quiet "I am the chosen one" treatment, NOT a CTA.
+  Earlier the active pill borrowed the full `--accent` fill, which read as
+  a primary button competing with the real action ("+ New memory") next to
+  it. Users would mis-read the count (e.g. "All 0") as a clickable big
+  orange button. We now keep the selection bordered + slightly weighted so
+  it still looks "on" but stops shouting; the lone primary button on the
+  right keeps its monopoly on the accent color.
+*/
+.filter-pill.active {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+button.filter-pill.active:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.filter-pill-count {
+  font-size: 11px;
+  opacity: 0.7;
+}
+button.filter-pill:hover:not(:disabled) .filter-pill-count,
+.filter-pill.active .filter-pill-count {
+  color: currentColor;
+  opacity: 0.9;
+}
+.example-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.example-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+/* Tag variants — keep the worktree base .example-tag style; these add
+   color-coded variants for mode/platform pills. */
+.example-tag.platform-mobile { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.example-tag.mode-deck { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+
+/* Example preview hover affordance + click-through overlay */
+.example-preview {
+  cursor: zoom-in;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.example-preview:hover {
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(201, 100, 66, 0.10);
+}
+.example-preview:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.example-preview-overlay {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: white;
+  background: rgba(28, 27, 26, 0.78);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+.example-preview:hover .example-preview-overlay,
+.example-preview:focus-visible .example-preview-overlay { opacity: 1; }
+
+/* ============================================================
+   Loading primitives — spinner, skeletons, shimmer
+   ============================================================ */
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.icon-spin { animation: icon-spin 0.9s linear infinite; transform-origin: center; }
+
+.loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.loading-spinner-label { font-size: 12px; }
+
+.skeleton-block,
+.skeleton-shimmer {
+  display: inline-block;
+  background-color: var(--bg-subtle);
+  background-image: linear-gradient(
+    90deg,
+    var(--bg-subtle) 0%,
+    var(--bg-muted) 50%,
+    var(--bg-subtle) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skeleton-block + .skeleton-block { margin-top: 6px; }
+
+.design-card-skeleton { cursor: default; pointer-events: none; }
+.design-card-skeleton .design-card-thumb { background: none; }
+.design-card-skeleton .design-card-thumb::before,
+.design-card-skeleton .design-card-thumb::after { display: none; }
+.design-card-skeleton .design-card-thumb {
+  background-image: linear-gradient(
+    90deg,
+    var(--bg-subtle) 0%,
+    var(--bg-muted) 50%,
+    var(--bg-subtle) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.centered-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 12px;
+  color: var(--text-muted);
+}
+.centered-loader-label { font-size: 12.5px; letter-spacing: 0.01em; }
+
+/* ============================================================
+   Resizable entry sidebar
+   ============================================================ */
+.entry {
+  /* The sidebar width is driven by an inline style fed from local state,
+     with sensible bounds enforced in JS. */
+}
+.entry-side {
+  position: relative;
+  min-width: 280px;
+  max-width: 560px;
+  min-height: 0;
+}
+.entry-side-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  transition: background-color 120ms ease;
+}
+.entry-side-resizer:hover,
+.entry-side-resizer.dragging { background: var(--accent-soft); }
+body.entry-resizing { cursor: col-resize; user-select: none; }
+
+/* ============================================================
+   Composer Import popover (coming-soon menu)
+   ============================================================ */
+.composer-import-wrap { position: relative; }
+.composer-import-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 240px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 30;
+  animation: pop-in 180ms cubic-bezier(0.21, 1.02, 0.73, 1);
+}
+.composer-import-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  font-size: 12.5px;
+  text-align: left;
+  width: 100%;
+}
+.composer-import-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-import-item-enabled {
+  cursor: pointer;
+  color: var(--text);
+}
+.composer-import-item-enabled:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-import-item-label { flex: 1; }
+.composer-import-item-soon {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 2px 6px;
+}
+.composer-import-item .ico {
+  display: inline-flex;
+  width: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   Chat header: conversation history dropdown
+   ============================================================ */
+.chat-history-wrap { position: static; display: inline-flex; align-items: center; }
+.chat-history-wrap .icon-only { position: relative; }
+.chat-history-wrap.open .icon-only { background: var(--bg-subtle); color: var(--text); }
+.chat-history-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  background: var(--accent);
+  color: white;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.chat-history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-height: min(360px, calc(100vh - 160px));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  z-index: 30;
+  overflow: hidden;
+  animation: pop-in 180ms cubic-bezier(0.21, 1.02, 0.73, 1);
+}
+.chat-history-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.chat-history-menu-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.chat-history-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.chat-history-new:hover { background: var(--bg-muted); color: var(--text); }
+.chat-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px 6px;
+  overflow-y: auto;
+}
+.chat-history-empty {
+  padding: 16px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
+}
+.chat-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.chat-conv-item:hover { background: var(--bg-subtle); }
+.chat-conv-item.active {
+  background: var(--accent-tint);
+  border-color: var(--accent-soft);
+  color: var(--text-strong);
+}
+.chat-conv-item-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-conv-item-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.chat-conv-item-del {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+.chat-conv-item:hover .chat-conv-item-del { opacity: 1; }
+.chat-conv-item-del:hover { background: var(--red-bg); color: var(--red); }
+
+/* ============================================================
+   Scroll-to-bottom button (chat)
+   ============================================================ */
+.chat-log-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; }
+.chat-log-wrap .chat-log { flex: 1; }
+.chat-jump-btn {
+  position: absolute;
+  bottom: 12px;
+  /* Margin-based centering (instead of `transform: translateX(-50%)`)
+   * so the slide-in / slide-out transition can animate `transform`
+   * without overwriting a centering translate. */
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  z-index: 6;
+  /* Default = hidden. The slide tucks below and scales down slightly to
+   * read as folding into the composer. Strong ease-out curve
+   * (cubic-bezier(0.23, 1, 0.32, 1)) replaces both built-in `ease` and
+   * the previous slightly-overshoot variant — Emil Kowalski's framework:
+   * UI animations should use strong custom ease-out, and entrance pills
+   * should not bounce. Exit is faster than enter (asymmetric timing):
+   * the user has already chosen to dismiss; system response should be
+   * decisive. */
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    visibility 0s linear 140ms;
+}
+.chat-jump-btn-active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    visibility 0s linear 0s;
+}
+.chat-jump-btn:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
+
+/* ============================================================
+   Assistant message footer (bottom-of-message status pill)
+   ============================================================ */
+.assistant-completion-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+}
+.assistant-footer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  width: fit-content;
+}
+.assistant-footer .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.assistant-footer .dot[data-active="true"] {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.assistant-footer .assistant-label {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 11.5px;
+}
+.assistant-footer .assistant-stats {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.assistant-footer[data-unfinished="true"] {
+  background: var(--amber-bg);
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--border));
+}
+.assistant-footer[data-unfinished="true"] .dot {
+  background: var(--amber);
+}

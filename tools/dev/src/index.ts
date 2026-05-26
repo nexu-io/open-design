@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, open, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 
 import { cac } from "cac";
@@ -16,6 +16,7 @@ import {
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateResult,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc } from "@open-design/sidecar";
@@ -47,9 +48,11 @@ import {
 } from "./config.js";
 import {
   appendStartupLogDiagnostics,
+  createUnsupportedNodeRuntimeError,
   createStartupLogDiagnostics,
   detectLogDiagnostics,
   formatLogDiagnostics,
+  isSupportedNodeRuntime,
   type LogDiagnostic,
 } from "./diagnostics.js";
 import {
@@ -60,6 +63,8 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
+import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
+import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
   expr?: string;
@@ -67,6 +72,7 @@ type CliOptions = ToolDevOptions & {
   path?: string;
   selector?: string;
   timeout?: string;
+  updateAction?: string;
 };
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -93,6 +99,10 @@ function output(payload: unknown, options: CliOptions = {}): void {
     return;
   }
   printJson(payload);
+}
+
+function assertSupportedNodeRuntimeForStart(): void {
+  if (!isSupportedNodeRuntime()) throw createUnsupportedNodeRuntimeError();
 }
 
 function normalizeDisplayUrl(url: string): string {
@@ -402,14 +412,29 @@ async function spawnSidecarRuntime(request: {
   return { pid: spawned.pid };
 }
 
-async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
+async function spawnDaemonRuntime(
+  config: ToolDevConfig,
+  options: CliOptions,
+  spawnOptions: { requireDesktopAuth?: boolean } = {},
+): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
+    await ensureDaemonCliBuild(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
+    if (spawnOptions.requireDesktopAuth) {
+      // PR #974 round-4 P1: when this daemon is being spawned in a
+      // desktop-bundled flow, hand it the env var that pins the
+      // import-folder gate ON from request 0. The daemon-side flag
+      // refuses tokenless imports even before the desktop main
+      // process has finished registering, closing the
+      // daemon-restart-mid-session bypass that the runtime-only
+      // handshake left open.
+      await logHandle.write(`[tools-dev] requiring desktop auth on /api/import/folder\n`);
+    }
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
       config,
@@ -417,6 +442,7 @@ async function spawnDaemonRuntime(config: ToolDevConfig, options: CliOptions): P
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+        ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
       },
       logHandle,
     });
@@ -466,6 +492,44 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
   await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
+  await runLoggedCommand({
+    args: invocation.args,
+    command: invocation.command,
+    cwd: config.workspaceRoot,
+    env: process.env,
+    logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+}
+
+async function latestMtimeMs(filePath: string): Promise<number> {
+  const entry = await lstat(filePath).catch(() => null);
+  if (entry == null) return 0;
+  if (!entry.isDirectory()) return entry.mtimeMs;
+
+  const children = await readdir(filePath, { withFileTypes: true }).catch(() => []);
+  let latest = entry.mtimeMs;
+  for (const child of children) {
+    if (child.name === "node_modules" || child.name === "dist" || child.name === ".tmp") continue;
+    latest = Math.max(latest, await latestMtimeMs(path.join(filePath, child.name)));
+  }
+  return latest;
+}
+
+async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  const daemonRoot = path.join(config.workspaceRoot, "apps/daemon");
+  const distCliPath = path.join(daemonRoot, "dist/cli.js");
+  const distMtime = await latestMtimeMs(distCliPath);
+  const sourceMtime = Math.max(
+    await latestMtimeMs(path.join(daemonRoot, "src")),
+    await latestMtimeMs(path.join(daemonRoot, "package.json")),
+    await latestMtimeMs(path.join(daemonRoot, "tsconfig.json")),
+  );
+  if (distMtime > 0 && distMtime >= sourceMtime) return;
+
+  const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
+  await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -556,18 +620,48 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
   }
 }
 
-async function startDaemon(config: ToolDevConfig, options: CliOptions) {
+async function startDaemon(
+  config: ToolDevConfig,
+  options: CliOptions,
+  startOptions: { refreshWebOrigin?: boolean; requireDesktopAuth?: boolean } = {},
+) {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
-  const existing = await inspectDaemonRuntime(runtimeLookup(config));
+  const webPort = parsePortOption(options.webPort, "--web-port");
+  let existing = await inspectDaemonRuntime(runtimeLookup(config));
+  const shouldRefreshWebOrigin = startOptions.refreshWebOrigin === true && webPort != null;
+  const existingWeb = shouldRefreshWebOrigin
+    ? await inspectWebRuntime(runtimeLookup(config))
+    : null;
+  if (existingWeb?.url != null && !statusMatchesForcedPort(existingWeb.url, webPort)) {
+    throw new Error(`${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existingWeb.url}; stop it or choose another namespace`);
+  }
+  const daemonTrustedWebOriginPort = existing?.trustedWebOriginPort ?? null;
   if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
-    return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
+    if (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort) {
+      if (existingWeb?.url != null) {
+        await stopApp(config, APP_KEYS.WEB);
+      }
+      await stopApp(config, APP_KEYS.DAEMON);
+      existing = null;
+    } else {
+      return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
+    }
   }
   if (existing?.url != null) {
     throw new Error(`${APP_KEYS.DAEMON} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`);
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.DAEMON);
 
-  const spawned = await spawnDaemonRuntime(config, options);
+  // PR #974 round-4 P1: pin the import-auth gate on the daemon when
+  // this spawn is part of a desktop-bundled flow OR a desktop runtime
+  // is already alive (revival case where the daemon died mid-session
+  // and the user is bringing it back up while desktop kept running).
+  // Both branches close the daemon-restart bypass.
+  const desktopAlreadyRunning = await inspectDesktopRuntime(runtimeLookup(config));
+  const requireDesktopAuth =
+    (startOptions.requireDesktopAuth ?? false) || desktopAlreadyRunning != null;
+
+  const spawned = await spawnDaemonRuntime(config, options, { requireDesktopAuth });
   try {
     const status = await waitForDaemonRuntime(runtimeLookup(config));
     return {
@@ -637,13 +731,56 @@ async function startDesktop(config: ToolDevConfig, options: CliOptions) {
   }
 }
 
-async function startApp(config: ToolDevConfig, appName: ToolDevAppName, options: CliOptions) {
+async function startApp(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+  options: CliOptions,
+  context: { targets?: readonly ToolDevAppName[] } = {},
+) {
   switch (appName) {
     case APP_KEYS.DAEMON:
-      return await startDaemon(config, options);
+      return await startDaemon(config, options, {
+        // PR #974 round-4 P1: when daemon is being spawned alongside
+        // desktop in the same orchestrator invocation, pin the import-
+        // auth gate via env var so the daemon refuses tokenless imports
+        // before desktop has had a chance to register. The introspection
+        // case (desktop already running) is handled inside startDaemon.
+        refreshWebOrigin: context.targets?.includes(APP_KEYS.WEB) === true,
+        requireDesktopAuth: context.targets?.includes(APP_KEYS.DESKTOP) === true,
+      });
     case APP_KEYS.WEB:
       return await startWeb(config, options);
     case APP_KEYS.DESKTOP:
+      // PR #974 round 6 (mrcfps): if a daemon is already running but
+      // ungated (split-start dev flow `start daemon` -> `start desktop`),
+      // restart it with the gate armed BEFORE launching desktop main —
+      // see `ensureDaemonGateForDesktop` above for the rationale.
+      await ensureDaemonGateForDesktop({
+        inspectDaemon: () => inspectDaemonRuntime(runtimeLookup(config)),
+        inspectWeb: () => inspectWebRuntime(runtimeLookup(config)),
+        stopApp: async (app) => {
+          await stopApp(config, app);
+        },
+        // Round 7 (lefarcen P2): preserve the running daemon/web ports
+        // across the hardening restart. Without this, a stack started
+        // with `--daemon-port`/`--web-port` would silently drift to
+        // random ports during the restart, breaking pinned browsers.
+        startDaemonGated: async ({ port, webPort }) => {
+          const portedOptions: CliOptions =
+            port != null ? { ...options, daemonPort: port } : { ...options };
+          if (webPort != null) portedOptions.webPort = webPort;
+          await startDaemon(config, portedOptions, {
+            refreshWebOrigin: webPort != null,
+            requireDesktopAuth: true,
+          });
+        },
+        startWeb: async ({ port }) => {
+          const portedOptions: CliOptions =
+            port != null ? { ...options, webPort: port } : options;
+          await startWeb(config, portedOptions);
+        },
+        log: (msg) => process.stderr.write(`${msg}\n`),
+      });
       return await startDesktop(config, options);
   }
 }
@@ -697,7 +834,17 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     const status = await inspectDaemonRuntime(runtimeLookup(config));
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
-    return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies DaemonStatusSnapshot;
+    return {
+      // PR #974 round 6: synthetic snapshot when the IPC is unreachable
+      // — daemon is starting or idle, so the gate is definitionally not
+      // active yet. The desktop-auth-gate helper treats this branch as
+      // "no daemon running" via the null check, but the type contract
+      // still requires the field.
+      desktopAuthGateActive: false,
+      pid: active.rootPids[0] ?? null,
+      state: active.pids.length > 0 ? "starting" : "idle",
+      url: null,
+    } satisfies DaemonStatusSnapshot;
   }
   if (appName === APP_KEYS.WEB) {
     const status = await inspectWebRuntime(runtimeLookup(config));
@@ -732,9 +879,13 @@ async function status(config: ToolDevConfig, appName: string | undefined) {
 async function restartTargets(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const stopTargets = resolveStopApps(appName);
   const startTargets = resolveStartApps(appName);
+  await resolveSharedPortsFromRunningState(startTargets, options, {
+    daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+  });
   return {
     stop: await runSequential(stopTargets, (target) => stopApp(config, target)),
-    start: await runSequential(startTargets, (target) => startApp(config, target, options)),
+    start: await runSequential(startTargets, (target) => startApp(config, target, options, { targets: startTargets })),
   };
 }
 
@@ -834,6 +985,18 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
       );
     case "console":
       return await requestJsonIpc<DesktopConsoleResult>(config.apps.desktop.ipcPath, { type: SIDECAR_MESSAGES.CONSOLE }, { timeoutMs });
+    case "update":
+      if (
+        options.updateAction != null &&
+        !["status", "check", "download", "install"].includes(options.updateAction)
+      ) {
+        throw new Error("--update-action must be status, check, download, or install");
+      }
+      return await requestJsonIpc<DesktopUpdateResult>(
+        config.apps.desktop.ipcPath,
+        { input: { action: options.updateAction ?? "status" }, type: SIDECAR_MESSAGES.UPDATE },
+        { timeoutMs },
+      );
     case "click":
       if (options.selector == null) throw new Error("--selector is required for desktop click");
       return await requestJsonIpc<DesktopClickResult>(
@@ -849,7 +1012,10 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
 async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
   if (appName === APP_KEYS.DAEMON) {
     if (target != null && target !== "status") throw new Error(`unsupported daemon inspect target: ${target}`);
-    return (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle", url: null } satisfies DaemonStatusSnapshot);
+    return (
+      (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ??
+      ({ desktopAuthGateActive: false, state: "idle", url: null } satisfies DaemonStatusSnapshot)
+    );
   }
   if (appName === APP_KEYS.WEB) {
     if (target != null && target !== "status") throw new Error(`unsupported web inspect target: ${target}`);
@@ -873,7 +1039,11 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
 async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
-  const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions));
+  await resolveSharedPortsFromRunningState(targets, foregroundOptions, {
+    daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+  });
+  const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions, { targets }));
   printRunForegroundResult(started, options);
 
   let shuttingDown = false;
@@ -916,15 +1086,21 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
-    const result = await runSequential(targets, (target) => startApp(config, target, options));
+    await resolveSharedPortsFromRunningState(targets, options, {
+      daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+      webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+    });
+    const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
     printStartResult(result, options);
   },
 );
 
 addPortOptions(addSharedOptions(cli.command("run [app]", "Start apps and keep this command alive until interrupted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     await runForeground(resolveToolDevConfig(options), appName, options);
   },
 );
@@ -946,6 +1122,7 @@ addSharedOptions(cli.command("stop [app]", "Stop daemon, web, desktop, or all wh
 
 addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     printRestartResult(await restartTargets(resolveToolDevConfig(options), appName, options), options);
   },
 );
@@ -968,6 +1145,7 @@ addSharedOptions(
   .option("--path <file>", "Output path for desktop screenshot")
   .option("--selector <css>", "CSS selector for desktop click")
   .option("--timeout <seconds>", "Desktop inspect timeout in seconds")
+  .option("--update-action <action>", "Desktop update action: status|check|download|install")
   .action(async (appName: string, target: string | undefined, options: CliOptions) => {
     output(await inspect(resolveToolDevConfig(options), appName, target, options), options);
   });

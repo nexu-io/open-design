@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neutral Modern — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/default. Every visible
+        value comes from tokens.css; if the agent paste-replaces the
+        :root block and reuses the component selectors below verbatim,
+        the artifact passes lint without further audit."
+    />
+
+    <style>
+      /* :root paste — sourced verbatim from
+         design-systems/default/tokens.css. Keep this block in sync
+         when tokens.css changes. The agent prompt instructs the
+         Designer panelist to paste this block as the FIRST thing in
+         their <style>, then reference everything below via var(...). */
+      :root {
+        --bg: #fafafa;
+        --surface: #ffffff;
+        --surface-warm: var(--surface);
+
+        --fg: #111111;
+        --fg-2: var(--fg);
+        --muted: #6b6b6b;
+        --meta: var(--muted);
+
+        --border: #e5e5e5;
+        --border-soft: var(--border);
+
+        --accent: #2f6feb;
+        --accent-on: #ffffff;
+        --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #17a34a;
+        --warn: #eab308;
+        --danger: #dc2626;
+
+        --font-display: "Inter", -apple-system, system-ui, sans-serif;
+        --font-body: "Inter", -apple-system, system-ui, sans-serif;
+        --font-mono: ui-monospace, "JetBrains Mono", monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 20px;
+        --text-xl: 24px;
+        --text-2xl: 32px;
+        --text-3xl: 48px;
+        --text-4xl: 64px;
+
+        --leading-body: 1.5;
+        --leading-tight: 1.2;
+        --tracking-display: -0.01em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --space-20: 80px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 2px 8px
+          color-mix(in oklab, var(--fg), transparent 92%);
+
+        --focus-ring: 0 0 0 3px
+          color-mix(in oklab, var(--accent), transparent 70%);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset (minimal) ───────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section {
+        padding-block: var(--section-y-desktop);
+      }
+      section + section {
+        border-top: 1px solid var(--border);
+      }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ────────────────────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--text-3xl);
+        font-weight: 600;
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-2xl);
+        font-weight: 600;
+        letter-spacing: var(--tracking-display);
+      }
+      h3 {
+        font-size: var(--text-lg);
+        font-weight: 600;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--muted);
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      /* `.eyebrow` is the only component that uses uppercase + tracking.
+         craft/typography.md requires letter-spacing ≥ 0.06em on any
+         uppercase rule; the token below is well above that floor. */
+      .eyebrow {
+        font-size: var(--text-xs);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 500;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ───────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px 16px;
+        border-radius: var(--radius-sm);
+        font-family: inherit;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition:
+          transform var(--motion-fast) var(--ease-standard),
+          background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:active { transform: translateY(1px); }
+      .btn:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+      }
+      .btn-primary:active {
+        background: var(--accent-active);
+      }
+      .btn-secondary {
+        background: transparent;
+        color: var(--fg);
+        border-color: var(--border);
+      }
+      .btn-secondary:hover {
+        background: var(--surface);
+        border-color: color-mix(in oklab, var(--border), var(--fg) 20%);
+      }
+
+      /* ─── Inputs ────────────────────────────────────────────── */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+      }
+      .field input {
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--fg);
+        font-family: inherit;
+        font-size: var(--text-sm);
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input:focus-visible {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+      .field input::placeholder { color: var(--muted); }
+      .field-help {
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+
+      /* ─── Cards ─────────────────────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-5);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      /* No left-border accent on cards — that pattern is in the
+         lint's P0 list (`left-accent-card`). Use a hairline border
+         all-around or rely on the surface contrast against --bg. */
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 2px var(--space-2);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        line-height: 1.6;
+      }
+      .badge-success {
+        color: var(--success);
+        background: color-mix(in oklab, var(--success), transparent 90%);
+      }
+      .badge-muted {
+        color: var(--muted);
+        background: color-mix(in oklab, var(--muted), transparent 88%);
+      }
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      /* ─── Links ─────────────────────────────────────────────── */
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      /* ─── Kbd ───────────────────────────────────────────────── */
+      kbd {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+      }
+
+      /* ─── Section-specific layout ───────────────────────────── */
+      .hero-grid {
+        display: grid;
+        /* Asymmetric hero — left column wider — keeps it from looking
+           like an AI-default centered template. */
+        grid-template-columns: 1.4fr 1fr;
+        gap: var(--space-12);
+        align-items: end;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
+      }
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+      }
+      .hero-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) {
+        .features-grid { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 639px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+      .form-row {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) {
+        .form-row { grid-template-columns: 1fr; }
+      }
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        max-width: 420px;
+      }
+      .form-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-2);
+      }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- ════════════════════════════════════════════════════════════
+           HERO — exercises: h1, .lead, .eyebrow, .btn-primary,
+           .btn-secondary, kbd, .badge-success, container, section,
+           --space-* rhythm. Asymmetric grid on purpose.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · default</p>
+            <h1>One source for the values your team keeps re-deciding.</h1>
+            <p class="lead" style="max-width: 52ch">
+              A starter pack that turns brand decisions into shippable
+              tokens — colors, type, spacing — so every interface
+              inherits the same answer instead of reaching for a default.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                View tokens
+                <svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the spec</a>
+            </div>
+          </div>
+
+          <aside class="hero-meta" aria-label="System status">
+            <div class="row-between">
+              <span class="body-sm">System status</span>
+              <span class="badge badge-success">
+                <span class="badge-dot" aria-hidden="true"></span>
+                Stable
+              </span>
+            </div>
+            <p class="body-sm body-muted">
+              Last reviewed
+              <time datetime="2026-05-11">2026-05-11</time> · v0.1
+            </p>
+            <p class="body-sm body-muted">
+              Press <kbd>⌘</kbd> <kbd>K</kbd> to search tokens.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FEATURES — exercises: h2, h3, .card, .body-muted, link,
+           .features-grid. Each card describes a real property of this
+           fixture (no "feature one/two/three" filler).
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 28ch">
+            Every component below uses only var(--*) — no raw hex, no
+            off-token type.
+          </h2>
+        </div>
+
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card">
+            <h3>Surface tokens</h3>
+            <p class="body-muted body-sm">
+              --bg, --surface, --fg, --muted, --border. The whole page
+              derives from these five names; rebind them for any other
+              brand and the layout follows.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect tokens →</a>
+          </article>
+
+          <article class="card">
+            <h3>Accent discipline</h3>
+            <p class="body-muted body-sm">
+              --accent appears at most twice on this screen — the
+              primary CTA and the focus ring. The hero status uses
+              --success instead, so the page does not feel mono-blue.
+            </p>
+            <a href="./DESIGN.md" class="body-sm">Read the rule →</a>
+          </article>
+
+          <article class="card">
+            <h3>Type rhythm</h3>
+            <p class="body-muted body-sm">
+              Display and body share Inter but differ in size, weight,
+              and tracking. No third type face, no fourth size on this
+              screen.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect typography →</a>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FORM — exercises: .field, input :focus-visible, .btn-primary
+           (reused), .btn-secondary, .field-help.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs inherit the same tokens.</h2>
+            <p class="body-muted" style="max-width: 48ch">
+              Focus rings, borders, placeholder color — all derive from
+              --accent and --border. The submit button reuses
+              .btn-primary unchanged. No new token introduced for this
+              section.
+            </p>
+          </div>
+
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@team.dev"
+                autocomplete="email"
+                required
+              />
+              <p class="field-help">
+                We'll send the spec PDF and nothing else.
+              </p>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                Send the spec
+              </button>
+              <button type="button" class="btn btn-secondary">
+                Skip for now
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

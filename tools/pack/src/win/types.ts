@@ -1,4 +1,4 @@
-import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot } from "@open-design/sidecar-proto";
+import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult } from "@open-design/sidecar-proto";
 import type { CacheReport } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
@@ -51,8 +51,15 @@ export type WinPaths = {
   assembledAppRoot: string;
   assembledMainEntryPath: string;
   assembledPackageJsonPath: string;
+  assembledPrebundledRoot: string;
   blockmapPath: string;
   builtManifestPath: string;
+  daemonCliPrebundleEntrypointPath: string;
+  daemonCliPrebundlePath: string;
+  daemonPrebundleMetaPath: string;
+  daemonPrebundleRoot: string;
+  daemonSidecarPrebundleEntrypointPath: string;
+  daemonSidecarPrebundlePath: string;
   exePath: string;
   installDir: string;
   installedExePath: string;
@@ -65,6 +72,8 @@ export type WinPaths = {
   nsisLogPath: string;
   nsisIncludePath: string;
   packagedConfigPath: string;
+  packagedMainPrebundleMetaPath: string;
+  packagedMainPrebundlePath: string;
   resourceRoot: string;
   setupPath: string;
   startMenuShortcutPath: string;
@@ -75,6 +84,8 @@ export type WinPaths = {
   uninstallerPath: string;
   webStandaloneHookAuditPath: string;
   webStandaloneHookConfigPath: string;
+  webSidecarPrebundleMetaPath: string;
+  webSidecarPrebundlePath: string;
   winIconPath: string;
   unpackedExePath: string;
   unpackedRoot: string;
@@ -144,6 +155,7 @@ export type WinSizeReport = {
     markdownBytes: number;
     nextBytes: number;
     nextSwcBytes: number;
+    prebundledRuntimeBytes: number;
     sharpLibvipsBytes: number;
     sourcemapBytes: number;
     tsbuildInfoBytes: number;
@@ -302,4 +314,5 @@ export type WinInspectResult = {
   eval?: DesktopEvalResult;
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
+  update?: DesktopUpdateResult;
 };

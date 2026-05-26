@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-05-07T00:00:00.000Z",
+  "generatedBy": "agent",
+  "notes": "Template fixture for the Mono Crimson Operations Brief style. data.json holds illustrative figures only — they are not derived from any real account, ERP, or carrier data. Replace with real values before treating refreshes as ground truth.",
+  "sources": [
+    {
+      "label": "Template author input",
+      "type": "user_input"
+    }
+  ]
+}

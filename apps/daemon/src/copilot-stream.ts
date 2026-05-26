@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Parses GitHub Copilot CLI's `--output-format json` JSONL stream into the
  * same UI-friendly events that claude-stream.js emits, so the chat panel
@@ -22,10 +21,17 @@
  *   result                        -> usage
  */
 
-export function createCopilotStreamHandler(onEvent) {
+type StreamEvent = Record<string, unknown>;
+type EventSink = (event: StreamEvent) => void;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function createCopilotStreamHandler(onEvent: EventSink) {
   let buffer = '';
 
-  function feed(chunk) {
+  function feed(chunk: string) {
     buffer += chunk;
     let nl;
     while ((nl = buffer.indexOf('\n')) !== -1) {
@@ -54,9 +60,9 @@ export function createCopilotStreamHandler(onEvent) {
     }
   }
 
-  function handleObject(obj) {
-    if (!obj || typeof obj !== 'object' || typeof obj.type !== 'string') return;
-    const data = obj.data || {};
+  function handleObject(obj: unknown) {
+    if (!isRecord(obj) || typeof obj.type !== 'string') return;
+    const data = isRecord(obj.data) ? obj.data : {};
 
     switch (obj.type) {
       case 'session.tools_updated':
@@ -109,7 +115,7 @@ export function createCopilotStreamHandler(onEvent) {
           usage: obj.usage ?? null,
           stopReason:
             obj.success === true || obj.exitCode === 0 ? 'completed' : 'error',
-          durationMs: obj.usage?.sessionDurationMs ?? null,
+          durationMs: isRecord(obj.usage) ? obj.usage.sessionDurationMs ?? null : null,
         });
         return;
 
@@ -121,9 +127,10 @@ export function createCopilotStreamHandler(onEvent) {
   return { feed, flush };
 }
 
-function stringifyResult(r) {
+function stringifyResult(r: unknown): string {
   if (r == null) return '';
   if (typeof r === 'string') return r;
+  if (!isRecord(r)) return JSON.stringify(r);
   if (typeof r.content === 'string') return r.content;
   if (typeof r.detailedContent === 'string') return r.detailedContent;
   return JSON.stringify(r);

@@ -1,6 +1,15 @@
-# Open Design
+# Open Design — [Claude Design][cd] の公式オープンソース代替
 
-> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
+> **Open Design は [Claude Design][cd] のオープンソース、ローカルファーストな代替です。** Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
+
+> [!IMPORTANT]
+> ### 🔥 `0.8.0-preview` が公開されました。デザインの旧時代は、ここで終わります。
+>
+> Claude Design / Figma のオープンソース代替 —— 2 週間で 40k stars、ここまで来ました。**残りの道のりは、あなたと一緒に進みたい。**
+>
+> **`main` で高速イテレーション中** — 0.8.0 は Open Design の次のフェーズです。PR を投げ、突飛なアイデアを放り込み、バグを報告してください —— あなたが持ち込んだものが、このムーブメントの次の姿になります。
+>
+> → [**告知を読む · インストーラーを入手 · このムーブメントに参加**](https://github.com/nexu-io/open-design/discussions/1727) · 現在の 0.7 と並行してインストールできます。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — ノートパソコン上のエージェントとデザインする" width="100%" />
@@ -22,13 +31,13 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#対応-coding-agent"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
   <a href="#design-system">
-  <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
-  <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
+  <a href="#組み込み-skill"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.ja-JP.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
@@ -44,7 +53,7 @@ Anthropic の [Claude Design][cd]（2026-04-17 リリース、Opus 4.7 搭載）
 
 OD は 4 つのオープンソースプロジェクトの上に立っています：
 
-- [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) — デザイン哲学の羅針盤。Junior-Designer ワークフロー、5 ステップのブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、そしてディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」のアイデア — すべて [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) に蒸留されています。
+- [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) — デザイン哲学の羅針盤。Junior-Designer ワークフロー、5 ステップのブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、そしてディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」のアイデア — すべて [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) に蒸留されています。
 - [**`op7418/guizang-ppt-skill`**（歸藏の雑誌風 PPT Skill）](https://github.com/op7418/guizang-ppt-skill) — Deck モード。[`skills/guizang-ppt/`](skills/guizang-ppt/) 以下にオリジナルのまま同梱、元の LICENSE を保持。雑誌レイアウト、WebGL hero、P0/P1/P2 チェックリスト。
 - [**`OpenCoworkAI/open-codesign`**](https://github.com/OpenCoworkAI/open-codesign) — UX の北極星であり、最も近い同類プロジェクト。初のオープンソース Claude-Design 代替。ストリーミング artifact ループ、サンドボックス iframe プレビュー（React 18 + Babel 同梱）、ライブエージェントパネル（todo + tool calls + 中断可能な生成）、5 種類のエクスポート形式リスト（HTML / PDF / PPTX / ZIP / Markdown）を借用。形態では意図的に分岐しています — 彼らは [`pi-ai`][piai] を同梱するデスクトップ Electron アプリ、私たちは既存の CLI に委任する Web アプリ + ローカル daemon です。
 - [**`multica-ai/multica`**](https://github.com/multica-ai/multica) — Daemon とランタイムのアーキテクチャ。PATH スキャンによるエージェント検出、ローカル daemon を唯一の特権プロセスとする思想、agent-as-teammate の世界観。
@@ -58,7 +67,7 @@ OD は 4 つのオープンソースプロジェクトの上に立っていま�
 | **組み込み Design System** | **72 種** — 2 つの手書きスターター + [`awesome-design-md`][acd2] からインポートした 70 のプロダクトシステム（Linear、Stripe、Vercel、Airbnb、Tesla、Notion、Anthropic、Apple、Cursor、Supabase、Figma、小紅書…） |
 | **組み込み Skill** | **31 個** — `prototype` モード 27 個（web-prototype、saas-landing、dashboard、mobile-app、gamified-app、social-carousel、magazine-poster、dating-web、sprite-animation、motion-frames、critique、tweaks、wireframe-sketch、pm-spec、eng-runbook、finance-report、hr-onboarding、invoice、kanban-board、team-okrs…）+ `deck` モード 4 個（`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`）。ピッカーは `scenario` でグループ化：design / marketing / operation / engineering / product / finance / hr / sale / personal。 |
 | **メディア生成** | 画像 · 動画 · 音声サーフェスがデザインループと並走。**gpt-image-2**（Azure / OpenAI）でポスター・アバター・インフォグラフィック・イラスト都市マップ · **Seedance 2.0**（ByteDance）で 15 秒のシネマティック text-to-video / image-to-video · **HyperFrames**（[heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)）で HTML→MP4 のモーショングラフィック（プロダクトリビール、キネティックタイポグラフィ、データチャート、ソーシャルオーバーレイ、ロゴアウトロ）。**93 件**のすぐ複製できる prompt ギャラリー — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames、すべて [`prompt-templates/`](prompt-templates/) にプレビュー画像と出典付きで配置。Chat の入口はコードと同じ；実体の `.mp4` / `.png` がプロジェクトワークスペースに chip として落ちます。 |
-| **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)） |
+| **ビジュアルディレクション** | 5 つの厳選流派（Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental）— 各々に OKLch パレット + フォントスタック付き（[`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)） |
 | **デバイスフレーム** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — ピクセル単位で正確、Skill 間で共有、[`assets/frames/`](assets/frames/) に集約 |
 | **エージェントランタイム** | ローカル daemon がプロジェクトフォルダ内で CLI を spawn — エージェントは実際のディスク上で `Read` / `Write` / `Bash` / `WebFetch` を使用。各 adapter に Windows `ENAMETOOLONG` フォールバック（stdin / 一時 prompt ファイル）あり |
 | **インポート** | [Claude Design][cd] のエクスポート ZIP をウェルカムダイアログにドロップ — `POST /api/import/claude-design` が実プロジェクトとして展開し、Anthropic の中断箇所からエージェントが編集を続行 |
@@ -254,7 +263,7 @@ DISCOVERY ディレクティブ     （turn-1 フォーム、turn-2 ブランド
   + （deck kind かつ Skill seed なし時） DECK_FRAMEWORK_DIRECTIVE   （nav / counter / scroll / print）
 ```
 
-すべてのレイヤーが組み合わせ可能で、すべてのレイヤーが編集可能なファイルです。実際の契約は [`apps/web/src/prompts/system.ts`](apps/web/src/prompts/system.ts) と [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) で確認できます。
+すべてのレイヤーが組み合わせ可能で、すべてのレイヤーが編集可能なファイルです。実際の契約は [`apps/daemon/src/prompts/system.ts`](apps/daemon/src/prompts/system.ts) と [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) で確認できます。
 
 ## アーキテクチャ
 
@@ -321,6 +330,8 @@ pnpm tools-dev run web
 ```
 
 環境要件：Node `~24`、pnpm `10.33.x`。`nvm` / `fnm` はあくまでオプションのヘルパーです。使用する場合は `pnpm install` の前に `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。
+
+Windows ユーザーはネイティブセットアップパスと小さなダブルクリックランチャーについて [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) を参照してください。
 
 デスクトップ / バックグラウンド起動、固定ポート再起動、メディア生成ディスパッチャの確認（`OD_BIN`、`OD_DAEMON_URL`、`apps/daemon/dist/cli.js`）は [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md) を参照。
 
@@ -491,7 +502,7 @@ open-design/
 | Brutalist | 生々しい、巨大タイプ、シャドウなし、鮮烈なアクセント | Bloomberg Businessweek · Achtung |
 | Soft warm | おおらか、低コントラスト、ピーチ系ニュートラル | Notion マーケティングページ · Apple Health |
 
-完全な仕様 → [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts)。
+完全な仕様 → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)。
 
 ## メディア生成
 
@@ -581,7 +592,7 @@ OD はコードで止まりません。`<artifact>` の HTML を生み出すの�
 
 ## anti-AI-slop 機構
 
-以下の機構はすべて [`huashu-design`](https://github.com/alchaincyf/huashu-design) のプレイブックを OD のプロンプトスタックに移植し、Skill 副ファイルの pre-flight で各 Skill に適用可能にしたものです。実際の文言は [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) を参照：
+以下の機構はすべて [`huashu-design`](https://github.com/alchaincyf/huashu-design) のプレイブックを OD のプロンプトスタックに移植し、Skill 副ファイルの pre-flight で各 Skill に適用可能にしたものです。実際の文言は [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) を参照：
 
 - **まずフォーム。** Turn 1 は `<question-form>` のみ — thinking 禁止、tools 禁止、ナレーション禁止。ユーザーはラジオの速度でデフォルトを選択。
 - **ブランドアセットプロトコル。** ユーザーがスクリーンショットや URL を添付した場合、エージェントは 5 ステップのプロトコル（特定 · ダウンロード · grep hex · `brand-spec.md` 作成 · 復唱）を実行してから CSS を書きます。**記憶からブランドカラーを推測することは絶対にありません。**
@@ -656,7 +667,7 @@ Daemon 起動時に `PATH` から自動検出。設定不要。ストリーミ�
 | プロジェクト | 本リポジトリでの役割 |
 |---|---|
 | [`Claude Design`][cd] | 本リポジトリがオープンソース代替を提供するクローズドソースプロダクト。 |
-| [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) | デザイン哲学のコア。Junior-Designer ワークフロー、5 ステップブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、ディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」ライブラリ — すべて [`apps/web/src/prompts/discovery.ts`](apps/web/src/prompts/discovery.ts) と [`apps/web/src/prompts/directions.ts`](apps/web/src/prompts/directions.ts) に蒸留。 |
+| [**`alchaincyf/huashu-design`**（花叔の画術）](https://github.com/alchaincyf/huashu-design) | デザイン哲学のコア。Junior-Designer ワークフロー、5 ステップブランドアセットプロトコル、anti-AI-slop チェックリスト、五次元セルフ評価、ディレクションピッカーの背後にある「5 流派 × 20 のデザイン哲学」ライブラリ — すべて [`apps/daemon/src/prompts/discovery.ts`](apps/daemon/src/prompts/discovery.ts) と [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts) に蒸留。 |
 | [**`op7418/guizang-ppt-skill`**（歸藏）][guizang] | Magazine-web-PPT Skill を [`skills/guizang-ppt/`](skills/guizang-ppt/) にそのまま同梱、元の LICENSE 保持。Deck モードのデフォルト。P0/P1/P2 チェックリスト文化を他のすべての Skill に波及。 |
 | [**`multica-ai/multica`**](https://github.com/multica-ai/multica) | Daemon + adapter アーキテクチャ。PATH スキャンによるエージェント検出、ローカル daemon を唯一の特権プロセスとする思想、agent-as-teammate の世界観。モデルを採用、コードは vendor せず。 |
 | [**`OpenCoworkAI/open-codesign`**][ocod] | 初のオープンソース Claude-Design 代替、最も近い同類。採用済み UX パターン：ストリーミング artifact ループ、サンドボックス iframe プレビュー（React 18 + Babel 同梱）、ライブエージェントパネル（todo + tool calls + 中断可能）、5 種エクスポート形式リスト（HTML/PDF/PPTX/ZIP/Markdown）、ローカルファーストストレージハブ、`SKILL.md` テイスト注入。ロードマップ上の UX パターン：コメントモード精密編集、AI 出力 tweaks パネル。**[`pi-ai`][piai] は意図的に vendor していません** — open-codesign はそれをエージェントランタイムとして同梱していますが、私たちはユーザーの既存 CLI に委任します。 |
@@ -712,7 +723,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-07" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-24" alt="Open Design コントリビューター" />
 </a>
 
 初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
@@ -729,9 +740,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-07" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-07" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-24" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-24" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-24" />
   </picture>
 </a>
 

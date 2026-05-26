@@ -1,10 +1,12 @@
-// @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import { createQoderStreamHandler } from '../src/qoder-stream.js';
 
-function parseLines(lines) {
-  const events = [];
+type QoderEvent = Record<string, unknown>;
+
+function parseLines(lines: string[]): QoderEvent[] {
+  const events: QoderEvent[] = [];
   const handler = createQoderStreamHandler((event) => events.push(event));
   for (const line of lines) {
     handler.feed(`${line}\n`);
@@ -32,6 +34,26 @@ test('qoder stream parser maps system init to status', () => {
       sessionId: 'session-1',
       qodercliVersion: '0.2.6',
     },
+  ]);
+});
+
+test('qoder stream parser decodes stdout buffer chunks as utf8 JSONL', () => {
+  const events: QoderEvent[] = [];
+  const handler = createQoderStreamHandler((event) => events.push(event));
+
+  handler.feed(
+    Buffer.from(
+      `${JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'Buffered output' }] },
+      })}\n`,
+      'utf8',
+    ),
+  );
+  handler.flush();
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'Buffered output' },
   ]);
 });
 
@@ -213,7 +235,7 @@ test('qoder stream parser forwards unknown and malformed lines as raw events', (
 });
 
 test('qoder stream parser flushes a trailing line without newline', () => {
-  const events = [];
+  const events: QoderEvent[] = [];
   const handler = createQoderStreamHandler((event) => events.push(event));
   handler.feed(
     JSON.stringify({

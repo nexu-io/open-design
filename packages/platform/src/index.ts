@@ -1,8 +1,8 @@
 import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 export type CommandInvocation = {
@@ -59,6 +59,24 @@ export type StopProcessesResult = {
 
 export type HttpWaitOptions = {
   timeoutMs?: number;
+};
+
+export type AtomicCopyFileOptions = {
+  overwrite?: boolean;
+};
+
+export type AtomicCopyFileResult = {
+  bytesCopied: number;
+  replaced: boolean;
+};
+
+export type RemovePathBestEffortOptions = {
+  recursive?: boolean;
+};
+
+export type RemovePathBestEffortResult = {
+  error?: string;
+  removed: boolean;
 };
 
 type WindowsProcessRecord = {
@@ -150,6 +168,72 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function pathContains(root: string, target: string): boolean {
+  const resolvedRoot = resolve(root);
+  const resolvedTarget = resolve(target);
+  const rel = relative(resolvedRoot, resolvedTarget);
+  return rel === "" || (rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function destinationExistsError(destinationPath: string): NodeJS.ErrnoException {
+  const error = new Error(`destination already exists: ${destinationPath}`) as NodeJS.ErrnoException;
+  error.code = "EEXIST";
+  return error;
+}
+
+export async function atomicCopyFile(
+  sourcePath: string,
+  destinationPath: string,
+  options: AtomicCopyFileOptions = {},
+): Promise<AtomicCopyFileResult> {
+  const source = resolve(sourcePath);
+  const destination = resolve(destinationPath);
+  if (source === destination) {
+    const entry = await stat(destination);
+    if (!entry.isFile()) throw new Error(`destination is not a file: ${destination}`);
+    return { bytesCopied: entry.size, replaced: true };
+  }
+
+  const destinationDir = dirname(destination);
+  await mkdir(destinationDir, { recursive: true });
+  const existing = await stat(destination).catch((error: unknown) => {
+    if (errorCode(error) === "ENOENT") return null;
+    throw error;
+  });
+  if (existing != null && options.overwrite !== true) {
+    throw destinationExistsError(destination);
+  }
+
+  const tempPath = join(
+    destinationDir,
+    `.${basename(destination)}.${process.pid}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}.tmp`,
+  );
+  try {
+    await copyFile(source, tempPath);
+    if (options.overwrite === true) {
+      await rm(destination, { force: true });
+    }
+    await rename(tempPath, destination);
+    const copied = await stat(destination);
+    return { bytesCopied: copied.size, replaced: existing != null };
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function removePathBestEffort(
+  path: string,
+  options: RemovePathBestEffortOptions = {},
+): Promise<RemovePathBestEffortResult> {
+  try {
+    await rm(path, { force: true, recursive: options.recursive ?? true });
+    return { removed: true };
+  } catch (error) {
+    return { error: errorMessage(error), removed: false };
+  }
+}
+
 // `cmd.exe /s /c "..."` runs percent-expansion on the inner line *regardless*
 // of whether the `%name%` pair sits inside a `"..."` quoted segment, so a
 // `.cmd` / `.bat` shim spawn with an attacker-influenced argv (e.g. an LLM
@@ -193,6 +277,8 @@ function buildCmdShimInvocation(command: string, args: string[], env: NodeJS.Pro
   };
 }
 
+const nodeLoadablePackageManagerExtensions = new Set([".js", ".cjs", ".mjs"]);
+
 export function createCommandInvocation({ args = [], command, env = process.env }: CommandInvocationRequest): CommandInvocation {
   if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
     return buildCmdShimInvocation(command, args, env);
@@ -202,7 +288,12 @@ export function createCommandInvocation({ args = [], command, env = process.env 
 
 export function createPackageManagerInvocation(args: string[], env: NodeJS.ProcessEnv = process.env): CommandInvocation {
   const execPath = env.npm_execpath;
-  if (execPath) return { args: [execPath, ...args], command: process.execPath };
+  if (execPath) {
+    if (nodeLoadablePackageManagerExtensions.has(extname(execPath).toLowerCase())) {
+      return { args: [execPath, ...args], command: process.execPath };
+    }
+    return createCommandInvocation({ args, command: execPath, env });
+  }
   if (process.platform === "win32") {
     return buildCmdShimInvocation("pnpm", args, env);
   }
@@ -429,6 +520,17 @@ export type WellKnownUserToolchainOptions = {
   env?: NodeJS.ProcessEnv;
 };
 
+function resolveUserScopedHome(raw: string | undefined, home: string): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (value.length === 0) return null;
+  if (value === "~") return home;
+  if (value.startsWith("~/") || value.startsWith("~\\")) {
+    return join(home, value.slice(2));
+  }
+  return isAbsolute(value) ? value : null;
+}
+
 // Single source of truth for "user-level CLI install locations the daemon
 // must search even when launched with a minimal PATH". GUI launchers
 // (macOS .app bundles, Linux .desktop files) typically inherit a stripped
@@ -445,6 +547,14 @@ export function wellKnownUserToolchainBins(
   const includeSystemBins = options.includeSystemBins ?? process.platform !== "win32";
   const env = options.env ?? process.env;
   const dirs: string[] = [];
+  // Vite+ global installs expose CLI shims from VP_HOME/bin (default
+  // ~/.vite-plus/bin). An explicit VP_HOME is the most specific signal for
+  // vp-managed shims, so it wins over other global package-manager prefixes
+  // when a CLI name exists in multiple stores.
+  const vpHome = resolveUserScopedHome(env.VP_HOME, home);
+  if (vpHome) {
+    dirs.push(join(vpHome, "bin"));
+  }
   // The user's *explicit* npm prefix outranks every conventional
   // location below — including `~/.local/bin`. The env var is the
   // user's current npm configuration, so a binary installed via
@@ -469,6 +579,7 @@ export function wellKnownUserToolchainBins(
   }
   dirs.push(
     join(home, ".local", "bin"),
+    join(home, ".vite-plus", "bin"),
     join(home, ".opencode", "bin"),
     join(home, ".bun", "bin"),
     join(home, ".volta", "bin"),
@@ -491,6 +602,7 @@ export function wellKnownUserToolchainBins(
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
   // contribute nothing.
+  dirs.push(...existingMiseNpmPackageBinDirs(join(home, ".local", "share", "mise", "installs")));
   for (const installRoot of [
     {
       root: join(home, ".local", "share", "mise", "installs", "node"),
@@ -504,12 +616,25 @@ export function wellKnownUserToolchainBins(
       root: join(home, ".local", "share", "fnm", "node-versions"),
       segments: ["installation", "bin"],
     },
+    {
+      root: join(home, ".fnm", "node-versions"),
+      segments: ["installation", "bin"],
+    },
   ]) {
     for (const dir of existingChildBinDirs(installRoot.root, installRoot.segments)) {
       dirs.push(dir);
     }
   }
   return dirs;
+}
+
+function existingMiseNpmPackageBinDirs(root: string): string[] {
+  const out: string[] = [];
+  for (const packageName of ["npm-openai-codex"]) {
+    const packageRoot = join(root, packageName);
+    out.push(...existingChildBinDirs(packageRoot, ["bin"]));
+  }
+  return out;
 }
 
 function existingChildBinDirs(root: string, segments: string[]): string[] {
@@ -520,10 +645,38 @@ function existingChildBinDirs(root: string, segments: string[]): string[] {
   } catch {
     return out;
   }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  for (const entry of sortVersionedDirEntries(entries)) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const candidate = join(root, entry.name, ...segments);
     if (existsSync(candidate)) out.push(candidate);
   }
   return out;
+}
+
+type SemverParts = [major: number, minor: number, patch: number];
+
+function sortVersionedDirEntries(entries: import("node:fs").Dirent<string>[]): import("node:fs").Dirent<string>[] {
+  return [...entries].sort((left, right) => compareVersionLikeDirNames(left.name, right.name));
+}
+
+function compareVersionLikeDirNames(left: string, right: string): number {
+  const leftSemver = parseVersionLikeDirName(left);
+  const rightSemver = parseVersionLikeDirName(right);
+  if (leftSemver && rightSemver) {
+    for (let index = 0; index < leftSemver.length; index += 1) {
+      const difference = rightSemver[index] - leftSemver[index];
+      if (difference !== 0) return difference;
+    }
+  } else if (leftSemver) {
+    return -1;
+  } else if (rightSemver) {
+    return 1;
+  }
+  return left.localeCompare(right);
+}
+
+function parseVersionLikeDirName(name: string): SemverParts | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(name);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }

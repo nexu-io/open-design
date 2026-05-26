@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Presentation Template</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600;700&display=swap');
+
+        :root {
+            --coral: #E85D5D;
+            --coral-dark: #D44A4A;
+            --cream: #F5F0E8;
+            --cream-dark: #E8E0D4;
+            --black: #1A1A1A;
+            --gray: #6B6B6B;
+            --light-gray: #B0B0B0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background: var(--black);
+            color: var(--black);
+        }
+
+        .presentation {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+            overflow: hidden;
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Navigation */
+        .nav-dots {
+            position: fixed;
+            right: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .nav-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            border: 2px solid rgba(255,255,255,0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-dot.active {
+            background: var(--coral);
+            border-color: var(--coral);
+        }
+
+        .nav-dot.dark {
+            background: rgba(26,26,26,0.2);
+            border-color: rgba(26,26,26,0.4);
+        }
+
+        .nav-dot.dark.active {
+            background: var(--coral);
+            border-color: var(--coral);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 18px;
+            letter-spacing: 2px;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .slide-counter.dark {
+            color: rgba(26,26,26,0.5);
+        }
+
+        /* Arrow Navigation */
+        .nav-arrows {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 1000;
+            display: flex;
+            gap: 16px;
+        }
+
+        .nav-arrow {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.3);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .nav-arrow:hover {
+            background: var(--coral);
+            border-color: var(--coral);
+        }
+
+        .nav-arrow.dark {
+            background: rgba(26,26,26,0.05);
+            border-color: rgba(26,26,26,0.2);
+            color: var(--black);
+        }
+
+        .nav-arrow.dark:hover {
+            background: var(--coral);
+            border-color: var(--coral);
+            color: white;
+        }
+
+        /* ===== SLIDE 1: TITLE / COVER ===== */
+        .slide-1 {
+            display: grid;
+            grid-template-rows: 32% 68%;
+        }
+
+        .slide-1 .top-section {
+            background: var(--coral);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            padding: clamp(24px, 4vh, 48px) clamp(40px, 8vw, 100px);
+        }
+
+        .slide-1 .zigzag-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .slide-1 .zigzag-layer svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .slide-1 .brand-mark {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            color: var(--black);
+            position: relative;
+            z-index: 2;
+            opacity: 0.7;
+        }
+
+        .slide-1 .bottom-section {
+            background: var(--cream);
+            padding: clamp(28px, 4.5vh, 60px) clamp(40px, 8vw, 100px) clamp(24px, 3.5vh, 44px);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            min-height: 0;
+        }
+
+        .slide-1 .main-title {
+            font-family: 'Bebas Neue', sans-serif;
+            /* Cap by both viewport WIDTH and HEIGHT so the 3-line title
+               can never grow taller than the bottom-section can hold.
+               Without the vh cap the title overflows on short laptops. */
+            font-size: min(120px, 9vw, 13vh);
+            color: var(--black);
+            line-height: 0.9;
+            letter-spacing: 4px;
+        }
+
+        .slide-1 .title-rule {
+            width: 100%;
+            height: 3px;
+            background: var(--black);
+            margin-top: clamp(16px, 2.5vh, 32px);
+            opacity: 0.15;
+        }
+
+        .slide-1 .meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-top: auto;
+            padding-top: clamp(16px, 2.5vh, 32px);
+        }
+
+        .slide-1 .meta-left {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .slide-1 .meta-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .slide-1 .meta-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--gray);
+        }
+
+        .slide-1 .meta-value {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: min(44px, 3.5vw, 5.5vh);
+            color: var(--black);
+            letter-spacing: 2px;
+            line-height: 1;
+        }
+
+        .slide-1 .meta-date {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: min(38px, 3vw, 4.8vh);
+            color: var(--black);
+            letter-spacing: 2px;
+            line-height: 1;
+        }
+
+        /* ===== SLIDE 2: INTRODUCTION ===== */
+        .slide-2 {
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px);
+        }
+
+        .slide-2 .section-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--coral);
+            margin-bottom: 24px;
+        }
+
+        .slide-2 .big-statement {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(42px, 7vw, 100px);
+            color: var(--black);
+            line-height: 1.0;
+            letter-spacing: 2px;
+            max-width: 90%;
+            margin-bottom: 32px;
+        }
+
+        .slide-2 .body-text {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(15px, 1.4vw, 20px);
+            line-height: 1.7;
+            color: var(--gray);
+            max-width: 600px;
+        }
+
+        .slide-2 .accent-line {
+            width: 80px;
+            height: 4px;
+            background: var(--coral);
+            margin-top: auto;
+        }
+
+        /* ===== SLIDE 3: TWO COLUMN ===== */
+        .slide-3 {
+            background: var(--black);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .slide-3 .left-col {
+            background: var(--coral);
+            padding: clamp(40px, 6vh, 80px) clamp(32px, 4vw, 60px);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-3 .left-col::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -30%;
+            width: 80%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 20px,
+                rgba(0,0,0,0.06) 20px,
+                rgba(0,0,0,0.06) 40px
+            );
+        }
+
+        .slide-3 .left-col .number {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(100px, 15vw, 200px);
+            color: rgba(0,0,0,0.12);
+            line-height: 1;
+            position: relative;
+        }
+
+        .slide-3 .left-col .col-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(36px, 5vw, 72px);
+            color: var(--black);
+            line-height: 1;
+            letter-spacing: 2px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .slide-3 .right-col {
+            padding: clamp(40px, 6vh, 80px) clamp(32px, 4vw, 60px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide-3 .right-col .item {
+            margin-bottom: 28px;
+        }
+
+        .slide-3 .right-col .item:last-child {
+            margin-bottom: 0;
+        }
+
+        .slide-3 .right-col .item-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--coral);
+            margin-bottom: 8px;
+        }
+
+        .slide-3 .right-col .item-text {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(14px, 1.2vw, 18px);
+            color: var(--cream);
+            line-height: 1.6;
+        }
+
+        /* ===== SLIDE 4: CHART / DATA ===== */
+        .slide-4 {
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px);
+        }
+
+        .slide-4 .slide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+        }
+
+        .slide-4 .header-left .section-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--coral);
+            margin-bottom: 12px;
+        }
+
+        .slide-4 .header-left .slide-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(40px, 6vw, 80px);
+            color: var(--black);
+            line-height: 1;
+            letter-spacing: 2px;
+        }
+
+        .slide-4 .header-right {
+            text-align: right;
+        }
+
+        .slide-4 .stat-number {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(48px, 7vw, 96px);
+            color: var(--coral);
+            line-height: 1;
+        }
+
+        .slide-4 .stat-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .slide-4 .chart-container {
+            flex: 1;
+            display: flex;
+            gap: 40px;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .slide-4 .chart-wrapper {
+            flex: 2;
+            position: relative;
+            min-height: 0;
+        }
+
+        .slide-4 .chart-wrapper canvas {
+            max-height: 100%;
+        }
+
+        .slide-4 .chart-sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .slide-4 .sidebar-item {
+            background: white;
+            padding: 20px 24px;
+            border-left: 4px solid var(--coral);
+        }
+
+        .slide-4 .sidebar-item .value {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(28px, 3vw, 48px);
+            color: var(--black);
+            line-height: 1;
+        }
+
+        .slide-4 .sidebar-item .label {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+
+        /* ===== SLIDE 5: FULL WIDTH FEATURE ===== */
+        .slide-5 {
+            display: grid;
+            grid-template-rows: 1fr auto;
+            background: var(--black);
+        }
+
+        .slide-5 .visual-area {
+            background: linear-gradient(135deg, var(--coral-dark) 0%, var(--coral) 100%);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide-5 .visual-area .pattern-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.1;
+            background-image: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 60px,
+                var(--black) 60px,
+                var(--black) 62px
+            );
+        }
+
+        .slide-5 .visual-area .center-text {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(80px, 15vw, 200px);
+            color: var(--black);
+            letter-spacing: 12px;
+            position: relative;
+            z-index: 2;
+            text-align: center;
+        }
+
+        .slide-5 .info-bar {
+            background: var(--cream);
+            padding: clamp(24px, 4vh, 40px) clamp(40px, 8vw, 100px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .slide-5 .info-bar .bar-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(28px, 4vw, 56px);
+            color: var(--black);
+            letter-spacing: 2px;
+        }
+
+        .slide-5 .info-bar .bar-meta {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-align: right;
+        }
+
+        /* ===== SLIDE 6: THREE COLUMNS ===== */
+        .slide-6 {
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px);
+        }
+
+        .slide-6 .slide-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(40px, 6vw, 80px);
+            color: var(--black);
+            line-height: 1;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .slide-6 .slide-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            color: var(--gray);
+            letter-spacing: 2px;
+            margin-bottom: 48px;
+        }
+
+        .slide-6 .columns-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+            flex: 1;
+        }
+
+        .slide-6 .column-card {
+            background: white;
+            padding: clamp(24px, 3vh, 40px);
+            border-top: 5px solid var(--coral);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide-6 .column-card .card-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--coral);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 24px;
+            color: white;
+        }
+
+        .slide-6 .column-card .card-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(24px, 2.5vw, 36px);
+            color: var(--black);
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            line-height: 1.1;
+        }
+
+        .slide-6 .column-card .card-text {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(13px, 1.1vw, 16px);
+            color: var(--gray);
+            line-height: 1.6;
+            flex: 1;
+        }
+
+        .slide-6 .column-card .card-stat {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(36px, 4vw, 56px);
+            color: var(--coral);
+            line-height: 1;
+            margin-top: auto;
+            padding-top: 20px;
+        }
+
+        /* ===== SLIDE 7: QUOTE ===== */
+        .slide-7 {
+            background: var(--black);
+            display: grid;
+            grid-template-columns: 40% 60%;
+        }
+
+        .slide-7 .quote-left {
+            background: var(--coral);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-7 .quote-left::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 30px,
+                rgba(0,0,0,0.06) 30px,
+                rgba(0,0,0,0.06) 60px
+            );
+        }
+
+        .slide-7 .quote-left .giant-mark {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(140px, 20vw, 280px);
+            color: var(--black);
+            opacity: 0.35;
+            line-height: 1;
+            position: relative;
+            z-index: 2;
+        }
+
+        .slide-7 .quote-right {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: clamp(40px, 8vh, 100px) clamp(48px, 7vw, 100px);
+        }
+
+        .slide-7 .quote-text {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(20px, 2.5vw, 36px);
+            font-weight: 300;
+            color: var(--cream);
+            line-height: 1.5;
+            font-style: italic;
+            margin-bottom: 40px;
+        }
+
+        .slide-7 .quote-author {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--coral);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .slide-7 .quote-role {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+
+        .slide-7 .quote-accent {
+            width: 60px;
+            height: 4px;
+            background: var(--coral);
+            margin-bottom: 32px;
+        }
+
+        /* ===== SLIDE 8: TIMELINE / DIAGRAM ===== */
+        .slide-8 {
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px);
+        }
+
+        .slide-8 .slide-header {
+            margin-bottom: 48px;
+        }
+
+        .slide-8 .section-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--coral);
+            margin-bottom: 12px;
+        }
+
+        .slide-8 .slide-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(40px, 6vw, 80px);
+            color: var(--black);
+            line-height: 1;
+            letter-spacing: 2px;
+        }
+
+        .slide-8 .timeline-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+
+        .slide-8 .timeline-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--black);
+            transform: translateY(-50%);
+        }
+
+        .slide-8 .timeline-line::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                90deg,
+                var(--black) 0px,
+                var(--black) 20px,
+                transparent 20px,
+                transparent 30px
+            );
+        }
+
+        .slide-8 .timeline-points {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            position: relative;
+            z-index: 2;
+        }
+
+        .slide-8 .t-point {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 18%;
+        }
+
+        .slide-8 .t-point:nth-child(odd) .t-bubble {
+            margin-bottom: 24px;
+            order: 1;
+        }
+
+        .slide-8 .t-point:nth-child(odd) .t-info {
+            order: 2;
+            text-align: center;
+        }
+
+        .slide-8 .t-point:nth-child(even) .t-bubble {
+            margin-top: 24px;
+            order: 2;
+        }
+
+        .slide-8 .t-point:nth-child(even) .t-info {
+            order: 1;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .slide-8 .t-bubble {
+            width: clamp(60px, 8vw, 100px);
+            height: clamp(60px, 8vw, 100px);
+            border-radius: 50%;
+            background: var(--coral);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(20px, 2vw, 32px);
+            color: white;
+            border: 4px solid var(--black);
+            flex-shrink: 0;
+        }
+
+        .slide-8 .t-info .t-phase {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--coral);
+            margin-bottom: 4px;
+        }
+
+        .slide-8 .t-info .t-desc {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(12px, 1vw, 14px);
+            color: var(--gray);
+            line-height: 1.4;
+        }
+
+        /* ===== SLIDE 9: TEAM GRID ===== */
+        .slide-9 {
+            background: var(--black);
+            display: flex;
+            flex-direction: column;
+            padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 100px);
+        }
+
+        .slide-9 .slide-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(40px, 6vw, 80px);
+            color: var(--cream);
+            line-height: 1;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .slide-9 .slide-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            color: var(--gray);
+            letter-spacing: 2px;
+            margin-bottom: 48px;
+        }
+
+        .slide-9 .team-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+            flex: 1;
+        }
+
+        .slide-9 .team-member {
+            background: rgba(245, 240, 232, 0.05);
+            padding: clamp(20px, 2vh, 32px);
+            border: 1px solid rgba(245, 240, 232, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .slide-9 .team-member:hover {
+            background: rgba(232, 93, 93, 0.1);
+            border-color: var(--coral);
+        }
+
+        .slide-9 .member-avatar {
+            width: clamp(60px, 8vw, 100px);
+            height: clamp(60px, 8vw, 100px);
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--coral) 0%, var(--coral-dark) 100%);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(28px, 3vw, 40px);
+            color: white;
+        }
+
+        .slide-9 .member-name {
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--cream);
+            margin-bottom: 4px;
+        }
+
+        .slide-9 .member-role {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            color: var(--gray);
+            letter-spacing: 1px;
+        }
+
+        /* ===== SLIDE 10: CLOSING ===== */
+        .slide-10 {
+            display: grid;
+            grid-template-columns: 55% 45%;
+        }
+
+        .slide-10 .left-panel {
+            background: var(--coral);
+            padding: clamp(40px, 8vh, 100px) clamp(40px, 6vw, 80px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-10 .left-panel .closing-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(48px, 8vw, 120px);
+            color: var(--black);
+            line-height: 0.95;
+            letter-spacing: 4px;
+            margin-bottom: 24px;
+        }
+
+        .slide-10 .left-panel .closing-subtitle {
+            font-family: 'Inter', sans-serif;
+            font-size: clamp(14px, 1.3vw, 20px);
+            color: rgba(0,0,0,0.7);
+            line-height: 1.6;
+            max-width: 400px;
+        }
+
+        .slide-10 .left-panel .zigzag-deco {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            opacity: 0.2;
+        }
+
+        .slide-10 .right-panel {
+            background: var(--cream);
+            padding: clamp(40px, 8vh, 100px) clamp(40px, 6vw, 80px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide-10 .contact-block {
+            margin-bottom: 32px;
+        }
+
+        .slide-10 .contact-block:last-child {
+            margin-bottom: 0;
+        }
+
+        .slide-10 .contact-label {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--gray);
+            margin-bottom: 8px;
+        }
+
+        .slide-10 .contact-value {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(24px, 3vw, 40px);
+            color: var(--black);
+            letter-spacing: 2px;
+            line-height: 1.1;
+        }
+
+        .slide-10 .social-row {
+            display: flex;
+            gap: 16px;
+            margin-top: 40px;
+        }
+
+        .slide-10 .social-icon {
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--black);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--black);
+            transition: all 0.3s ease;
+        }
+
+        .slide-10 .social-icon:hover {
+            background: var(--coral);
+            border-color: var(--coral);
+            color: white;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .slide-3 {
+                grid-template-columns: 1fr;
+                grid-template-rows: 40% 60%;
+            }
+
+            .slide-6 .columns-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .slide-8 .timeline-container {
+                overflow-x: auto;
+            }
+
+            .slide-8 .timeline-points {
+                min-width: 600px;
+            }
+
+            .slide-9 .team-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .slide-10 {
+                grid-template-columns: 1fr;
+                grid-template-rows: 50% 50%;
+            }
+
+            .slide-4 .chart-container {
+                flex-direction: column;
+            }
+
+            .slide-7 {
+                grid-template-columns: 1fr;
+                grid-template-rows: 35% 65%;
+            }
+
+            .slide-7 .quote-left {
+                min-height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <!-- Slide 1: Title / Cover -->
+        <div class="slide slide-1 active">
+            <div class="top-section">
+                <div class="zigzag-layer">
+                    <svg viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid slice">
+                        <polyline points="-50,320 50,120 150,320 250,120 350,320 450,120 550,320 650,120 750,320 850,120 950,320 1050,120 1150,320 1250,120" 
+                                  fill="none" stroke="#1A1A1A" stroke-width="18" stroke-linejoin="miter" stroke-linecap="butt" opacity="0.22"/>
+                        <polyline points="-50,380 50,180 150,380 250,180 350,380 450,180 550,380 650,180 750,380 850,180 950,380 1050,180 1150,380 1250,180" 
+                                  fill="none" stroke="#1A1A1A" stroke-width="12" stroke-linejoin="miter" stroke-linecap="butt" opacity="0.15"/>
+                    </svg>
+                </div>
+                <div class="brand-mark">VENTURE</div>
+            </div>
+            <div class="bottom-section">
+                <div>
+                    <div class="main-title">QUARTERLY<br>STRATEGY<br>SESSION 2026</div>
+                    <div class="title-rule"></div>
+                </div>
+                <div class="meta-row">
+                    <div class="meta-left">
+                        <div class="meta-label">Location</div>
+                        <div class="meta-value">7TH FLOOR</div>
+                    </div>
+                    <div class="meta-right">
+                        <div class="meta-label">May 15 / 09:00 Start</div>
+                        <div class="meta-date">2026</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2: Introduction -->
+        <div class="slide slide-2">
+            <div class="section-label">01 / Overview</div>
+            <div class="big-statement">REDEFINING THE BOUNDARIES OF WHAT IS POSSIBLE</div>
+            <div class="body-text">
+                We bring together diverse perspectives and bold ideas to create meaningful impact. 
+                Our approach combines strategic thinking with creative execution, ensuring every initiative 
+                delivers measurable results and lasting value for our partners and community.
+            </div>
+            <div class="accent-line"></div>
+        </div>
+
+        <!-- Slide 3: Two Column -->
+        <div class="slide slide-3">
+            <div class="left-col">
+                <div class="number">03</div>
+                <div class="col-title">CORE<br>PILLARS</div>
+            </div>
+            <div class="right-col">
+                <div class="item">
+                    <div class="item-label">Innovation</div>
+                    <div class="item-text">Pushing boundaries with cutting-edge solutions and forward-thinking methodologies.</div>
+                </div>
+                <div class="item">
+                    <div class="item-label">Collaboration</div>
+                    <div class="item-text">Building strong partnerships across teams, disciplines, and industries.</div>
+                </div>
+                <div class="item">
+                    <div class="item-label">Execution</div>
+                    <div class="item-text">Delivering results with precision, speed, and uncompromising quality.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Chart / Data -->
+        <div class="slide slide-4">
+            <div class="slide-header">
+                <div class="header-left">
+                    <div class="section-label">02 / Performance</div>
+                    <div class="slide-title">GROWTH METRICS</div>
+                </div>
+                <div class="header-right">
+                    <div class="stat-number">+147%</div>
+                    <div class="stat-label">Year Over Year</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-wrapper">
+                    <canvas id="growthChart"></canvas>
+                </div>
+                <div class="chart-sidebar">
+                    <div class="sidebar-item">
+                        <div class="value">2.4M</div>
+                        <div class="label">Total Reach</div>
+                    </div>
+                    <div class="sidebar-item">
+                        <div class="value">89%</div>
+                        <div class="label">Retention Rate</div>
+                    </div>
+                    <div class="sidebar-item">
+                        <div class="value">156</div>
+                        <div class="label">New Partners</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Full Width Feature -->
+        <div class="slide slide-5">
+            <div class="visual-area">
+                <div class="pattern-overlay"></div>
+                <div class="center-text">IMPACT</div>
+            </div>
+            <div class="info-bar">
+                <div class="bar-title">GLOBAL INITIATIVE 2026</div>
+                <div class="bar-meta">Phase One / Launch Q2<br>12 Cities / 4 Continents</div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Three Columns -->
+        <div class="slide slide-6">
+            <div class="slide-title">KEY OBJECTIVES</div>
+            <div class="slide-subtitle">Strategic priorities for the upcoming fiscal period</div>
+            <div class="columns-grid">
+                <div class="column-card">
+                    <div class="card-icon">A</div>
+                    <div class="card-title">EXPAND REACH</div>
+                    <div class="card-text">Enter new markets and establish presence in emerging territories through targeted campaigns.</div>
+                    <div class="card-stat">24</div>
+                </div>
+                <div class="column-card">
+                    <div class="card-icon">B</div>
+                    <div class="card-title">DEEPEN ENGAGEMENT</div>
+                    <div class="card-text">Strengthen relationships with existing partners through enhanced service offerings.</div>
+                    <div class="card-stat">+45%</div>
+                </div>
+                <div class="column-card">
+                    <div class="card-icon">C</div>
+                    <div class="card-title">OPTIMIZE FLOW</div>
+                    <div class="card-text">Streamline internal processes to improve delivery times and resource allocation.</div>
+                    <div class="card-stat">3.2x</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Quote -->
+        <div class="slide slide-7">
+            <div class="quote-left">
+                <div class="giant-mark">"</div>
+            </div>
+            <div class="quote-right">
+                <div class="quote-accent"></div>
+                <div class="quote-text">The best way to predict the future is to create it with intention, precision, and the courage to challenge convention.</div>
+                <div class="quote-author">Alexandra Chen</div>
+                <div class="quote-role">Chief Strategy Officer</div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Timeline / Diagram -->
+        <div class="slide slide-8">
+            <div class="slide-header">
+                <div class="section-label">03 / Roadmap</div>
+                <div class="slide-title">PROJECT TIMELINE</div>
+            </div>
+            <div class="timeline-container">
+                <div class="timeline-line"></div>
+                <div class="timeline-points">
+                    <div class="t-point">
+                        <div class="t-bubble">Q1</div>
+                        <div class="t-info">
+                            <div class="t-phase">Discovery</div>
+                            <div class="t-desc">Research &amp; planning phase with stakeholder alignment</div>
+                        </div>
+                    </div>
+                    <div class="t-point">
+                        <div class="t-bubble">Q2</div>
+                        <div class="t-info">
+                            <div class="t-phase">Design</div>
+                            <div class="t-desc">Concept development and prototype validation</div>
+                        </div>
+                    </div>
+                    <div class="t-point">
+                        <div class="t-bubble">Q3</div>
+                        <div class="t-info">
+                            <div class="t-phase">Build</div>
+                            <div class="t-desc">Full implementation and iterative refinement</div>
+                        </div>
+                    </div>
+                    <div class="t-point">
+                        <div class="t-bubble">Q4</div>
+                        <div class="t-info">
+                            <div class="t-phase">Launch</div>
+                            <div class="t-desc">Market release and performance monitoring</div>
+                        </div>
+                    </div>
+                    <div class="t-point">
+                        <div class="t-bubble">+</div>
+                        <div class="t-info">
+                            <div class="t-phase">Scale</div>
+                            <div class="t-desc">Expansion and long-term optimization</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Team Grid -->
+        <div class="slide slide-9">
+            <div class="slide-title">LEADERSHIP</div>
+            <div class="slide-subtitle">The people driving our vision forward</div>
+            <div class="team-grid">
+                <div class="team-member">
+                    <div class="member-avatar">JD</div>
+                    <div class="member-name">Jordan Davis</div>
+                    <div class="member-role">Chief Executive</div>
+                </div>
+                <div class="team-member">
+                    <div class="member-avatar">MK</div>
+                    <div class="member-name">Morgan Kim</div>
+                    <div class="member-role">Head of Product</div>
+                </div>
+                <div class="team-member">
+                    <div class="member-avatar">SR</div>
+                    <div class="member-name">Sam Rivera</div>
+                    <div class="member-role">Creative Director</div>
+                </div>
+                <div class="team-member">
+                    <div class="member-avatar">TW</div>
+                    <div class="member-name">Taylor Wong</div>
+                    <div class="member-role">Operations Lead</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Closing -->
+        <div class="slide slide-10">
+            <div class="left-panel">
+                <div class="closing-title">THANK<br>YOU</div>
+                <div class="closing-subtitle">Let's build something extraordinary together. Reach out to start the conversation.</div>
+                <svg class="zigzag-deco" viewBox="0 0 400 60" preserveAspectRatio="none">
+                    <path d="M0,30 L40,10 L80,30 L120,10 L160,30 L200,10 L240,30 L280,10 L320,30 L360,10 L400,30 L400,60 L0,60 Z" fill="black"/>
+                </svg>
+            </div>
+            <div class="right-panel">
+                <div class="contact-block">
+                    <div class="contact-label">Email</div>
+                    <div class="contact-value">HELLO@VENTURE.IO</div>
+                </div>
+                <div class="contact-block">
+                    <div class="contact-label">Phone</div>
+                    <div class="contact-value">+1 (555) 014-2298</div>
+                </div>
+                <div class="contact-block">
+                    <div class="contact-label">Office</div>
+                    <div class="contact-value">SEATTLE, WA</div>
+                </div>
+                <div class="social-row">
+                    <div class="social-icon">LI</div>
+                    <div class="social-icon">TW</div>
+                    <div class="social-icon">IG</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-dots" id="navDots"></div>
+    <div class="slide-counter" id="slideCounter">01 / 10</div>
+    <div class="nav-arrows" id="navArrows">
+        <div class="nav-arrow" id="prevArrow">&#8592;</div>
+        <div class="nav-arrow" id="nextArrow">&#8594;</div>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        let currentSlide = 0;
+
+        const navDotsContainer = document.getElementById('navDots');
+        const slideCounter = document.getElementById('slideCounter');
+        const prevArrow = document.getElementById('prevArrow');
+        const nextArrow = document.getElementById('nextArrow');
+        const navArrows = document.getElementById('navArrows');
+
+        // Create dots
+        slides.forEach((_, index) => {
+            const dot = document.createElement('div');
+            dot.className = 'nav-dot' + (index === 0 ? ' active' : '');
+            dot.addEventListener('click', () => goToSlide(index));
+            navDotsContainer.appendChild(dot);
+        });
+
+        const dots = document.querySelectorAll('.nav-dot');
+
+        function updateNav() {
+            slides.forEach((slide, index) => {
+                slide.classList.toggle('active', index === currentSlide);
+            });
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+            slideCounter.textContent = String(currentSlide + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+
+            // Check if current slide has light background for dark nav elements
+            const currentSlideEl = slides[currentSlide];
+            const isLight = currentSlideEl.classList.contains('slide-2') || 
+                           currentSlideEl.classList.contains('slide-4') || 
+                           currentSlideEl.classList.contains('slide-6') || 
+                           currentSlideEl.classList.contains('slide-8');
+            
+            dots.forEach(d => d.classList.toggle('dark', isLight));
+            slideCounter.classList.toggle('dark', isLight);
+            prevArrow.classList.toggle('dark', isLight);
+            nextArrow.classList.toggle('dark', isLight);
+        }
+
+        function goToSlide(index) {
+            if (index >= 0 && index < totalSlides) {
+                currentSlide = index;
+                updateNav();
+            }
+        }
+
+        function nextSlide() {
+            goToSlide((currentSlide + 1) % totalSlides);
+        }
+
+        function prevSlide() {
+            goToSlide((currentSlide - 1 + totalSlides) % totalSlides);
+        }
+
+        prevArrow.addEventListener('click', prevSlide);
+        nextArrow.addEventListener('click', nextSlide);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        // Chart.js initialization for Slide 4
+        function initChart() {
+            const ctx = document.getElementById('growthChart');
+            if (!ctx) return;
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Revenue (K)',
+                        data: [45, 62, 55, 78, 95, 112],
+                        backgroundColor: '#E85D5D',
+                        borderColor: '#1A1A1A',
+                        borderWidth: 2,
+                        borderRadius: 0,
+                        borderSkipped: false,
+                    }, {
+                        label: 'Target (K)',
+                        data: [50, 58, 65, 72, 85, 100],
+                        backgroundColor: '#1A1A1A',
+                        borderColor: '#1A1A1A',
+                        borderWidth: 2,
+                        borderRadius: 0,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { family: 'Inter', size: 12 },
+                                color: '#6B6B6B',
+                                usePointStyle: true,
+                                pointStyle: 'rect',
+                                padding: 20
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                font: { family: 'Inter', size: 12 },
+                                color: '#6B6B6B'
+                            }
+                        },
+                        y: {
+                            border: { display: false },
+                            grid: {
+                                color: 'rgba(26,26,26,0.08)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: { family: 'Inter', size: 11 },
+                                color: '#B0B0B0',
+                                callback: function(value) { return '$' + value + 'K'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize chart after a short delay to ensure canvas is visible
+        setTimeout(initChart, 300);
+
+        // Initial nav update
+        updateNav();
+    </script>
+</body>
+</html>

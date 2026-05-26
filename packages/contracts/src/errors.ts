@@ -1,4 +1,4 @@
-import type { JsonValue } from './common';
+import type { JsonValue } from './common.js';
 
 export const API_ERROR_CODES = [
   // Generic HTTP/API failures.
@@ -11,13 +11,37 @@ export const API_ERROR_CODES = [
   'UNSUPPORTED_MEDIA_TYPE',
   'VALIDATION_FAILED',
   'AGENT_UNAVAILABLE',
+  'AGENT_AUTH_REQUIRED',
   'AGENT_EXECUTION_FAILED',
   'AGENT_PROMPT_TOO_LARGE',
   'PROJECT_NOT_FOUND',
+  // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
+  // is not in the project, or has no messages to synthesize a handoff from.
+  'CONVERSATION_NOT_FOUND',
+  'EMPTY_TRANSCRIPT',
   'FILE_NOT_FOUND',
   'ARTIFACT_NOT_FOUND',
+  // The agent emitted a new artifact whose body is dramatically smaller than
+  // a prior artifact sharing the same metadata.identifier. Almost always means
+  // the agent shipped a placeholder ("see other-file.html in this project",
+  // a bare filename string, an empty fallback page) instead of the full
+  // document. Configurable via OD_ARTIFACT_STUB_GUARD (reject|warn|off).
+  'ARTIFACT_REGRESSION',
+  // The daemon's publication guard found unresolved template placeholders
+  // (e.g. pitch-deck `Name to confirm` / `$X.XM`) in an HTML/deck artifact
+  // body at write time, so the file cannot be published. The caller should
+  // supply the missing facts and retry rather than republishing the same
+  // body. Returned by `POST /api/projects/:id/files` (and the
+  // `tools live-artifacts create` path) as a 422.
+  'ARTIFACT_PUBLICATION_BLOCKED',
   'UPSTREAM_UNAVAILABLE',
   'RATE_LIMITED',
+  // PR #974 round-4: desktop-paired daemon received an import request
+  // but the desktop main process has not yet registered its HMAC secret
+  // over sidecar IPC (startup race or daemon-restart-mid-session). The
+  // client should retry shortly; the desktop runtime will re-register
+  // on its existing retry schedule.
+  'DESKTOP_AUTH_PENDING',
   // Agent-facing tool endpoint authorization failures.
   'TOOL_TOKEN_MISSING',
   'TOOL_TOKEN_INVALID',

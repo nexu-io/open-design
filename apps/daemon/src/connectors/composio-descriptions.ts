@@ -15,6 +15,8 @@ export interface ComposioToolkitMetadata {
   description: string;
   /** Preferred category tag for the connector card. */
   category: string;
+  /** Snapshot count for first paint before live toolkit metadata loads. */
+  toolCount?: number;
 }
 
 export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> = {
@@ -23,6 +25,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
     description:
       'Browse repositories, read issues and pull requests, inspect commits, and search code across GitHub.',
     category: 'Developer',
+    toolCount: 2,
   },
   GITLAB: {
     description:
@@ -102,6 +105,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
   APIFY_MCP: {
     description: 'Run Apify actors to scrape, crawl, and enrich data for live artifacts.',
     category: 'Automation',
+    toolCount: 8,
   },
   TAVILY_MCP: {
     description: 'Run Tavily web search and extraction for research-grounded artifacts.',
@@ -121,6 +125,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
     description:
       'Search Notion pages and databases, read page content, and pull structured records into artifacts.',
     category: 'Productivity',
+    toolCount: 48,
   },
   GOOGLEDOCS: {
     description: 'Read Google Docs content and comments to source text for live artifacts.',
@@ -143,6 +148,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
   GOOGLEDRIVE: {
     description: 'Search and read files and folders stored in Google Drive.',
     category: 'Storage',
+    toolCount: 2,
   },
   DROPBOX: {
     description: 'Search and read files stored in Dropbox for document-grounded artifacts.',
@@ -522,6 +528,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
   TWITTER: {
     description: 'Read Twitter/X timelines, tweets, users, and searches.',
     category: 'Social',
+    toolCount: 72,
   },
   FACEBOOK: {
     description: 'Read Facebook pages, posts, and insights.',
@@ -602,6 +609,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
   CLOCKIFY: {
     description: 'Read Clockify time entries, projects, and reports.',
     category: 'Time tracking',
+    toolCount: 75,
   },
   HARVEST: {
     description: 'Read Harvest time entries, projects, and invoices.',
@@ -658,6 +666,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
   AIRTABLE: {
     description: 'Query Airtable bases, tables, and records for structured data artifacts.',
     category: 'Database',
+    toolCount: 25,
   },
   CONTENTFUL: {
     description: 'Read Contentful content types, entries, and assets.',
@@ -696,6 +705,7 @@ export const COMPOSIO_TOOLKIT_METADATA: Record<string, ComposioToolkitMetadata> 
   CANVAS: {
     description: 'Read Canvas LMS courses, assignments, and submissions.',
     category: 'Education',
+    toolCount: 574,
   },
   D2LBRIGHTSPACE: {
     description: 'Read D2L Brightspace courses, enrollments, and gradebooks.',

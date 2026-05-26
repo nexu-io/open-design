@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pinterest — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/pinterest. Warm visual-
+        discovery canvas, olive/sand neutrals, Pinterest Red (#e60023) as
+        the single bold accent, Pin Sans across the entire hierarchy,
+        generous 12–28px radii, photography-first masonry layouts."
+    />
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f6f6f3;
+        --surface-warm: #e5e5e0;
+
+        --fg: #211922;
+        --fg-2: #000000;
+        --muted: #62625b;
+        --meta: #91918c;
+
+        --border: #c8c8c1;
+        --border-soft: #e0e0d9;
+
+        --accent: #e60023;
+        --accent-on: #000000;
+        --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #103c25;
+        --warn: #c47700;
+        --danger: #9e0a0a;
+
+        --font-display:
+          "Pin Sans", -apple-system, system-ui, "Segoe UI", Roboto, "Oxygen-Sans",
+          "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Ubuntu, Cantarell,
+          "Fira Sans", "Droid Sans", "Helvetica Neue", Helvetica,
+          "ヒラギノ角ゴ Pro W3", メイリオ, Meiryo, "ＭＳ Ｐゴシック", Arial,
+          sans-serif;
+        --font-body:
+          "Pin Sans", -apple-system, system-ui, "Segoe UI", Roboto, "Oxygen-Sans",
+          "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Ubuntu, Cantarell,
+          "Fira Sans", "Droid Sans", "Helvetica Neue", Helvetica,
+          "ヒラギノ角ゴ Pro W3", メイリオ, Meiryo, "ＭＳ Ｐゴシック", Arial,
+          sans-serif;
+        --font-mono:
+          ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco,
+          Consolas, monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 22px;
+        --text-2xl: 28px;
+        --text-3xl: 44px;
+        --text-4xl: 70px;
+
+        --leading-body: 1.4;
+        --leading-tight: 1.15;
+        --tracking-display: -0.02em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+
+        --radius-sm: 12px;
+        --radius-md: 16px;
+        --radius-lg: 28px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 4px 16px rgba(33, 25, 34, 0.06);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, #435ee5, transparent 70%);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1280px;
+        --container-gutter-desktop: 32px;
+        --container-gutter-tablet: 24px;
+        --container-gutter-phone: 16px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 400;
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border-soft); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — Pin Sans, plum-black, friendly weights ─ */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        color: var(--fg);
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        font-weight: 600;
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-2xl);
+        font-weight: 700;
+        letter-spacing: var(--tracking-display);
+      }
+      h3 {
+        font-size: var(--text-lg);
+        font-weight: 700;
+        line-height: 1.3;
+      }
+      p { margin: 0; }
+      .lede {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--muted);
+      }
+      .body-muted { color: var(--muted); }
+      .body-meta { color: var(--meta); font-size: var(--text-sm); }
+      .body-sm { font-size: var(--text-sm); }
+
+      .eyebrow {
+        font-family: var(--font-display);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .stack-2 > * + * { margin-block-start: var(--space-2); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — 16px radius, generous but never pill ────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        padding: 12px 20px;
+        border: 2px solid transparent;
+        border-radius: var(--radius-md);
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: var(--text-sm);
+        line-height: 1;
+        cursor: pointer;
+        text-decoration: none;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn:active { transform: translateY(1px); }
+
+      /* Primary: Pinterest Red — DESIGN.md §4 carries BLACK text on red */
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+
+      /* Secondary: warm Sand Gray — Pinterest's signature secondary surface */
+      .btn-secondary {
+        background: var(--surface-warm);
+        color: var(--fg-2);
+      }
+      .btn-secondary:hover {
+        background: color-mix(in oklab, var(--surface-warm), black 6%);
+      }
+
+      /* Ghost / transparent — DESIGN.md §4 tertiary action */
+      .btn-ghost {
+        background: transparent;
+        color: var(--fg-2);
+      }
+      .btn-ghost:hover {
+        background: color-mix(in oklab, var(--surface-warm), transparent 50%);
+      }
+
+      /* Circular action — DESIGN.md §4: --radius-pill, warm light bg */
+      .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: none;
+        border-radius: var(--radius-pill);
+        background: var(--border-soft);
+        color: var(--fg);
+        cursor: pointer;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          transform var(--motion-fast) var(--ease-standard);
+      }
+      .btn-icon:hover {
+        background: color-mix(in oklab, var(--border-soft), black 8%);
+      }
+      .btn-icon:active { transform: scale(0.94); }
+      .btn-icon:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-icon svg { width: 18px; height: 18px; }
+
+      /* ─── Inputs — 16px radius, Warm Silver border ──────────── */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .field label {
+        font-family: var(--font-display);
+        font-size: var(--text-sm);
+        font-weight: 700;
+        color: var(--fg);
+      }
+      .field input {
+        padding: 11px 15px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--meta);
+        background: var(--bg);
+        color: var(--fg);
+        font-family: inherit;
+        font-size: var(--text-base);
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus-visible {
+        border-color: var(--fg);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help {
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+
+      /* ─── Cards — Pinterest pin shape, soft warm shadow ─────── */
+      .pin {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        transition:
+          transform var(--motion-base) var(--ease-standard),
+          box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .pin:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--elev-raised);
+      }
+      .pin-photo {
+        position: relative;
+        aspect-ratio: 4 / 5;
+        background: var(--surface-warm);
+        overflow: hidden;
+      }
+      .pin-photo::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            ellipse at 30% 25%,
+            color-mix(in oklab, var(--accent), transparent 70%) 0%,
+            transparent 55%
+          ),
+          linear-gradient(
+            150deg,
+            var(--surface-warm) 0%,
+            var(--border-soft) 45%,
+            var(--surface) 100%
+          );
+      }
+      .pin-photo.alt-2::before {
+        background:
+          radial-gradient(
+            ellipse at 70% 75%,
+            color-mix(in oklab, #103c25, transparent 60%) 0%,
+            transparent 60%
+          ),
+          linear-gradient(
+            210deg,
+            var(--border-soft) 0%,
+            var(--surface-warm) 60%,
+            var(--surface) 100%
+          );
+      }
+      .pin-photo.alt-3::before {
+        background:
+          radial-gradient(
+            ellipse at 50% 35%,
+            color-mix(in oklab, var(--accent), transparent 80%) 0%,
+            transparent 50%
+          ),
+          linear-gradient(
+            330deg,
+            var(--surface) 0%,
+            var(--surface-warm) 45%,
+            var(--border-soft) 100%
+          );
+      }
+      .pin-overlay {
+        position: absolute;
+        top: var(--space-3);
+        right: var(--space-3);
+        z-index: 1;
+      }
+      .pin-badge {
+        position: absolute;
+        bottom: var(--space-3);
+        left: var(--space-3);
+        z-index: 1;
+      }
+      .pin-meta {
+        padding: var(--space-4) var(--space-5) var(--space-5);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .pin-title {
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: 700;
+        color: var(--fg);
+        line-height: 1.3;
+      }
+      .pin-subtitle {
+        font-size: var(--text-sm);
+        color: var(--muted);
+        line-height: var(--leading-body);
+      }
+      .pin-author {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-xs);
+        color: var(--muted);
+        margin-block-start: var(--space-2);
+      }
+      .pin-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: var(--radius-pill);
+        background: var(--border-soft);
+        color: var(--fg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-display);
+        font-size: 10px;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 5px var(--space-3);
+        font-family: var(--font-display);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        line-height: 1.2;
+        border-radius: var(--radius-pill);
+      }
+      .badge-soft {
+        background: hsla(60, 20%, 98%, 0.85);
+        color: var(--fg);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
+      .badge-warm {
+        background: var(--surface-warm);
+        color: var(--fg);
+      }
+      .badge-status {
+        background: color-mix(in oklab, var(--success), transparent 88%);
+        color: var(--success);
+      }
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-pill);
+        background: currentColor;
+      }
+
+      /* ─── Links ────────────────────────────────────────────── */
+      a {
+        color: var(--fg);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        text-decoration-color: var(--border);
+        transition: text-decoration-color var(--motion-fast) var(--ease-standard);
+      }
+      a:hover { text-decoration-color: var(--fg); }
+      a:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+        border-radius: var(--radius-sm);
+      }
+
+      /* ─── Kbd ─────────────────────────────────────────────── */
+      kbd {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 2px 6px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ─── Hero / nav / grids ───────────────────────────────── */
+      .nav-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-block: var(--space-4);
+        gap: var(--space-4);
+      }
+      .nav-logo {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: var(--tracking-display);
+        text-decoration: none;
+      }
+      .nav-logo svg { width: 24px; height: 24px; }
+      .nav-search {
+        flex: 1;
+        max-width: 540px;
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px var(--space-4);
+        background: var(--surface);
+        border-radius: var(--radius-pill);
+        border: 1px solid transparent;
+        transition: border-color var(--motion-fast) var(--ease-standard);
+      }
+      .nav-search:focus-within { border-color: var(--fg); box-shadow: var(--focus-ring); }
+      .nav-search svg { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; }
+      .nav-search input {
+        flex: 1;
+        border: none;
+        background: transparent;
+        outline: none;
+        font: inherit;
+        color: var(--fg);
+        min-width: 0;
+      }
+      .nav-search input::placeholder { color: var(--muted); }
+      .nav-cluster {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
+      }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+      }
+      .hero-aside {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-3);
+        align-content: start;
+      }
+      .hero-aside .pin:nth-child(1) { transform: translateY(0); }
+      .hero-aside .pin:nth-child(2) { transform: translateY(var(--space-8)); }
+
+      .pins-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+        margin-block-start: var(--space-8);
+        align-items: start;
+      }
+      .pins-grid .pin:nth-child(2) { margin-block-start: var(--space-6); }
+      .pins-grid .pin:nth-child(3) { margin-block-start: var(--space-12); }
+      @media (max-width: 1023px) {
+        .pins-grid { grid-template-columns: repeat(2, 1fr); }
+        .pins-grid .pin:nth-child(3) { margin-block-start: 0; }
+      }
+      @media (max-width: 639px) {
+        .pins-grid { grid-template-columns: 1fr; gap: var(--space-4); }
+        .pins-grid .pin:nth-child(2),
+        .pins-grid .pin:nth-child(3) { margin-block-start: 0; }
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) {
+        .form-row { grid-template-columns: 1fr; }
+      }
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        padding: var(--space-6);
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+      }
+      .form-actions {
+        display: flex;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        margin-block-start: var(--space-2);
+      }
+      .form-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+      }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <nav class="nav-row" aria-label="Primary">
+        <a href="#" class="nav-logo" aria-label="Pinterest">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2a10 10 0 0 0-3.6 19.32c-.07-.74-.13-1.86.03-2.66.14-.71 1.06-4.52 1.06-4.52s-.27-.54-.27-1.35c0-1.27.74-2.21 1.66-2.21.78 0 1.16.59 1.16 1.29 0 .79-.5 1.96-.76 3.05-.21.91.46 1.65 1.36 1.65 1.63 0 2.88-1.72 2.88-4.2 0-2.2-1.58-3.74-3.83-3.74-2.61 0-4.14 1.96-4.14 3.98 0 .79.3 1.63.68 2.09.08.09.09.17.06.27-.07.27-.21.85-.24.97-.04.16-.13.19-.29.12-1.1-.51-1.78-2.11-1.78-3.4 0-2.77 2.01-5.31 5.81-5.31 3.05 0 5.42 2.17 5.42 5.08 0 3.03-1.91 5.47-4.57 5.47-.89 0-1.73-.46-2.02-1.01l-.55 2.09c-.2.77-.74 1.73-1.1 2.32A10 10 0 1 0 12 2z" />
+          </svg>
+          Pinterest
+        </a>
+        <label class="nav-search" aria-label="Search Pinterest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <input type="search" placeholder="Search for ideas" />
+        </label>
+        <div class="nav-cluster">
+          <button class="btn-icon" type="button" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2h16z" />
+              <path d="M10 20a2 2 0 0 0 4 0" />
+            </svg>
+          </button>
+          <button class="btn-icon" type="button" aria-label="Messages">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M21 12a8 8 0 1 1-3.3-6.5L21 4l-1.5 3.5A7.9 7.9 0 0 1 21 12z" />
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · pinterest</p>
+            <h1 style="max-width: 14ch">Find the next thing you love.</h1>
+            <p class="lede" style="max-width: 56ch">
+              A warm-canvas token system distilled from Pinterest's 2026 brand —
+              Pin Sans across the entire hierarchy, olive/sand neutrals that
+              feel handcrafted, and Pinterest Red used once per screen as the
+              only confident accent. The masonry below uses the same
+              <code style="font-family: var(--font-mono); font-size: var(--text-sm)">:root</code>
+              block agents paste into every artifact.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Explore tokens
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the brand</a>
+              <button type="button" class="btn btn-ghost">Save for later</button>
+            </div>
+            <div class="form-meta" style="margin-block-start: var(--space-6)">
+              <span class="badge badge-status">
+                <span class="badge-dot" aria-hidden="true"></span>
+                56 tokens passing schema
+              </span>
+              <span class="body-meta">
+                Press <kbd>⌘</kbd> <kbd>K</kbd> to jump to the token grep.
+              </span>
+            </div>
+          </div>
+
+          <aside class="hero-aside" aria-label="Sample pins">
+            <article class="pin">
+              <div class="pin-photo">
+                <button class="btn-icon pin-overlay" type="button"
+                  aria-label="Save this pin"
+                  style="background: var(--accent); color: var(--accent-on)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.25" stroke-linecap="round"
+                    stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+                <span class="badge badge-soft pin-badge">Inspiration</span>
+              </div>
+              <div class="pin-meta">
+                <p class="pin-title">Soft palettes for warm rooms</p>
+                <div class="pin-author">
+                  <span class="pin-avatar" aria-hidden="true">SA</span>
+                  Sand &amp; Olive
+                </div>
+              </div>
+            </article>
+            <article class="pin">
+              <div class="pin-photo alt-2">
+                <button class="btn-icon pin-overlay" type="button" aria-label="More">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="5" cy="12" r="1.4" />
+                    <circle cx="12" cy="12" r="1.4" />
+                    <circle cx="19" cy="12" r="1.4" />
+                  </svg>
+                </button>
+                <span class="badge badge-warm pin-badge">Idea pin</span>
+              </div>
+              <div class="pin-meta">
+                <p class="pin-title">Green hour, plum dusk</p>
+                <div class="pin-author">
+                  <span class="pin-avatar" aria-hidden="true">PL</span>
+                  Plum Studio
+                </div>
+              </div>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What the fixture exercises</p>
+          <h2 style="max-width: 24ch">Three pins, one Pinterest Red, no cool grays.</h2>
+          <p class="body-muted" style="max-width: 58ch">
+            Every visible value resolves through
+            <code style="font-family: var(--font-mono); font-size: var(--text-sm)">var(--*)</code>.
+            The masonry offsets, the warm card surface, the 16px button radius,
+            the plum-tinted whisper shadow on hover — all driven by the same
+            paste block above.
+          </p>
+        </div>
+
+        <div class="pins-grid">
+          <article class="pin">
+            <div class="pin-photo">
+              <button class="btn-icon pin-overlay" type="button"
+                aria-label="Save this pin"
+                style="background: var(--accent); color: var(--accent-on)">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.7A4 4 0 0 1 19 11c0 5.5-7 10-7 10z" />
+                </svg>
+              </button>
+              <span class="badge badge-soft pin-badge">Warmth as a system</span>
+            </div>
+            <div class="pin-meta">
+              <h3>Olive &amp; sand neutrals</h3>
+              <p class="pin-subtitle">
+                Surface, border, and meta colors all lean warm. The page never
+                feels clinical — even the disabled state carries an olive
+                undertone.
+              </p>
+              <div class="pin-author">
+                <span class="pin-avatar" aria-hidden="true">OD</span>
+                <a href="./tokens.css">Inspect the neutrals</a>
+              </div>
+            </div>
+          </article>
+
+          <article class="pin">
+            <div class="pin-photo alt-2">
+              <button class="btn-icon pin-overlay" type="button"
+                aria-label="Save this pin"
+                style="background: var(--accent); color: var(--accent-on)">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.7A4 4 0 0 1 19 11c0 5.5-7 10-7 10z" />
+                </svg>
+              </button>
+              <span class="badge badge-warm pin-badge">Pin Sans, end to end</span>
+            </div>
+            <div class="pin-meta">
+              <h3>One font, twelve to seventy</h3>
+              <p class="pin-subtitle">
+                Pin Sans handles every label — 12px caption, 16px body, 70px
+                hero. No secondary display family, no monospace beyond
+                <kbd>⌘</kbd> hints.
+              </p>
+              <div class="pin-author">
+                <span class="pin-avatar" aria-hidden="true">PS</span>
+                <a href="./DESIGN.md">Read the rule</a>
+              </div>
+            </div>
+          </article>
+
+          <article class="pin">
+            <div class="pin-photo alt-3">
+              <button class="btn-icon pin-overlay" type="button"
+                aria-label="Save this pin"
+                style="background: var(--accent); color: var(--accent-on)">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.7A4 4 0 0 1 19 11c0 5.5-7 10-7 10z" />
+                </svg>
+              </button>
+              <span class="badge badge-soft pin-badge">Generous geometry</span>
+            </div>
+            <div class="pin-meta">
+              <h3>12, 16, 28 — never pill on text</h3>
+              <p class="pin-subtitle">
+                Buttons land at 16px, pin cards at 28px, chips at 12px. Pinterest's
+                soft geometry sits between sharp and pill — friendly, never
+                corporate.
+              </p>
+              <div class="pin-author">
+                <span class="pin-avatar" aria-hidden="true">RA</span>
+                <a href="./tokens.css">Inspect the radii</a>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2 style="max-width: 22ch">Save ideas to your private board.</h2>
+            <p class="body-muted" style="max-width: 52ch">
+              Inputs sit on the white canvas with a 1px Warm Silver edge and
+              the brand's 16px button radius. Focus rings switch to Focus Blue
+              so they survive both the warm secondary surface and the red CTA —
+              an accent-tinted ring would vanish into Pinterest Red.
+            </p>
+            <p class="body-meta">
+              Full reference at <a href="./tokens.css">tokens.css</a> ·
+              brand at <a href="./DESIGN.md">DESIGN.md</a>.
+            </p>
+          </div>
+
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@somewhere.studio"
+                autocomplete="email"
+                required
+              />
+              <p class="field-help">
+                We&rsquo;ll send a single weekly idea digest — never more.
+              </p>
+            </div>
+            <div class="field">
+              <label for="board">Board name</label>
+              <input
+                id="board"
+                type="text"
+                placeholder="Warm rooms, soft light"
+                autocomplete="off"
+              />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Create board</button>
+              <button type="button" class="btn btn-secondary">Add later</button>
+            </div>
+            <div class="form-meta" style="margin-block-start: var(--space-2)">
+              <span class="badge badge-warm">
+                <svg viewBox="0 0 24 24" fill="currentColor"
+                  style="width: 12px; height: 12px" aria-hidden="true">
+                  <path d="M12 2l2.9 6.9 7.1.6-5.4 4.7 1.7 7L12 17l-6.3 4.2 1.7-7L2 9.5l7.1-.6z" />
+                </svg>
+                Private board
+              </span>
+              <span class="body-meta">No one sees this but you.</span>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

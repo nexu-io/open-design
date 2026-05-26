@@ -1,0 +1,85 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-hyperframes-saas-product-promo-30s",
+  "title": "HyperFrames: 30-Second SaaS Product Promo (Linear-style)",
+  "version": "0.1.0",
+  "description": "A 30-second HyperFrames composition modelled on Linear/ClickUp-style product films — UI 3D reveals, beat-synced kinetic typography, animated UI screenshots, end-card with logo outro. Built from HF catalog blocks (ui-3d-reveal, app-showcase, logo-outro) plus shader transitions between scenes.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "HeyGen",
+    "url": "https://x.com/HeyGen/status/2048882211022311614"
+  },
+  "homepage": "https://github.com/heygen-com/hyperframes",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "marketing",
+    "hyperframes",
+    "product-promo",
+    "saas",
+    "linear-style",
+    "kinetic-typography"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png",
+      "video": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a 30-second HyperFrames product promo (1920×1080, 30fps) for a fictional SaaS app. Pull these catalog blocks first: `npx hyperframes add ui-3d-reveal`, `npx hyperframes add app-showcase`, `npx hyperframes add logo-outro`, `npx hyperframes add flash-through-white`, `npx hyperframes add chromatic-radial-split`.\n\nVisual identity: cool slate canvas #0e1116, single electric accent #6cf3c0, off-white text #f5f7fa, secondary indigo #7da4ff used only on UI chrome. Display face: \"General Sans\" 120px; body \"Inter\" 24px; mono \"JetBrains Mono\" 18px on UI bits; tabular-nums on numbers.\n\nFour scenes, each ~7s, separated by shader transitions:\n\nScene 1 (0–7s) HOOK — full-bleed quote-typography. Headline scales in from 0.9 over 0.6s ease expo.out, then a single mono kicker line below appears with a marker-sweep highlight (use the css-patterns marker pattern). Background: subtle grain-overlay block at 8% opacity.\nTransition at 7.0s → flash-through-white, 0.4s.\n\nScene 2 (7.4–14.4s) PROBLEM — three pull-quotes from \"users\" in stacked Reddit-style cards using the `reddit-post` overlay block, staggered 280ms apart, each entering with x:-60→0 + opacity 0→1 ease power3.out 0.5s. Hold for 2s on the third card. Background still grain-overlay; soft #6cf3c0 radial glow at 6% behind the stack.\nTransition at 14.4s → chromatic-radial-split, 0.5s.\n\nScene 3 (14.9–22.0s) SOLUTION — the `app-showcase` block (three floating phones / desktop hybrid) renders the product UI. Use ui-3d-reveal to fly in the central UI panel from z=-400 with a 0.7s ease expo.out, then stagger three feature pills (each \"plan / track / ship\") sliding in from the right over 1.6s. Animate one cursor click on the active pill at 19.5s.\nTransition at 22.0s → flash-through-white, 0.3s.\n\nScene 4 (22.3–30s) END-CARD — `logo-outro` block: piece-by-piece wordmark assembly with bloom glow over 1.4s, then a single CTA line \"try it · 14-day free\" fades in at 25.5s, then hold. Final 1s of grain-overlay continues for texture.\n\nNon-negotiables: all timelines `paused: true` registered to window.__timelines; entrance-only animations (no opacity-to-0 exits — transitions handle the cuts); root data-composition-id, data-width=1920, data-height=1080, data-duration=30; min font-size 60px on every headline; tabular-nums on any digit row. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 10` before render. Output: `saas-product-promo-30s.mp4`.",
+        "zh-CN": "使用这个插件完成以下任务：Build a 30-second HyperFrames product promo (1920×1080, 30fps) for a fictional SaaS app. Pull these catalog blocks first: `npx hyperframes add ui-3d-reveal`, `npx hyperframes add app-showcase`, `npx hyperframes add logo-outro`, `npx hyperframes add flash-through-white`, `npx hyperframes add chromatic-radial-split`.\n\nVisual identity: cool slate canvas #0e1116, single electric accent #6cf3c0, off-white text #f5f7fa, secondary indigo #7da4ff used only on UI chrome. Display face: \"General Sans\" 120px; body \"Inter\" 24px; mono \"JetBrains Mono\" 18px on UI bits; tabular-nums on numbers.\n\nFour scenes, each ~7s, separated by shader transitions:\n\nScene 1 (0–7s) HOOK — full-bleed quote-typography. Headline scales in from 0.9 over 0.6s ease expo.out, then a single mono kicker line below appears with a marker-sweep highlight (use the css-patterns marker pattern). Background: subtle grain-overlay block at 8% opacity.\nTransition at 7.0s → flash-through-white, 0.4s.\n\nScene 2 (7.4–14.4s) PROBLEM — three pull-quotes from \"users\" in stacked Reddit-style cards using the `reddit-post` overlay block, staggered 280ms apart, each entering with x:-60→0 + opacity 0→1 ease power3.out 0.5s. Hold for 2s on the third card. Background still grain-overlay; soft #6cf3c0 radial glow at 6% behind the stack.\nTransition at 14.4s → chromatic-radial-split, 0.5s.\n\nScene 3 (14.9–22.0s) SOLUTION — the `app-showcase` block (three floating phones / desktop hybrid) renders the product UI. Use ui-3d-reveal to fly in the central UI panel from z=-400 with a 0.7s ease expo.out, then stagger three feature pills (each \"plan / track / ship\") sliding in from the right over 1.6s. Animate one cursor click on the active pill at 19.5s.\nTransition at 22.0s → flash-through-white, 0.3s.\n\nScene 4 (22.3–30s) END-CARD — `logo-outro` block: piece-by-piece wordmark assembly with bloom glow over 1.4s, then a single CTA line \"try it · 14-day free\" fades in at 25.5s, then hold. Final 1s of grain-overlay continues for texture.\n\nNon-negotiables: all timelines `paused: true` registered to window.__timelines; entrance-only animations (no opacity-to-0 exits — transitions handle the cuts); root data-composition-id, data-width=1920, data-height=1080, data-duration=30; min font-size 60px on every headline; tabular-nums on any digit row. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 10` before render. Output: `saas-product-promo-30s.mp4`."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "hyperframes-html"
+        ],
+        "default": "hyperframes-html"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

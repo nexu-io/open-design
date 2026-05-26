@@ -1,5 +1,5 @@
-// @ts-nocheck
 import assert from 'node:assert/strict';
+import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,8 @@ import {
   closeDatabase,
   insertConversation,
   insertProject,
+  getConversation,
+  listConversations,
   listLatestProjectRunStatuses,
   listProjectsAwaitingInput,
   openDatabase,
@@ -16,7 +18,7 @@ import {
 } from '../src/db.js';
 import { composeProjectDisplayStatus } from '../src/server.js';
 
-const tempDirs = [];
+const tempDirs: string[] = [];
 
 afterEach(() => {
   closeDatabase();
@@ -25,13 +27,13 @@ afterEach(() => {
   }
 });
 
-function createDb() {
+function createDb(): Database.Database {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-status-'));
   tempDirs.push(dir);
   return openDatabase(dir, { dataDir: path.join(dir, '.od') });
 }
 
-function seedProject(db, projectId, runStatus = 'succeeded') {
+function seedProject(db: Database.Database, projectId: string, runStatus = 'succeeded') {
   insertProject(db, {
     id: projectId,
     name: projectId,
@@ -56,7 +58,13 @@ function seedProject(db, projectId, runStatus = 'succeeded') {
   return `${projectId}-conversation`;
 }
 
-function addMessage(db, conversationId, id, role, content) {
+function addMessage(
+  db: Database.Database,
+  conversationId: string,
+  id: string,
+  role: 'user' | 'assistant',
+  content: string,
+) {
   upsertMessage(db, conversationId, { id, role, content });
 }
 
@@ -97,6 +105,81 @@ test('plain text question does not mark awaiting input', () => {
   addMessage(db, conversationId, 'assistant-question', 'assistant', 'Can you clarify the color palette?');
 
   assert.equal(listProjectsAwaitingInput(db).has('project-d'), false);
+});
+
+test('conversation latest run follows assistant message position', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-latest', 'succeeded');
+
+  upsertMessage(db, conversationId, {
+    id: 'project-latest-running',
+    role: 'assistant',
+    content: 'working',
+    runId: 'project-latest-running-id',
+    runStatus: 'running',
+    startedAt: 20,
+  });
+
+  assert.equal(listConversations(db, 'project-latest')[0]?.latestRun?.status, 'running');
+  assert.equal(getConversation(db, conversationId)?.latestRun?.status, 'running');
+});
+
+test('conversation listing batches latest run summaries for large projects', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-large',
+    name: 'project-large',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  for (let i = 0; i < 125; i += 1) {
+    const conversationId = `project-large-conversation-${i}`;
+    insertConversation(db, {
+      id: conversationId,
+      projectId: 'project-large',
+      title: `Conversation ${i}`,
+      createdAt: i,
+      updatedAt: i,
+    });
+    upsertMessage(db, conversationId, {
+      id: `${conversationId}-older`,
+      role: 'assistant',
+      content: 'done',
+      runId: `${conversationId}-older-run`,
+      runStatus: 'succeeded',
+      startedAt: 10,
+      endedAt: 20,
+    });
+    upsertMessage(db, conversationId, {
+      id: `${conversationId}-latest`,
+      role: 'assistant',
+      content: 'failed',
+      runId: `${conversationId}-latest-run`,
+      runStatus: 'failed',
+      startedAt: 100,
+      endedAt: 175,
+    });
+  }
+
+  const preparedSql: string[] = [];
+  const instrumentedDb = new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === 'prepare') {
+        return (sql: string) => {
+          preparedSql.push(sql);
+          return target.prepare(sql);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as Database.Database;
+
+  const conversations = listConversations(instrumentedDb, 'project-large');
+
+  assert.equal(conversations.length, 125);
+  assert.equal(preparedSql.length, 1);
+  assert.equal(conversations[0]?.latestRun?.status, 'failed');
+  assert.equal(conversations[0]?.latestRun?.durationMs, 75);
 });
 
 test('only succeeded statuses are overridden by awaiting input', () => {

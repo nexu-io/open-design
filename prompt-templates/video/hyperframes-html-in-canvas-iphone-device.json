@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-html-in-canvas-iphone-device",
+  "surface": "video",
+  "title": "HyperFrames HTML-in-Canvas: 3D iPhone + MacBook Product Demo",
+  "summary": "A 15-second product demo where a real GLTF iPhone 15 Pro Max and MacBook Pro float on a clean stage with the actual app UI rendering live on their screens via drawElementImage. Morphing glass lens flare + 360° turntable. Built on the vfx-iphone-device catalog block.",
+  "category": "VFX / HTML-in-Canvas",
+  "tags": ["hyperframes", "html-in-canvas", "3d", "iphone", "macbook", "product-demo"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 15-second HyperFrames composition (1920×1080, 30fps) titled \"device-product-demo\". Pull the catalog block first: `npx hyperframes add vfx-iphone-device`. The block ships the iPhone and MacBook GLTFs plus screen-content placeholders.\n\nVisual identity: ultra-clean studio canvas with a vertical gradient #f7f8fb → #eaecf2, single primary brand color the user supplies (default #4f46e5), muted ink #0f172a for type. Display face: \"Söhne Halbfett\" 96px for the headline; body \"Inter Tight\" 28px (for video sizing); mono \"JetBrains Mono\" 20px on UI bits. Subtle floor-shadow blob beneath each device.\n\nReplace the block's two screen placeholders with the user's actual product surfaces:\n• `mobile-screen` — a `<canvas layoutsubtree width=\"1170\" height=\"2532\">` containing the real iOS app UI as DOM (status bar, large title, primary list, bottom tab bar). Use real semantic HTML and CSS so the captured texture is pixel-perfect.\n• `desktop-screen` — a `<canvas layoutsubtree width=\"2880\" height=\"1800\">` containing the macOS app UI (sidebar, main pane, command palette overlay).\n\nTimeline (paused: true, registered window.__timelines.main, data-duration=15):\n\n0.0–4.5s ENTRY — both devices fly in: iPhone from camera-left (x:-600, rotateY:35°→0°, scale 0.85→1.0, ease expo.out 1.1s), MacBook from camera-right with a 0.25s stagger (x:+800, rotateY:-28°→0°, ease expo.out 1.2s). Headline \"Your work. Anywhere.\" types in via `gsap.from(\".headline\", { y: 60, opacity: 0, duration: 0.7, ease: 'power3.out' }, 1.0)`. Subhead at 1.6s.\n\n4.5–10.5s TURNTABLE — both devices rotate slowly +18° on Y in lock-step (ease sine.inOut). Re-blit `drawElementImage` every frame so the captured screen content stays sharp under the moving normal map. Add the morphing glass-lens flare overlay (block-supplied) sweeping camera-left to camera-right between 6.0s–9.5s. At 7.5s, animate one in-app interaction inside `mobile-screen` (a list item slides in, then a checkmark scales 0→1) — the texture re-capture picks this up automatically.\n\n10.5–15.0s OUTRO — devices ease back to neutral (rotateY 0°, x 0). Headline morphs to a single CTA line \"download today\" with marker-sweep highlight using `references/css-patterns.md`. Final 0.6s holds the hero frame — no opacity-to-0 exits.\n\nFeature detection: gracefully fall back to flat 2D screenshots on browsers without `drawElementImage`. The renderer enables the flag automatically; Studio preview without it must not be black.\n\nNon-negotiables: GLTF assets stay at the block's default paths (`models/iphone.glb`, `models/macbook.glb`); only swap the screen DOM content, not the model URIs. Deterministic — no Math.random / Date.now, no `repeat: -1`. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 10 --at 1,3,5,7.5,10,13` before render. Output: `device-product-demo.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-iphone-device.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-iphone-device.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/blocks/vfx-iphone-device"
+  }
+}

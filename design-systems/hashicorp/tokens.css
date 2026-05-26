@@ -1,0 +1,272 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/hashicorp/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by HashiCorp" —
+ * enterprise infrastructure-as-code made tangible: a dramatic near-black
+ * canvas, engineering-grade typography, whisper-level shadows, and one
+ * functional blue accent reserved for actionable signals.
+ *
+ * Brand identity in three sentences:
+ *   1. Dark-mode-native canvas (#15181e Dark Charcoal → #0d0e12 Near Black).
+ *      DESIGN.md §1 names these as the "dramatic dark-mode for hero areas
+ *      and product showcases" — we bind --bg/--surface to the iconic
+ *      pair because HashiCorp's brand-defining surfaces are dark.
+ *   2. HashiCorp Sans for headings (600–700 weight, kern enabled, 1.17
+ *      line-height at 82px display); system-ui for body, navigation, and
+ *      functional text. The brand font carries the weight; system-ui
+ *      carries the words.
+ *   3. Action Blue (#1060ff) as the lone functional accent on dark; the
+ *      multi-product palette (Terraform purple, Vault yellow, Waypoint
+ *      teal, Vagrant blue) lives in DESIGN.md §2 as product-scoped
+ *      colors and intentionally does NOT bind here — DESIGN.md §7 forbids
+ *      "product brand colors outside their product context".
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match HashiCorp's voice rather than the cross-brand default):
+ *
+ *   1. --bg is #15181e (Dark Charcoal), not white. DESIGN.md describes
+ *      the brand's "dual mode" — clean white informational sections AND
+ *      dramatic dark hero/product areas — but the dark surfaces are the
+ *      identity-defining ones; that is where HashiCorp Sans at 82px,
+ *      the multi-product accent colors, and the whisper shadows all
+ *      do their work. Binding --bg to the dark canvas honors the
+ *      iconic look and matches the "dark-friendly enterprise UI"
+ *      identity called out in the brand interpretation.
+ *
+ *   2. --fg ramp is independently bound across all four tiers
+ *      (Near White #efeff1 → Mid Gray #d5d7db → Cool Gray #b2b6bd →
+ *      Dark Gray #656a76). DESIGN.md §2 lists each as a named role —
+ *      "Primary text on dark / Button text on dark / Border accents /
+ *      Helper text" — and the brand genuinely walks the full ramp.
+ *      Collapsing --fg-2 or --muted to siblings would flatten the
+ *      ladder that gives HashiCorp content its enterprise density.
+ *
+ *   3. --border is rgba(178, 182, 189, 0.4) — the literal alpha used
+ *      on DESIGN.md §4's "Primary Dark" button border. Binding
+ *      --border to the alpha (not a solid hex) lets `--elev-ring`
+ *      reproduce the cool-gray hairline and lets components reach the
+ *      same value via `border: 1px solid var(--border)`.
+ *      --border-soft drops to 0.15 alpha for inner separators that
+ *      should not visually compete with the button edge.
+ *
+ *   4. --accent is Action Blue (#1060ff), NOT a product brand color.
+ *      DESIGN.md §2 explicitly classifies Terraform purple / Vault
+ *      yellow / Waypoint teal as product-scoped tokens; the corporate
+ *      brand's functional CTA color on dark is #1060ff. --accent-hover
+ *      LIFTS to #2b89ff (DESIGN.md "Bright Blue — Active links, hover
+ *      accent") instead of darkening — the schema's default black-mix
+ *      formula would lose contrast on the dark canvas. --accent-active
+ *      then darkens via the standard formula for the press state.
+ *
+ *   5. --warn is #bb5a00 (DESIGN.md Amber-200), not the schema default
+ *      #eab308. The brighter yellow would clash with HashiCorp's
+ *      muted enterprise palette and read as "Vault product color"
+ *      rather than "warning state". The burnt-amber sits warm but
+ *      restrained on the dark canvas.
+ *
+ *   6. --font-display loads HashiCorp Sans (the custom brand face
+ *      called out throughout DESIGN.md) with a substantive fallback
+ *      stack; --font-body uses system-ui per DESIGN.md §3's brand/
+ *      system split ("HashiCorp Sans for headings only (17px+),
+ *      system-ui for everything else"). Mixing the two is the
+ *      structural rule — never set body copy in HashiCorp Sans.
+ *
+ *   7. Type scale tops at 82px (--text-4xl) with 1.17 line-height
+ *      (--leading-tight). DESIGN.md §3 lists 82px / 52px / 42px / 34px
+ *      / 26px as the documented HashiCorp Sans tiers; the 8 schema
+ *      slots map onto five of those plus body sizes 20/16/14/13.
+ *      --tracking-display is `normal` because DESIGN.md §3 explicitly
+ *      sets the 82px hero to letter-spacing `normal` — the brand
+ *      relies on kerning, not tracking, for its monolithic feel.
+ *
+ *   8. --leading-body is 1.63 (DESIGN.md's relaxed 1.63–1.69 body
+ *      range) — generous reading rhythm BELOW the tight 1.17 headings
+ *      is the brand's "weight at the top of each section" rule.
+ *      --leading-tight is 1.17, the documented display line-height.
+ *
+ *   9. --radius scale is tight: 5px / 8px / 8px / 5px. DESIGN.md §5
+ *      caps radius at 8px ("nothing pill-shaped or circular") and
+ *      uses 5px for primary buttons, badges, and inputs. We bind
+ *      --radius-lg to the same 8px ceiling (HashiCorp does not have
+ *      a third tier above cards) and --radius-pill to 5px, matching
+ *      DESIGN.md §4's "Badges / Pills — Radius: 5px". The brand's
+ *      "no true pill" rule is structural, not stylistic.
+ *
+ *  10. --elev-raised is the whisper-shadow VERBATIM from DESIGN.md §6
+ *      Level 1: dual-layer at 5% opacity on a cool-gray base. The
+ *      doc says it explicitly: "If you can see the shadow, it's too
+ *      strong." We must not strengthen this in component CSS —
+ *      enterprise stability is communicated through restraint.
+ *
+ *  11. --focus-ring is 3px solid var(--accent) (sharp ring, no halo),
+ *      per DESIGN.md §6 ("Focus (Level 2) — 3px solid"). Sharp focus
+ *      is the engineered alternative to the schema's 3px alpha glow.
+ *
+ *  12. --section-y-desktop is 80px (DESIGN.md §5 "Enterprise breathing
+ *      room: Generous vertical spacing between sections (48px–80px+)").
+ *      --container-max is 1150px exactly — DESIGN.md §5 names ~1150px
+ *      as the documented xl breakpoint and max content width.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the schema. The HashiCorp Sans face is referenced by
+ * name only — the stack lists OS fallbacks so artifacts render
+ * acceptably even when the brand font is not loaded.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — dark-mode canvas) ───────────────────────
+   * DESIGN.md §1 names #15181e and #0d0e12 as the two dark-mode
+   * surfaces. --surface-warm aliases --surface because the brand is
+   * famously achromatic on dark — depth comes from luminance steps
+   * and whisper shadows, not from warm-tinting one surface against
+   * another. (DESIGN.md §7: "Don't use pure black (#000000) for dark
+   * backgrounds — use #15181e or #0d0e12.") */
+  --bg: #15181e;                       /* Dark Charcoal — hero canvas */
+  --surface: #0d0e12;                  /* Near Black — cards, inputs */
+  --surface-warm: var(--surface);      /* alias — no warm tier on dark */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * Near White → Mid Gray → Cool Gray → Dark Gray. All four are named
+   * in DESIGN.md §2 with distinct roles, so we bind each independently
+   * (no aliasing). #efeff1 instead of #ffffff matters — pure white
+   * against #15181e reads as harsh; the slight warmth keeps the
+   * enterprise tone from feeling clinical. */
+  --fg: #efeff1;                       /* Near White — primary text on dark */
+  --fg-2: #d5d7db;                     /* Mid Gray — body description, button text */
+  --muted: #b2b6bd;                    /* Cool Gray — captions, tertiary text */
+  --meta: #656a76;                     /* Dark Gray — helper text, disabled */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * DESIGN.md §4 names rgba(178, 182, 189, 0.4) as the primary dark
+   * button border — we lift that exact alpha into --border so
+   * --elev-ring and `border: 1px solid var(--border)` both reproduce
+   * the documented hairline. --border-soft drops to 0.15 for inner
+   * row separators that must not compete with the card edge. */
+  --border: rgba(178, 182, 189, 0.4);  /* Cool Gray @ 0.4 — primary button edge */
+  --border-soft: rgba(178, 182, 189, 0.15); /* inner separator — barely-there */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Action Blue — the corporate brand's single functional CTA color
+   * on dark. Hard cap of ≤2 visible uses per screen aligns with
+   * DESIGN.md §7's restraint: the multi-product palette (Terraform
+   * purple, Vault yellow) is product-scoped and intentionally does
+   * NOT bind here. Hover LIFTS to Bright Blue rather than darkening
+   * (the schema default would lose contrast on dark). */
+  --accent: #1060ff;                   /* Action Blue — primary CTA on dark */
+  --accent-on: #ffffff;                /* white label on saturated blue */
+  --accent-hover: #2b89ff;             /* Bright Blue — DESIGN.md §2 active links */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * --warn overrides to DESIGN.md §2 Amber #bb5a00 (the schema's
+   * #eab308 would read as "Vault product color" on a HashiCorp
+   * surface). --success and --danger inherit the schema defaults —
+   * DESIGN.md does not define a brand-specific success color, and
+   * #731e25 (DESIGN.md's documented red) is a deep error-background
+   * tone, not the foreground signal a --danger token needs. */
+  --success: #16a34a;
+  --warn: #bb5a00;                     /* DESIGN.md Amber-200 — warning states */
+  --danger: #dc2626;
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Brand/system split per DESIGN.md §3. HashiCorp Sans is the
+   * heading face; system-ui handles body, navigation, and functional
+   * text. The fallback chains let artifacts render acceptably when
+   * the custom face is not loaded. */
+  --font-display: "HashiCorp Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 Hierarchy table. The 8 schema slots
+   * map the HashiCorp Sans display tiers (82/52/42/26) plus the
+   * documented body/caption sizes (20/16/14/13). Sub-heading 34px
+   * and small-title 19px live inline in components when needed. */
+  --text-xs: 13px;                     /* caption / uppercase label */
+  --text-sm: 14px;                     /* small body */
+  --text-base: 16px;                   /* body / nav / button text */
+  --text-lg: 20px;                     /* body large / hero description */
+  --text-xl: 26px;                     /* card title */
+  --text-2xl: 42px;                    /* feature heading */
+  --text-3xl: 52px;                    /* section heading */
+  --text-4xl: 82px;                    /* display hero — "infrastructure-grade" */
+
+  /* DESIGN.md §3: tight headings (1.17–1.21) over relaxed body
+   * (1.50–1.69). We sit at the documented endpoints — 1.17 hero,
+   * 1.63 body. --tracking-display is `normal` because DESIGN.md §3
+   * lists the 82px hero at letter-spacing `normal` (kerning is on
+   * via font-feature-settings, not tracking). */
+  --leading-body: 1.63;
+  --leading-tight: 1.17;
+  --tracking-display: normal;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 8px base unit (DESIGN.md §5). The 4/8/12/16/20/24/32/48 tier
+   * covers structural rhythm; sub-tier increments (2/3/6/7/9/11)
+   * live per-component because they are too fine for the shared
+   * schema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 "Enterprise breathing room
+   * (48–80px+)". 80px desktop sits at the documented top end;
+   * we collapse to 56px on tablet and 40px on phone. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 56px;
+  --section-y-phone: 40px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 caps radius at 8px and uses 5px for buttons/inputs/
+   * badges. --radius-lg sits at the 8px ceiling (no third tier
+   * exists in the brand). --radius-pill binds to 5px because
+   * DESIGN.md §4 explicitly says "Badges / Pills — Radius: 5px" —
+   * HashiCorp does not have a true 9999px pill shape; the no-pill
+   * rule is structural. */
+  --radius-sm: 5px;                    /* DESIGN.md "Comfortable" — buttons, inputs */
+  --radius-md: 8px;                    /* DESIGN.md "Card" — cards, containers */
+  --radius-lg: 8px;                    /* same 8px ceiling — no third tier */
+  --radius-pill: 5px;                  /* DESIGN.md §4 — no true pills, 5px chips */
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * Whisper shadows VERBATIM from DESIGN.md §6 Level 1: dual-layer
+   * at 5% opacity on a cool-gray (97, 104, 117) base. The doc is
+   * emphatic: "If you can see the shadow, it's too strong." Never
+   * strengthen these values in component overrides. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(97, 104, 117, 0.05) 0px 1px 1px,
+    rgba(97, 104, 117, 0.05) 0px 2px 2px;
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * DESIGN.md §6 Level 2: "3px solid var(--mds-color-focus-action-
+   * external)". Sharp 3px ring at --accent, not the schema's alpha
+   * glow — HashiCorp's focus is engineered, not atmospheric. */
+  --focus-ring: 0 0 0 3px var(--accent);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Standard durations — HashiCorp's enterprise tone leans on type
+   * and shadow restraint, not motion choreography. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1150px max content width per DESIGN.md §5 ("Max content width:
+   * ~1150px (xl breakpoint)"). Gutters narrow on mobile to preserve
+   * the line-length-as-craft feel. */
+  --container-max: 1150px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

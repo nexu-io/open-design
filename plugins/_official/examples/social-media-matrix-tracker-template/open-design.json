@@ -1,0 +1,94 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-social-media-matrix-tracker-template",
+  "title": "Social Media Matrix Tracker Template",
+  "version": "0.1.0",
+  "description": "社媒矩阵数据追踪面板模板（Social Media Matrix Tracker）。\nUse when users ask for a cinematic, data-dense social media analytics dashboard\nwith multi-platform metrics, interactive charts, hover insights, range compare,\nand dark/light theme switching in a single HTML artifact.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-media-matrix-tracker-template",
+  "tags": [
+    "example",
+    "first-party",
+    "template",
+    "live-artifacts",
+    "web",
+    "desktop",
+    "social-media-matrix-tracker",
+    "social-media-dashboard-template",
+    "creator-analytics-template",
+    "live-social-dashboard",
+    "social-analytics",
+    "content-performance",
+    "tiktok-analytics-dashboard",
+    "instagram-analytics-dashboard",
+    "youtube-analytics-dashboard",
+    "multi-platform-creator-dashboard",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "template",
+    "platform": "desktop",
+    "scenario": "live-artifacts",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a social media matrix tracker dashboard template using my DESIGN.md. Keep the cinematic glassmorphism style, multi-chart analytics sections, hover tooltips, pin/drag range analysis, and light/dark switching.",
+        "zh-CN": "使用这个插件完成以下任务：Create a social media matrix tracker dashboard template using my DESIGN.md. Keep the cinematic glassmorphism style, multi-chart analytics sections, hover tooltips, pin/drag range analysis, and light/dark switching."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Social Media Matrix Tracker Template"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

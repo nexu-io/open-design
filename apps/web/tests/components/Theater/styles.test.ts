@@ -1,0 +1,15 @@
+import { describe, expect, it } from 'vitest';
+import { readExpandedIndexCss } from '../../helpers/read-expanded-css';
+
+describe('Critique Theater styles', () => {
+  it('keeps the Theater UI selectors in the global stylesheet', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain('.theater-stage');
+    expect(css).toContain('.theater-lane');
+    expect(css).toContain('.theater-score-ticker');
+    expect(css).toContain('.theater-interrupt');
+    expect(css).toContain('.theater-transcript');
+    expect(css.indexOf('.theater-stage')).toBeLessThan(css.indexOf('.assistant-feedback-wrap'));
+  });
+});

@@ -187,10 +187,29 @@ describe('runOrchestrator - happy path', () => {
     const transcriptFile = join(artifactDir, result.transcriptPath!);
     expect(existsSync(transcriptFile)).toBe(true);
 
+    // Phase 6.2 artifact persistence: the SHIP <ARTIFACT> body lands on
+    // disk, the row carries an absolute path to it, and the file contains
+    // the exact bytes the agent shipped (CDATA wrapper stripped).
+    expect(result.artifactPath).toBeTruthy();
+    expect(row?.artifactPath).toBe(result.artifactPath);
+    expect(existsSync(result.artifactPath!)).toBe(true);
+    expect(result.artifactPath!.endsWith('artifact.html')).toBe(true);
+    expect(readFileSync(result.artifactPath!, 'utf8')).toBe('<html><body>final</body></html>');
+
     // SSE events emitted: should include run_started and ship.
     const eventNames = events.map((e) => e.event);
     expect(eventNames).toContain('critique.run_started');
     expect(eventNames).toContain('critique.ship');
+
+    // SSE ship payload must NOT carry the artifact body or the mime,
+    // those travel only through the parser side-channel and the on-disk
+    // file. Broadcasting megabytes of HTML to every SSE subscriber would
+    // ruin the bus.
+    const shipEvent = events.find((e) => e.event === 'critique.ship');
+    expect(shipEvent).toBeTruthy();
+    const shipData = shipEvent?.data as Record<string, unknown>;
+    expect(shipData['body']).toBeUndefined();
+    expect(shipData['mime']).toBeUndefined();
   });
 
   it('SSE events are emitted in source order', async () => {
@@ -215,6 +234,57 @@ describe('runOrchestrator - happy path', () => {
     const shipIdx = names.lastIndexOf('critique.ship');
     expect(runStartedIdx).toBe(0);
     expect(shipIdx).toBeGreaterThan(runStartedIdx);
+  });
+
+  // Regression: lefarcen P1 on PR #1085. SSE clients react to
+  // critique.ship by fetching the artifact endpoint, so the file must
+  // exist on disk AND the row must already have artifactPath populated
+  // by the time critique.ship goes out, otherwise a fast client races
+  // the writer and gets a 404 against a row that is about to gain its
+  // path on the next finalize call.
+  it('does not emit critique.ship until the artifact is on disk and the row has artifactPath', async () => {
+    const events: CritiqueSseEvent[] = [];
+    const observations: Array<{
+      artifactPathOnRow: string | null;
+      fileExistsOnDisk: boolean;
+    }> = [];
+    const artifactDir = join(tmpDir, 'run-ordering');
+    const bus: CritiqueSseBus = {
+      emit: (e) => {
+        events.push(e);
+        if (e.event === 'critique.ship') {
+          // Snapshot the row + filesystem AT THE MOMENT the ship event
+          // fires. Any client subscribed to the SSE bus would observe
+          // exactly this state when it reacts to the event.
+          const row = getCritiqueRun(db, 'r-order-race');
+          observations.push({
+            artifactPathOnRow: row?.artifactPath ?? null,
+            fileExistsOnDisk:
+              row?.artifactPath != null ? existsSync(row.artifactPath) : false,
+          });
+        }
+      },
+    };
+
+    await runOrchestrator({
+      runId: 'r-order-race',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir,
+      adapter: 'claude',
+      cfg: defaultCritiqueConfig(),
+      db,
+      bus,
+      stdout: streamOf(happyStream3Rounds()),
+    });
+
+    // Exactly one critique.ship event was observed and at that instant
+    // the row already carried artifactPath and the file already
+    // existed on disk.
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.artifactPathOnRow).toBeTruthy();
+    expect(observations[0]?.fileExistsOnDisk).toBe(true);
   });
 });
 

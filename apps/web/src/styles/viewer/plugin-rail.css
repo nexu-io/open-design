@@ -1,0 +1,432 @@
+/* ==================================================================
+   Plugin detail — premium chrome
+   ------------------------------------------------------------------
+   Shared visual language for the four detail variants:
+   - Smooth scale-in entry (used by every detail backdrop + modal)
+   - Trust-tinted byline strip (PluginByline) reused across surfaces
+   - Share popover (PluginShareMenu) reused across surfaces
+   - Cinematic media detail layout
+   The goal: detail modals feel like curated content viewers users
+   want to share, not like internal admin inspectors.
+   ================================================================== */
+
+@keyframes plugin-detail-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes plugin-detail-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.plugin-details-modal-backdrop,
+.ds-modal-backdrop,
+.prompt-template-modal-backdrop {
+  animation: plugin-detail-fade 160ms ease-out;
+}
+.plugin-details-modal,
+.ds-modal,
+.prompt-template-modal {
+  animation: plugin-detail-rise 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.plugin-details-modal__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* PluginShareMenu — popover trigger that doubles as a regular ghost
+   pill in the PreviewModal action row, or a softer brand chip when
+   it stands alone next to the close button on a detail modal. */
+.plugin-share-menu {
+  position: relative;
+  display: inline-flex;
+}
+.plugin-share-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease,
+    border-color 120ms ease;
+}
+.plugin-share-trigger--solo {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.plugin-share-trigger--solo:hover,
+.plugin-share-trigger--solo[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plugin-share-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 220px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: plugin-detail-rise 140ms ease-out;
+}
+.plugin-share-popover__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plugin-share-popover__divider {
+  height: 1px;
+  margin: 4px 4px;
+  background: var(--border);
+  opacity: 0.6;
+}
+.plugin-share-item {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+.plugin-share-item:hover,
+.plugin-share-item:focus-visible {
+  background: var(--bg-subtle);
+  outline: none;
+}
+
+/* PluginByline — author avatar + name + trust tier + version chip,
+   shared by media + scenario variants, lives just under the modal
+   title bar. The compact variant collapses the secondary link row
+   when used inside dark/gradient headers. */
+.plugin-byline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.plugin-byline--compact {
+  padding: 8px 16px;
+  border-bottom: none;
+  background: transparent;
+}
+.plugin-byline__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  overflow: hidden;
+  object-fit: cover;
+}
+.plugin-byline__avatar--fallback {
+  background: linear-gradient(
+    135deg,
+    var(--accent-tint) 0%,
+    var(--bg-subtle) 100%
+  );
+  color: var(--accent);
+}
+.plugin-byline__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.plugin-byline__primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugin-byline__by {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  text-transform: lowercase;
+}
+.plugin-byline__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-byline__version {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.plugin-byline__secondary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plugin-byline__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+.plugin-byline__link:hover {
+  color: var(--accent);
+}
+
+/* Plugins section composite — wraps InlinePluginsRail + ContextChipStrip +
+   PluginInputsForm. Mounted above ChatComposer (strip variant). The
+   NewProjectPanel mount has been removed: that flow now binds the
+   default scenario plugin transparently at create time, so the wide
+   variant has no remaining host. */
+.plugins-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plugins-section__active {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+/* Strip rail — single-row horizontal scroller, intended for the
+   ChatComposer mount where vertical space is precious. Cards collapse
+   to compact pills (title only). */
+.inline-plugins-rail--strip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding: 2px 0 6px;
+  max-height: 44px;
+}
+.inline-plugins-rail--strip::-webkit-scrollbar {
+  height: 6px;
+}
+.inline-plugins-rail--strip::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.inline-plugins-rail--strip .inline-plugins-rail__card {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.inline-plugins-rail--strip .inline-plugins-rail__card:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.inline-plugins-rail--strip .inline-plugins-rail__card:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.inline-plugins-rail--strip .inline-plugins-rail__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+/* Description + trust are hidden inside the strip rail — they live
+   in the marketplace detail page. Keeping the strip compact is the
+   only way the chat history stays visible. */
+.inline-plugins-rail--strip .inline-plugins-rail__desc,
+.inline-plugins-rail--strip .inline-plugins-rail__trust {
+  display: none;
+}
+
+.inline-plugins-rail__error {
+  flex: 0 0 100%;
+  font-size: 11.5px;
+  color: var(--danger, #c33);
+}
+
+/* Context chip strip — small pill list of typed context items the
+   active plugin contributed. Sits inside `.plugins-section__active`. */
+.context-chip-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: center;
+}
+.context-chip-strip__empty {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.context-chip-strip__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 0;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text);
+  max-width: 240px;
+}
+/* Per-kind accent stripe — keeps the chip recognisable at a glance
+   without leaning on color-only differentiation (the icon does most
+   of the work). Uses border-left for skill, design-system, etc. */
+.context-chip-strip__chip[data-kind='skill'] {
+  border-left: 3px solid var(--accent, #6e7bff);
+}
+.context-chip-strip__chip[data-kind='design-system'] {
+  border-left: 3px solid #d6a648;
+}
+.context-chip-strip__chip[data-kind='craft'] {
+  border-left: 3px solid #6dbf6d;
+}
+.context-chip-strip__chip[data-kind='asset'] {
+  border-left: 3px solid #8a8a8a;
+}
+.context-chip-strip__chip[data-kind='mcp'] {
+  border-left: 3px solid #c47bd9;
+}
+.context-chip-strip__chip[data-kind='claude-plugin'] {
+  border-left: 3px solid #d97757;
+}
+.context-chip-strip__chip[data-kind='atom'] {
+  border-left: 3px solid #5fb8d1;
+}
+.context-chip-strip__chip[data-kind='plugin'] {
+  border-left: 3px solid var(--accent, #6e7bff);
+}
+.context-chip-strip__body {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  text-align: left;
+  border-radius: 999px;
+  min-width: 0;
+}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body {
+  cursor: pointer;
+}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+.context-chip-strip__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body:hover
+  .context-chip-strip__icon {
+  color: var(--accent, var(--text));
+}
+.context-chip-strip__kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.context-chip-strip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-chip-strip__remove {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.context-chip-strip__remove:hover {
+  color: var(--text);
+}
+
+/* Plugin inputs form — appears when the active plugin declares
+   `od.inputs[]`. Compact stacked label/input pairs. */
+.plugin-inputs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plugin-inputs-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.plugin-inputs-form__label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.plugin-inputs-form__required {
+  color: var(--danger, #c33);
+  margin-left: 2px;
+}
+.plugin-inputs-form__input {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+}
+.plugin-inputs-form__input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+.plugin-inputs-form__input--textarea {
+  min-height: 56px;
+  resize: vertical;
+}
+

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-finance-report",
+  "title": "Finance Report",
+  "version": "0.1.0",
+  "description": "Quarterly / monthly financial report — masthead with KPIs, revenue and\nburn charts, P&L summary table, top-line highlights, and an outlook\nparagraph. Use when the brief mentions \"financial report\", \"Q3 report\",\n\"MRR review\", \"P&L\", or \"财报\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/finance-report",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "finance",
+    "web",
+    "desktop",
+    "financial-report",
+    "finance-report",
+    "quarterly-report",
+    "p-l",
+    "mrr-review",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "finance",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build me a Q3 financial report for an early-stage SaaS — MRR, burn, gross margin, top accounts.",
+        "zh-CN": "使用这个插件完成以下任务：Build me a Q3 financial report for an early-stage SaaS — MRR, burn, gross margin, top accounts."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Finance Report"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "rtl-and-bidi"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

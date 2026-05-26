@@ -2,9 +2,13 @@ export const PRODUCT_NAME = "Open Design";
 
 export const INTERNAL_PACKAGES = [
   { directory: "packages/contracts", name: "@open-design/contracts" },
+  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
   { directory: "packages/platform", name: "@open-design/platform" },
+  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
+  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -15,6 +19,9 @@ export const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 export const WEB_STANDALONE_HOOK_CONFIG_ENV = "OD_TOOLS_PACK_WEB_STANDALONE_HOOK_CONFIG";
 export const WEB_STANDALONE_RESOURCE_NAME = "open-design-web-standalone";
 export const ELECTRON_BUILDER_ASAR = false;
+export const ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE = false;
+export const ELECTRON_REBUILD_MODE = "sequential" as const;
+export const ELECTRON_REBUILD_NATIVE_MODULES = ["better-sqlite3"] as const;
 export const ELECTRON_BUILDER_FILE_PATTERNS = [
   "**/*",
   "!**/node_modules/.bin",
@@ -49,4 +56,3 @@ export const MAC_ELECTRON_LANGUAGES = [
   "uk",
   "tr",
 ] as const;
-

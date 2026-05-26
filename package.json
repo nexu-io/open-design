@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.5.0",
+  "version": "0.8.0",
   "private": true,
   "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215",
   "type": "module",
@@ -18,30 +18,48 @@
     "dev:daemon": "pnpm -C apps/daemon dev",
     "dev:list": "echo 'Per-app dev scripts (cheap on CPU — pick what you need):' && echo '  pnpm dev          # full orchestrator (all apps + watchers — heavy)' && echo '  pnpm dev:web      # Next.js web app only' && echo '  pnpm dev:landing  # Astro landing page only' && echo '  pnpm dev:daemon   # gRPC daemon only' && echo '' && echo 'Note: apps/desktop and apps/packaged are build-only — they have no dev script.'",
     "tools-pack": "pnpm exec tools-pack",
-    "guard": "tsx ./scripts/guard.ts",
+    "tools-serve": "pnpm exec tools-serve",
+    "nix:update-hash": "tsx ./scripts/update-nix-pnpm-deps-hash.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/approve-fork-pr-workflows.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
+    "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
     "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
     "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
-    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
+    "seed:curated-design-skills": "node --experimental-strip-types scripts/seed-curated-design-skills.ts",
+    "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
-    "@types/node": "^20.17.10",
-    "tsx": "4.21.0",
-    "typescript": "^5.6.3"
+    "@open-design/tools-serve": "workspace:*",
+    "@types/node": "20.19.39",
+    "tsx": "4.22.3",
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": "~24",
     "pnpm": ">=10.33.2"
   },
   "pnpm": {
+    "overrides": {
+      "brace-expansion": "5.0.6",
+      "devalue": "5.8.1",
+      "fast-uri": "3.1.2",
+      "hono": "4.12.19",
+      "ip-address": "10.2.0",
+      "postcss": "8.5.15",
+      "protobufjs": "8.4.0",
+      "qs": "6.15.2",
+      "yaml": "2.9.0"
+    },
     "onlyBuiltDependencies": [
       "better-sqlite3",
+      "core-js",
       "electron",
       "electron-winstaller",
       "esbuild",
+      "protobufjs",
       "sharp"
     ]
   },

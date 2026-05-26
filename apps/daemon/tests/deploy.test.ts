@@ -25,6 +25,7 @@ import {
   extractInlineCssReferences,
   injectDeployHookScript,
   isVercelProtectedResponse,
+  listCloudflarePagesZones,
   normalizeDeployHookScriptUrl,
   prepareDeployPreflight,
   publicDeployConfig,
@@ -39,6 +40,7 @@ import {
   writeCloudflarePagesConfig,
   writeVercelConfig,
 } from '../src/deploy.js';
+import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
 import { ensureProject } from '../src/projects.js';
 
 async function setupProject() {
@@ -51,6 +53,7 @@ async function setupProject() {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  closeDatabase();
 });
 
 describe('deploy config', () => {
@@ -153,6 +156,43 @@ describe('deploy config', () => {
         accountId: 'account_456',
         projectName: '',
       });
+
+      const withDomainHints = await writeCloudflarePagesConfig({
+        token: SAVED_CLOUDFLARE_TOKEN_MASK,
+        accountId: 'account_456',
+        cloudflarePages: {
+          lastZoneId: 'zone-1',
+          lastZoneName: 'example.com',
+          lastDomainPrefix: 'demo',
+        },
+      });
+      expect((withDomainHints as any).cloudflarePages).toEqual({
+        lastZoneId: 'zone-1',
+        lastZoneName: 'example.com',
+        lastDomainPrefix: 'demo',
+      });
+
+      const withoutDomainPrefix = await writeCloudflarePagesConfig({
+        token: SAVED_CLOUDFLARE_TOKEN_MASK,
+        accountId: 'account_456',
+        cloudflarePages: {
+          lastZoneId: 'zone-1',
+          lastZoneName: 'example.com',
+        },
+      });
+      expect((withoutDomainPrefix as any).cloudflarePages).toEqual({
+        lastZoneId: 'zone-1',
+        lastZoneName: 'example.com',
+      });
+      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toMatchObject({
+        cloudflarePages: {
+          lastZoneId: 'zone-1',
+          lastZoneName: 'example.com',
+        },
+      });
+      expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8')).cloudflarePages).not.toHaveProperty(
+        'lastDomainPrefix',
+      );
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
@@ -812,6 +852,192 @@ describe('deploy plan and analyzer', () => {
 });
 
 describe('cloudflare pages deploys', () => {
+  function customDomainRequestInfo(input: string | URL | Request, init?: RequestInit) {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+    const method =
+      init?.method || (input instanceof Request ? input.method : 'GET');
+    return { url, method };
+  }
+
+  function createCustomDomainDeployMock(options: {
+    dnsRecords?: Array<Record<string, unknown>>;
+    dnsRecordsAfterDuplicate?: Array<Record<string, unknown>>;
+    dnsCreateAlreadyExists?: boolean;
+    dnsCreateRejectsComment?: boolean;
+    pagesDomains?: Array<Record<string, unknown>>;
+    customHeadStatus?: number;
+  } = {}) {
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello index'),
+    });
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    let dnsCreateCount = 0;
+    let dnsLookupCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const { url, method } = customDomainRequestInfo(input, init);
+      calls.push({ url, method, body: init?.body });
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({ hashes: [indexHash] });
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_custom', url: 'https://d34527d9.demo-pages.pages.dev' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/zones/zone-1/dns_records?') && method === 'GET') {
+        dnsLookupCount += 1;
+        const result = options.dnsRecordsAfterDuplicate && dnsLookupCount > 1
+          ? options.dnsRecordsAfterDuplicate
+          : options.dnsRecords ?? [];
+        return new Response(JSON.stringify({ success: true, result }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/zones/zone-1/dns_records') && method === 'POST') {
+        dnsCreateCount += 1;
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        if (options.dnsCreateRejectsComment && dnsCreateCount === 1) {
+          expect(body).toHaveProperty('comment');
+          return new Response(JSON.stringify({
+            success: false,
+            errors: [{ message: 'comment is not allowed for this token' }],
+          }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (options.dnsCreateAlreadyExists && dnsCreateCount === 1) {
+          return new Response(JSON.stringify({
+            success: false,
+            errors: [{ message: 'DNS record already exists' }],
+          }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ success: true, result: { id: 'dns-1', ...body } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/zones/zone-1/dns_records/dns-1') && method === 'PATCH') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify({ success: true, result: { id: 'dns-1', ...body } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/domains/demo.example.com') && method === 'GET') {
+        const result = (options.pagesDomains ?? [])
+          .find((domain) => domain.name === 'demo.example.com');
+        if (!result) {
+          return new Response(JSON.stringify({
+            success: false,
+            errors: [{ message: 'Custom domain not found' }],
+          }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          success: true,
+          result,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/domains') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { name: 'demo.example.com', status: 'active' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://demo.example.com' && method === 'HEAD') {
+        return new Response('', { status: options.customHeadStatus ?? 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    return { calls, fetchMock };
+  }
+
+  async function deployWithCustomDomain(options: {
+    priorMetadata?: Record<string, unknown>;
+  } = {}) {
+    return deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      projectId: 'project-1',
+      cloudflarePages: {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'demo',
+      },
+      priorMetadata: options.priorMetadata,
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('hello index'),
+          contentType: 'text/html',
+          sourcePath: 'index.html',
+        },
+      ],
+    });
+  }
+
   it('chunks asset uploads before posting to Cloudflare Pages', () => {
     const chunks = chunkCloudflarePagesAssetUploads(
       [
@@ -993,6 +1219,15 @@ describe('cloudflare pages deploys', () => {
       if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
         return new Response('', { status: 200 });
       }
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
@@ -1102,6 +1337,15 @@ describe('cloudflare pages deploys', () => {
       if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
         return new Response('', { status: 200 });
       }
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
@@ -1130,6 +1374,812 @@ describe('cloudflare pages deploys', () => {
       status: 'ready',
     });
     expect(projectLookupCount).toBe(2);
+  });
+
+  it('rejects invalid custom-domain prefix before creating a Pages deployment', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      projectId: 'project-1',
+      cloudflarePages: {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'bad.prefix',
+      },
+      files: [],
+    })).rejects.toThrow(/valid subdomain prefix/i);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale Cloudflare zone selections before creating a Pages deployment', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'other.example', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      projectId: 'project-1',
+      cloudflarePages: {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'demo',
+      },
+      files: [],
+    })).rejects.toThrow(/zone selection/i);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('paginates Cloudflare Pages zones for large accounts', async () => {
+    const pagesSeen: number[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const requestUrl = new URL(url);
+      expect(requestUrl.pathname).toBe('/client/v4/zones');
+      expect(requestUrl.searchParams.get('account.id')).toBe('account_123');
+      expect(requestUrl.searchParams.get('per_page')).toBe('100');
+      const page = Number(requestUrl.searchParams.get('page') || '1');
+      pagesSeen.push(page);
+      const result = page === 1
+        ? [{ id: 'zone-1', name: 'example.com', status: 'active', type: 'full' }]
+        : [{ id: 'zone-2', name: 'example.org', status: 'active', type: 'full' }];
+      return new Response(JSON.stringify({
+        success: true,
+        result,
+        result_info: { page, per_page: 100, total_pages: 2 },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(listCloudflarePagesZones({
+      token: 'cloudflare-token-secret',
+      accountId: 'account_123',
+      cloudflarePages: { lastZoneId: 'zone-2' },
+    })).resolves.toEqual({
+      zones: [
+        { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        { id: 'zone-2', name: 'example.org', status: 'active', type: 'full' },
+      ],
+      cloudflarePages: { lastZoneId: 'zone-2' },
+    });
+    expect(pagesSeen).toEqual([1, 2]);
+  });
+
+  it('round-trips typed Cloudflare info while keeping provider metadata internal', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'od-deployment-db-test-'));
+    try {
+      const db = openDatabase(root, { dataDir: path.join(root, '.od') });
+      insertProject(db, {
+        id: 'project-1',
+        name: 'Project 1',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const saved = upsertDeployment(db, {
+        id: 'deployment-1',
+        projectId: 'project-1',
+        fileName: 'index.html',
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        url: 'https://demo-pages.pages.dev',
+        deploymentId: 'dep-1',
+        deploymentCount: 1,
+        target: 'preview',
+        status: 'link-delayed',
+        cloudflarePages: {
+          projectName: 'demo-pages',
+          pagesDev: {
+            url: 'https://demo-pages.pages.dev',
+            status: 'ready',
+          },
+          customDomain: {
+            hostname: 'demo.example.com',
+            url: 'https://demo.example.com',
+            zoneId: 'zone-1',
+            zoneName: 'example.com',
+            domainPrefix: 'demo',
+            status: 'pending',
+            dnsStatus: 'created',
+            dnsRecordId: 'dns-1',
+            dnsOwnership: 'marked',
+            domainStatus: 'pending',
+          },
+        },
+        providerMetadata: {
+          cloudflarePagesProjectName: 'demo-pages',
+          cloudflarePagesCustomDomain: {
+            projectId: 'project-1',
+            pagesProjectName: 'demo-pages',
+            hostname: 'demo.example.com',
+            marker: 'od:cfp:aaaaaaaaaaaa:bbbbbbbbbbbb',
+            dnsRecordId: 'dns-1',
+          },
+        },
+        createdAt: 1,
+        updatedAt: 2,
+      });
+      const loaded = getDeployment(db, 'project-1', 'index.html', CLOUDFLARE_PAGES_PROVIDER_ID);
+      if (!saved || !loaded) throw new Error('expected deployment roundtrip to be saved');
+
+      expect(saved).toMatchObject({
+        cloudflarePages: {
+          customDomain: {
+            hostname: 'demo.example.com',
+            dnsRecordId: 'dns-1',
+          },
+        },
+        providerMetadata: {
+          cloudflarePagesProjectName: 'demo-pages',
+          cloudflarePagesCustomDomain: {
+            marker: 'od:cfp:aaaaaaaaaaaa:bbbbbbbbbbbb',
+          },
+        },
+      });
+      expect(loaded).toMatchObject(saved);
+    } finally {
+      closeDatabase();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('creates a Cloudflare DNS CNAME and Pages custom domain while keeping pages.dev primary', async () => {
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello index'),
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({ hashes: [indexHash] });
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_custom', url: 'https://d34527d9.demo-pages.pages.dev' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/zones/zone-1/dns_records?') && method === 'GET') {
+        expect(url).toContain('name=demo.example.com');
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/zones/zone-1/dns_records') && method === 'POST') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body).toMatchObject({
+          type: 'CNAME',
+          name: 'demo.example.com',
+          content: 'demo-pages.pages.dev',
+          proxied: true,
+          ttl: 1,
+        });
+        expect(body.comment).toMatch(/^od:cfp:[a-f0-9]{12}:[a-f0-9]{12}$/);
+        return new Response(JSON.stringify({ success: true, result: { id: 'dns-1', ...body } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/domains/demo.example.com') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: false,
+          errors: [{ message: 'Custom domain not found' }],
+        }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/domains') && method === 'POST') {
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({ name: 'demo.example.com' });
+        return new Response(JSON.stringify({
+          success: true,
+          result: { name: 'demo.example.com', status: 'active' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://demo.example.com' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      projectId: 'project-1',
+      cloudflarePages: {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'demo',
+      },
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('hello index'),
+          contentType: 'text/html',
+          sourcePath: 'index.html',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      url: 'https://demo-pages.pages.dev',
+      status: 'ready',
+      cloudflarePages: {
+        pagesDev: {
+          url: 'https://demo-pages.pages.dev',
+          status: 'ready',
+        },
+        customDomain: {
+          hostname: 'demo.example.com',
+          url: 'https://demo.example.com',
+          status: 'ready',
+          dnsStatus: 'created',
+          dnsRecordId: 'dns-1',
+          dnsOwnership: 'marked',
+          domainStatus: 'active',
+        },
+      },
+      providerMetadata: {
+        cloudflarePagesProjectName: 'demo-pages',
+        cloudflarePagesCustomDomain: {
+          projectId: 'project-1',
+          pagesProjectName: 'demo-pages',
+          hostname: 'demo.example.com',
+          dnsRecordId: 'dns-1',
+        },
+      },
+    });
+  });
+
+  it('reuses an exact Cloudflare CNAME without mutating DNS', async () => {
+    const { calls, fetchMock } = createCustomDomainDeployMock({
+      dnsRecords: [{
+        id: 'dns-existing',
+        type: 'CNAME',
+        name: 'demo.example.com',
+        content: 'demo-pages.pages.dev',
+      }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployWithCustomDomain();
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      cloudflarePages: {
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'ready',
+          dnsStatus: 'reused',
+          dnsRecordId: 'dns-existing',
+          dnsOwnership: 'unmarked',
+        },
+      },
+    });
+    expect(calls.some((call) => (
+      call.url.includes('/zones/zone-1/dns_records') &&
+      (call.method === 'POST' || call.method === 'PATCH')
+    ))).toBe(false);
+  });
+
+  it('reuses a concurrently created CNAME after Cloudflare reports a duplicate', async () => {
+    const { calls, fetchMock } = createCustomDomainDeployMock({
+      dnsRecords: [],
+      dnsCreateAlreadyExists: true,
+      dnsRecordsAfterDuplicate: [{
+        id: 'dns-race',
+        type: 'CNAME',
+        name: 'demo.example.com',
+        content: 'demo-pages.pages.dev',
+      }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployWithCustomDomain();
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      cloudflarePages: {
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'ready',
+          dnsStatus: 'reused',
+          dnsRecordId: 'dns-race',
+          dnsOwnership: 'unmarked',
+        },
+      },
+    });
+    expect(calls.filter((call) => call.url.includes('/zones/zone-1/dns_records?') && call.method === 'GET')).toHaveLength(2);
+    expect(calls.filter((call) => call.url.endsWith('/zones/zone-1/dns_records') && call.method === 'POST')).toHaveLength(1);
+  });
+
+  it('reads an existing Cloudflare Pages custom domain without unsupported list pagination', async () => {
+    const { calls, fetchMock } = createCustomDomainDeployMock({
+      pagesDomains: [{ name: 'demo.example.com', status: 'active' }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployWithCustomDomain();
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      cloudflarePages: {
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'ready',
+          domainStatus: 'active',
+        },
+      },
+    });
+    const domainLookupUrls = calls
+      .filter((call) => call.url.includes('/pages/projects/demo-pages/domains/') && call.method === 'GET')
+      .map((call) => call.url);
+    expect(domainLookupUrls).toEqual([
+      'https://api.cloudflare.com/client/v4/accounts/account_123/pages/projects/demo-pages/domains/demo.example.com',
+    ]);
+    expect(domainLookupUrls.every((url) => !url.includes('?'))).toBe(true);
+    expect(calls.some((call) => call.url.endsWith('/pages/projects/demo-pages/domains') && call.method === 'POST')).toBe(false);
+  });
+
+  it('retries DNS creation without a comment when Cloudflare rejects comments', async () => {
+    const { calls, fetchMock } = createCustomDomainDeployMock({
+      dnsCreateRejectsComment: true,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployWithCustomDomain();
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      cloudflarePages: {
+        customDomain: {
+          status: 'ready',
+          dnsStatus: 'created',
+          dnsRecordId: 'dns-1',
+          dnsOwnership: 'unmarked',
+        },
+      },
+    });
+    const dnsCreateBodies = calls
+      .filter((call) => call.url.endsWith('/zones/zone-1/dns_records') && call.method === 'POST')
+      .map((call) => JSON.parse(String(call.body ?? '{}')));
+    expect(dnsCreateBodies).toHaveLength(2);
+    expect(dnsCreateBodies[0]).toHaveProperty('comment');
+    expect(dnsCreateBodies[1]).not.toHaveProperty('comment');
+  });
+
+  it('does not patch an unowned different-target CNAME', async () => {
+    const { calls, fetchMock } = createCustomDomainDeployMock({
+      dnsRecords: [{
+        id: 'dns-external',
+        type: 'CNAME',
+        name: 'demo.example.com',
+        content: 'other.pages.dev',
+      }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployWithCustomDomain();
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      cloudflarePages: {
+        pagesDev: {
+          url: 'https://demo-pages.pages.dev',
+          status: 'ready',
+        },
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'conflict',
+          errorCode: 'cloudflare_dns_record_conflict',
+          dnsStatus: 'conflict',
+          dnsRecordId: 'dns-external',
+          dnsOwnership: 'external',
+          domainStatus: 'skipped',
+        },
+      },
+    });
+    expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+    expect(calls.some((call) => call.url.endsWith('/pages/projects/demo-pages/domains') && call.method === 'POST')).toBe(false);
+  });
+
+  it('patches only a previously owned CNAME with matching marker metadata', async () => {
+    const initial = createCustomDomainDeployMock();
+    vi.stubGlobal('fetch', initial.fetchMock);
+    const first = await deployWithCustomDomain();
+    const priorMetadata = first.providerMetadata as Record<string, unknown>;
+    const priorCustom = priorMetadata.cloudflarePagesCustomDomain as Record<string, unknown>;
+    vi.unstubAllGlobals();
+
+    const { calls, fetchMock } = createCustomDomainDeployMock({
+      dnsRecords: [{
+        id: 'dns-1',
+        type: 'CNAME',
+        name: 'demo.example.com',
+        content: 'old-demo-pages.pages.dev',
+        comment: priorCustom.marker,
+      }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployWithCustomDomain({ priorMetadata });
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      cloudflarePages: {
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'ready',
+          dnsStatus: 'patched',
+          dnsRecordId: 'dns-1',
+          dnsOwnership: 'marked',
+        },
+      },
+    });
+    const patchBodies = calls
+      .filter((call) => call.url.endsWith('/zones/zone-1/dns_records/dns-1') && call.method === 'PATCH')
+      .map((call) => JSON.parse(String(call.body ?? '{}')));
+    expect(patchBodies).toEqual([expect.objectContaining({
+      type: 'CNAME',
+      name: 'demo.example.com',
+      content: 'demo-pages.pages.dev',
+      comment: priorCustom.marker,
+    })]);
+  });
+
+  it('returns partial success with pages.dev when DNS custom-domain setup conflicts', async () => {
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello index'),
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({ hashes: [indexHash] });
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_conflict', url: 'https://d34527d9.demo-pages.pages.dev' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/zones/zone-1/dns_records?') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: [{
+            id: 'dns-existing',
+            type: 'A',
+            name: 'demo.example.com',
+            content: '192.0.2.10',
+          }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      projectId: 'project-1',
+      cloudflarePages: {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'demo',
+      },
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('hello index'),
+          contentType: 'text/html',
+          sourcePath: 'index.html',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      url: 'https://demo-pages.pages.dev',
+      status: 'ready',
+      cloudflarePages: {
+        pagesDev: {
+          url: 'https://demo-pages.pages.dev',
+          status: 'ready',
+        },
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'conflict',
+          errorCode: 'cloudflare_dns_record_conflict',
+          dnsStatus: 'conflict',
+          dnsRecordId: 'dns-existing',
+          domainStatus: 'skipped',
+        },
+      },
+    });
+    expect(fetchMock.mock.calls.some(([input, init]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      return url.endsWith('/pages/projects/demo-pages/domains') && method === 'POST';
+    })).toBe(false);
+  });
+
+  it('returns partial success with pages.dev when Pages custom-domain binding conflicts', async () => {
+    const indexHash = cloudflarePagesAssetHash({
+      file: 'index.html',
+      data: Buffer.from('hello index'),
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method =
+        init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url.endsWith('/pages/projects/demo-pages') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: 'demo-pages' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/upload-token') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        expect(JSON.parse(String(init?.body ?? '{}'))).toEqual({ hashes: [indexHash] });
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'dep_domain_conflict', url: 'https://d34527d9.demo-pages.pages.dev' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://demo-pages.pages.dev' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      if (url.endsWith('/zones/zone-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'zone-1', name: 'example.com', status: 'active', type: 'full' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/zones/zone-1/dns_records?') && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/zones/zone-1/dns_records') && method === 'POST') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify({ success: true, result: { id: 'dns-1', ...body } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/domains/demo.example.com') && method === 'GET') {
+        return new Response(JSON.stringify({
+          success: false,
+          errors: [{ message: 'Custom domain not found' }],
+        }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/projects/demo-pages/domains') && method === 'POST') {
+        return new Response(JSON.stringify({
+          success: false,
+          errors: [{ message: 'Custom domain already exists' }],
+        }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToCloudflarePages({
+      config: {
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+        projectName: 'demo-pages',
+      },
+      projectId: 'project-1',
+      cloudflarePages: {
+        zoneId: 'zone-1',
+        zoneName: 'example.com',
+        domainPrefix: 'demo',
+      },
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('hello index'),
+          contentType: 'text/html',
+          sourcePath: 'index.html',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      url: 'https://demo-pages.pages.dev',
+      status: 'ready',
+      cloudflarePages: {
+        pagesDev: {
+          url: 'https://demo-pages.pages.dev',
+          status: 'ready',
+        },
+        customDomain: {
+          hostname: 'demo.example.com',
+          status: 'conflict',
+          errorCode: 'cloudflare_domain_already_bound',
+          dnsStatus: 'created',
+          dnsRecordId: 'dns-1',
+          domainStatus: 'conflict',
+        },
+      },
+    });
   });
 });
 
@@ -1250,6 +2300,6 @@ describe('deployment link readiness', () => {
       server: 'Vercel',
       'set-cookie': '_vercel_sso_nonce=test',
     });
-    expect(isVercelProtectedResponse({ headers }, 'Authentication Required')).toBe(true);
+    expect(isVercelProtectedResponse(new Response(null, { headers }), 'Authentication Required')).toBe(true);
   });
 });

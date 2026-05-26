@@ -29,6 +29,15 @@ od:
     requires: [typography, color, anti-ai-slop]
 ```
 
+Use the layered stack for editorial skills that require authored hierarchy
+and sustained reading behavior:
+
+```yaml
+od:
+  craft:
+    requires: [typography, typography-hierarchy, typography-hierarchy-editorial]
+```
+
 Allowed values match the file names in this directory minus the `.md`
 extension. Unknown values are silently ignored (forward-compatible).
 
@@ -62,6 +71,8 @@ A purely behavioral craft file (state-coverage, animation-discipline) is guidanc
 | File | Section name | When to require |
 |---|---|---|
 | `typography.md` | `typography` | Any skill that emits typed content (~all skills) |
+| `typography-hierarchy.md` | `typography-hierarchy` | Any skill that emits typed content where hierarchy must feel authored, not assembled — especially surfaces with a strong entry point, varied levels, or intentional rhythm. Compose with `typography`. |
+| `typography-hierarchy-editorial.md` | `typography-hierarchy-editorial` | Skills whose primary artifact is a sustained reading surface: `blog-post`, `docs-page`, `digital-eguide`. Requires `typography` + `typography-hierarchy`. |
 | `color.md` | `color` | Any skill that emits styled output (~all skills) |
 | `anti-ai-slop.md` | `anti-ai-slop` | Marketing pages, landing pages, decks |
 | `state-coverage.md` | `state-coverage` | Any skill with stateful UI (dashboards, mobile apps, forms, list/table views) |

@@ -9,6 +9,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev run web` runs foreground daemon + web for the Playwright webServer flow.
 - `pnpm tools-dev inspect desktop ...` inspects the desktop runtime through sidecar IPC.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset plus beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
+- `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
+
+## Retired tools
+
+- `tools/pr` / `@open-design/tools-pr` / `pnpm tools-pr` has been retired from this repository. Maintainer PR-duty workflows now live outside the product workspace in `PerishCode/duty`; do not restore an Open Design-local PR-duty tool without a new explicit maintainer decision.
 
 ## Packaging scope
 
@@ -31,6 +36,8 @@ pnpm --filter @open-design/tools-dev typecheck
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack typecheck
 pnpm --filter @open-design/tools-pack build
+pnpm --filter @open-design/tools-serve typecheck
+pnpm --filter @open-design/tools-serve build
 pnpm tools-dev status --json
 pnpm tools-dev logs --json
 pnpm tools-dev check
@@ -47,4 +54,5 @@ pnpm tools-pack linux install --headless
 pnpm tools-pack linux start --headless
 pnpm tools-pack linux stop --headless
 pnpm tools-pack linux build --containerized
+pnpm tools-serve start updater
 ```

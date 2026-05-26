@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hyperframes Video Template Example</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #061236; color: #d9f4ff; font-family: "Chakra Petch", system-ui, sans-serif; }
+    .top {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      border-bottom: 1px solid #29447a;
+      background: #0b1b49;
+      letter-spacing: 0.06em;
+      font-size: 12px;
+    }
+    .top b { font-size: 12px; color: #8ce9ff; }
+    .top span { color: #b8d1ff; opacity: 0.9; }
+    .stage { height: calc(100% - 49px); display: grid; grid-template-columns: 1.2fr 1fr; }
+    .pane { border-right: 1px solid #203765; }
+    .pane:last-child { border-right: 0; }
+    iframe { width: 100%; height: 100%; border: 0; background: #030a24; }
+    video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <b>HYPERFRAMES VIDEO TEMPLATE · DEFAULT SHOWCASE</b>
+    <span>Left: editable HTML template · Right: rendered MP4 sample</span>
+  </div>
+  <div class="stage">
+    <div class="pane">
+      <iframe src="./assets/template.html" title="Hyperframes template HTML preview"></iframe>
+    </div>
+    <div class="pane">
+      <video controls preload="metadata" src="./assets/default-showcase.mp4"></video>
+    </div>
+  </div>
+</body>
+</html>

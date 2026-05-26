@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
+import { conversationMetaLabel } from './ChatPane';
 import type { Conversation } from '../types';
 
 interface Props {
@@ -189,7 +190,7 @@ function ConversationsDropdown({
                   <span className="conv-item-name">
                     {c.title || t('conv.untitled')}
                   </span>
-                  <span className="conv-item-meta">{relTime(c.updatedAt, t)}</span>
+                  <span className="conv-item-meta">{conversationMetaLabel(c, t)}</span>
                 </button>
               )}
               <button
@@ -216,16 +217,4 @@ function ConversationsDropdown({
       )}
     </div>
   );
-}
-
-function relTime(ts: number, t: ReturnType<typeof useT>): string {
-  const diff = Date.now() - ts;
-  const min = 60_000;
-  const hr = 60 * min;
-  const day = 24 * hr;
-  if (diff < min) return t('common.now');
-  if (diff < hr) return t('common.minutesShort', { n: Math.floor(diff / min) });
-  if (diff < day) return t('common.hoursShort', { n: Math.floor(diff / hr) });
-  if (diff < 7 * day) return t('common.daysShort', { n: Math.floor(diff / day) });
-  return new Date(ts).toLocaleDateString();
 }

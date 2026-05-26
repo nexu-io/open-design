@@ -1,0 +1,162 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "open-design.fullname" . }}
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "open-design.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+          checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+          checksum/proxy-config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
+          checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "open-design.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.initContainers }}
+        {{- toYaml .Values.initContainers | nindent 8 }}
+        {{- end }}
+        - name: auth-proxy-init
+          image: {{ .Values.authProxy.image }}
+          securityContext:
+            {{- toYaml .Values.authProxy.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+          envFrom:
+            - configMapRef:
+                name: {{ include "open-design.fullname" . }}
+          env:
+            - name: PROXY_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "open-design.fullname" . }}
+                  key: OD_API_TOKEN
+          volumeMounts:
+            - name: proxy-template
+              mountPath: /etc/nginx/templates
+            - name: proxy-config
+              mountPath: /etc/nginx/conf.d
+            - name: proxy-tmp
+              mountPath: /tmp
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.webPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "open-design.fullname" . }}
+          env:
+            - name: OD_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "open-design.fullname" . }}
+                  key: OD_API_TOKEN
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command: ["wget", "-qO-", "http://{{ .Values.config.bindHost }}:{{ .Values.config.webPort }}/api/health"]
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command: ["wget", "-qO-", "http://{{ .Values.config.bindHost }}:{{ .Values.config.webPort }}/api/health"]
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: storage
+              mountPath: /app/.od
+            - name: tmp
+              mountPath: /tmp
+        - name: auth-proxy
+          image: {{ .Values.authProxy.image }}
+          securityContext:
+            {{- toYaml .Values.authProxy.securityContext | nindent 12 }}
+          ports:
+            - name: http-proxy
+              containerPort: {{ .Values.authProxy.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /nginx-health
+              port: http-proxy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http-proxy
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          volumeMounts:
+            - name: proxy-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: proxy-tmp
+              mountPath: /tmp
+        {{- if .Values.sidecars }}
+        {{- toYaml .Values.sidecars | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: storage
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "open-design.fullname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        - name: proxy-template
+          configMap:
+            name: {{ include "open-design.fullname" . }}-proxy
+        - name: proxy-config
+          emptyDir: {}
+        - name: proxy-tmp
+          emptyDir: {}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

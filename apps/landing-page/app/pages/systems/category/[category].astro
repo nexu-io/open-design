@@ -1,0 +1,74 @@
+---
+/*
+ * /systems/category/<slug>/ — every design system grouped by category
+ * (AI & LLM, Productivity & SaaS, Editorial, Brand, ...).
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import SystemCard from '../../../_components/system-card.astro';
+import {
+  getSystemCategoryIndex,
+  getSystemsForCategory,
+  type TagDescriptor,
+} from '../../../_lib/catalog';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
+
+export async function getStaticPaths() {
+  const tags = await getSystemCategoryIndex();
+  return tags.map((tag) => ({
+    params: { category: tag.slug },
+    props: { tag },
+  }));
+}
+
+interface Props {
+  tag: TagDescriptor;
+}
+
+const { tag } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const { records, label } = await getSystemsForCategory(tag.slug, locale);
+const heading = label ?? tag.label;
+
+const title = ui.catalog.systems.categoryHeading(heading, records.length);
+const description = ui.catalog.systems.categoryDescription(heading, records.length);
+
+const url = new URL(`/systems/category/${tag.slug}/`, Astro.site).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url,
+  numberOfItems: records.length,
+};
+---
+
+<Layout title={title} description={description} active="systems" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
+      <a href={href('/systems/')}>{ui.catalog.systems.detailLabel}</a>
+      <span aria-hidden="true">/</span>
+      <span>{ui.catalog.systems.category}</span>
+      <span aria-hidden="true">/</span>
+      <span class="crumb-active">{heading}</span>
+    </nav>
+    <span class="label">{ui.catalog.systems.label}</span>
+    <h1 class="display">
+      {ui.catalog.systems.categoryHeading(heading, records.length)}
+    </h1>
+    <p class="lead">
+      {ui.catalog.systems.categoryLead(label ?? tag.label)}
+    </p>
+    <p class="filter-clear">
+      <a href={href('/systems/')}>{ui.catalog.systems.allSystems}</a>
+    </p>
+  </header>
+
+  <section class="catalog-grid systems-grid" aria-label={ui.catalog.systems.allAria}>
+    <ul>
+      {records.map((s) => <SystemCard system={s} />)}
+    </ul>
+  </section>
+</Layout>

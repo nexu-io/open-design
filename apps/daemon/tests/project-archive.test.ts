@@ -36,7 +36,7 @@ describe('buildProjectArchive', () => {
       .filter((entry) => !entry.dir)
       .map((entry) => entry.name)
       .sort();
-    expect(fileEntries).toEqual(['frames/phone.html', 'index.html', 'src/app.css']);
+    expect(fileEntries).toEqual(['DESIGN-HANDOFF.md', 'DESIGN-MANIFEST.json', 'frames/phone.html', 'index.html', 'src/app.css']);
   });
 
   it('zips the whole project when no root is given', async () => {
@@ -46,6 +46,8 @@ describe('buildProjectArchive', () => {
     const fileEntries = Object.values(zip.files)
       .filter((entry) => !entry.dir)
       .map((entry) => entry.name);
+    expect(fileEntries).toContain('DESIGN-HANDOFF.md');
+    expect(fileEntries).toContain('DESIGN-MANIFEST.json');
     expect(fileEntries).toContain('README.md');
     expect(fileEntries).toContain('ui-design/index.html');
     expect(fileEntries).toContain('ui-design/src/app.css');
@@ -85,5 +87,112 @@ describe('buildProjectArchive', () => {
     expect(baseName).toBe(dirName);
     const zip = await JSZip.loadAsync(buffer);
     expect(Object.keys(zip.files)).toContain('index.html');
+  });
+
+  it('adds an AI-coding handoff guide to project archives', async () => {
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'ui-design');
+    const zip = await JSZip.loadAsync(buffer);
+    const handoff = await zip.file('DESIGN-HANDOFF.md')?.async('string');
+    expect(handoff).toContain('implementation handoff');
+    expect(handoff).toContain('Mobile compact: 360×800');
+    expect(handoff).toContain('Tablet portrait: 820×1180');
+    expect(handoff).toContain('Wide desktop: 1920×1080');
+    expect(handoff).toContain('Design fidelity contract');
+    expect(handoff).toContain('CJX-ready UX contract');
+    expect(handoff).toContain('DESIGN-MANIFEST.json');
+    expect(handoff).toContain('in-app modules/components');
+    expect(handoff).toContain('OS widgets are home-screen/lock-screen/quick-access surfaces');
+    expect(handoff).toContain('Color and brand contract');
+    expect(handoff).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
+    expect(handoff).toContain('Build product screens and domain-specific in-app modules');
+  });
+
+  it('adds a machine-readable design manifest to project archives', async () => {
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'ui-design');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+    expect(manifest.schema).toBe('open-design.design-manifest.v1');
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.sourceFiles.css).toEqual(['src/app.css']);
+    expect(manifest.sourceFiles.html).toEqual(['frames/phone.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
+    expect(manifest.appModules.join(' ')).toContain('domain-specific in-app modules');
+    expect(manifest.osWidgets.join(' ')).toContain('home-screen');
+    expect(manifest.responsiveViewports).toContainEqual({
+      name: 'tablet-portrait',
+      width: 820,
+      height: 1180,
+      category: 'tablet',
+      mustAvoidHorizontalScroll: true,
+    });
+  });
+
+  it('does not classify plain home.html as a landing page in daemon archive manifests', async () => {
+    const dir = path.join(projectsRoot, projectId, 'product-app');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'home.html'), '<!doctype html>home');
+    await writeFile(path.join(dir, 'dashboard.html'), '<!doctype html>dashboard');
+    await writeFile(path.join(dir, 'marketing.html'), '<!doctype html>marketing');
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'product-app');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+    const screens = new Map(manifest.screens.map((screen: { file: string; role: string }) => [screen.file, screen.role]));
+
+    expect(screens.get('home.html')).not.toBe('landing-page');
+    expect(screens.get('marketing.html')).toBe('landing-page');
+    expect(screens.get('dashboard.html')).toBe('product-screen');
+  });
+
+  it('keeps frame wrapper HTML out of daemon archive manifest screens', async () => {
+    const dir = path.join(projectsRoot, projectId, 'framed-app');
+    await mkdir(path.join(dir, 'frames'), { recursive: true });
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html>app');
+    await writeFile(path.join(dir, 'frames', 'iphone-15-pro.html'), '<!doctype html>frame');
+    await writeFile(path.join(dir, 'browser-chrome.html'), '<!doctype html>browser frame');
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'framed-app');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+
+    expect(manifest.sourceFiles.html).toEqual(['browser-chrome.html', 'frames/iphone-15-pro.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
+  });
+
+  it('does not overwrite an existing design handoff file', async () => {
+    const dir = path.join(projectsRoot, projectId, 'custom-handoff');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html>hi');
+    await writeFile(path.join(dir, 'DESIGN-HANDOFF.md'), '# custom handoff');
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'custom-handoff');
+    const zip = await JSZip.loadAsync(buffer);
+    const handoff = await zip.file('DESIGN-HANDOFF.md')?.async('string');
+    expect(handoff).toBe('# custom handoff');
+  });
+
+  it('keeps phone.html and iphone-upgrade.html as real screens when outside frames/ directory', async () => {
+    // phone.html as a carrier storefront, iphone-upgrade.html as a product
+    // surface — they must not be silently dropped from manifest screens.
+    const dir = path.join(projectsRoot, projectId, 'carrier-app');
+    await mkdir(path.join(dir, 'frames'), { recursive: true });
+    await writeFile(path.join(dir, 'phone.html'), '<!doctype html>phone storefront');
+    await writeFile(path.join(dir, 'iphone-upgrade.html'), '<!doctype html>upgrade screen');
+    await writeFile(path.join(dir, 'frames', 'device-shell.html'), '<!doctype html>frame');
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, 'carrier-app');
+    const zip = await JSZip.loadAsync(buffer);
+    const manifestRaw = await zip.file('DESIGN-MANIFEST.json')?.async('string');
+    const manifest = JSON.parse(manifestRaw || '{}');
+
+    const screenFiles = manifest.screens.map((screen: { file: string }) => screen.file);
+    expect(screenFiles).toContain('phone.html');
+    expect(screenFiles).toContain('iphone-upgrade.html');
+    // frame wrapper inside frames/ is still excluded from screens
+    expect(screenFiles).not.toContain('frames/device-shell.html');
+    // but still present in sourceFiles.html
+    expect(manifest.sourceFiles.html).toContain('frames/device-shell.html');
   });
 });

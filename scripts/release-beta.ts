@@ -234,7 +234,6 @@ function setOutput(name: string, value: string): void {
   appendFileSync(outputPath, `${name}=${value}\n`);
 }
 
-const signed = process.env.OPEN_DESIGN_RELEASE_SIGNED !== "false";
 const packagedVersion = await readPackagedVersion();
 const packagedParsed = parseStableVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
 const tags = await fetchGitTags("open-design-v*");
@@ -297,20 +296,18 @@ if (latestBeta != null) {
 }
 
 const betaVersion = `${packagedVersion}-beta.${betaNumber}`;
-const unsignedSuffix = signed ? "" : ".unsigned";
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const commit = process.env.GITHUB_SHA ?? "";
-const releaseName = `Open Design Beta ${betaVersion}${signed ? "" : " (unsigned)"}`;
+const releaseName = `Open Design Beta ${betaVersion}`;
 
 console.log(`[release-beta] channel: beta`);
 console.log(`[release-beta] base version: ${packagedVersion}`);
 console.log(`[release-beta] beta version: ${betaVersion}`);
-console.log(`[release-beta] signed: ${signed ? "true" : "false"}`);
 console.log(`[release-beta] beta state source: ${stateSource}`);
 if (latestStable != null) console.log(`[release-beta] latest stable: ${latestStable.value}`);
 if (latestBeta != null) console.log(`[release-beta] latest beta: ${latestBeta.betaVersion}`);
 
-setOutput("asset_version_suffix", unsignedSuffix);
+setOutput("asset_version_suffix", "");
 setOutput("base_version", packagedVersion);
 setOutput("beta_number", String(betaNumber));
 setOutput("beta_version", betaVersion);
@@ -318,5 +315,4 @@ setOutput("branch", branch);
 setOutput("commit", commit);
 setOutput("latest_stable", latestStable?.value ?? "");
 setOutput("release_name", releaseName);
-setOutput("signed", signed ? "true" : "false");
 setOutput("state_source", stateSource);

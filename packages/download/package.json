@@ -1,0 +1,34 @@
+{
+  "name": "@open-design/download",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/platform": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

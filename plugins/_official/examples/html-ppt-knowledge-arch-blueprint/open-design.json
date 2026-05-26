@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-knowledge-arch-blueprint",
+  "title": "Html Ppt Knowledge Arch Blueprint",
+  "version": "0.1.0",
+  "description": "奶油蓝图架构 deck — 奶油纸 #F0EAE0 底色 + 单一锈红 #B5392A 高亮、48px 蓝图网格 mask、2px 黑边硬卡片、pipeline 步骤盒（其中一个抬高）、右侧锈红 insight callout、Playfair 衬线大字、SVG 虚线反馈环。零渐变零软阴影，认真且印刷友好。",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-knowledge-arch-blueprint",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "engineering",
+    "web",
+    "architecture",
+    "blueprint",
+    "system-design",
+    "untitled",
+    "data-flow",
+    "engineering-whitepaper"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "engineering",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the html-ppt-knowledge-arch-blueprint template to create a system architecture introduction deck. Use a cream paper base, rust-red highlights, blueprint grid, raised pipeline blocks, and serif display type. First ask me for the system name, 5-7 core modules, and data-flow direction, then write 8-10 slides.",
+        "zh-CN": "用 html-ppt-knowledge-arch-blueprint 模板做一份系统架构介绍 PPT。奶油纸底 + 锈红高亮 + 蓝图网格 + pipeline 抬高一格 + 衬线大字。先告诉我系统名 + 5-7 个核心模块 + 数据流方向，再写 8-10 页。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Html Ppt Knowledge Arch Blueprint"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -26,6 +26,8 @@ export interface ToolRenderProps {
   name: string;
   args: unknown;
   result: string | undefined;
+  // Mirrors tool_result.isError. Terminal failures without a tool_result are
+  // surfaced through `status: 'error'`.
   isError: boolean;
 }
 
@@ -85,38 +87,35 @@ export function clearToolRenderers(): void {
 }
 
 /**
- * Map an in-flight tool call to AG-UI's four-state lifecycle.
+ * Map a tool call to AG-UI's lifecycle status.
  *
  * - `error`      — tool returned with `isError`
  * - `complete`   — tool returned cleanly
  * - `executing`  — no result yet, run still streaming
- * - `inProgress` — no result yet, run finished (rare: agent crashed
- *                  mid-call). Distinct so renderers can surface a
- *                  different affordance ("interrupted") than the
- *                  live-spinner state.
+ * - `complete`   — no result yet, run finished. Some stored assistant
+ *                  turns can be missing a tool_result even though the run
+ *                  succeeded, so renderers should show the completed turn.
  *
- * The split between `inProgress` and `executing` is the same one
- * CopilotKit exposes: in their world, `inProgress` = streaming args,
- * `executing` = handler running. We don't currently receive partial
- * tool_use args from the daemon, so the two states collapse onto the
- * "run alive vs. run dead" axis instead. Either way, renderers that
- * want a single "loading" state can treat both identically.
+ * - `error`      — no result after a failed or canceled terminal run.
  */
 export function deriveToolStatus(
   result: ToolResult | undefined,
   runStreaming: boolean,
+  runSucceeded = false,
 ): ToolStatus {
   if (result) return result.isError ? 'error' : 'complete';
-  return runStreaming ? 'executing' : 'inProgress';
+  if (runStreaming) return 'executing';
+  return runSucceeded ? 'complete' : 'error';
 }
 
 export function toRenderProps(
   use: ToolUse,
   result: ToolResult | undefined,
   runStreaming: boolean,
+  runSucceeded = false,
 ): ToolRenderProps {
   return {
-    status: deriveToolStatus(result, runStreaming),
+    status: deriveToolStatus(result, runStreaming, runSucceeded),
     name: use.name,
     args: use.input,
     result: result?.content,

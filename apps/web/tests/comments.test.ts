@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildBoardCommentAttachments,
+  buildVisualAnnotationAttachment,
   commentsToAttachments,
   historyWithCommentAttachmentContext,
   liveSnapshotForComment,
@@ -22,11 +23,21 @@ describe('preview comment attachment helpers', () => {
       text: `  ${'Title '.repeat(80)}  `,
       htmlHint: `<h1 class="hero-title" data-od-id="hero-title">${'x'.repeat(240)}</h1>`,
       position: { x: 10.4, y: 20.5, width: 300.2, height: 88.8 },
+      style: {
+        color: 'rgb(26, 25, 22)',
+        fontSize: '13.5px',
+        fontFamily: 'Inter, sans-serif',
+      },
     });
 
     expect(target.text.length).toBeLessThanOrEqual(160);
     expect(target.htmlHint.length).toBeLessThanOrEqual(180);
     expect(target.position).toEqual({ x: 10, y: 21, width: 300, height: 89 });
+    expect(target.style).toMatchObject({
+      color: 'rgb(26, 25, 22)',
+      fontSize: '13.5px',
+      fontFamily: 'Inter, sans-serif',
+    });
   });
 
   it('creates ordered compact send payloads from attached comments', () => {
@@ -83,6 +94,33 @@ describe('preview comment attachment helpers', () => {
       comment: 'Tighten the hierarchy',
     });
     expect(messageContentWithCommentAttachments('', attachments)).toContain('memberCount: 2');
+  });
+
+  it('builds visual annotation payloads without requiring a selector', () => {
+    const attachment = buildVisualAnnotationAttachment({
+      order: 1,
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      note: '',
+      bounds: { x: 12, y: 24, width: 140, height: 80 },
+      target: {
+        filePath: 'index.html',
+        position: { x: 12, y: 24, width: 140, height: 80 },
+      },
+    });
+
+    expect(attachment).toMatchObject({
+      selectionKind: 'visual',
+      screenshotPath: 'uploads/drawing.png',
+      markKind: 'stroke',
+      selector: '',
+      comment: expect.stringContaining('red strokes'),
+      intent: expect.stringContaining('red strokes'),
+    });
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('targetKind: visual');
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('screenshot: uploads/drawing.png');
+    expect(messageContentWithCommentAttachments('', [attachment])).toContain('markKind: stroke');
+    expect(messageContentWithCommentAttachments('', [attachment])).not.toContain('selector: ');
   });
 
   it('keeps large queued board-note batches ordered in one send payload', () => {
@@ -184,9 +222,39 @@ describe('preview comment attachment helpers', () => {
     expect(liveSnapshotForComment(comment({ filePath: 'other.html' }), snapshots)).toBeNull();
   });
 
+  it('rehydrates saved free-pin markers from persisted comment position after iframe reload', () => {
+    const saved = comment({
+      elementId: 'pin-abc123',
+      selector: '[data-od-pin="pin-abc123"]',
+      label: 'pin',
+      text: '',
+      htmlHint: '',
+      position: { x: 88, y: 144, width: 24, height: 24 },
+    });
+
+    expect(liveSnapshotForComment(saved, new Map())).toMatchObject({
+      filePath: 'index.html',
+      elementId: 'pin-abc123',
+      selector: '[data-od-pin="pin-abc123"]',
+      label: 'pin',
+      position: { x: 88, y: 144, width: 24, height: 24 },
+    });
+  });
+
   it('serializes selected comments into API-mode prompt context without visible input', () => {
     const attachments = commentsToAttachments([
-      comment({ id: 'c1', elementId: 'hero-title', note: 'Only shorten this title' }),
+      comment({
+        id: 'c1',
+        elementId: 'hero-title',
+        note: 'Only shorten this title',
+        style: {
+          color: 'rgb(26, 25, 22)',
+          backgroundColor: 'rgba(255, 255, 255, 0)',
+          fontSize: '13.5px',
+          fontWeight: '500',
+          fontFamily: 'Inter, sans-serif',
+        },
+      }),
     ]);
 
     const content = messageContentWithCommentAttachments('', attachments);
@@ -194,6 +262,8 @@ describe('preview comment attachment helpers', () => {
     expect(content).toContain('(No extra typed instruction.)');
     expect(content).toContain('<attached-preview-comments>');
     expect(content).toContain('selector: [data-od-id="hero-title"]');
+    expect(content).toContain('computedStyle: color: rgb(26, 25, 22)');
+    expect(content).toContain('fontSize: 13.5px');
     expect(content).toContain('comment: Only shorten this title');
   });
 

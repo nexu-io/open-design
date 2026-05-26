@@ -10,6 +10,7 @@ import {
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
@@ -50,6 +51,7 @@ import type {
 } from "./types.js";
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -406,9 +408,16 @@ export async function resetPackedWinNamespaces(config: ToolPackConfig): Promise<
   return { namespaces, results };
 }
 
-export async function inspectPackedWinApp(config: ToolPackConfig, options: { expr?: string; path?: string }): Promise<WinInspectResult> {
+function resolveUpdateAction(value: string | undefined): "status" | "check" | "download" | "install" | null {
+  if (value == null) return null;
+  if (value === "status" || value === "check" || value === "download" || value === "install") return value;
+  throw new Error("--update-action must be status, check, download, or install");
+}
+
+export async function inspectPackedWinApp(config: ToolPackConfig, options: { expr?: string; path?: string; updateAction?: string }): Promise<WinInspectResult> {
   const stamp = desktopStamp(config);
   const status = await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 2000 }).catch(() => null);
+  const updateAction = resolveUpdateAction(options.updateAction);
   return {
     ...(options.expr == null ? {} : {
       eval: await requestJsonIpc<DesktopEvalResult>(
@@ -422,6 +431,13 @@ export async function inspectPackedWinApp(config: ToolPackConfig, options: { exp
         stamp.ipc,
         { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
         { timeoutMs: 10000 },
+      ),
+    }),
+    ...(updateAction == null ? {} : {
+      update: await requestJsonIpc<DesktopUpdateResult>(
+        stamp.ipc,
+        { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
+        { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),
     status,

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-sensational-girl-dance-storyboard-8-shots",
+  "title": "Social Media Post - Sensational Girl Dance Storyboard (8 Shots)",
+  "version": "0.1.0",
+  "description": "A full 8-shot storyboard prompt set for generating a coherent frame-by-frame dance sequence of a stylish character. Includes shared global style tokens, a reusable negative prompt, and eight per-shot prompts (opening pose, hip groove, body wave, beat-drop waist twist, side hip sway, hair flick, power stance, finishing pose). Tuned for GPT-Image-2 tier models: concise vocabulary, no sensitive phrasing, consistent framing and lighting language across shots so the frames feel like one continuous choreography.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "open-design contributors",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "storyboard",
+    "dance",
+    "portrait",
+    "cinematic",
+    "sequence",
+    "fashion"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/social-media-post-sensational-girl-dance-storyboard-8-shots.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "# Sensational Girl Dance — 8-Shot Storyboard for GPT-Image-2\n\nFor each shot, prepend the GLOBAL STYLE TOKENS and append the NEGATIVE PROMPT. Shots are choreographed to flow as a continuous short dance clip, so do not change the outfit, hair, body type, or lighting language between frames.\n\n## GLOBAL STYLE TOKENS (prepend to every shot)\nultra-high definition, 8K, crisp fine detail, textured skin, natural complexion, native ambient light, subtle street atmosphere, minimal backdrop, gentle motion blur, dance kinetic tension, natural posture, refined facial features, relaxed mood, filmic grain, low-saturation premium color grading, full-body or half-body framing, clean uncluttered frame, authentic human texture, candid dance-capture feel\n\n## NEGATIVE PROMPT (append to every shot, required)\ndeformed limbs, distorted hands or feet, warped face, motion smear, compression artifacts, stray clutter, text watermark, heavy occlusion, broken proportions, stiff posture, over-exposed skin, trashy texture, exaggerated deformity, duplicated elements, pixelated grain\n\n## SHARED CHARACTER LOCK (keep identical across all 8 shots)\n- Subject: {argument name=\"subject\" default=\"young stylish Asian woman in her early 20s\"}\n- Hair: {argument name=\"hair\" default=\"long dark wavy hair with soft highlights\"}\n- Outfit: {argument name=\"outfit\" default=\"fitted cropped top, high-waist slim pants, minimal modern streetwear accessories\"}\n- Expression baseline: cool, aloof, confident, subtly playful\n- Body language: loose athletic dancer frame, effortless posture\n\n---\n\n## SHOT 1 — Opening Pose / Preparation (Half-Body, Static Start)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level candid framing, stylish girl in an opening dance-ready stance, body slightly angled, languid cool expression, relaxed pre-beat posture, fitted cropped streetwear outfit, warm soft side light sculpting shoulder and waist line, pure black minimal backdrop, faint motion potential in fingertips, calm breath-hold moment before the beat drops. NEGATIVE PROMPT.\n\n## SHOT 2 — Hip Groove (Full-Body, Weight Shift Right)\nGLOBAL STYLE TOKENS, full-body wide shot, low eye-level framing, stylish girl mid-groove with hips shifted to her right side, one knee slightly bent, arms relaxed and bouncing to rhythm, loose athletic dancer posture, warm rim light separating silhouette from backdrop, subtle motion blur on trailing hand, pure dark minimal backdrop, confident rhythmic flow. NEGATIVE PROMPT.\n\n## SHOT 3 — Body Wave (Half-Body, Spine Undulation)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level framing, stylish girl mid body-wave with spine gently undulating forward, chest lifted, shoulders rolling through the wave, hair catching light as it moves, soft directional key light from the left, faint motion trail along the torso line, pure dark minimal backdrop, fluid kinetic tension across the frame. NEGATIVE PROMPT.\n\n## SHOT 4 — Beat-Drop Waist Twist (Full-Body, Sharp Accent)\nGLOBAL STYLE TOKENS, full-body three-quarter shot, slightly low angle, stylish girl snapping waist to her left on a sharp beat drop, arms flaring out for balance, hair fanning with the motion, crisp shutter-speed feel capturing the peak of the movement, warm key light with a cooler rim, pure dark minimal backdrop, decisive confident accent pose. NEGATIVE PROMPT.\n\n## SHOT 5 — Side Hip Sway (Full-Body, Profile)\nGLOBAL STYLE TOKENS, full-body profile shot, eye-level framing, stylish girl swaying hips to the side in a smooth lateral groove, weight on the back foot, front arm crossing the body, cool aloof expression, long silhouette emphasized against the backdrop, warm side light grazing the hip line, pure dark minimal backdrop, elegant lateral rhythm. NEGATIVE PROMPT.\n\n## SHOT 6 — Hair Flick (Half-Body, Head Turn)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level candid framing, stylish girl mid hair-flick with head turning and long wavy hair arcing across the frame, eyes closed or half-lidded in playful focus, shoulder lifted on the flick side, crisp frozen motion on individual hair strands, warm top light highlighting the hair arc, pure dark minimal backdrop, cinematic kinetic beauty shot. NEGATIVE PROMPT.\n\n## SHOT 7 — Power Stance (Full-Body, Peak Energy)\nGLOBAL STYLE TOKENS, full-body wide shot, low eye-level framing, stylish girl in a grounded wide power stance at the peak of the drop, knees bent, one arm extended downward with open palm, other arm coiled close to the body, chin down and eyes up with fierce confident expression, strong key light with dramatic rim, pure dark minimal backdrop, commanding stage-presence frame. NEGATIVE PROMPT.\n\n## SHOT 8 — Finishing Pose (Half-Body, Exhale)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level framing, stylish girl in the final resting pose as the beat fades, chest relaxed on a long exhale, shoulders dropped, faint satisfied half-smile, hair slightly disheveled from the choreography, soft warm key light only, pure dark minimal backdrop, quiet confident close-out of the sequence. NEGATIVE PROMPT.",
+        "zh-CN": "使用这个插件完成以下任务：# Sensational Girl Dance — 8-Shot Storyboard for GPT-Image-2\n\nFor each shot, prepend the GLOBAL STYLE TOKENS and append the NEGATIVE PROMPT. Shots are choreographed to flow as a continuous short dance clip, so do not change the outfit, hair, body type, or lighting language between frames.\n\n## GLOBAL STYLE TOKENS (prepend to every shot)\nultra-high definition, 8K, crisp fine detail, textured skin, natural complexion, native ambient light, subtle street atmosphere, minimal backdrop, gentle motion blur, dance kinetic tension, natural posture, refined facial features, relaxed mood, filmic grain, low-saturation premium color grading, full-body or half-body framing, clean uncluttered frame, authentic human texture, candid dance-capture feel\n\n## NEGATIVE PROMPT (append to every shot, required)\ndeformed limbs, distorted hands or feet, warped face, motion smear, compression artifacts, stray clutter, text watermark, heavy occlusion, broken proportions, stiff posture, over-exposed skin, trashy texture, exaggerated deformity, duplicated elements, pixelated grain\n\n## SHARED CHARACTER LOCK (keep identical across all 8 shots)\n- Subject: {argument name=\"subject\" default=\"young stylish Asian woman in her early 20s\"}\n- Hair: {argument name=\"hair\" default=\"long dark wavy hair with soft highlights\"}\n- Outfit: {argument name=\"outfit\" default=\"fitted cropped top, high-waist slim pants, minimal modern streetwear accessories\"}\n- Expression baseline: cool, aloof, confident, subtly playful\n- Body language: loose athletic dancer frame, effortless posture\n\n---\n\n## SHOT 1 — Opening Pose / Preparation (Half-Body, Static Start)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level candid framing, stylish girl in an opening dance-ready stance, body slightly angled, languid cool expression, relaxed pre-beat posture, fitted cropped streetwear outfit, warm soft side light sculpting shoulder and waist line, pure black minimal backdrop, faint motion potential in fingertips, calm breath-hold moment before the beat drops. NEGATIVE PROMPT.\n\n## SHOT 2 — Hip Groove (Full-Body, Weight Shift Right)\nGLOBAL STYLE TOKENS, full-body wide shot, low eye-level framing, stylish girl mid-groove with hips shifted to her right side, one knee slightly bent, arms relaxed and bouncing to rhythm, loose athletic dancer posture, warm rim light separating silhouette from backdrop, subtle motion blur on trailing hand, pure dark minimal backdrop, confident rhythmic flow. NEGATIVE PROMPT.\n\n## SHOT 3 — Body Wave (Half-Body, Spine Undulation)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level framing, stylish girl mid body-wave with spine gently undulating forward, chest lifted, shoulders rolling through the wave, hair catching light as it moves, soft directional key light from the left, faint motion trail along the torso line, pure dark minimal backdrop, fluid kinetic tension across the frame. NEGATIVE PROMPT.\n\n## SHOT 4 — Beat-Drop Waist Twist (Full-Body, Sharp Accent)\nGLOBAL STYLE TOKENS, full-body three-quarter shot, slightly low angle, stylish girl snapping waist to her left on a sharp beat drop, arms flaring out for balance, hair fanning with the motion, crisp shutter-speed feel capturing the peak of the movement, warm key light with a cooler rim, pure dark minimal backdrop, decisive confident accent pose. NEGATIVE PROMPT.\n\n## SHOT 5 — Side Hip Sway (Full-Body, Profile)\nGLOBAL STYLE TOKENS, full-body profile shot, eye-level framing, stylish girl swaying hips to the side in a smooth lateral groove, weight on the back foot, front arm crossing the body, cool aloof expression, long silhouette emphasized against the backdrop, warm side light grazing the hip line, pure dark minimal backdrop, elegant lateral rhythm. NEGATIVE PROMPT.\n\n## SHOT 6 — Hair Flick (Half-Body, Head Turn)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level candid framing, stylish girl mid hair-flick with head turning and long wavy hair arcing across the frame, eyes closed or half-lidded in playful focus, shoulder lifted on the flick side, crisp frozen motion on individual hair strands, warm top light highlighting the hair arc, pure dark minimal backdrop, cinematic kinetic beauty shot. NEGATIVE PROMPT.\n\n## SHOT 7 — Power Stance (Full-Body, Peak Energy)\nGLOBAL STYLE TOKENS, full-body wide shot, low eye-level framing, stylish girl in a grounded wide power stance at the peak of the drop, knees bent, one arm extended downward with open palm, other arm coiled close to the body, chin down and eyes up with fierce confident expression, strong key light with dramatic rim, pure dark minimal backdrop, commanding stage-presence frame. NEGATIVE PROMPT.\n\n## SHOT 8 — Finishing Pose (Half-Body, Exhale)\nGLOBAL STYLE TOKENS, medium half-body shot, eye-level framing, stylish girl in the final resting pose as the beat fades, chest relaxed on a long exhale, shoulders dropped, faint satisfied half-smile, hair slightly disheveled from the choreography, soft warm key light only, pure dark minimal backdrop, quiet confident close-out of the sequence. NEGATIVE PROMPT."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "3:4"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

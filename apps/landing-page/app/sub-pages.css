@@ -1,0 +1,1567 @@
+/*
+ * Sub-page styles — Skills / Systems / Craft / Templates index +
+ * detail layouts.
+ *
+ * Lives in a separate stylesheet (not `globals.css`) so the
+ * lockstep-with-`example.html` rule on the homepage stays intact.
+ * All tokens here come from the same Atelier Zero CSS custom
+ * properties defined in `globals.css` — keep this file focused
+ * on layout primitives the sub-pages need.
+ */
+
+/* ---------- shell adjustments ---------- */
+
+body.sub-page {
+  /* sub-pages don't have a hero, so the nav can sit closer to the
+   * page top without the topbar strip pushing it down. */
+  background: var(--paper);
+}
+
+.sub-main {
+  /* Only set vertical padding here. The element also has the `.container`
+   * class which provides the responsive horizontal gutter; using the
+   * `padding` shorthand instead would zero out left/right and let
+   * content touch the screen edge on mobile (issue #review-fix-8). */
+  padding-top: 140px;
+  padding-bottom: 96px;
+  min-height: 60vh;
+}
+
+@media (max-width: 720px) {
+  .sub-main {
+    padding-top: 120px;
+    padding-bottom: 72px;
+  }
+}
+
+/* ---------- nav active state ---------- */
+
+.nav-links a.is-active {
+  color: var(--ink);
+}
+.nav-links a.is-active::after {
+  content: '';
+  display: block;
+  height: 1.5px;
+  background: var(--coral);
+  margin-top: 4px;
+  border-radius: 2px;
+}
+
+/* ---------- breadcrumb ---------- */
+
+.breadcrumb {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.breadcrumb a {
+  color: var(--ink-mute);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+.breadcrumb a:hover {
+  color: var(--ink);
+  border-bottom-color: var(--coral);
+}
+.breadcrumb span:not([aria-current]) { opacity: 0.5; }
+.breadcrumb [aria-current] { color: var(--ink); }
+
+/* ---------- catalog head (shared between index pages) ---------- */
+
+.catalog-head {
+  max-width: 880px;
+  margin-bottom: 56px;
+  border-top: 1px solid var(--ink);
+  padding-top: 28px;
+}
+.catalog-head .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: inline-block;
+  margin-bottom: 18px;
+}
+.catalog-head .display {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(40px, 6vw, 72px);
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  margin-bottom: 24px;
+}
+.catalog-head .display em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--coral);
+}
+.catalog-head .display .dot { color: var(--coral); }
+.catalog-head .lead {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 720px;
+}
+.catalog-head .lead code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: rgba(237, 111, 92, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ---------- filter strip ---------- */
+
+.filter-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 56px;
+  padding: 24px 0 28px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.filter-group {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 18px;
+  align-items: baseline;
+}
+.filter-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.filter-group ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.32);
+  transition: border-color 0.16s ease, color 0.16s ease;
+  text-decoration: none;
+}
+.chip:hover {
+  border-color: var(--coral);
+  color: var(--coral);
+}
+.chip-link {
+  cursor: pointer;
+}
+.chip-link:hover {
+  background: rgba(237, 111, 92, 0.06);
+}
+.chip-num {
+  color: var(--ink-mute);
+  font-size: 10px;
+}
+
+/* breadcrumb active leaf + filter-clear back-link share styling so
+ * faceted views feel coherent with the breadcrumb above. */
+.breadcrumb .crumb-active {
+  color: var(--ink);
+  opacity: 1;
+}
+.filter-clear {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.filter-clear a {
+  color: var(--ink-mute);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+.filter-clear a:hover {
+  color: var(--coral);
+  border-bottom-color: var(--coral);
+}
+
+@media (max-width: 720px) {
+  .filter-group { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* ---------- featured strip (skills index) ---------- */
+
+.featured-strip {
+  margin-bottom: 56px;
+}
+.strip-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 16px;
+}
+.featured-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 0;
+  margin: 0;
+}
+.featured-card {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+  overflow: hidden;
+}
+.featured-card:hover {
+  border-color: var(--coral);
+  transform: translateY(-2px);
+}
+.featured-card a {
+  display: block;
+  padding: 0;
+  text-decoration: none;
+  color: var(--ink);
+}
+.featured-card a > * + * {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+.featured-card .featured-num { margin-top: 18px; }
+.featured-card p { margin-bottom: 12px; }
+.featured-card .meta-tag { margin-bottom: 22px; }
+.featured-thumb {
+  display: block;
+  margin: 0;
+  aspect-ratio: 16 / 10;
+  background: var(--paper-warm);
+  border-bottom: 1px solid var(--line-soft);
+  overflow: hidden;
+}
+.featured-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+  transition: transform 0.5s ease;
+}
+.featured-card:hover .featured-thumb img { transform: scale(1.02); }
+.featured-thumb-empty {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--paper-dark),
+      var(--paper-dark) 10px,
+      var(--paper-warm) 10px,
+      var(--paper-warm) 20px
+    );
+}
+.featured-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--coral);
+  display: block;
+  margin-bottom: 12px;
+}
+.featured-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  display: block;
+  margin-bottom: 8px;
+}
+.featured-card p {
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  /* Only set bottom margin here. Horizontal margin is owned by the
+   * `.featured-card a > * + *` rule above (24px both sides); using
+   * the `margin: ...` shorthand instead would clobber that to 0 and
+   * the description text would bleed against the card edge. Same
+   * fragility template-summary fixed in #2600. */
+  margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 980px) {
+  .featured-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .featured-grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- catalog grid (linear list, used by skills + craft + templates) ---------- */
+
+.catalog-grid {
+  margin-top: 16px;
+}
+.catalog-grid ol,
+.catalog-grid ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.catalog-row {
+  border-bottom: 1px solid var(--line);
+}
+.catalog-row a {
+  display: grid;
+  grid-template-columns: 60px 1fr auto auto;
+  gap: 24px;
+  align-items: center;
+  /*
+   * Horizontal 24px lockstep with the rest of the catalog tile
+   * families (featured-card / template-card / system-card / source-card).
+   * Hover used to push from 0 → 12px which produced a visible
+   * jolt; staying at 24 base + only changing background on hover
+   * keeps the row composition steady.
+   */
+  padding: 22px 24px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.catalog-row-skill a {
+  grid-template-columns: 60px 130px 1fr auto auto;
+}
+.catalog-row a:hover {
+  background: var(--paper-warm);
+}
+.catalog-row a:hover .row-arrow { color: var(--coral); transform: translateX(4px); }
+
+.row-thumb {
+  display: block;
+  width: 130px;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--line-soft);
+  background: var(--paper-warm);
+  overflow: hidden;
+}
+.row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+.row-thumb-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--paper-dark),
+      var(--paper-dark) 8px,
+      var(--paper-warm) 8px,
+      var(--paper-warm) 16px
+    );
+}
+
+.row-index {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+}
+.row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.row-name {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.row-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 320px;
+}
+.row-arrow {
+  font-family: var(--mono);
+  color: var(--ink-faint);
+  transition: color 0.16s ease, transform 0.16s ease;
+}
+
+.meta-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.meta-tag.muted {
+  color: var(--ink-mute);
+  border-color: var(--line-soft);
+}
+.meta-tag.coral {
+  color: var(--coral);
+  border-color: rgba(237, 111, 92, 0.4);
+}
+
+@media (max-width: 720px) {
+  .catalog-row a,
+  .catalog-row-skill a {
+    grid-template-columns: 36px 1fr auto;
+    gap: 14px;
+    /* Keep a real horizontal gutter at narrow widths so the row body
+     * doesn't bleed against the card edge. The previous `0` was a
+     * holdover from when hover padding was the only horizontal inset. */
+    padding: 18px 20px;
+  }
+  .row-meta { display: none; }
+  .row-thumb { display: none; }
+  .row-arrow { font-size: 14px; }
+}
+
+/* ---------- template grid ---------- */
+
+.template-grid ul {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  padding: 0;
+  margin: 0;
+}
+.template-card {
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+  overflow: hidden;
+}
+.template-card:hover {
+  border-color: var(--coral);
+  transform: translateY(-2px);
+}
+.template-card a {
+  display: block;
+  text-decoration: none;
+  color: var(--ink);
+}
+.template-card a > .meta-tag,
+.template-card a > .template-name,
+.template-card a > .template-summary,
+.template-card a > .template-meta-line {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+.template-card a > .meta-tag {
+  display: inline-block;
+  margin-top: 16px;
+}
+.template-thumb {
+  display: block;
+  aspect-ratio: 16 / 10;
+  background: var(--paper-warm);
+  border-bottom: 1px solid var(--line-soft);
+  overflow: hidden;
+}
+.template-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+  transition: transform 0.5s ease;
+}
+.template-card:hover .template-thumb img { transform: scale(1.02); }
+.template-thumb-empty {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--paper-dark),
+      var(--paper-dark) 10px,
+      var(--paper-warm) 10px,
+      var(--paper-warm) 20px
+    );
+}
+.template-name {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.template-summary {
+  /* Horizontal padding (24px) is owned by the group rule on
+   * `.template-card a > .template-summary` above; this rule only sets
+   * top/bottom rhythm so siblings stay in lockstep. */
+  margin-top: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.template-meta-line {
+  display: block;
+  /* Negative top tugs this row up against the summary; horizontal owned
+   * by the group rule above. */
+  margin-top: -10px;
+  margin-bottom: 20px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+@media (max-width: 720px) {
+  .template-grid ul { grid-template-columns: 1fr; }
+}
+
+/* ---------- systems grid ---------- */
+
+.systems-grid ul {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  padding: 0;
+  margin: 0;
+  border-top: none;
+}
+.system-card {
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+.system-card:hover {
+  border-color: var(--coral);
+  transform: translateY(-2px);
+}
+.system-card a {
+  display: block;
+  padding: 18px 24px 22px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.system-swatches {
+  display: flex;
+  gap: 0;
+  height: 28px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-soft);
+}
+.system-swatches .swatch {
+  flex: 1;
+  display: block;
+}
+.system-swatches .swatch.placeholder {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--paper-dark),
+    var(--paper-dark) 6px,
+    var(--paper-warm) 6px,
+    var(--paper-warm) 12px
+  );
+}
+.system-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.2;
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+.system-cat {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: block;
+  margin-bottom: 10px;
+}
+.system-tagline {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 980px) {
+  .systems-grid ul { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .systems-grid ul { grid-template-columns: 1fr; }
+}
+
+/* ---------- detail pages ---------- */
+
+.detail {
+  max-width: 880px;
+}
+.detail-head {
+  border-top: 1px solid var(--ink);
+  padding-top: 28px;
+  margin-bottom: 48px;
+}
+.detail-head .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: inline-block;
+  margin-bottom: 18px;
+}
+.detail-head .label .ix {
+  color: var(--coral);
+  margin-left: 6px;
+}
+.detail-head .display {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(36px, 5vw, 60px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 22px;
+}
+.detail-head .display .dot { color: var(--coral); }
+.detail-head .lead {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin-bottom: 28px;
+  max-width: 720px;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.detail-preview {
+  margin: 0 0 48px;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  overflow: hidden;
+}
+.detail-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-bottom: 1px solid var(--line-soft);
+}
+.detail-preview figcaption {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+  padding: 12px 16px;
+}
+.detail-preview figcaption code {
+  background: rgba(237, 111, 92, 0.08);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+
+/* `btn` styles already exist in globals.css; the detail-actions only
+ * positions them. */
+
+.detail-meta {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 24px;
+  padding: 24px 0;
+  margin-bottom: 40px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.detail-meta dt {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0;
+}
+.detail-meta dd {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.detail-block {
+  margin-bottom: 48px;
+}
+.detail-block h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.block-lead {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.55;
+  margin-bottom: 20px;
+  max-width: 680px;
+}
+
+.trigger-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+}
+.trigger-list li code {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: rgba(237, 111, 92, 0.08);
+  border: 1px solid rgba(237, 111, 92, 0.22);
+  color: var(--ink);
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.example-prompt {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.55;
+  background: var(--paper-warm);
+  border-left: 3px solid var(--coral);
+  padding: 18px 20px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+
+.atmosphere {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink);
+  max-width: 720px;
+  border-left: 3px solid var(--coral);
+  padding-left: 20px;
+}
+
+.palette-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.palette-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.palette-cell .swatch {
+  width: 80px;
+  height: 80px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.palette-cell code {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+}
+
+.related-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  padding: 0;
+  margin: 0;
+}
+.related-grid li {
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+.related-grid li:hover { border-color: var(--coral); transform: translateY(-2px); }
+.related-grid a {
+  display: block;
+  padding: 18px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.related-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.005em;
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+.related-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.related-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .related-grid { grid-template-columns: 1fr; }
+  .detail-meta { grid-template-columns: 1fr; gap: 6px 0; }
+  .detail-meta dt { padding-top: 8px; }
+  .detail-meta dd { padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+}
+
+/* ---------- sub-page footer ---------- */
+
+.sub-footer {
+  border-top: 1px solid var(--ink);
+  background: var(--paper);
+  padding: 60px 0 32px;
+  margin-top: 96px;
+}
+.sub-footer-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  gap: 48px;
+  margin-bottom: 36px;
+}
+.sub-footer-brand .brand {
+  text-decoration: none;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 17px;
+}
+.sub-footer-brand p {
+  margin-top: 16px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 480px;
+}
+.sub-footer-col h5 {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+.sub-footer-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.sub-footer-col a {
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 14px;
+  transition: color 0.16s ease;
+}
+.sub-footer-col a:hover { color: var(--coral); }
+.sub-footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+@media (max-width: 720px) {
+  .sub-footer-grid { grid-template-columns: 1fr; gap: 32px; }
+  .sub-footer { padding: 40px 0 24px; }
+}
+
+/* =========================================================
+ * SEO landing pages — /official/, /quickstart/, /compare/,
+ * /alternatives/claude-design/, /agents/
+ * =========================================================
+ *
+ * Shared layout primitives for the high-intent, mostly-textual
+ * pages added in growth/seo-opendesigner-analysis.md. These reuse
+ * Atelier Zero tokens; they avoid the editorial side rails and
+ * full hero, since these pages are query-legible first.
+ */
+.info-page {
+  max-width: 920px;
+}
+.info-page .info-section + .info-section { margin-top: 64px; }
+.info-page h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  margin: 0 0 14px;
+}
+.info-page h2 em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--coral);
+}
+.info-page h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin: 28px 0 10px;
+}
+.info-page p {
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+  max-width: 70ch;
+}
+.info-page p code,
+.info-page li code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: rgba(237, 111, 92, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+.info-page ul,
+.info-page ol {
+  margin: 0 0 18px;
+  padding-left: 1.4em;
+  color: var(--ink-soft);
+}
+.info-page li {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 6px;
+}
+.info-page strong { color: var(--ink); }
+.info-page a.inline-link {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--coral);
+}
+.info-page a.inline-link:hover { color: var(--coral); }
+
+/* Source-of-truth "official links" card used on /official/ and
+ * elsewhere we need to lead with the canonical surface. */
+.source-card {
+  border: 1px solid var(--ink);
+  background: var(--paper-warm);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 28px;
+  margin: 0 0 32px;
+}
+.source-card a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  transition: color 0.16s ease;
+}
+.source-card a:hover { color: var(--coral); }
+.source-card a span.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.source-card a span.arrow { color: var(--coral); }
+
+@media (max-width: 720px) {
+  .source-card { grid-template-columns: 1fr; padding: 18px 20px; }
+}
+
+/* Comparison table for /compare/ and /alternatives/claude-design/. */
+.compare-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 32px;
+  border: 1px solid var(--line);
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: 14px;
+  min-width: 720px;
+}
+.compare-table th,
+.compare-table td {
+  text-align: left;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.compare-table thead th {
+  background: var(--paper-warm);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.compare-table tbody tr:last-child td { border-bottom: none; }
+.compare-table tbody th {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  width: 28%;
+}
+.compare-table td.yes { color: var(--ink); }
+.compare-table td.no { color: var(--ink-faint); }
+.compare-table td .check { color: var(--coral); font-weight: 600; margin-right: 6px; }
+
+/* Code block for /quickstart/ command sequences. */
+.code-block {
+  display: block;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 18px 22px;
+  margin: 0 0 18px;
+  overflow-x: auto;
+  white-space: pre;
+  border-radius: 2px;
+}
+.code-block .prompt { color: var(--coral); }
+.code-block .comment { color: rgba(255, 255, 255, 0.5); }
+
+/* Agent / comparison cards grid used on /compare/, /agents/. */
+.agent-grid,
+.compare-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 0;
+  margin: 0 0 32px;
+}
+.agent-card,
+.compare-card {
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  padding: 22px 24px;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+.agent-card:hover,
+.compare-card:hover { border-color: var(--coral); transform: translateY(-2px); }
+.agent-card h3,
+.compare-card h3 { margin: 0 0 10px; }
+.agent-card p,
+.compare-card p {
+  margin: 0 0 12px;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.agent-card a,
+.compare-card a {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--coral);
+}
+.agent-card a:hover,
+.compare-card a:hover { color: var(--coral); }
+
+@media (max-width: 720px) {
+  .agent-grid,
+  .compare-grid { grid-template-columns: 1fr; }
+}
+
+/* In-page TOC for the longer alternative + compare pages. */
+.info-toc {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+  margin: 0 0 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.info-toc span {
+  color: var(--ink-mute);
+}
+.info-toc a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.16s ease;
+}
+.info-toc a:hover { border-bottom-color: var(--coral); }
+
+/* Closing CTA strip — used at the bottom of /quickstart/, /agents/,
+ * /alternatives/claude-design/. Gives the documentation-heavy SEO
+ * pages a concrete exit point: Star · Download · Discord. */
+.info-cta {
+  margin-top: 56px;
+  padding: 36px 0 28px;
+  border-top: 1px solid var(--ink);
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 32px;
+  align-items: end;
+}
+.info-cta h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.info-cta h2 em {
+  font-style: italic;
+  color: var(--coral);
+}
+.info-cta p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.info-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.info-cta-actions .btn {
+  white-space: nowrap;
+}
+.info-cta-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding-top: 18px;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.info-cta-meta .stamp {
+  color: var(--coral);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .info-cta {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .info-cta-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* TL;DR / Summary card. */
+.tldr-card {
+  border-left: 3px solid var(--coral);
+  padding: 14px 0 14px 20px;
+  margin: 0 0 32px;
+}
+.tldr-card h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--coral);
+  margin: 0 0 8px;
+}
+.tldr-card p {
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0;
+  max-width: none;
+}
+
+
+/* =========================================================
+ * Skill / template detail page: live preview + share row
+ * =========================================================
+ *
+ * `details > summary` toggles an iframe that renders the canonical
+ * `example.html` (or `preview.html` for live-artifacts). The frame
+ * is loaded lazily — click the summary, that's when the network
+ * request goes out.
+ */
+/*
+ * Click-to-expand interactive preview. The `<summary>` IS the
+ * thumbnail — when collapsed, users see a normal preview image; on
+ * hover the overlay reveals "Click for live preview ↗"; on click the
+ * details element opens, swapping the summary out for an iframe of
+ * the canonical example.html. The iframe's `loading="lazy"` plus the
+ * fact that `<details>` only renders content on open means the
+ * network request fires only when the user actually wants the live
+ * view.
+ */
+.detail-preview-live {
+  display: block;
+}
+.detail-preview-live > summary {
+  cursor: pointer;
+  list-style: none;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.detail-preview-live > summary::-webkit-details-marker { display: none; }
+.detail-preview-thumb-trigger {
+  position: relative;
+  overflow: hidden;
+}
+.detail-preview-thumb-trigger img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transition: transform 0.4s ease;
+}
+.detail-preview-thumb-trigger:hover img,
+.detail-preview-thumb-trigger:focus-visible img {
+  transform: scale(1.015);
+}
+.detail-preview-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(21, 20, 15, 0);
+  transition: background 0.18s ease;
+  pointer-events: none;
+}
+.detail-preview-thumb-trigger:hover .detail-preview-thumb-overlay,
+.detail-preview-thumb-trigger:focus-visible .detail-preview-thumb-overlay {
+  background: rgba(21, 20, 15, 0.42);
+}
+.detail-preview-thumb-cta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--coral);
+  padding: 10px 18px;
+  border-radius: 999px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.detail-preview-thumb-trigger:hover .detail-preview-thumb-cta,
+.detail-preview-thumb-trigger:focus-visible .detail-preview-thumb-cta {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Once expanded, hide the summary so the iframe takes its place. */
+.detail-preview-live[open] > summary { display: none; }
+.detail-preview-frame-wrap {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+}
+.detail-preview-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+.detail-preview-popout {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid currentColor;
+  padding: 6px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.detail-preview-popout:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/*
+ * Share dialog — replaces the previous inline 6-button row. The
+ * trigger is a `Share ↗` button inside `.detail-actions` (so it has
+ * visual weight equal to the primary CTAs); clicking opens a
+ * `<dialog>` with the canonical share copy ready to copy + a row of
+ * platform jump buttons that just open the vendor's compose page.
+ *
+ * The copy-then-paste flow works around platform pre-fill limits:
+ * LinkedIn / Facebook ignore `text` params, X truncates Chinese
+ * unpredictably, Reddit's title is title-only. Copy-then-paste is
+ * uniformly reliable.
+ */
+.detail-share-dialog {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  width: min(540px, calc(100vw - 32px));
+  padding: 0;
+  border-radius: 4px;
+  box-shadow: 0 32px 80px rgba(21, 20, 15, 0.32);
+}
+.detail-share-dialog::backdrop {
+  background: rgba(21, 20, 15, 0.42);
+}
+.detail-share-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 28px 28px;
+  margin: 0;
+}
+.detail-share-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+}
+.detail-share-dialog-head h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 22px;
+  margin: 0;
+}
+.detail-share-dialog-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-mute);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.detail-share-dialog-close:hover { color: var(--coral); border-color: var(--coral); }
+.detail-share-dialog-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+.detail-share-dialog-text {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  padding: 12px 14px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  border-radius: 2px;
+  resize: vertical;
+}
+.detail-share-dialog-text:focus {
+  outline: none;
+  border-color: var(--coral);
+}
+.detail-share-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-share-dialog-actions .btn {
+  flex: 1 1 auto;
+  text-align: center;
+}
+.detail-share-dialog-copy[data-copied],
+.detail-share-dialog-copy-link[data-copied] {
+  background: var(--coral) !important;
+  color: var(--paper) !important;
+  border-color: var(--coral) !important;
+}
+.detail-share-dialog-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.detail-share-dialog-platforms-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-right: 4px;
+}
+.detail-share-platform-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  color: var(--ink);
+  text-decoration: none;
+  background: transparent;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.detail-share-platform-btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateY(-1px);
+}
+.detail-share-platform-btn svg {
+  display: block;
+}
+/* Visually-hidden helper for screen-reader-only platform names. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The trigger button itself in `.detail-actions` */
+.detail-share-trigger {
+  /* uses existing `.btn .btn-ghost` styling; this just lets future
+   * code target it for analytics or a11y customizations */
+}
+
+@media (max-width: 720px) {
+  .detail-preview-popout { top: 8px; right: 8px; padding: 4px 10px; font-size: 9.5px; }
+  .detail-share-dialog-form { padding: 20px 22px 24px; }
+  .detail-share-dialog-actions { flex-direction: column; }
+}

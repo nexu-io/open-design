@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-route-navigation-guide",
+  "title": "Cinematic Route Navigation Guide",
+  "version": "0.1.0",
+  "description": "A structured multi-scene prompt designed for Seedance to create a consistent walking navigation video featuring a recurring tour guide character and smooth transitions between real-world locations.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Michael Guo",
+    "url": "https://x.com/Michaelzsguo/status/2048966649982669053"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "fantasy",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/49a08d9ecf7257120711ce6d7b158073/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/49a08d9ecf7257120711ce6d7b158073/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a 5-second cinematic route-guide clip for a walking navigation video.\n\nContinuity:\nThis is scene {N} of 5 in a route from North Avenue MARTA Station to Coda Tech Square in Atlanta.\nThe guide is the same stylish female tour guide in every scene: black sunglasses, sleeveless cream belted dress, brown leather belt, tour lanyard, small shoulder bag, brown hair tied back, confident warm expression.\nShe appears on the sidewalk or plaza only, never in traffic lanes.\n\nScene role:\n{route_step}\n\nStarting frame:\nUse the supplied Street View image as the real-world location reference. Preserve the recognizable street layout, building massing, sidewalk direction, signage, and lighting.\n\nAction:\nThe guide is already in frame, slightly ahead of the viewer. She turns toward the camera, gestures toward the next walking direction, then begins to lead the viewer forward.\n\nCamera:\nSmooth handheld walking pace, slight forward push-in, no jumpy zooms, no orbit. Keep horizon stable. The final second should frame the direction of the next scene so the edit can cut naturally.\n\nEnd frame:\nEnd with the camera facing {next_direction_or_landmark}, with the guide near the edge of frame pointing forward.\n\nRestrictions:\nDo not invent a different city, indoor location, parking lot, or tourist group. Do not place the guide in the road. Do not block crosswalks, street signs, building entrances, or the Coda facade.",
+        "zh-CN": "使用这个插件完成以下任务：Create a 5-second cinematic route-guide clip for a walking navigation video.\n\nContinuity:\nThis is scene {N} of 5 in a route from North Avenue MARTA Station to Coda Tech Square in Atlanta.\nThe guide is the same stylish female tour guide in every scene: black sunglasses, sleeveless cream belted dress, brown leather belt, tour lanyard, small shoulder bag, brown hair tied back, confident warm expression.\nShe appears on the sidewalk or plaza only, never in traffic lanes.\n\nScene role:\n{route_step}\n\nStarting frame:\nUse the supplied Street View image as the real-world location reference. Preserve the recognizable street layout, building massing, sidewalk direction, signage, and lighting.\n\nAction:\nThe guide is already in frame, slightly ahead of the viewer. She turns toward the camera, gestures toward the next walking direction, then begins to lead the viewer forward.\n\nCamera:\nSmooth handheld walking pace, slight forward push-in, no jumpy zooms, no orbit. Keep horizon stable. The final second should frame the direction of the next scene so the edit can cut naturally.\n\nEnd frame:\nEnd with the camera facing {next_direction_or_landmark}, with the guide near the edge of frame pointing forward.\n\nRestrictions:\nDo not invent a different city, indoor location, parking lot, or tourist group. Do not place the guide in the road. Do not block crosswalks, street signs, building entrances, or the Coda facade."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

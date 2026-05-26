@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
+  buildDesignHandoffContent,
+  buildDesignManifestContent,
   buildSandboxedPreviewDocument,
+  exportAsImage,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
+  requestPreviewSnapshot,
 } from '../../src/runtime/exports';
 
 function mockResponse(headers: Record<string, string>): Response {
@@ -69,6 +75,163 @@ describe('archiveFilenameFrom', () => {
       'content-disposition': "attachment; filename*=UTF-8''%E9%9D",
     });
     expect(archiveFilenameFrom(resp, 'fallback', 'ui-design')).toBe('ui-design.zip');
+  });
+});
+
+describe('buildDesignHandoffContent', () => {
+  it('documents coding handoff and responsive verification expectations', () => {
+    const content = buildDesignHandoffContent({
+      title: 'Checkout Design',
+      entryFile: 'index.html',
+      files: ['index.html', 'src/app.css', 'src/app.js'],
+    });
+
+    expect(content).toContain('Checkout Design implementation handoff');
+    expect(content).toContain('Mobile compact: 360×800');
+    expect(content).toContain('Tablet portrait: 820×1180');
+    expect(content).toContain('Wide desktop: 1920×1080');
+    expect(content).toContain('`src/app.css`');
+    expect(content).toContain('visual system');
+    expect(content).toContain('Design fidelity contract');
+    expect(content).toContain('CJX-ready UX contract');
+    expect(content).toContain('DESIGN-MANIFEST.json');
+    expect(content).toContain('in-app modules/components');
+    expect(content).toContain('OS widgets are home-screen/lock-screen/quick-access surfaces');
+    expect(content).toContain('Color and brand contract');
+    expect(content).toContain('Do not introduce warm beige / cream / peach / pink / orange-brown background washes');
+    expect(content).toContain('Build product screens and domain-specific in-app modules');
+  });
+
+  it('builds a machine-readable design manifest for coding tools', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Checkout Design',
+      entryFile: 'index.html',
+      files: ['index.html', 'src/app.css', 'src/app.js'],
+    }));
+
+    expect(manifest.schema).toBe('open-design.design-manifest.v1');
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.sourceFiles.css).toEqual(['src/app.css']);
+    expect(manifest.sourceFiles.scriptsAndComponents).toEqual(['src/app.js']);
+    expect(manifest.appModules.join(' ')).toContain('domain-specific in-app modules');
+    expect(manifest.osWidgets.join(' ')).toContain('home-screen');
+    expect(manifest.responsiveViewports).toContainEqual({
+      name: 'tablet-portrait',
+      width: 820,
+      height: 1180,
+      category: 'tablet',
+      mustAvoidHorizontalScroll: true,
+    });
+    expect(manifest.implementationChecklist.join(' ')).toContain('landing pages, in-app modules, and OS widgets');
+  });
+
+  it('does not classify plain home.html as a landing page in the manifest', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Product App',
+      entryFile: 'home.html',
+      files: ['home.html', 'dashboard.html', 'marketing.html'],
+    }));
+
+    const screens = new Map(manifest.screens.map((screen: { file: string; role: string }) => [screen.file, screen.role]));
+    expect(screens.get('home.html')).not.toBe('landing-page');
+    expect(screens.get('marketing.html')).toBe('landing-page');
+    expect(screens.get('dashboard.html')).toBe('product-screen');
+  });
+
+  it('keeps frame wrapper HTML out of client export manifest screens', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Framed App',
+      entryFile: 'index.html',
+      files: ['index.html', 'frames/iphone-15-pro.html', 'browser-chrome.html', 'src/app.css'],
+    }));
+
+    expect(manifest.sourceFiles.html).toEqual(['browser-chrome.html', 'frames/iphone-15-pro.html', 'index.html']);
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html']);
+  });
+
+  it('normalizes a frame-wrapper active file to the implementable screen entry in manifest and handoff', () => {
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Framed App',
+      entryFile: 'frames/iphone-15-pro.html',
+      files: ['index.html', 'landing.html', 'frames/iphone-15-pro.html', 'src/app.css'],
+    }));
+    const handoff = buildDesignHandoffContent({
+      title: 'Framed App',
+      entryFile: 'frames/iphone-15-pro.html',
+      files: ['index.html', 'landing.html', 'frames/iphone-15-pro.html', 'src/app.css'],
+    });
+
+    expect(manifest.entryFile).toBe('index.html');
+    expect(manifest.screens.map((screen: { file: string }) => screen.file)).toEqual(['index.html', 'landing.html']);
+    expect(handoff).toContain('Primary entry: `index.html`');
+    expect(handoff).toContain('Open `index.html` and `DESIGN-MANIFEST.json`');
+    expect(handoff).not.toContain('Primary entry: `frames/iphone-15-pro.html`');
+  });
+
+  it('keeps phone.html and iphone-upgrade.html as real screens when outside frames/ directory', () => {
+    // phone.html as a carrier storefront screen, iphone-upgrade.html as a
+    // product surface — neither should be silently dropped from screens just
+    // because the filename resembles a device name.
+    const manifest = JSON.parse(buildDesignManifestContent({
+      title: 'Carrier Storefront',
+      entryFile: 'phone.html',
+      files: ['phone.html', 'iphone-upgrade.html', 'frames/browser-shell.html', 'src/app.css'],
+    }));
+
+    const screenFiles = manifest.screens.map((screen: { file: string }) => screen.file);
+    expect(screenFiles).toContain('phone.html');
+    expect(screenFiles).toContain('iphone-upgrade.html');
+    // frame wrapper inside frames/ is still excluded
+    expect(screenFiles).not.toContain('frames/browser-shell.html');
+    // both real screens appear in sourceFiles.html
+    expect(manifest.sourceFiles.html).toContain('phone.html');
+    expect(manifest.sourceFiles.html).toContain('iphone-upgrade.html');
+    expect(manifest.sourceFiles.html).toContain('frames/browser-shell.html');
+  });
+});
+
+describe('exportProjectAsPdf', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('uses the daemon desktop PDF export API before falling back to browser print', async () => {
+    const fallback = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+
+    const result = await exportProjectAsPdf({
+      deck: true,
+      fallbackPdf: fallback,
+      filePath: 'deck/index.html',
+      projectId: 'proj-1',
+      title: 'Seed Deck',
+    });
+
+    expect(result).toBe('desktop');
+    expect(fallback).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj-1/export/pdf', {
+      body: JSON.stringify({ deck: true, fileName: 'deck/index.html', title: 'Seed Deck' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+  });
+
+  it('falls back to browser print when the desktop PDF export API is unavailable', async () => {
+    const fallback = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'unavailable' } }), { status: 501 })));
+
+    const result = await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: fallback,
+      filePath: 'index.html',
+      projectId: 'proj-1',
+      title: 'Landing',
+    });
+
+    expect(result).toBe('fallback');
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -213,7 +376,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {
-    exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
+    await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
 
     expect(openCalls).toEqual([['', '_blank']]);
     expect(mockWin.opener).toBeNull();
@@ -227,7 +390,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('preserves deck print handling inside sandboxed PDF exports', async () => {
-    exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
+    await exportAsPdf('<section class="slide">One</section>', 'Deck PDF', { deck: true });
 
     expect(openCalls).toEqual([['', '_blank']]);
     expect(mockWin.opener).toBeNull();
@@ -240,7 +403,7 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('allows explicit trusted PDF opt-out without changing the secure default', async () => {
-    exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
+    await exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
       sandboxedPreview: false,
     });
 
@@ -255,16 +418,298 @@ describe('sandboxed preview Blob exports', () => {
 
   it('shows an alert and revokes the blob URL when the popup is blocked', async () => {
     vi.stubGlobal('window', {
-      ...window,
       open: () => null,
+      addEventListener: () => {},
     });
 
     const revokeSpy = URL.revokeObjectURL as ReturnType<typeof vi.fn>;
     revokeSpy.mockClear();
 
-    exportAsPdf('<p>test</p>', 'Blocked');
+    await exportAsPdf('<p>test</p>', 'Blocked');
 
-    expect(alert).toHaveBeenCalledWith('Popup blocked! Please allow popups for this site to export as PDF.');
+    expect(alert).toHaveBeenCalledWith('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     expect(revokeSpy).toHaveBeenCalledWith('blob:test');
+  });
+
+  it('uses the desktop native print bridge when the host PDF bridge is available', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
+    });
+
+    try {
+      await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'Desktop PDF');
+    } finally {
+      restoreHost();
+    }
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    expect(openCalls).toEqual([]);
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    expect(htmlArg).toContain('sandbox="allow-scripts"');
+    expect(htmlArg).not.toContain('allow-modals');
+    expect(htmlArg).toContain('&lt;script&gt;window.parent.document.body.innerHTML=&quot;owned&quot;&lt;/script&gt;');
+    expect(htmlArg).not.toContain('<script>window.parent.document.body.innerHTML="owned"</script>');
+    // Verify the readiness handshake is present — the sandboxed iframe posts
+    // 'OD_PRINT_READY' to the parent once fonts and images are loaded.
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // Verify the parent-wrapper cache script is present so the handshake is
+    // never missed even if 'OD_PRINT_READY' fires before the listener attaches.
+    expect(htmlArg).toContain('__odPrintReady');
+    // Verify the print script is NOT injected — Electron renders via the
+    // native printToPDF path, so a self-printing document would trigger a
+    // second print dialog.
+    expect(htmlArg).not.toContain('window.print()');
+  });
+
+  it('passes deck intent through the desktop native print bridge', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
+    });
+
+    try {
+      await exportAsPdf('<section class="slide">One</section>', 'Desktop Deck', { deck: true });
+    } finally {
+      restoreHost();
+    }
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    expect(printPdfMock.mock.calls[0]![2]).toEqual({ deck: true });
+    expect(printPdfMock.mock.calls[0]![0]).toContain('data-deck-print=&quot;injected&quot;');
+  });
+
+  it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
+    });
+
+    // HTML with an intentionally non-loadable image to exercise the
+    // incomplete-image detection in the injected handshake.
+    const html = '<div><img src="https://example.com/will-not-load.png" alt="test"/></div>';
+    try {
+      await exportAsPdf(html, 'Image Test');
+    } finally {
+      restoreHost();
+    }
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // In the sandboxed wrapper the srcdoc attribute is HTML-escaped, so the
+    // handshake script content is present as unescaped JS fragments.
+    expect(htmlArg).toContain('document.images');
+    expect(htmlArg).toContain("img.addEventListener('load'");
+    expect(htmlArg).toContain("img.addEventListener('error'");
+    expect(htmlArg).toContain('img.complete');
+    // The original font- and load-waiting logic must still be present.
+    expect(htmlArg).toContain('document.fonts');
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // The handshake posts an object with a per-export nonce to prevent
+    // spoofing by untrusted artifact code.
+    expect(htmlArg).toContain("type:'OD_PRINT_READY'");
+    expect(htmlArg).toContain("nonce:'");
+    // The cache script also validates the nonce and event source.
+    expect(htmlArg).toContain("e.data.type==='OD_PRINT_READY'");
+    expect(htmlArg).toContain("e.data.nonce===");
+    expect(htmlArg).toContain('e.source===');
+    // The parent cache should still be injected.
+    expect(htmlArg).toContain('__odPrintReady');
+    // No window.print() since the desktop bridge handles printing natively.
+    expect(htmlArg).not.toContain('window.print()');
+  });
+
+  it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
+    });
+
+    try {
+      await exportAsPdf('<main>Trusted local document</main>', 'Trusted', {
+        sandboxedPreview: false,
+      });
+    } finally {
+      restoreHost();
+    }
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // No sandbox wrapper — the document is passed through directly.
+    expect(htmlArg).not.toContain('sandbox="allow-scripts"');
+    expect(htmlArg).toContain('<main>Trusted local document</main>');
+    // The readiness handshake must still be injected.
+    expect(htmlArg).toContain('OD_PRINT_READY');
+    // The cache must be present so waitForPrintReadyHandshake never hangs.
+    expect(htmlArg).toContain('__odPrintReady');
+    // No window.print() since the desktop bridge handles printing natively.
+    expect(htmlArg).not.toContain('window.print()');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Image screenshot export
+// ---------------------------------------------------------------------------
+
+describe('requestPreviewSnapshot', () => {
+  let listeners: Map<string, Set<(ev: unknown) => void>>;
+
+  beforeEach(() => {
+    listeners = new Map();
+    vi.stubGlobal('window', {
+      addEventListener: (type: string, fn: (ev: unknown) => void) => {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type)!.add(fn);
+      },
+      removeEventListener: (type: string, fn: (ev: unknown) => void) => {
+        listeners.get(type)?.delete(fn);
+      },
+      dispatchEvent: (ev: { type: string }) => {
+        for (const fn of listeners.get(ev.type) ?? []) fn(ev);
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('returns null when the iframe has no contentWindow', async () => {
+    const iframe = { contentWindow: null } as unknown as HTMLIFrameElement;
+    const result = await requestPreviewSnapshot(iframe);
+    expect(result).toBeNull();
+  });
+
+  it('resolves with snapshot data when the bridge responds', async () => {
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe);
+
+    expect(postMessageMock).toHaveBeenCalledOnce();
+    const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
+
+    // Simulate the bridge responding — source must match iframe.contentWindow
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id, dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
+    );
+
+    const result = await promise;
+    expect(result).toEqual({ dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 });
+  });
+
+  it('resolves null when the bridge responds with an error', async () => {
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe);
+    const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
+
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id, error: 'snapshot image failed' } } as unknown as Event,
+    );
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it('resolves null on timeout', async () => {
+    vi.useFakeTimers();
+    const iframe = {
+      contentWindow: { postMessage: vi.fn() },
+    } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100);
+    vi.advanceTimersByTime(150);
+
+    const result = await promise;
+    expect(result).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('ignores messages with a mismatched id', async () => {
+    vi.useFakeTimers();
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100);
+
+    // Correct source but wrong id — should be ignored
+    window.dispatchEvent(
+      { type: 'message', source: contentWindow, data: { type: 'od:snapshot:result', id: 'wrong-id', dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
+    );
+
+    vi.advanceTimersByTime(150);
+    const result = await promise;
+    expect(result).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('ignores messages from a different source window', async () => {
+    vi.useFakeTimers();
+    const postMessageMock = vi.fn();
+    const contentWindow = { postMessage: postMessageMock };
+    const iframe = { contentWindow } as unknown as HTMLIFrameElement;
+
+    const promise = requestPreviewSnapshot(iframe, 100);
+    const { id } = postMessageMock.mock.calls[0]![0] as { type: string; id: string };
+
+    // Correct id but wrong source — should be ignored
+    window.dispatchEvent(
+      { type: 'message', source: { other: true }, data: { type: 'od:snapshot:result', id, dataUrl: 'data:image/png;base64,abc', w: 100, h: 50 } } as unknown as Event,
+    );
+
+    vi.advanceTimersByTime(150);
+    const result = await promise;
+    expect(result).toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe('exportAsImage', () => {
+  let clickMock: ReturnType<typeof vi.fn>;
+  let anchors: Array<{ href: string; download: string; click: ReturnType<typeof vi.fn> }>;
+
+  beforeEach(() => {
+    clickMock = vi.fn();
+    anchors = [];
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:mock-url', revokeObjectURL: vi.fn() });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const el = { href: '', download: '', click: clickMock };
+        anchors.push(el);
+        return el;
+      },
+      body: {
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+      },
+    });
+    // triggerDownload calls setTimeout for deferred revoke
+    vi.stubGlobal('setTimeout', (fn: () => void) => fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('triggers a download with a .png filename', () => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    exportAsImage(dataUrl, 'My Design');
+
+    expect(clickMock).toHaveBeenCalledOnce();
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]!.download).toBe('My-Design.png');
+  });
+
+  it('sanitizes the title into a safe filename', () => {
+    exportAsImage('data:image/png;base64,AA==', 'Hello <World> / Test!');
+
+    expect(anchors[0]!.download).toBe('Hello-World-Test.png');
   });
 });

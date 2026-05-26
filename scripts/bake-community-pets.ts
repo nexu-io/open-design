@@ -27,7 +27,6 @@ const BUNDLED_PETS = [
   'dario',
   'nyako-shigure',
   'slavik',
-  'trump',
   'tux',
   'yelling-dario',
   'yorha-sit-2b',

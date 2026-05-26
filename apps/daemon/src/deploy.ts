@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -12,8 +11,43 @@ export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
 
+type JsonObject = Record<string, any>;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
+type DeployErrorDetails = JsonObject | string | undefined;
+type DeployConfig = {
+  token: string;
+  teamId?: string | undefined;
+  teamSlug?: string | undefined;
+  accountId?: string | undefined;
+  projectName?: string | undefined;
+  cloudflarePages?: CloudflarePagesConfigHints | undefined;
+};
+type CloudflarePagesConfigHints = {
+  lastZoneId?: string;
+  lastZoneName?: string;
+  lastDomainPrefix?: string;
+};
+type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
+type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
+type DeployOptions = { metadata?: unknown; hookScriptUrl?: string; providerId?: DeployProviderId };
+type CloudflarePagesDeploySelection = { zoneId: string; zoneName: string; domainPrefix: string; hostname: string };
+type CloudflareDnsRecord = JsonObject & { id?: string; type?: string; name?: string; content?: string; comment?: string };
+type DeployLinkStatus = 'ready' | 'protected' | 'failed' | 'link-delayed';
+type DeploymentUrlCheck = { reachable: boolean; status?: DeployLinkStatus; statusCode?: number; statusMessage?: string };
+type MaybeJsonObject = JsonObject | null | undefined;
+
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && 'code' in err;
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 const VERCEL_API = 'https://api.vercel.com';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
+const CLOUDFLARE_API_PAGE_SIZE = 100;
+const CLOUDFLARE_API_MAX_PAGES = 100;
 export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES = 100;
 export const CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES = 75 * 1024 * 1024;
 export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
@@ -21,20 +55,25 @@ const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
 
 export class DeployError extends Error {
-  constructor(message, status = 400, details = undefined) {
+  status: number;
+  details: DeployErrorDetails;
+  code?: string | undefined;
+
+  constructor(message: string, status = 400, details: DeployErrorDetails = undefined, code?: string) {
     super(message);
     this.name = 'DeployError';
     this.status = status;
     this.details = details;
+    this.code = code;
   }
 }
 
-export function deployConfigPath(providerId = VERCEL_PROVIDER_ID) {
+export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
 }
 
-export async function readVercelConfig() {
+export async function readVercelConfig(): Promise<DeployConfig> {
   try {
     const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
     const parsed = JSON.parse(raw);
@@ -44,12 +83,12 @@ export async function readVercelConfig() {
       teamSlug: typeof parsed.teamSlug === 'string' ? parsed.teamSlug : '',
     };
   } catch (err) {
-    if (err && err.code === 'ENOENT') return { token: '', teamId: '', teamSlug: '' };
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', teamId: '', teamSlug: '' };
     throw err;
   }
 }
 
-export async function readCloudflarePagesConfig() {
+export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
   try {
     const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
     const parsed = JSON.parse(raw);
@@ -57,14 +96,15 @@ export async function readCloudflarePagesConfig() {
       token: typeof parsed.token === 'string' ? parsed.token : '',
       accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
       projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
+      cloudflarePages: normalizeCloudflarePagesConfigHints(parsed.cloudflarePages),
     };
   } catch (err) {
-    if (err && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '' };
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '', cloudflarePages: {} };
     throw err;
   }
 }
 
-export async function writeVercelConfig(input) {
+export async function writeVercelConfig(input: Partial<DeployConfig>) {
   const current = await readVercelConfig();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   const next = {
@@ -80,10 +120,11 @@ export async function writeVercelConfig(input) {
   return publicDeployConfig(next);
 }
 
-export async function writeCloudflarePagesConfig(input) {
+export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
   const current = await readCloudflarePagesConfig();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const next = {
+  const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
+  const next: DeployConfig = {
     token:
       tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
         ? tokenInput
@@ -95,13 +136,14 @@ export async function writeCloudflarePagesConfig(input) {
     // mirroring Vercel's automatic `od-${projectId}` deployment name.
     projectName: '',
   };
+  if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
   if (!next.token) throw new DeployError('Cloudflare API token is required.', 400);
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
   await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
   return publicCloudflarePagesConfig(next);
 }
 
-async function writeDeployConfigFile(file, config) {
+async function writeDeployConfigFile(file: string, config: DeployConfig) {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   try {
@@ -111,7 +153,7 @@ async function writeDeployConfigFile(file, config) {
   }
 }
 
-export function publicDeployConfig(config) {
+export function publicDeployConfig(config: Partial<DeployConfig>) {
   return {
     providerId: VERCEL_PROVIDER_ID,
     configured: Boolean(config?.token),
@@ -122,8 +164,9 @@ export function publicDeployConfig(config) {
   };
 }
 
-export function publicCloudflarePagesConfig(config) {
-  return {
+export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
+  const cloudflarePages = normalizeCloudflarePagesConfigHints(config?.cloudflarePages);
+  const body: JsonObject = {
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
     configured: Boolean(config?.token && config?.accountId),
     tokenMask: config?.token ? SAVED_CLOUDFLARE_TOKEN_MASK : '',
@@ -133,25 +176,56 @@ export function publicCloudflarePagesConfig(config) {
     projectName: config?.projectName || '',
     target: 'preview',
   };
+  if (Object.keys(cloudflarePages).length > 0) body.cloudflarePages = cloudflarePages;
+  return body;
 }
 
-export async function readDeployConfig(providerId = VERCEL_PROVIDER_ID) {
+export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
   return readVercelConfig();
 }
 
-export async function writeDeployConfig(providerId = VERCEL_PROVIDER_ID, input = {}) {
+export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
   return writeVercelConfig(input);
 }
 
-export function publicDeployConfigForProvider(providerId = VERCEL_PROVIDER_ID, config = {}) {
+export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
   return publicDeployConfig(config);
 }
 
-export function isDeployProviderId(value) {
+export function isDeployProviderId(value: unknown): value is DeployProviderId {
   return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+}
+
+function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
+  const hasSource = Boolean(input && typeof input === 'object');
+  const source = (hasSource ? input : {}) as CloudflarePagesConfigHints;
+  const prior = (!hasSource && fallback && typeof fallback === 'object' ? fallback : {}) as CloudflarePagesConfigHints;
+  const lastZoneId =
+    typeof source.lastZoneId === 'string'
+      ? source.lastZoneId.trim()
+      : typeof prior.lastZoneId === 'string'
+        ? prior.lastZoneId.trim()
+        : '';
+  const lastZoneName =
+    typeof source.lastZoneName === 'string'
+      ? normalizeCloudflareZoneName(source.lastZoneName)
+      : typeof prior.lastZoneName === 'string'
+        ? normalizeCloudflareZoneName(prior.lastZoneName)
+        : '';
+  const lastDomainPrefix =
+    typeof source.lastDomainPrefix === 'string'
+      ? normalizeCloudflareDomainPrefix(source.lastDomainPrefix)
+      : typeof prior.lastDomainPrefix === 'string'
+        ? normalizeCloudflareDomainPrefix(prior.lastDomainPrefix)
+        : '';
+  return {
+    ...(lastZoneId ? { lastZoneId } : {}),
+    ...(lastZoneName ? { lastZoneName } : {}),
+    ...(lastDomainPrefix ? { lastDomainPrefix } : {}),
+  };
 }
 
 // Walk the entry HTML and any referenced CSS, producing the full set of
@@ -159,7 +233,7 @@ export function isDeployProviderId(value) {
 // missing and invalid references. Does not throw on a partial result so
 // callers can distinguish between "ready to ship" and "ready except for
 // these specific issues" without parsing an error string.
-export async function buildDeployFilePlan(projectsRoot, projectId, entryName, options = {}) {
+export async function buildDeployFilePlan(projectsRoot: string, projectId: string, entryName: string, options: DeployOptions = {}): Promise<DeployFilePlan> {
   const entryPath = validateProjectPath(entryName);
   if (!/\.html?$/i.test(entryPath)) {
     throw new DeployError('Only HTML files can be deployed.', 400);
@@ -172,7 +246,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     rewriteEntryHtmlReferences(html, entryBase),
     options.hookScriptUrl ?? process.env.OD_DEPLOY_HOOK_SCRIPT_URL,
   );
-  const files = new Map();
+  const files = new Map<string, DeployFile>();
   files.set('index.html', {
     file: 'index.html',
     data: Buffer.from(deployHtml, 'utf8'),
@@ -180,10 +254,10 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     sourcePath: entryPath,
   });
 
-  const visited = new Set([entryPath]);
-  const missing = [];
-  const invalid = [];
-  const pending = extractHtmlReferences(html).map((ref) => ({
+  const visited = new Set<string>([entryPath]);
+  const missing: string[] = [];
+  const invalid: string[] = [];
+  const pending: { ref: string; base: string }[] = extractHtmlReferences(html).map((ref) => ({
     ref,
     base: entryBase,
   }));
@@ -195,12 +269,16 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     pending.push({ ref, base: entryBase });
   }
 
-  for (const manifestRef of entry.artifactManifest?.supportingFiles ?? []) {
+  const supportingFiles = 'supportingFiles' in (entry.artifactManifest ?? {})
+    ? ((entry.artifactManifest as { supportingFiles?: string[] }).supportingFiles ?? [])
+    : [];
+  for (const manifestRef of supportingFiles) {
     pending.push({ ref: manifestRef, base: entryBase });
   }
 
   while (pending.length > 0) {
     const item = pending.shift();
+    if (!item) break;
     const resolved = resolveReferencedPath(item.ref, item.base);
     if (!resolved) continue;
     let safePath;
@@ -217,7 +295,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
     try {
       projectFile = await readProjectFile(projectsRoot, projectId, safePath, options.metadata);
     } catch (err) {
-      if (err && err.code === 'ENOENT') {
+      if (isErrnoException(err) && err.code === 'ENOENT') {
         missing.push(safePath);
         continue;
       }
@@ -249,7 +327,7 @@ export async function buildDeployFilePlan(projectsRoot, projectId, entryName, op
   };
 }
 
-export async function buildDeployFileSet(projectsRoot, projectId, entryName, options = {}) {
+export async function buildDeployFileSet(projectsRoot: string, projectId: string, entryName: string, options: DeployOptions = {}) {
   const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
   if (plan.missing.length || plan.invalid.length) {
     const parts = [];
@@ -263,7 +341,7 @@ export async function buildDeployFileSet(projectsRoot, projectId, entryName, opt
   return plan.files;
 }
 
-export async function deployToVercel({ config, files, projectId }) {
+export async function deployToVercel({ config, files, projectId }: { config: DeployConfig; files: DeployFile[]; projectId: string }) {
   if (!config?.token) {
     throw new DeployError('Vercel token is required.', 400);
   }
@@ -314,10 +392,53 @@ export async function deployToVercel({ config, files, projectId }) {
   };
 }
 
-export async function deployToCloudflarePages({ config, files }) {
+export async function listCloudflarePagesZones(config: DeployConfig) {
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  const accountId = config.accountId;
+  const zones = await fetchCloudflarePaginatedResult(
+    config,
+    (page, perPage) => {
+      const params = new URLSearchParams({
+        'account.id': accountId,
+        status: 'active',
+        type: 'full',
+        page: String(page),
+        per_page: String(perPage),
+      });
+      return `${CLOUDFLARE_API}/zones?${params.toString()}`;
+    },
+    'Cloudflare zones lookup failed.',
+  );
+  return {
+    zones: zones
+      .map((zone) => ({
+        id: typeof zone?.id === 'string' ? zone.id : '',
+        name: normalizeCloudflareZoneName(zone?.name),
+        status: typeof zone?.status === 'string' ? zone.status : undefined,
+        type: typeof zone?.type === 'string' ? zone.type : undefined,
+      }))
+      .filter((zone) => zone.id && zone.name),
+    cloudflarePages: normalizeCloudflarePagesConfigHints(config?.cloudflarePages),
+  };
+}
+
+export async function deployToCloudflarePages(input: { config: DeployConfig; files: DeployFile[]; projectId?: string; cloudflarePages?: unknown; priorMetadata?: JsonObject | undefined }) {
+  const {
+    config,
+    files,
+    projectId = '',
+    cloudflarePages = undefined,
+    priorMetadata = undefined,
+  } = input || {};
   if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
   if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
   if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+
+  const customDomainSelection = await validateCloudflarePagesDeploySelection(
+    config,
+    normalizeCloudflarePagesDeploySelection(cloudflarePages),
+  );
 
   await ensureCloudflarePagesProject(config);
 
@@ -325,7 +446,7 @@ export async function deployToCloudflarePages({ config, files }) {
   await uploadCloudflarePagesAssets(uploadToken, files);
 
   const form = new FormData();
-  const manifest = {};
+  const manifest: Record<string, string> = {};
   for (const file of files) {
     manifest[`/${file.file}`] = cloudflarePagesAssetHash(file);
   }
@@ -348,19 +469,476 @@ export async function deployToCloudflarePages({ config, files }) {
     productionUrl ? [productionUrl] : [deployment?.url],
     { providerLabel: 'Cloudflare Pages' },
   );
-
-  return {
-    providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
-    url: productionUrl || link.url || deploymentUrl(deployment),
-    deploymentId: deployment?.id,
-    target: 'preview',
-    status: link.status,
+  const pagesDevUrl = productionUrl || link.url || deploymentUrl(deployment);
+  const pagesDev = {
+    url: pagesDevUrl,
+    status: normalizeDeploymentLinkStatus(link.status),
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
   };
+  const customDomain = customDomainSelection
+    ? await setupCloudflarePagesCustomDomain({
+        config,
+        projectId,
+        selection: customDomainSelection,
+        pagesDevUrl,
+        priorMetadata,
+      })
+    : undefined;
+  const cloudflarePagesInfo = {
+    projectName: config.projectName,
+    pagesDev,
+    ...(customDomain ? { customDomain } : {}),
+  };
+  const aggregate = aggregateCloudflarePagesStatus(pagesDev, customDomain);
+
+  return {
+    providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+    url: pagesDevUrl,
+    deploymentId: deployment?.id,
+    target: 'preview',
+    status: aggregate.status,
+    statusMessage: aggregate.statusMessage,
+    reachableAt: link.reachableAt,
+    cloudflarePages: cloudflarePagesInfo,
+    providerMetadata: cloudflarePagesProviderMetadata(config.projectName, cloudflarePagesInfo, { projectId }),
+  };
 }
 
-async function ensureCloudflarePagesProject(config) {
+function normalizeDeploymentLinkStatus(status: unknown): DeployLinkStatus {
+  return status === 'ready' || status === 'protected' || status === 'failed'
+    ? status
+    : 'link-delayed';
+}
+
+function normalizeCloudflarePagesDeploySelection(input: unknown): CloudflarePagesDeploySelection | null {
+  if (!input || typeof input !== 'object') return null;
+  const source = input as JsonObject;
+  const rawZoneId = typeof source.zoneId === 'string' ? source.zoneId.trim() : '';
+  const rawZoneName = typeof source.zoneName === 'string' ? source.zoneName.trim() : '';
+  const rawPrefix = typeof source.domainPrefix === 'string' ? source.domainPrefix.trim() : '';
+  if (!rawZoneId && !rawZoneName && !rawPrefix) return null;
+  const zoneName = normalizeCloudflareZoneName(rawZoneName);
+  const domainPrefix = normalizeCloudflareDomainPrefix(rawPrefix);
+  if (!rawZoneId) throw new DeployError('Cloudflare zone is required for a custom domain.', 400);
+  if (!zoneName || !isValidCloudflareZoneName(zoneName)) {
+    throw new DeployError('Select a valid Cloudflare domain for the custom domain.', 400);
+  }
+  if (!domainPrefix) {
+    throw new DeployError('Enter a valid subdomain prefix, for example "demo".', 400);
+  }
+  return {
+    zoneId: rawZoneId,
+    zoneName,
+    domainPrefix,
+    hostname: `${domainPrefix}.${zoneName}`,
+  };
+}
+
+async function validateCloudflarePagesDeploySelection(config: DeployConfig, selection: CloudflarePagesDeploySelection | null): Promise<CloudflarePagesDeploySelection | null> {
+  if (!selection) return null;
+  const resp = await fetch(`${CLOUDFLARE_API}/zones/${encodeURIComponent(selection.zoneId)}`, {
+    headers: cloudflareHeaders(config),
+  });
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json?.success === false) {
+    throw cloudflareError(json, resp.status, 'Cloudflare zone lookup failed.');
+  }
+  const zone = json?.result ?? json;
+  const zoneName = normalizeCloudflareZoneName(zone?.name);
+  if (!zoneName || zoneName !== selection.zoneName) {
+    throw new DeployError('Cloudflare zone selection no longer matches the selected domain.', 400, {
+      errorCode: 'cloudflare_zone_mismatch',
+    });
+  }
+  if (zone?.status && zone.status !== 'active') {
+    throw new DeployError('Cloudflare custom domains require an active zone.', 400, {
+      errorCode: 'cloudflare_zone_inactive',
+    });
+  }
+  if (zone?.type && zone.type !== 'full') {
+    throw new DeployError('Cloudflare custom domains require a full DNS zone.', 400, {
+      errorCode: 'cloudflare_zone_not_full',
+    });
+  }
+  return { ...selection, zoneName };
+}
+
+async function setupCloudflarePagesCustomDomain({ config, projectId, selection, pagesDevUrl, priorMetadata }: { config: DeployConfig; projectId: string; selection: CloudflarePagesDeploySelection; pagesDevUrl: string; priorMetadata?: JsonObject | undefined }) {
+  if (!config.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+  const pagesTarget = normalizeHostname(hostnameFromUrl(pagesDevUrl) || `${config.projectName}.pages.dev`);
+  const marker = cloudflarePagesDnsMarker(projectId, config.projectName, pagesTarget);
+  const base = {
+    hostname: selection.hostname,
+    url: `https://${selection.hostname}`,
+    zoneId: selection.zoneId,
+    zoneName: selection.zoneName,
+    domainPrefix: selection.domainPrefix,
+  };
+
+  let dns;
+  try {
+    dns = await ensureCloudflarePagesCnameRecord({
+      config,
+      selection,
+      target: pagesTarget,
+      marker,
+      priorMetadata,
+    });
+  } catch (err) {
+    const details = err instanceof DeployError && err.details && typeof err.details === 'object'
+      ? err.details
+      : {};
+    return {
+      ...base,
+      status: details.errorCode === 'cloudflare_dns_record_conflict' ? 'conflict' : 'failed',
+      statusMessage: errorMessage(err, 'Cloudflare DNS record setup failed.'),
+      errorCode: details.errorCode || 'cloudflare_dns_record_failed',
+      errorMessage: errorMessage(err, 'Cloudflare DNS record setup failed.'),
+      dnsStatus: details.dnsStatus || (details.errorCode === 'cloudflare_dns_record_conflict' ? 'conflict' : 'failed'),
+      dnsRecordId: details.dnsRecordId,
+      dnsOwnership: details.dnsOwnership || 'external',
+      domainStatus: 'skipped',
+    };
+  }
+
+  let domain;
+  try {
+    domain = await ensureCloudflarePagesDomain(config, selection.hostname);
+  } catch (err) {
+    const details = err instanceof DeployError && err.details && typeof err.details === 'object'
+      ? err.details
+      : {};
+    return {
+      ...base,
+      status: details.errorCode === 'cloudflare_domain_already_bound' ? 'conflict' : 'failed',
+      statusMessage: errorMessage(err, 'Cloudflare Pages custom domain setup failed.'),
+      errorCode: details.errorCode || 'cloudflare_domain_setup_failed',
+      errorMessage: errorMessage(err, 'Cloudflare Pages custom domain setup failed.'),
+      dnsStatus: dns.dnsStatus,
+      dnsRecordId: dns.dnsRecordId,
+      dnsOwnership: dns.dnsOwnership,
+      domainStatus: details.domainStatus || 'failed',
+    };
+  }
+
+  const domainStatus = normalizeCloudflarePagesDomainStatus(domain?.status);
+  const customLink = domainStatus === 'active'
+    ? await checkDeploymentUrl(base.url)
+    : null;
+  const ready = domainStatus === 'active' && customLink?.reachable;
+  const failed = domainStatus === 'failed';
+  return {
+    ...base,
+    status: ready ? 'ready' : failed ? 'failed' : 'pending',
+    statusMessage: ready
+      ? 'Custom domain is ready.'
+      : failed
+        ? 'Cloudflare Pages reported a custom-domain error.'
+        : customLink?.statusMessage || 'Custom domain is being verified by Cloudflare Pages.',
+    errorCode: failed ? 'cloudflare_domain_setup_failed' : undefined,
+    dnsStatus: dns.dnsStatus,
+    dnsRecordId: dns.dnsRecordId,
+    dnsOwnership: dns.dnsOwnership,
+    domainStatus,
+    pagesDomainStatus: typeof domain?.status === 'string' ? domain.status : undefined,
+    validationData: domain?.validation_data,
+    verificationData: domain?.verification_data,
+  };
+}
+
+async function ensureCloudflarePagesCnameRecord({ config, selection, target, marker, priorMetadata }: { config: DeployConfig; selection: CloudflarePagesDeploySelection; target: string; marker: string; priorMetadata?: JsonObject | undefined }) {
+  const records = await listCloudflareDnsRecords(config, selection.zoneId, selection.hostname);
+  const targetHost = normalizeHostname(target);
+  const exact = findExactCloudflarePagesCname(records, selection, targetHost);
+  if (exact) {
+    return cloudflarePagesCnameReuseResult(exact, marker);
+  }
+
+  const conflicting = findCloudflarePagesHostnameRecord(records, selection);
+  if (conflicting) {
+    if (canPatchCloudflarePagesCname(conflicting, selection, marker, priorMetadata)) {
+      const conflictingId = conflicting.id;
+      if (!conflictingId) throw new DeployError('Cloudflare DNS record id is missing.', 502);
+      const patched = await patchCloudflareDnsRecord(config, selection.zoneId, conflictingId, {
+        type: 'CNAME',
+        name: selection.hostname,
+        content: targetHost,
+        proxied: true,
+        ttl: 1,
+        comment: marker,
+      });
+      return {
+        dnsStatus: 'patched',
+        dnsRecordId: patched?.id || conflictingId,
+        dnsOwnership: 'marked',
+        marker,
+      };
+    }
+    throw cloudflarePagesDnsConflictError(selection, conflicting);
+  }
+
+  try {
+    const created = await createCloudflareDnsRecord(config, selection.zoneId, {
+      type: 'CNAME',
+      name: selection.hostname,
+      content: targetHost,
+      proxied: true,
+      ttl: 1,
+      comment: marker,
+    });
+    return {
+      dnsStatus: 'created',
+      dnsRecordId: created?.id,
+      dnsOwnership: 'marked',
+      marker,
+    };
+  } catch (err) {
+    const racedRecord = await maybeReuseCloudflarePagesCnameAfterDuplicate({
+      err,
+      config,
+      selection,
+      targetHost,
+      marker,
+    });
+    if (racedRecord) return racedRecord;
+    if (!(err instanceof DeployError) || !isCloudflareCommentError(err.details || err.message)) throw err;
+    try {
+      const created = await createCloudflareDnsRecord(config, selection.zoneId, {
+        type: 'CNAME',
+        name: selection.hostname,
+        content: targetHost,
+        proxied: true,
+        ttl: 1,
+      });
+      return {
+        dnsStatus: 'created',
+        dnsRecordId: created?.id,
+        dnsOwnership: 'unmarked',
+        marker,
+      };
+    } catch (retryErr) {
+      const racedRetryRecord = await maybeReuseCloudflarePagesCnameAfterDuplicate({
+        err: retryErr,
+        config,
+        selection,
+        targetHost,
+        marker,
+      });
+      if (racedRetryRecord) return racedRetryRecord;
+      throw retryErr;
+    }
+  }
+}
+
+function findExactCloudflarePagesCname(records: CloudflareDnsRecord[], selection: CloudflarePagesDeploySelection, targetHost: string) {
+  return records.find((record) => (
+    String(record?.type || '').toUpperCase() === 'CNAME' &&
+    normalizeHostname(record?.name) === selection.hostname &&
+    normalizeHostname(record?.content) === targetHost
+  ));
+}
+
+function findCloudflarePagesHostnameRecord(records: CloudflareDnsRecord[], selection: CloudflarePagesDeploySelection) {
+  return records.find((record) => normalizeHostname(record?.name) === selection.hostname);
+}
+
+function cloudflarePagesCnameReuseResult(record: CloudflareDnsRecord, marker: string) {
+  return {
+    dnsStatus: 'reused',
+    dnsRecordId: typeof record.id === 'string' ? record.id : undefined,
+    dnsOwnership: record.comment === marker ? 'marked' : 'unmarked',
+    marker,
+  };
+}
+
+function cloudflarePagesDnsConflictError(selection: CloudflarePagesDeploySelection, conflicting: CloudflareDnsRecord) {
+  return new DeployError(
+    `Cloudflare DNS already has a different record for ${selection.hostname}.`,
+    409,
+    {
+      errorCode: 'cloudflare_dns_record_conflict',
+      dnsStatus: 'conflict',
+      dnsRecordId: conflicting.id,
+      dnsOwnership: 'external',
+    },
+  );
+}
+
+async function maybeReuseCloudflarePagesCnameAfterDuplicate({ err, config, selection, targetHost, marker }: { err: unknown; config: DeployConfig; selection: CloudflarePagesDeploySelection; targetHost: string; marker: string }) {
+  if (!(err instanceof DeployError) || !isCloudflareAlreadyExists(err.details || err.message)) return null;
+  const racedRecords = await listCloudflareDnsRecords(config, selection.zoneId, selection.hostname);
+  const exact = findExactCloudflarePagesCname(racedRecords, selection, targetHost);
+  if (exact) return cloudflarePagesCnameReuseResult(exact, marker);
+  const conflicting = findCloudflarePagesHostnameRecord(racedRecords, selection);
+  if (conflicting) throw cloudflarePagesDnsConflictError(selection, conflicting);
+  throw err;
+}
+
+async function listCloudflareDnsRecords(config: DeployConfig, zoneId: string, hostname: string): Promise<CloudflareDnsRecord[]> {
+  const params = new URLSearchParams({
+    name: hostname,
+    per_page: '100',
+  });
+  const resp = await fetch(`${cloudflareZoneDnsRecordsUrl(zoneId)}?${params.toString()}`, {
+    headers: cloudflareHeaders(config),
+  });
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json?.success === false) {
+    throw cloudflareError(json, resp.status, 'Cloudflare DNS record lookup failed.');
+  }
+  return Array.isArray(json?.result) ? json.result : [];
+}
+
+async function createCloudflareDnsRecord(config: DeployConfig, zoneId: string, body: JsonObject) {
+  const resp = await fetch(cloudflareZoneDnsRecordsUrl(zoneId), {
+    method: 'POST',
+    headers: cloudflareHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json?.success === false) {
+    throw cloudflareError(json, resp.status, 'Cloudflare DNS record creation failed.');
+  }
+  return json?.result ?? json;
+}
+
+async function patchCloudflareDnsRecord(config: DeployConfig, zoneId: string, dnsRecordId: string, body: JsonObject) {
+  const resp = await fetch(`${cloudflareZoneDnsRecordsUrl(zoneId)}/${encodeURIComponent(dnsRecordId)}`, {
+    method: 'PATCH',
+    headers: cloudflareHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json?.success === false) {
+    throw cloudflareError(json, resp.status, 'Cloudflare DNS record update failed.');
+  }
+  return json?.result ?? json;
+}
+
+function canPatchCloudflarePagesCname(record: CloudflareDnsRecord, selection: CloudflarePagesDeploySelection, marker: string, priorMetadata?: JsonObject) {
+  const prior = priorMetadata?.cloudflarePagesCustomDomain;
+  return (
+    record &&
+    String(record.type || '').toUpperCase() === 'CNAME' &&
+    typeof record.id === 'string' &&
+    record.id &&
+    record.id === prior?.dnsRecordId &&
+    normalizeHostname(record.name) === selection.hostname &&
+    record.comment === marker &&
+    prior?.marker === marker
+  );
+}
+
+async function ensureCloudflarePagesDomain(config: DeployConfig, hostname: string) {
+  const existing = await findCloudflarePagesDomain(config, hostname);
+  if (existing) return existing;
+
+  const resp = await fetch(cloudflarePagesProjectUrl(config, 'domains'), {
+    method: 'POST',
+    headers: cloudflareHeaders(config, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ name: hostname }),
+  });
+  const json = await readCloudflareJson(resp);
+  if (!resp.ok || json?.success === false) {
+    if (isCloudflareAlreadyExists(json)) {
+      const retry = await findCloudflarePagesDomain(config, hostname);
+      if (retry) return retry;
+      throw new DeployError(
+        `Cloudflare Pages says ${hostname} is already bound to another project.`,
+        409,
+        {
+          errorCode: 'cloudflare_domain_already_bound',
+          domainStatus: 'conflict',
+        },
+      );
+    }
+    throw cloudflareError(json, resp.status, 'Cloudflare Pages custom domain setup failed.');
+  }
+  return json?.result ?? json;
+}
+
+async function findCloudflarePagesDomain(config: DeployConfig, hostname: string) {
+  const normalizedHostname = normalizeHostname(hostname);
+  if (!normalizedHostname) return null;
+  const resp = await fetch(cloudflarePagesProjectDomainUrl(config, normalizedHostname), {
+    headers: cloudflareHeaders(config),
+  });
+  const json = await readCloudflareJson(resp);
+  if (resp.status === 404) return null;
+  if (!resp.ok || json?.success === false) {
+    throw cloudflareError(json, resp.status, 'Cloudflare Pages custom domain lookup failed.');
+  }
+  const domain = json?.result ?? json;
+  return normalizeHostname(domain?.name) === normalizedHostname ? domain : null;
+}
+
+export async function readCloudflarePagesDomain(config: DeployConfig, hostname: string) {
+  if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
+  if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
+  if (!config?.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
+  return findCloudflarePagesDomain(config, hostname);
+}
+
+function normalizeCloudflarePagesDomainStatus(status: unknown) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'active') return 'active';
+  if (value === 'error' || value === 'blocked' || value === 'deactivated') return 'failed';
+  return 'pending';
+}
+
+export function aggregateCloudflarePagesStatus(pagesDev: JsonObject, customDomain?: JsonObject) {
+  if (!customDomain) {
+    return {
+      status: pagesDev.status,
+      statusMessage: pagesDev.statusMessage,
+    };
+  }
+  if (customDomain.status === 'ready') {
+    return {
+      status: pagesDev.status === 'ready' ? 'ready' : 'link-delayed',
+      statusMessage: pagesDev.status === 'ready'
+        ? 'Cloudflare Pages and custom domain are ready.'
+        : pagesDev.statusMessage || 'Cloudflare Pages is still preparing its pages.dev link.',
+    };
+  }
+  if (customDomain.status === 'pending') {
+    return {
+      status: 'link-delayed',
+      statusMessage: customDomain.statusMessage || 'Custom domain is still being prepared.',
+    };
+  }
+  const customFailureMessage = customDomain.errorMessage || customDomain.statusMessage || 'Custom domain setup failed.';
+  return {
+    status: pagesDev.status,
+    statusMessage: pagesDev.status === 'ready'
+      ? `pages.dev is ready. ${customFailureMessage}`
+      : pagesDev.statusMessage || customFailureMessage,
+  };
+}
+
+function cloudflarePagesProviderMetadata(projectName: string, cloudflarePagesInfo: JsonObject, { projectId = '' }: { projectId?: string } = {}) {
+  const custom = cloudflarePagesInfo?.customDomain;
+  return {
+    cloudflarePagesProjectName: projectName,
+    cloudflarePages: cloudflarePagesInfo,
+    ...(custom ? {
+      cloudflarePagesCustomDomain: {
+        projectId,
+        pagesProjectName: projectName,
+        hostname: custom.hostname,
+        zoneId: custom.zoneId,
+        zoneName: custom.zoneName,
+        domainPrefix: custom.domainPrefix,
+        marker: cloudflarePagesDnsMarker(projectId, projectName, hostnameFromUrl(cloudflarePagesInfo.pagesDev?.url)),
+        dnsRecordId: custom.dnsRecordId,
+        dnsOwnership: custom.dnsOwnership,
+      },
+    } : {}),
+  };
+}
+
+async function ensureCloudflarePagesProject(config: DeployConfig) {
   const getResp = await fetch(cloudflarePagesProjectUrl(config), {
     headers: cloudflareHeaders(config),
   });
@@ -394,7 +972,7 @@ async function ensureCloudflarePagesProject(config) {
   return created?.result ?? created;
 }
 
-function isCloudflarePagesProjectAlreadyExists(body) {
+function isCloudflarePagesProjectAlreadyExists(body: unknown) {
   const text = JSON.stringify(body || {}).toLowerCase();
   return (
     text.includes('already exists') ||
@@ -405,7 +983,7 @@ function isCloudflarePagesProjectAlreadyExists(body) {
   );
 }
 
-async function getCloudflarePagesUploadToken(config) {
+async function getCloudflarePagesUploadToken(config: DeployConfig): Promise<string> {
   const tokenResp = await fetch(cloudflarePagesProjectUrl(config, 'upload-token'), {
     headers: cloudflareHeaders(config),
   });
@@ -417,8 +995,8 @@ async function getCloudflarePagesUploadToken(config) {
   return jwt;
 }
 
-async function uploadCloudflarePagesAssets(uploadToken, files) {
-  const uniqueFiles = new Map();
+async function uploadCloudflarePagesAssets(uploadToken: string, files: DeployFile[]) {
+  const uniqueFiles = new Map<string, { hash: string; data: Buffer; contentType: string }>();
   for (const file of files) {
     const data = Buffer.from(file.data);
     if (data.length > CLOUDFLARE_PAGES_ASSET_MAX_BYTES) {
@@ -481,14 +1059,14 @@ async function uploadCloudflarePagesAssets(uploadToken, files) {
 }
 
 export function chunkCloudflarePagesAssetUploads(
-  files,
+  files: { hash: string; data: Buffer | Uint8Array | string; contentType?: string }[],
   {
     maxFiles = CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_FILES,
     maxBytes = CLOUDFLARE_PAGES_ASSET_UPLOAD_MAX_BODY_BYTES,
   } = {},
 ) {
-  const chunks = [];
-  let current = [];
+  const chunks: typeof files[] = [];
+  let current: typeof files = [];
   let currentBytes = 2; // JSON array brackets.
 
   for (const file of files) {
@@ -508,7 +1086,7 @@ export function chunkCloudflarePagesAssetUploads(
   return chunks;
 }
 
-function estimateCloudflarePagesAssetUploadPayloadBytes(file) {
+function estimateCloudflarePagesAssetUploadPayloadBytes(file: { hash?: string; data?: Buffer | Uint8Array | string; contentType?: string }) {
   const data = Buffer.from(file?.data ?? '');
   const encodedBytes = Math.ceil(data.length / 3) * 4;
   const contentTypeBytes = Buffer.byteLength(file?.contentType || 'application/octet-stream');
@@ -517,7 +1095,7 @@ function estimateCloudflarePagesAssetUploadPayloadBytes(file) {
   return encodedBytes + contentTypeBytes + hashBytes + 128;
 }
 
-async function cloudflarePagesMissingAssetHashes(uploadToken, hashes) {
+async function cloudflarePagesMissingAssetHashes(uploadToken: string, hashes: string[]): Promise<string[]> {
   const resp = await fetch(`${CLOUDFLARE_API}/pages/assets/check-missing`, {
     method: 'POST',
     headers: cloudflareAssetHeaders(uploadToken, { 'Content-Type': 'application/json' }),
@@ -531,14 +1109,14 @@ async function cloudflarePagesMissingAssetHashes(uploadToken, hashes) {
   return Array.isArray(result) ? result : Array.isArray(result?.hashes) ? result.hashes : hashes;
 }
 
-export function cloudflarePagesAssetHash(file) {
+export function cloudflarePagesAssetHash(file: Pick<DeployFile, 'file' | 'data'>) {
   const data = Buffer.from(file.data);
   const extension = path.posix.extname(file.file).slice(1);
   return blake3Hash(`${data.toString('base64')}${extension}`).toString('hex').slice(0, 32);
 }
 
-export function extractHtmlReferences(html) {
-  const refs = [];
+export function extractHtmlReferences(html: string) {
+  const refs: string[] = [];
   for (const tag of parseHtmlTags(html)) {
     const attrs = parseHtmlAttributes(tag.attrs);
     for (const name of ['src', 'poster']) {
@@ -566,13 +1144,13 @@ export function extractHtmlReferences(html) {
 const CSS_URL_REGEX = /url\(\s*(['"]?)([^)]*?)\1\s*\)/gi;
 const CSS_IMPORT_REGEX = /@import\s+(?:url\(\s*)?(['"])([^'"]*?)\1/gi;
 
-export function extractCssReferences(css) {
-  const refs = [];
+export function extractCssReferences(css: string) {
+  const refs: string[] = [];
   const urlRe = new RegExp(CSS_URL_REGEX.source, CSS_URL_REGEX.flags);
   let match;
-  while ((match = urlRe.exec(css))) refs.push(match[2]);
+  while ((match = urlRe.exec(css))) refs.push(match[2] ?? '');
   const importRe = new RegExp(CSS_IMPORT_REGEX.source, CSS_IMPORT_REGEX.flags);
-  while ((match = importRe.exec(css))) refs.push(match[2]);
+  while ((match = importRe.exec(css))) refs.push(match[2] ?? '');
   return refs;
 }
 
@@ -584,16 +1162,16 @@ export function extractCssReferences(css) {
 // Style-like text that lives inside `<script>` string literals or HTML
 // comments is intentionally skipped, mirroring how extractHtmlReferences
 // treats those raw-text regions.
-export function extractInlineCssReferences(html) {
+export function extractInlineCssReferences(html: string) {
   const source = String(html);
-  const refs = [];
+  const refs: string[] = [];
   const skipRanges = htmlRawTextRanges(source);
 
   const styleBlockRe = /<style\b[^<>]*>([\s\S]*?)<\/style\s*>/gi;
   let block;
   while ((block = styleBlockRe.exec(source))) {
     if (isOffsetInRanges(block.index, skipRanges)) continue;
-    refs.push(...extractCssReferences(block[1]));
+    refs.push(...extractCssReferences(block[1] ?? ''));
   }
 
   for (const tag of parseHtmlTags(source)) {
@@ -610,7 +1188,7 @@ export function extractInlineCssReferences(html) {
 // the deploy root. Mirrors `rewriteHtmlReference` for HTML attributes.
 // Uses the same hardened character classes as `extractCssReferences` so
 // extract and rewrite see the same set of references.
-export function rewriteCssReferences(css, baseDir) {
+export function rewriteCssReferences(css: string, baseDir: string) {
   return String(css)
     .replace(CSS_URL_REGEX, (match, quote, value) => {
       if (!value) return match;
@@ -623,20 +1201,20 @@ export function rewriteCssReferences(css, baseDir) {
     });
 }
 
-export function resolveReferencedPath(raw, baseDir) {
+export function resolveReferencedPath(raw: unknown, baseDir: string) {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (!trimmed || trimmed.startsWith('#')) return null;
   if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(trimmed)) return null;
   if (trimmed.startsWith('//')) return null;
-  const withoutHash = trimmed.split('#')[0];
-  const withoutQuery = withoutHash.split('?')[0];
+  const withoutHash = trimmed.split('#')[0] ?? '';
+  const withoutQuery = withoutHash.split('?')[0] ?? '';
   if (!withoutQuery) return null;
   if (withoutQuery.startsWith('/')) return withoutQuery.slice(1);
   return path.posix.normalize(path.posix.join(baseDir || '.', withoutQuery));
 }
 
-export function rewriteEntryHtmlReferences(html, baseDir) {
+export function rewriteEntryHtmlReferences(html: string, baseDir: string) {
   const source = String(html);
   // Compute raw-text ranges against the input first so the style-block
   // pre-pass can skip `<style>...</style>` text that lives inside a
@@ -673,7 +1251,7 @@ export const DEPLOY_PREFLIGHT_LARGE_ASSET_BYTES = 4 * 1024 * 1024;
 export const DEPLOY_PREFLIGHT_LARGE_BUNDLE_BYTES = 75 * 1024 * 1024;
 export const DEPLOY_PREFLIGHT_LARGE_HTML_BYTES = 1 * 1024 * 1024;
 
-function isExternalUrl(value) {
+function isExternalUrl(value: unknown) {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
   if (!trimmed) return false;
@@ -682,7 +1260,7 @@ function isExternalUrl(value) {
   return false;
 }
 
-function pushUnique(list, warning) {
+function pushUnique(list: { warnings: JsonObject[]; seen: Set<string> }, warning: JsonObject) {
   const key = `${warning.code}:${warning.path ?? ''}:${warning.url ?? ''}`;
   if (list.seen.has(key)) return;
   list.seen.add(key);
@@ -711,14 +1289,14 @@ function pushUnique(list, warning) {
 export function analyzeDeployPlan(input: {
   entryPath: string;
   html: string;
-  files: any[];
-  missing?: any[];
-  invalid?: any[];
-}): { warnings: any[]; totalBytes: number; totalFiles: number } {
+  files: DeployFile[];
+  missing?: string[];
+  invalid?: string[];
+}): { warnings: JsonObject[]; totalBytes: number; totalFiles: number } {
   const { entryPath, html, files } = input;
   const missing = input.missing ?? [];
   const invalid = input.invalid ?? [];
-  const acc: { warnings: any[]; seen: Set<string> } = { warnings: [], seen: new Set() };
+  const acc: { warnings: JsonObject[]; seen: Set<string> } = { warnings: [], seen: new Set() };
 
   for (const ref of missing) {
     pushUnique(acc, {
@@ -830,13 +1408,13 @@ export function analyzeDeployPlan(input: {
   return { warnings: acc.warnings, totalBytes, totalFiles: (files || []).length };
 }
 
-function formatMib(bytes) {
+function formatMib(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
 }
 
 // One-shot orchestrator: build the file plan, run the analyzer, and
 // return the typed preflight payload exposed by the daemon.
-export async function prepareDeployPreflight(projectsRoot, projectId, entryName, options = {}) {
+export async function prepareDeployPreflight(projectsRoot: string, projectId: string, entryName: string, options: DeployOptions = {}) {
   const plan = await buildDeployFilePlan(projectsRoot, projectId, entryName, options);
   const { warnings, totalBytes, totalFiles } = analyzeDeployPlan(plan);
   return {
@@ -854,7 +1432,7 @@ export async function prepareDeployPreflight(projectsRoot, projectId, entryName,
   };
 }
 
-export function injectDeployHookScript(html, scriptUrl) {
+export function injectDeployHookScript(html: string, scriptUrl: unknown) {
   const normalized = normalizeDeployHookScriptUrl(scriptUrl);
   if (!normalized) return html;
 
@@ -867,7 +1445,7 @@ export function injectDeployHookScript(html, scriptUrl) {
   return `${html}${tag}`;
 }
 
-export function normalizeDeployHookScriptUrl(raw) {
+export function normalizeDeployHookScriptUrl(raw: unknown) {
   if (typeof raw !== 'string') return '';
   const trimmed = raw.trim();
   if (!trimmed) return '';
@@ -880,7 +1458,7 @@ export function normalizeDeployHookScriptUrl(raw) {
   }
 }
 
-function escapeHtmlAttribute(value) {
+function escapeHtmlAttribute(value: unknown) {
   return String(value)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -888,21 +1466,21 @@ function escapeHtmlAttribute(value) {
     .replace(/>/g, '&gt;');
 }
 
-function rewriteSrcset(raw, baseDir) {
+function rewriteSrcset(raw: string, baseDir: string) {
   return String(raw)
     .split(',')
     .map((part) => {
       const trimmed = part.trim();
       if (!trimmed) return part;
       const pieces = trimmed.split(/\s+/);
-      const nextUrl = rewriteHtmlReference(pieces[0], baseDir);
+      const nextUrl = rewriteHtmlReference(pieces[0] ?? '', baseDir);
       return [nextUrl, ...pieces.slice(1)].join(' ');
     })
     .join(', ');
 }
 
-function parseHtmlTags(html) {
-  const tags = [];
+function parseHtmlTags(html: string) {
+  const tags: { name: string; attrs: string }[] = [];
   const rawTextRanges = htmlRawTextRanges(html);
   const tagRe = /<([A-Za-z][A-Za-z0-9:-]*)([^<>]*?)>/g;
   let match;
@@ -916,9 +1494,9 @@ function parseHtmlTags(html) {
   return tags;
 }
 
-function htmlRawTextRanges(html) {
+function htmlRawTextRanges(html: string) {
   const source = String(html);
-  const ranges = [];
+  const ranges: [number, number][] = [];
 
   const commentRe = /<!--[\s\S]*?-->/g;
   let match;
@@ -941,12 +1519,12 @@ function htmlRawTextRanges(html) {
   return ranges;
 }
 
-function isOffsetInRanges(offset, ranges) {
+function isOffsetInRanges(offset: number, ranges: [number, number][]) {
   return ranges.some(([start, end]) => offset >= start && offset < end);
 }
 
-function parseHtmlAttributes(rawAttrs) {
-  const attrs = new Map();
+function parseHtmlAttributes(rawAttrs: string) {
+  const attrs = new Map<string, string>();
   const attrRe = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
   let match;
   while ((match = attrRe.exec(String(rawAttrs)))) {
@@ -955,7 +1533,7 @@ function parseHtmlAttributes(rawAttrs) {
   return attrs;
 }
 
-function rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir) {
+function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<string, string>, baseDir: string) {
   const shouldRewriteHref = shouldCollectHref(tagName, attrs);
   return String(rawAttrs).replace(
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
@@ -984,7 +1562,7 @@ function rewriteHtmlAttributes(rawAttrs, tagName, attrs, baseDir) {
   );
 }
 
-function shouldCollectHref(tagName, attrs) {
+function shouldCollectHref(tagName: string, attrs: Map<string, string>) {
   if (tagName !== 'link') return false;
   const rel = String(attrs.get('rel') || '').toLowerCase();
   if (!rel) return false;
@@ -999,7 +1577,7 @@ function shouldCollectHref(tagName, attrs) {
   ));
 }
 
-function rewriteHtmlReference(raw, baseDir) {
+function rewriteHtmlReference(raw: string, baseDir: string) {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
   if (!trimmed || trimmed.startsWith('/') || trimmed.startsWith('#')) return raw;
@@ -1009,7 +1587,7 @@ function rewriteHtmlReference(raw, baseDir) {
   return `${resolved}${suffix}`;
 }
 
-function referenceSuffix(raw) {
+function referenceSuffix(raw: string) {
   const queryIdx = raw.indexOf('?');
   const hashIdx = raw.indexOf('#');
   const suffixIdx =
@@ -1017,8 +1595,8 @@ function referenceSuffix(raw) {
   return suffixIdx === -1 ? '' : raw.slice(suffixIdx);
 }
 
-async function pollVercelDeployment(config, id) {
-  let last = null;
+async function pollVercelDeployment(config: DeployConfig, id: string) {
+  let last: JsonObject | null = null;
   for (let i = 0; i < 30; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, i < 5 ? 1000 : 2000));
     const resp = await fetch(
@@ -1034,7 +1612,7 @@ async function pollVercelDeployment(config, id) {
 }
 
 export async function waitForReachableDeploymentUrl(
-  urls,
+  urls: unknown[],
   { timeoutMs = 60_000, intervalMs = 2_000, providerLabel = 'Deployment provider' } = {},
 ) {
   const candidates = [...new Set((urls || []).map(normalizeDeploymentUrl).filter(Boolean))];
@@ -1081,7 +1659,7 @@ export async function waitForReachableDeploymentUrl(
   };
 }
 
-export async function checkDeploymentUrl(url, { timeoutMs = 8_000 } = {}) {
+export async function checkDeploymentUrl(url: unknown, { timeoutMs = 8_000 }: { timeoutMs?: number } = {}): Promise<DeploymentUrlCheck> {
   const normalized = normalizeDeploymentUrl(url);
   if (!normalized) {
     return { reachable: false, statusMessage: 'Deployment URL is empty.' };
@@ -1099,7 +1677,7 @@ export async function checkDeploymentUrl(url, { timeoutMs = 8_000 } = {}) {
   return get.reachable ? get : (get.statusMessage ? get : head);
 }
 
-async function requestDeploymentUrl(url, method, timeoutMs) {
+async function requestDeploymentUrl(url: string, method: 'HEAD' | 'GET', timeoutMs: number): Promise<DeploymentUrlCheck> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -1112,7 +1690,7 @@ async function requestDeploymentUrl(url, method, timeoutMs) {
       return { reachable: true, statusCode: resp.status };
     }
     const body = method === 'GET' || resp.status === 401
-      ? await resp.text().catch(() => '')
+      ? await resp.text()
       : '';
     if (resp.status === 401 && isVercelProtectedResponse(resp, body)) {
       return {
@@ -1130,14 +1708,14 @@ async function requestDeploymentUrl(url, method, timeoutMs) {
   } catch (err) {
     return {
       reachable: false,
-      statusMessage: `Public link is not reachable yet: ${err?.message || String(err)}`,
+      statusMessage: `Public link is not reachable yet: ${errorMessage(err, String(err))}`,
     };
   } finally {
     clearTimeout(timer);
   }
 }
 
-export function isVercelProtectedResponse(resp, body = '') {
+export function isVercelProtectedResponse(resp: Response, body = '') {
   const server = resp.headers?.get?.('server') || '';
   const setCookie = resp.headers?.get?.('set-cookie') || '';
   const text = String(body || '');
@@ -1150,8 +1728,8 @@ export function isVercelProtectedResponse(resp, body = '') {
   );
 }
 
-export function deploymentUrlCandidates(...responses) {
-  const urls = [];
+export function deploymentUrlCandidates(...responses: MaybeJsonObject[]) {
+  const urls: string[] = [];
   for (const json of responses) {
     if (!json) continue;
     if (json.url) urls.push(json.url);
@@ -1165,14 +1743,14 @@ export function deploymentUrlCandidates(...responses) {
   return [...new Set(urls.map(normalizeDeploymentUrl).filter(Boolean))];
 }
 
-export function normalizeDeploymentUrl(url) {
+export function normalizeDeploymentUrl(url: unknown) {
   if (typeof url !== 'string') return '';
   const trimmed = url.trim();
   if (!trimmed) return '';
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
-function vercelTeamQuery(config) {
+function vercelTeamQuery(config: DeployConfig) {
   const params = new URLSearchParams();
   if (config.teamId) params.set('teamId', config.teamId);
   else if (config.teamSlug) params.set('slug', config.teamSlug);
@@ -1180,20 +1758,30 @@ function vercelTeamQuery(config) {
   return s ? `?${s}` : '';
 }
 
-function cloudflareAccountPagesProjectsUrl(config) {
+function cloudflareAccountPagesProjectsUrl(config: DeployConfig) {
+  if (!config.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
   return `${CLOUDFLARE_API}/accounts/${encodeURIComponent(config.accountId)}/pages/projects`;
 }
 
-function cloudflarePagesProjectUrl(config, suffix = '') {
+function cloudflarePagesProjectUrl(config: DeployConfig, suffix = '') {
+  if (!config.projectName) throw new DeployError('Cloudflare Pages project name could not be generated.', 400);
   const base = `${cloudflareAccountPagesProjectsUrl(config)}/${encodeURIComponent(config.projectName)}`;
   return suffix ? `${base}/${suffix}` : base;
 }
 
-function cloudflarePagesProductionUrl(config) {
+function cloudflarePagesProjectDomainUrl(config: DeployConfig, hostname: string) {
+  return `${cloudflarePagesProjectUrl(config, 'domains')}/${encodeURIComponent(hostname)}`;
+}
+
+function cloudflarePagesProductionUrl(config: DeployConfig) {
   return config?.projectName ? `https://${config.projectName}.pages.dev` : '';
 }
 
-export function cloudflarePagesProjectNameForProject(projectId, projectName = '') {
+function cloudflareZoneDnsRecordsUrl(zoneId: string) {
+  return `${CLOUDFLARE_API}/zones/${encodeURIComponent(zoneId)}/dns_records`;
+}
+
+export function cloudflarePagesProjectNameForProject(projectId: string, projectName = '') {
   const idSuffix = safeDnsLabel(projectId).slice(0, 12) || randomUUID().slice(0, 8);
   const nameBase = safeDnsLabel(projectName) || 'project';
   const fixedLength = 'od--'.length + idSuffix.length;
@@ -1201,47 +1789,98 @@ export function cloudflarePagesProjectNameForProject(projectId, projectName = ''
   return safeDnsLabel(`od-${nameBase.slice(0, baseLength)}-${idSuffix}`);
 }
 
-function cloudflareHeaders(config, extra = {}) {
+function cloudflareHeaders(config: DeployConfig, extra: Record<string, string> = {}) {
   return {
     Authorization: `Bearer ${config.token}`,
     ...extra,
   };
 }
 
-function cloudflareAssetHeaders(token, extra = {}) {
+function cloudflareAssetHeaders(token: string, extra: Record<string, string> = {}) {
   return {
     Authorization: `Bearer ${token}`,
     ...extra,
   };
 }
 
-async function readCloudflareJson(resp) {
+async function readCloudflareJson(resp: Response): Promise<JsonObject> {
   try {
-    return await resp.json();
+    return await resp.json() as JsonObject;
   } catch {
-    return {};
+    throw new DeployError('Cloudflare returned a non-JSON response.', resp.status || 502);
   }
 }
 
-async function readVercelJson(resp) {
+async function fetchCloudflarePaginatedResult(config: DeployConfig, buildUrl: (page: number, perPage: number) => string, fallback: string, options: { perPage?: number } = {}) {
+  const results: JsonObject[] = [];
+  const perPage = options.perPage || CLOUDFLARE_API_PAGE_SIZE;
+  for (let page = 1; page <= CLOUDFLARE_API_MAX_PAGES; page += 1) {
+    const resp = await fetch(buildUrl(page, perPage), {
+      headers: cloudflareHeaders(config),
+    });
+    const json = await readCloudflareJson(resp);
+    if (!resp.ok || json?.success === false) {
+      throw cloudflareError(json, resp.status, fallback);
+    }
+    const pageItems = Array.isArray(json?.result) ? json.result : [];
+    results.push(...pageItems);
+    if (!shouldFetchNextCloudflarePage(json?.result_info, page, perPage, pageItems.length)) break;
+  }
+  return results;
+}
+
+function shouldFetchNextCloudflarePage(resultInfo: JsonObject | undefined, page: number, perPage: number, itemCount: number) {
+  if (itemCount <= 0) return false;
+  const totalPages = Number(resultInfo?.total_pages);
+  if (Number.isFinite(totalPages) && totalPages > 0) return page < totalPages;
+  const totalCount = Number(resultInfo?.total_count);
+  const responsePerPage = Number(resultInfo?.per_page);
+  const effectivePerPage = Number.isFinite(responsePerPage) && responsePerPage > 0
+    ? responsePerPage
+    : perPage;
+  if (Number.isFinite(totalCount) && totalCount >= 0) {
+    return page * effectivePerPage < totalCount;
+  }
+  const count = Number(resultInfo?.count);
+  if (Number.isFinite(count) && count >= 0) return count >= effectivePerPage;
+  return itemCount >= perPage;
+}
+
+async function readVercelJson(resp: Response): Promise<JsonObject> {
   try {
-    return await resp.json();
+    return await resp.json() as JsonObject;
   } catch {
-    return {};
+    throw new DeployError('Vercel returned a non-JSON response.', resp.status || 502);
   }
 }
 
-function cloudflareError(json, status, fallback) {
+function cloudflareError(json: JsonObject, status: number, fallback: string) {
   const message =
-    json?.errors?.find?.((err) => err?.message)?.message ||
-    json?.messages?.find?.((item) => item?.message)?.message ||
+    json?.errors?.find?.((err: JsonObject) => err?.message)?.message ||
+    json?.messages?.find?.((item: JsonObject) => item?.message)?.message ||
     json?.message ||
     fallback ||
     `Cloudflare request failed (${status}).`;
   return new DeployError(message, status, json);
 }
 
-function vercelError(json, status) {
+function isCloudflareAlreadyExists(body: unknown) {
+  const text = JSON.stringify(body || {}).toLowerCase();
+  return (
+    text.includes('already exists') ||
+    text.includes('already exist') ||
+    text.includes('already bound') ||
+    text.includes('already been taken') ||
+    text.includes('already in use') ||
+    text.includes('duplicate')
+  );
+}
+
+function isCloudflareCommentError(value: unknown) {
+  return /comment/i.test(typeof value === 'string' ? value : JSON.stringify(value || {}));
+}
+
+function vercelError(json: JsonObject, status: number) {
   const code = json?.error?.code;
   const message = json?.error?.message || json?.message || `Vercel request failed (${status}).`;
   if (code === 'forbidden' || /permission/i.test(message)) {
@@ -1250,21 +1889,64 @@ function vercelError(json, status) {
   return new DeployError(message, status, json);
 }
 
-function deploymentUrl(json) {
+function deploymentUrl(json: JsonObject | null | undefined) {
   const url = json?.url || json?.alias?.[0] || '';
   if (!url) return '';
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
-function safeVercelProjectName(raw) {
+function hostnameFromUrl(raw: unknown) {
+  const normalized = normalizeDeploymentUrl(raw);
+  if (!normalized) return '';
+  try {
+    return new URL(normalized).hostname.toLowerCase();
+  } catch {
+    return normalizeHostname(raw);
+  }
+}
+
+function normalizeHostname(raw: unknown) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//i, '')
+    .split('/')[0]!
+    .replace(/\.$/, '');
+}
+
+function normalizeCloudflareZoneName(raw: unknown) {
+  return normalizeHostname(raw);
+}
+
+function isValidCloudflareZoneName(raw: unknown) {
+  const name = normalizeCloudflareZoneName(raw);
+  if (!name || name.length > 253 || name.includes('..')) return false;
+  return name.split('.').every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+}
+
+function normalizeCloudflareDomainPrefix(raw: unknown) {
+  const prefix = String(raw || '').trim().toLowerCase();
+  if (!prefix || prefix === '@' || prefix.includes('.') || prefix.includes('*')) return '';
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(prefix) ? prefix : '';
+}
+
+function cloudflarePagesDnsMarker(projectId: string, projectName: string, pagesTarget: string) {
+  return `od:cfp:${shortCloudflareHash(projectId || projectName)}:${shortCloudflareHash(pagesTarget || projectName)}`;
+}
+
+function shortCloudflareHash(value: unknown) {
+  return blake3Hash(String(value || '')).toString('hex').slice(0, 12);
+}
+
+function safeVercelProjectName(raw: unknown) {
   return safeProjectLabel(raw, 80) || `od-${randomUUID().slice(0, 8)}`;
 }
 
-function safeDnsLabel(raw) {
+function safeDnsLabel(raw: unknown) {
   return safeProjectLabel(raw, 63);
 }
 
-function safeProjectLabel(raw, maxLength) {
+function safeProjectLabel(raw: unknown, maxLength: number) {
   return String(raw)
     .normalize('NFKD')
     .toLowerCase()

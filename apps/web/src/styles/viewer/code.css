@@ -1,0 +1,767 @@
+/* Code viewer with line numbers */
+.code-viewer {
+  background: var(--bg-panel);
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 100%;
+}
+.code-viewer .gutter {
+  background: var(--bg);
+  color: var(--text-faint);
+  text-align: right;
+  padding: 16px 12px 16px 16px;
+  user-select: none;
+  border-right: 1px solid var(--border-soft);
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+.code-viewer .lines {
+  padding: 16px 16px 16px 18px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+}
+
+.viewer-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+/* Compact horizontal variant for the upload-failure banner: the message
+   sits inline next to a dismiss button so the user can clear the stale
+   notice without changing tabs. Issue #786. */
+.viewer-empty.viewer-empty-dismissible {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
+.document-preview {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 40px 56px;
+  color: var(--text);
+}
+.document-preview h2 {
+  margin: 0 0 24px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.document-preview section {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.document-preview h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.document-preview p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.markdown-rendered {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 28px 40px;
+  color: var(--text);
+  line-height: 1.65;
+  white-space: normal;
+}
+.markdown-status {
+  margin: 12px auto 0;
+  max-width: 900px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.markdown-status-error {
+  border-color: color-mix(in oklab, var(--danger, #d04b4b) 45%, var(--border-soft));
+  color: var(--danger, #d04b4b);
+}
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6 {
+  margin: 20px 0 10px;
+  line-height: 1.25;
+}
+.markdown-rendered p { margin: 10px 0; }
+.markdown-rendered ul,
+.markdown-rendered ol {
+  margin: 10px 0;
+  padding-left: 24px;
+}
+.markdown-rendered blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg-panel);
+}
+.markdown-code-block {
+  position: relative;
+}
+.markdown-code-copy {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 1;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-panel) 92%, black 8%);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.markdown-code-block:hover .markdown-code-copy,
+.markdown-code-block:focus-within .markdown-code-copy {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (hover: none) {
+  .markdown-code-copy {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.markdown-code-copy:hover,
+.markdown-code-copy:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-elevated, var(--bg));
+}
+.markdown-code-toast {
+  position: absolute;
+  top: 18px;
+  right: 82px;
+  z-index: 1;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 18%, var(--bg-panel));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  box-shadow: 0 10px 26px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.markdown-rendered pre {
+  margin: 12px 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 40px 12px 12px;
+  overflow: auto;
+}
+.markdown-rendered code {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.markdown-rendered a { color: var(--accent); }
+.image-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.image-body img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.sketch-preview svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview.loading {
+  background:
+    radial-gradient(circle at 8px 8px, #d7d4ce 1px, transparent 1px),
+    #f7f5f1;
+  background-size: 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview-empty-mark path {
+  stroke: #bfbcb6;
+  stroke-width: 6;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* Sketch editor */
+.sketch-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+.sketch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-wrap: wrap;
+}
+.sketch-tool {
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  min-width: 32px;
+}
+.sketch-tool:hover { background: var(--bg-subtle); }
+.sketch-tool.active { background: var(--accent); color: white; border-color: var(--accent); }
+.sketch-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.sketch-color { width: 32px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.sketch-size { width: 80px; background: transparent; border: none; }
+.sketch-spacer { flex: 1; }
+.sketch-canvas-wrap { flex: 1; min-height: 0; position: relative; background: var(--bg); }
+.sketch-canvas-wrap canvas { display: block; cursor: crosshair; }
+
+/* ===========================================================
+   Streaming chat: assistant message header, prose, thinking,
+   tool cards, status pills, grouped action card.
+   =========================================================== */
+.chat-empty-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px 8px;
+  min-height: 100%;
+}
+.chat-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  max-width: 44ch;
+}
+.chat-empty-title { font-weight: 600; color: var(--text-strong); font-size: 15px; }
+.chat-empty-hint { line-height: 1.6; }
+
+.chat-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.chat-example {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+  font: inherit;
+  overflow: hidden;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+  opacity: 0;
+  animation: chat-example-in 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.chat-example::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    var(--accent-tint) 0%,
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.chat-example:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  background: var(--bg-panel);
+}
+.chat-example:hover::before {
+  opacity: 1;
+}
+.chat-example:active {
+  transform: translateY(0);
+}
+.chat-example:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-example-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+}
+.chat-example-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-example-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chat-example-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.chat-example-tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-soft);
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.chat-example-prompt {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chat-example-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 13px;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+.chat-example:hover .chat-example-cta {
+  background: var(--accent);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+/* Connect-your-repo CTA in the empty chat state. Shares the example cards'
+   sizing and accent system but stands apart with a tinted fill so it reads as
+   guidance rather than another starter prompt. */
+.chat-connect-repo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  padding: 14px 16px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  animation: chat-example-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 220ms forwards;
+}
+.chat-connect-repo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+}
+.chat-connect-repo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-connect-repo-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.chat-connect-repo-text {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.chat-connect-repo button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@keyframes chat-example-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.assistant-header .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.assistant-header .dot[data-active="true"] {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.assistant-label { font-weight: 600; color: var(--text-strong); font-size: 12.5px; }
+.assistant-stats { font-variant-numeric: tabular-nums; margin-left: auto; }
+
+.assistant-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.prose-block { line-height: 1.6; color: var(--text); }
+.prose-block .md-p { margin: 0; }
+.prose-block .md-p + .md-p { margin-top: 8px; }
+.prose-block .md-h { margin: 10px 0 4px; line-height: 1.3; font-weight: 600; }
+.prose-block .md-h1 { font-size: 18px; }
+.prose-block .md-h2 { font-size: 16px; }
+.prose-block .md-h3 { font-size: 14px; }
+.prose-block .md-h4 { font-size: 13px; }
+.prose-block .md-ul, .prose-block .md-ol { margin: 4px 0; padding-left: 20px; }
+.prose-block .md-ul li, .prose-block .md-ol li { margin: 2px 0; }
+.prose-block .md-inline-code {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.prose-block .md-code {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.prose-block .md-code code { font-family: var(--mono); }
+.prose-block .md-link {
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.prose-block .md-link-bare {
+  /* Long bare URLs (OAuth flows etc.) need to wrap mid-string so they
+     don't escape the chat column. break-word is enough for most agents,
+     but `anywhere` covers query strings with no spaces. */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+.prose-block .md-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+/* GFM pipe tables. Rules are intentionally unscoped so both the chat path
+   (`.prose-block`) and the artifact preview (`.markdown-rendered`) get
+   the same treatment. Horizontal scroll lives on the wrapper so the
+   inner <table> can keep `display: table; width: 100%` and distribute
+   column widths across the container instead of collapsing to content. */
+.md-table-wrap {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.md-table th,
+.md-table td {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.md-table th + th,
+.md-table td + td {
+  border-left: 1px solid var(--border);
+}
+.md-table thead th {
+  background: var(--bg-panel);
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--border);
+}
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.md-table tbody tr:nth-child(even) td {
+  background: color-mix(in oklab, var(--bg-panel) 40%, transparent);
+}
+.op-waiting {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Thinking blocks */
+.thinking-block {
+  background: rgba(108, 58, 166, 0.04);
+  border: 1px solid rgba(108, 58, 166, 0.16);
+  border-radius: var(--radius-sm);
+}
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+}
+.thinking-toggle:hover { background: rgba(108, 58, 166, 0.05); border-color: transparent; }
+.thinking-icon { color: var(--purple); }
+.thinking-label { font-weight: 500; }
+.thinking-preview {
+  flex: 1;
+  color: var(--text-muted);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thinking-chev { color: var(--text-muted); font-size: 10px; }
+.thinking-body {
+  margin: 0;
+  padding: 0 14px 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Status pills */
+.status-pill {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.status-label { letter-spacing: 0.02em; }
+.status-detail {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* Grouped tool / action card — the collapsible pill from screenshot 9 */
+.action-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.action-card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.action-card-toggle:hover { background: var(--bg-subtle); border-color: transparent; }
+.action-card-toggle .ico {
+  width: 20px; height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.action-card-toggle .summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action-card-toggle .summary strong { font-weight: 500; }
+.action-card-toggle .chev { color: var(--text-faint); font-size: 10px; flex-shrink: 0; }
+.action-card-toggle.running .ico { animation: pulse 1.6s ease-in-out infinite; background: var(--purple-bg); color: var(--purple); }
+.action-card-body {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border-soft);
+}
+.action-card-body > .op-card { border-color: transparent; box-shadow: none; padding: 4px 0; }
+.action-card-body > .op-card .op-card-head { padding: 6px 0; }
+
+/* Tool / operation cards — single, ungrouped */
+.op-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+  min-width: 0;
+  max-width: 100%;
+}
+.op-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.op-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.op-icon-write { background: var(--green-bg); color: var(--green); }
+.op-icon-edit  { background: var(--amber-bg); color: var(--amber); }
+.op-icon-read  { background: var(--blue-bg); color: var(--blue); }
+.op-title { font-weight: 500; }

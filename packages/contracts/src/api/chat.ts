@@ -3,24 +3,103 @@ import type {
   PreviewCommentMember,
   PreviewCommentPosition,
   PreviewCommentSelectionKind,
+  PreviewAnnotationStyle,
+  PreviewVisualMarkKind,
 } from './comments';
+import type { ResearchOptions } from './research';
+import type { RunContextSelection } from './context.js';
 
 export type ChatRole = 'user' | 'assistant';
+export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
 
 export interface ChatRequest {
   agentId: string;
   message: string;
+  /** The latest user turn only, used for per-turn telemetry content. */
+  currentPrompt?: string;
   systemPrompt?: string;
   projectId?: string | null;
   conversationId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
+  // Per-turn skill ids picked via the composer's @-mention popover. The
+  // daemon concatenates each skill's body into the system prompt for
+  // this run only — they are NOT persisted on the project. Use this to
+  // assemble multiple capabilities (e.g. @web-search + @summarize) for
+  // a single turn without binding the project to one of them.
+  skillIds?: string[];
   designSystemId?: string | null;
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
+  locale?: string;
+  research?: ResearchOptions;
+  context?: RunContextSelection;
+  /**
+   * Optional analytics context for the v2 run_created / run_finished
+   * events. The daemon never trusts these for behavior — they only
+   * shape PostHog props. `entryFrom` is one of the documented
+   * `entry_from` enums; `designSystemRunContext` carries the
+   * DS-variant context (source counts, brand description length
+   * bucket, DS origin) used by the design_system_project run shape.
+   */
+  analyticsHints?: ChatAnalyticsHints;
+}
+
+export type ChatAnalyticsEntryFrom =
+  | 'new_project'
+  | 'chat_composer'
+  | 'design_system_create'
+  | 'onboarding_design_system'
+  | 'regenerate_from_review';
+
+export type ChatAnalyticsLengthBucket =
+  | '0'
+  | '1_50'
+  | '51_200'
+  | '201_500'
+  | '500_plus';
+
+export type ChatAnalyticsDesignSystemOrigin =
+  | 'onboarding'
+  | 'manual_create'
+  | 'github_repo'
+  | 'local_code'
+  | 'fig'
+  | 'assets'
+  | 'official_preset'
+  | 'enterprise'
+  | 'template'
+  | 'mixed'
+  | 'unknown';
+
+export interface ChatAnalyticsDesignSystemRunContext {
+  origin?: ChatAnalyticsDesignSystemOrigin;
+  sourceCount?: number;
+  hasBrandDescription?: boolean;
+  brandDescriptionLengthBucket?: ChatAnalyticsLengthBucket;
+  githubRepoCount?: number;
+  localFolderCount?: number;
+  figFileCount?: number;
+  assetFileCount?: number;
+}
+
+export interface ChatAnalyticsHints {
+  entryFrom?: ChatAnalyticsEntryFrom;
+  projectKind?:
+    | 'prototype'
+    | 'live_artifact'
+    | 'slide_deck'
+    | 'template'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'design_system'
+    | 'other';
+  designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {
@@ -32,8 +111,62 @@ export interface ChatRunCreateRequest extends ChatRequest {
 
 export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
+export type ChatMessageFeedbackRating = 'positive' | 'negative';
+
+export type ChatMessageFeedbackReasonCode =
+  | 'matched_request'
+  | 'strong_visual'
+  | 'useful_structure'
+  | 'easy_to_continue'
+  | 'followed_design_system'
+  | 'missed_request'
+  | 'weak_visual'
+  | 'incomplete_output'
+  | 'hard_to_use'
+  | 'missed_design_system'
+  | 'other';
+
+export interface ChatMessageFeedback {
+  rating: ChatMessageFeedbackRating;
+  reasonCodes?: ChatMessageFeedbackReasonCode[];
+  customReason?: string;
+  reasonsSubmittedAt?: number;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+/**
+ * POST /api/runs/:runId/feedback — relays the user's assistant-turn rating
+ * to Langfuse as a `score-create` so evals can filter traces by feedback.
+ * The daemon is the single network egress point for telemetry (web never
+ * talks to Langfuse directly), and gates this on `telemetry.metrics +
+ * telemetry.content` consent independently of what the browser thinks.
+ *
+ * `customReason` ships the raw free text the user typed in the "other"
+ * input (trimmed). Product confirmed on 2026-05-13 that analysts need the
+ * text to make sense of the feedback; this is consent-gated behind
+ * `telemetry.content` like the rest of the message-content telemetry.
+ */
+export interface ChatRunFeedbackRequest {
+  projectId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  rating: ChatMessageFeedbackRating;
+  reasonCodes: ChatMessageFeedbackReasonCode[];
+  hasCustomReason: boolean;
+  /** Raw "other" free text (trimmed). Empty string when no custom reason. */
+  customReason: string;
+}
+
+export interface ChatRunFeedbackResponse {
+  /** `'accepted'` once the daemon has enqueued (or skipped due to consent). */
+  status: 'accepted' | 'skipped_consent' | 'skipped_no_sink';
+}
+
 export interface ChatRunCreateResponse {
   runId: string;
+  appliedPluginSnapshotId?: string;
+  pluginId?: string;
 }
 
 export interface ChatRunStatusResponse {
@@ -42,11 +175,15 @@ export interface ChatRunStatusResponse {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  appliedPluginSnapshotId?: string | null;
+  pluginId?: string | null;
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
   exitCode?: number | null;
   signal?: string | null;
+  error?: string | null;
+  errorCode?: string | null;
 }
 
 export interface ChatRunListResponse {
@@ -75,9 +212,13 @@ export interface ChatCommentAttachment {
   currentText: string;
   pagePosition: PreviewCommentPosition;
   htmlHint: string;
-  selectionKind?: PreviewCommentSelectionKind;
+  style?: PreviewAnnotationStyle;
+  selectionKind?: ChatCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
+  screenshotPath?: string;
+  markKind?: PreviewVisualMarkKind;
+  intent?: string;
   source?: 'saved-comment' | 'board-batch';
 }
 
@@ -124,4 +265,13 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  // Diff baseline so reattach can rebuild producedFiles after reload.
+  preTurnFileNames?: string[];
+  feedback?: ChatMessageFeedback;
+  /**
+   * Request-only marker for the final assistant-message persistence pass.
+   * The daemon does not store or return this field; it only uses it to
+   * avoid telemetry reads before content and producedFiles are finalized.
+   */
+  telemetryFinalized?: boolean;
 }

@@ -71,10 +71,52 @@ export const SIDECAR_MESSAGES = Object.freeze({
   CLICK: "click",
   CONSOLE: "console",
   EVAL: "eval",
+  EXPORT_PDF: "export-pdf",
+  REGISTER_DESKTOP_AUTH: "register-desktop-auth",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
   STATUS: "status",
+  UPDATE: "update",
 } as const);
+
+export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
+  CHECK: "check",
+  DOWNLOAD: "download",
+  INSTALL: "install",
+  STATUS: "status",
+} as const);
+
+export type DesktopUpdateAction = (typeof DESKTOP_UPDATE_ACTIONS)[keyof typeof DESKTOP_UPDATE_ACTIONS];
+
+export const DESKTOP_UPDATE_MODES = Object.freeze({
+  JS_INCREMENTAL: "js-incremental",
+  PACKAGE_LAUNCHER: "package-launcher",
+} as const);
+
+export type DesktopUpdateMode = (typeof DESKTOP_UPDATE_MODES)[keyof typeof DESKTOP_UPDATE_MODES];
+
+export const DESKTOP_UPDATE_CHANNELS = Object.freeze({
+  BETA: "beta",
+  NIGHTLY: "nightly",
+  PREVIEW: "preview",
+  STABLE: "stable",
+} as const);
+
+export type DesktopUpdateChannel = (typeof DESKTOP_UPDATE_CHANNELS)[keyof typeof DESKTOP_UPDATE_CHANNELS];
+
+export const DESKTOP_UPDATE_STATES = Object.freeze({
+  AVAILABLE: "available",
+  CHECKING: "checking",
+  DOWNLOADED: "downloaded",
+  DOWNLOADING: "downloading",
+  ERROR: "error",
+  IDLE: "idle",
+  INSTALLING: "installing",
+  NOT_AVAILABLE: "not-available",
+  UNSUPPORTED: "unsupported",
+} as const);
+
+export type DesktopUpdateState = (typeof DESKTOP_UPDATE_STATES)[keyof typeof DESKTOP_UPDATE_STATES];
 
 export const SIDECAR_ERROR_CODES = Object.freeze({
   INVALID_MESSAGE: "SIDECAR_INVALID_MESSAGE",
@@ -98,8 +140,21 @@ export type ServiceRuntimeState = "idle" | "running" | "starting" | "stopped" | 
 export type DaemonStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  trustedWebOriginPort?: number | null;
   updatedAt?: string;
   url: string | null;
+  /**
+   * PR #974 round 6 (mrcfps): true when the daemon's
+   * `/api/import/folder` route refuses tokenless requests. Surfaced
+   * over IPC so `tools-dev start desktop` can detect a daemon that
+   * was spawned without `OD_REQUIRE_DESKTOP_AUTH=1` (the split-start
+   * dev flow `start daemon` -> `start desktop`) and restart it
+   * before launching desktop main, instead of letting a renderer
+   * race the registration handshake. Mirrors
+   * `apps/daemon/src/server.ts#isDesktopAuthGateActive()` at the
+   * moment the STATUS request was answered.
+   */
+  desktopAuthGateActive: boolean;
 };
 
 export type WebStatusSnapshot = {
@@ -115,6 +170,7 @@ export type DesktopStatusSnapshot = {
   pid?: number | null;
   state: DesktopRuntimeState;
   title?: string | null;
+  update?: DesktopUpdateStatusSnapshot;
   updatedAt?: string;
   url?: string | null;
   windowVisible?: boolean;
@@ -157,14 +213,154 @@ export type DesktopClickResult = {
   found: boolean;
 };
 
+export type DesktopExportPdfInput = {
+  baseHref?: string;
+  deck: boolean;
+  defaultFilename: string;
+  html: string;
+  title: string;
+};
+
+export type DesktopExportPdfResult = {
+  canceled?: boolean;
+  error?: string;
+  ok: boolean;
+  path?: string;
+};
+
+export type DesktopUpdateCapabilitySet = {
+  canApplyInPlace: boolean;
+  canDownload: boolean;
+  canOpenInstaller: boolean;
+  requiresManualInstall: boolean;
+};
+
+export type DesktopUpdatePathSnapshot = {
+  downloadRoot?: string;
+  manifestPath?: string;
+};
+
+export type DesktopUpdateChecksumSnapshot = {
+  algorithm: "sha256" | "sha512";
+  url?: string;
+  value?: string;
+};
+
+export type DesktopUpdateArtifactSnapshot = {
+  name?: string;
+  platformKey?: string;
+  size?: number;
+  type?: string;
+  url: string;
+};
+
+export type DesktopUpdateProgressSnapshot = {
+  receivedBytes: number;
+  totalBytes?: number;
+};
+
+export type DesktopUpdateErrorSnapshot = {
+  code: string;
+  details?: unknown;
+  message: string;
+};
+
+export type DesktopUpdateInstallResult = {
+  dryRun?: boolean;
+  openedAt: string;
+  path: string;
+};
+
+export type DesktopUpdateReleaseSnapshot = {
+  arch: string;
+  artifact: DesktopUpdateArtifactSnapshot;
+  checksum: DesktopUpdateChecksumSnapshot;
+  channel: DesktopUpdateChannel;
+  downloadedAt: string;
+  key: string;
+  metadata?: Record<string, unknown>;
+  path: string;
+  platformKey: string;
+  version: string;
+};
+
+export type DesktopUpdateIncomingSnapshot = {
+  arch: string;
+  artifact: DesktopUpdateArtifactSnapshot;
+  channel: DesktopUpdateChannel;
+  key?: string;
+  metadata?: Record<string, unknown>;
+  progress?: DesktopUpdateProgressSnapshot;
+  startedAt: string;
+  version: string;
+};
+
+export type DesktopUpdateStatusSnapshot = {
+  active?: DesktopUpdateReleaseSnapshot;
+  arch: string;
+  artifact?: DesktopUpdateArtifactSnapshot;
+  artifactUrl?: string;
+  availableVersion?: string;
+  capabilities: DesktopUpdateCapabilitySet;
+  channel: DesktopUpdateChannel;
+  checksum?: DesktopUpdateChecksumSnapshot;
+  currentVersion: string;
+  downloadPath?: string;
+  enabled: boolean;
+  error?: DesktopUpdateErrorSnapshot;
+  incoming?: DesktopUpdateIncomingSnapshot;
+  installResult?: DesktopUpdateInstallResult;
+  lastCheckedAt?: string;
+  metadata?: Record<string, unknown>;
+  mode: DesktopUpdateMode;
+  paths?: DesktopUpdatePathSnapshot;
+  platform: string;
+  progress?: DesktopUpdateProgressSnapshot;
+  state: DesktopUpdateState;
+  supported: boolean;
+};
+
+export type DesktopUpdateInput = {
+  action: DesktopUpdateAction;
+};
+
+export type DesktopUpdateResult = DesktopUpdateStatusSnapshot;
+
 export type SidecarStatusMessage = { type: typeof SIDECAR_MESSAGES.STATUS };
 export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
 export type DesktopClickMessage = { input: DesktopClickInput; type: typeof SIDECAR_MESSAGES.CLICK };
+export type DesktopExportPdfMessage = { input: DesktopExportPdfInput; type: typeof SIDECAR_MESSAGES.EXPORT_PDF };
+export type DesktopUpdateMessage = { input: DesktopUpdateInput; type: typeof SIDECAR_MESSAGES.UPDATE };
 
-export type DaemonSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
+// Sent by the desktop main process to the daemon over its sidecar IPC at
+// startup, before the BrowserWindow is created. The base64 string is a
+// freshly generated 32-byte secret that both processes will share for the
+// lifetime of the daemon. The daemon uses this secret to verify HMAC tokens
+// minted by the desktop main process for `POST /api/import/folder` calls
+// (PR #974: closes the renderer→arbitrary-baseDir→openPath bypass chain).
+// When the secret is registered, daemon's import-folder route requires a
+// valid per-path token; when it isn't (web-only deployments), the route
+// behaves as before.
+export type RegisterDesktopAuthInput = {
+  secret: string;
+};
+
+export type RegisterDesktopAuthMessage = {
+  input: RegisterDesktopAuthInput;
+  type: typeof SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH;
+};
+
+export type RegisterDesktopAuthResult = {
+  accepted: true;
+};
+
+export type DaemonSidecarMessage =
+  | SidecarStatusMessage
+  | SidecarShutdownMessage
+  | RegisterDesktopAuthMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -172,7 +368,9 @@ export type DesktopSidecarMessage =
   | DesktopEvalMessage
   | DesktopScreenshotMessage
   | DesktopConsoleMessage
-  | DesktopClickMessage;
+  | DesktopClickMessage
+  | DesktopExportPdfMessage
+  | DesktopUpdateMessage;
 
 export type ShutdownResult = {
   accepted: true;
@@ -204,6 +402,10 @@ export type OpenDesignSidecarContract = {
   sources: typeof SIDECAR_SOURCES;
   stampFields: typeof SIDECAR_STAMP_FIELDS;
   stampFlags: typeof SIDECAR_STAMP_FLAGS;
+  updateActions: typeof DESKTOP_UPDATE_ACTIONS;
+  updateChannels: typeof DESKTOP_UPDATE_CHANNELS;
+  updateModes: typeof DESKTOP_UPDATE_MODES;
+  updateStates: typeof DESKTOP_UPDATE_STATES;
 };
 
 function assertObject(value: unknown, label: string): Record<string, unknown> {
@@ -336,6 +538,50 @@ function normalizeDesktopClickInput(input: unknown): DesktopClickInput {
   return { selector: normalizeNonEmptyString(value.selector, "desktop click selector") };
 }
 
+function normalizeRegisterDesktopAuthInput(input: unknown): RegisterDesktopAuthInput {
+  const value = assertObject(input, "register-desktop-auth input");
+  assertKnownKeys(value, ["secret"], "register-desktop-auth input");
+  const secret = normalizeNonEmptyString(value.secret, "register-desktop-auth secret");
+  // Reject anything that isn't base64-shaped — the wire format is a
+  // base64-encoded random buffer minted by the desktop main process. The
+  // daemon decodes it back to bytes for HMAC. Loose validation here, not
+  // length-pinned, so the encoding (base64 vs base64url) stays caller-driven.
+  if (!/^[A-Za-z0-9+/_=-]+$/.test(secret)) {
+    throw new Error("register-desktop-auth secret must be base64-encoded");
+  }
+  return { secret };
+}
+
+function normalizeBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
+  return value;
+}
+
+function normalizeDesktopExportPdfInput(input: unknown): DesktopExportPdfInput {
+  const value = assertObject(input, "desktop PDF export input");
+  assertKnownKeys(value, ["baseHref", "deck", "defaultFilename", "html", "title"], "desktop PDF export input");
+  return {
+    ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop PDF export baseHref") }),
+    deck: normalizeBoolean(value.deck, "desktop PDF export deck"),
+    defaultFilename: normalizeNonEmptyString(value.defaultFilename, "desktop PDF export defaultFilename"),
+    html: normalizeNonEmptyString(value.html, "desktop PDF export html"),
+    title: normalizeNonEmptyString(value.title, "desktop PDF export title"),
+  };
+}
+
+function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
+  return Object.values(DESKTOP_UPDATE_ACTIONS).includes(value as DesktopUpdateAction);
+}
+
+function normalizeDesktopUpdateInput(input: unknown): DesktopUpdateInput {
+  const value = assertObject(input, "desktop update input");
+  assertKnownKeys(value, ["action"], "desktop update input");
+  if (!isDesktopUpdateAction(value.action)) {
+    throw new Error(`unsupported desktop update action: ${String(value.action)}`);
+  }
+  return { action: value.action };
+}
+
 function normalizeMessageType(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, `${label} type must be a non-empty string`);
@@ -349,6 +595,10 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
   if (type === SIDECAR_MESSAGES.STATUS || type === SIDECAR_MESSAGES.SHUTDOWN) {
     assertKnownKeys(value, ["type"], "daemon sidecar message");
     return { type };
+  }
+  if (type === SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    return { input: normalizeRegisterDesktopAuthInput(value.input), type };
   }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }
@@ -381,6 +631,12 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.CLICK:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopClickInput(value.input), type };
+    case SIDECAR_MESSAGES.EXPORT_PDF:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopExportPdfInput(value.input), type };
+    case SIDECAR_MESSAGES.UPDATE:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopUpdateInput(value.input), type };
     default:
       throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown desktop sidecar message: ${type}`);
   }
@@ -401,4 +657,8 @@ export const OPEN_DESIGN_SIDECAR_CONTRACT = Object.freeze({
   sources: SIDECAR_SOURCES,
   stampFields: SIDECAR_STAMP_FIELDS,
   stampFlags: SIDECAR_STAMP_FLAGS,
+  updateActions: DESKTOP_UPDATE_ACTIONS,
+  updateChannels: DESKTOP_UPDATE_CHANNELS,
+  updateModes: DESKTOP_UPDATE_MODES,
+  updateStates: DESKTOP_UPDATE_STATES,
 } as const satisfies OpenDesignSidecarContract);

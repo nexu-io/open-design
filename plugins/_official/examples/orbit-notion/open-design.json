@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-orbit-notion",
+  "title": "Orbit Notion",
+  "version": "0.1.0",
+  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when\nNotion is the user's only connected connector, or when the user\nexplicitly scopes their daily digest to Notion. Pulls the past 24\nhours of document edits, comments, mentions, and database row changes\nfrom the user's authenticated Notion connection and renders the\ndigest as a native Notion page (callout / toggle / database table\nprimitives). This skill should not be triggered manually — it is\ninvoked by Orbit's daily-digest scheduler against live Notion data.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/orbit-notion",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "orbit",
+    "web",
+    "desktop",
+    "notion-briefing",
+    "notion-digest",
+    "doc-digest",
+    "notion",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "orbit",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Generate today's Open Orbit Notion briefing. Notion is my only connected connector — pull yesterday's document edits, comments, @ mentions, and database row changes and render the digest as a native Notion page.",
+        "zh-CN": "使用这个插件完成以下任务：Generate today's Open Orbit Notion briefing. Notion is my only connected connector — pull yesterday's document edits, comments, @ mentions, and database row changes and render the digest as a native Notion page."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Orbit Notion"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

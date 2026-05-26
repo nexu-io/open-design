@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-video-hyperframes",
+  "title": "Hyperframes Video",
+  "version": "0.1.0",
+  "description": "Hyperframes / Remotion-compatible continuous frame animation with autoplay support.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/video-hyperframes",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "hyperframes",
+    "remotion",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "featured": 0.13,
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Hyperframes Video template to turn my content into a Hyperframes / Remotion-compatible continuous frame animation with autoplay support. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Hyperframes 视频脚本」模板把我的内容做成一段「Hyperframes / Remotion 兼容的连续帧动画, 可自动播放」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Hyperframes Video",
+          "title_i18n": {
+            "en": "Hyperframes Video",
+            "zh-CN": "Hyperframes 视频脚本"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  },
+  "title_i18n": {
+    "en": "Hyperframes Video",
+    "zh-CN": "Hyperframes 视频脚本"
+  },
+  "description_i18n": {
+    "en": "Hyperframes / Remotion-compatible continuous frame animation with autoplay support.",
+    "zh-CN": "Hyperframes / Remotion 兼容的连续帧动画, 可自动播放"
+  }
+}

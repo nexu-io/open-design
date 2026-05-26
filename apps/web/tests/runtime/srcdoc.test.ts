@@ -27,6 +27,33 @@ describe('buildSrcdoc', () => {
     expect(doc).toContain('var initialSlideIndex = 0;');
   });
 
+  it('injects the snapshot bridge used by draw annotations', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('data-od-snapshot-bridge');
+    expect(srcdoc).toContain("data.type !== 'od:snapshot'");
+    expect(srcdoc).toContain("type: 'od:snapshot:result'");
+    expect(srcdoc).toContain('copyComputedStyle');
+    expect(srcdoc).toContain('foreignObject');
+  });
+
+  it('can guard preview iframes against load-time focus stealing', () => {
+    // This test would fail if injectPreviewFocusGuard were removed from
+    // buildSrcdoc — the guard script would be absent, and the assertions
+    // below would not find the data-od-preview-focus-guard marker.
+    const srcdoc = buildSrcdoc(
+      '<!doctype html><html><head><script>window.focus();document.body.focus();</script></head><body>Hero</body></html>',
+      { previewFocusGuard: true },
+    );
+
+    expect(srcdoc).toContain('data-od-preview-focus-guard');
+    expect(srcdoc).toContain("Object.defineProperty(window, 'focus'");
+    expect(srcdoc).toContain("Object.defineProperty(HTMLElement.prototype, 'focus'");
+    expect(srcdoc.indexOf('data-od-preview-focus-guard')).toBeLessThan(
+      srcdoc.indexOf('<script>window.focus();document.body.focus();</script>'),
+    );
+  });
+
   it('only uses directly mutable slide conventions for setActive support', () => {
     const srcdoc = buildSrcdoc(
       '<section class="slide">One</section><section class="slide">Two</section>',
@@ -62,8 +89,28 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('data-od-comment-mode-kind');
     expect(srcdoc).toContain("body * { cursor: crosshair !important; }");
     expect(srcdoc).toContain('MutationObserver(schedulePostTargets)');
-    expect(srcdoc).toContain("document.addEventListener('scroll', schedulePostTargets, true);");
+    expect(srcdoc).toContain('schedulePostPreviewScroll');
+    expect(srcdoc).toContain("type: 'od:preview-scroll'");
+    expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
     expect(srcdoc).toContain('data-od-selection-bridge-style');
+    expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
+    expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');
+    expect(srcdoc).toContain('pointer-events: none !important');
+  });
+
+  it('emits free-pin fallback coordinates in viewport space', () => {
+    const srcdoc = buildSrcdoc('<main>Hero</main>', { commentBridge: true });
+    const freePinStart = srcdoc.indexOf('var pinX = Math.round(ev.clientX);');
+    const freePinEnd = srcdoc.indexOf('// Pod drawing', freePinStart);
+    const freePinBlock = srcdoc.slice(freePinStart, freePinEnd);
+
+    expect(freePinBlock).toContain('var pinX = Math.round(ev.clientX);');
+    expect(freePinBlock).toContain('var pinY = Math.round(ev.clientY);');
+    expect(freePinBlock).toContain('position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 }');
+    expect(freePinBlock).not.toContain('scrollX');
+    expect(freePinBlock).not.toContain('scrollY');
+    expect(freePinBlock).not.toContain('pageXOffset');
+    expect(freePinBlock).not.toContain('pageYOffset');
   });
 
   it('injects the selection bridge for inspect mode and exposes override hooks', () => {
@@ -188,5 +235,133 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('data-od-source-path="path-0-0"');
     expect(srcdoc).not.toContain('<script data-od-source-path=');
     expect(srcdoc.indexOf('data-od-source-path="path-0"')).toBeLessThan(srcdoc.indexOf('document.body.prepend'));
+  });
+
+  it('injects only the manual edit bridge when edit mode is enabled without picker bridges', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      editBridge: true,
+    });
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-source-path=');
+    expect(srcdoc).toContain('data-od-edit-bridge');
+    expect(srcdoc).not.toContain('data-od-selection-bridge');
+    expect(srcdoc).not.toContain("type: 'od:comment-target'");
+    expect(srcdoc).not.toContain("type: 'od:inspect-overrides'");
+    expect(srcdoc).not.toContain('html[data-od-comment-mode] body iframe');
+  });
+
+  // Regression for nexu-io/open-design#892: imported designs (e.g. Claude
+  // Design ZIP) may not carry data-od-id annotations. The selection bridge
+  // depends on these attributes to identify clickable targets, so we
+  // auto-annotate structural elements when they are missing.
+  it('auto-annotates imported HTML that lacks data-od-id or data-screen-label', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><h1>Title</h1></div></section><article>Body</article>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Structural elements get path-based data-od-id
+    expect(srcdoc).toContain('data-od-id="');
+    // Script / style elements are skipped
+    expect(srcdoc).not.toContain('<script data-od-id=');
+  });
+
+  it('does not overwrite existing data-od-id or data-screen-label annotations', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section data-od-id="hero">Hero</section><div data-screen-label="cta">CTA</div>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Existing annotations must be preserved intact on their elements.
+    expect(srcdoc).toContain('<section data-od-id="hero">');
+    expect(srcdoc).toContain('<div data-screen-label="cta">');
+    // The div already has data-screen-label, so it must not get a fallback
+    // data-od-id injected by auto-annotation.
+    expect(srcdoc).not.toContain('<div data-od-id=');
+  });
+
+  it('auto-annotates direct-child divs with class or id under semantic containers', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><div class="wrapper">Wrapper</div><div id="named">Named</div></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Direct-child divs under section get data-od-id
+    expect(srcdoc).toContain('<div class="wrapper" data-od-id=');
+    expect(srcdoc).toContain('<div id="named" data-od-id=');
+  });
+
+  it('skips deeply nested divs to avoid layout-noise in the selection bridge', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><div class="outer"><div class="inner">Deep</div></div></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // The outer div is a direct child of section, so it gets annotated
+    expect(srcdoc).toContain('<div class="outer" data-od-id=');
+    // The inner div is nested two levels deep; it must NOT get annotated
+    expect(srcdoc).not.toContain('<div class="inner" data-od-id=');
+  });
+
+  it('auto-annotates even when no bridge flags are set (always-on for persistence)', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<article><h1>Title</h1></article>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Without commentBridge or inspectBridge, annotation still runs so that
+    // saved inspect tweaks (which reference data-od-id selectors) survive
+    // when the user later leaves inspect mode.
+    expect(srcdoc).toContain('<article data-od-id=');
+    expect(srcdoc).toContain('<h1 data-od-id=');
+  });
+
+  it('skips iframe, object, and embed tags from auto-annotation even when they have id', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><iframe src="x"></iframe><object data="x"></object><embed src="x"></embed><iframe id="framed" src="y"></iframe></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).not.toContain('<iframe data-od-id=');
+    expect(srcdoc).not.toContain('<object data-od-id=');
+    expect(srcdoc).not.toContain('<embed data-od-id=');
+    expect(srcdoc).not.toContain('<iframe id="framed" data-od-id=');
+  });
+
+  it('annotates div children of elements with id', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<div id="wrapper"><div class="content">Content</div><div id="named">Named</div></div>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // The wrapper div itself is matched by [id] and gets annotated
+    expect(srcdoc).toContain('<div id="wrapper" data-od-id=');
+    // Its direct-child divs are matched by [id] > div[class] / [id] > div[id]
+    expect(srcdoc).toContain('<div class="content" data-od-id=');
+    expect(srcdoc).toContain('<div id="named" data-od-id=');
   });
 });
