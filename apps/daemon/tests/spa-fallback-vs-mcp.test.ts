@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import http from 'node:http';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -14,17 +15,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 /** Builds a test app replicating the current server.ts SPA fallback pattern. */
 function makeTestApp(opts: { excludeMcp: boolean; staticDir: string }) {
   const app = express();
+  const staticDir = path.resolve(opts.staticDir);
 
   // ── Replicates the SPA fallback block from server.ts ──
-  if (fs.existsSync(opts.staticDir)) {
-    app.use(express.static(opts.staticDir));
-    const indexHtml = `${opts.staticDir}/index.html`;
+  if (fs.existsSync(staticDir)) {
+    app.use(express.static(staticDir));
+    const indexHtml = path.join(staticDir, 'index.html');
     if (fs.existsSync(indexHtml)) {
+      const htmlContent = fs.readFileSync(indexHtml, 'utf-8');
       app.use((req, res, next) => {
         if (req.method !== 'GET') return next();
         if (req.path.startsWith('/api')) return next();
         if (opts.excludeMcp && req.path.startsWith('/mcp')) return next();
-        res.sendFile(indexHtml);
+        res.type('html').send(htmlContent);
       });
     }
   }
@@ -49,9 +52,9 @@ describe('SPA fallback does not intercept MCP routes', () => {
   beforeAll(
     () =>
       new Promise<void>((resolve) => {
-        tmpDir = `${import.meta.dirname}/.tmp-spa-fallback-test`;
+        tmpDir = path.join(import.meta.dirname, '.tmp-spa-fallback-test');
         fs.mkdirSync(tmpDir, { recursive: true });
-        fs.writeFileSync(`${tmpDir}/index.html`, '<html><body>SPA shell</body></html>');
+        fs.writeFileSync(path.join(tmpDir, 'index.html'), '<html><body>SPA shell</body></html>');
 
         const app = makeTestApp({ excludeMcp: true, staticDir: tmpDir });
         server = app.listen(0, '127.0.0.1', () => {
