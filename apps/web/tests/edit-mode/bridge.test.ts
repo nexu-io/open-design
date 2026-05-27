@@ -451,6 +451,25 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('does not prevent default pointer behavior on the active inline editor', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]')!;
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    const secondClick = new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true });
+    title.dispatchEvent(secondClick);
+
+    expect(secondClick.defaultPrevented).toBe(false);
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+
+    dom.window.close();
+  });
+
   it('clears active inline text editing on explicit clear-selection sync', () => {
     const dom = new JSDOM(
       `<main>

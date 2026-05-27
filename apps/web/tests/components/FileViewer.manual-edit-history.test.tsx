@@ -547,6 +547,82 @@ describe('FileViewer manual edit history regressions', () => {
 
     await waitFor(() => expect(panelState.props?.selectedTarget).toBeNull());
   });
+
+  it('flushes pending inline text before clearing selection', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        savedSources.push(payload.content);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(initialSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => expect(panelState.props).not.toBeNull());
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const hero = manualEditTarget('hero', 'Hero');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-targets', targets: [hero] },
+    }));
+    await waitFor(() => expect(panelState.props?.targets.length).toBe(1));
+    await act(async () => {
+      await panelState.props?.onSelectTarget(hero);
+    });
+    await waitFor(() => expect(panelState.props?.selectedTarget?.id).toBe('hero'));
+
+    const originalPostMessage = frame.contentWindow!.postMessage.bind(frame.contentWindow);
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((message: unknown, options?: WindowPostMessageOptions) => {
+      const data = message as { type?: string };
+      if (data?.type === 'od-edit-text-commit-now') {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od-edit-text-commit',
+            id: 'hero',
+            value: 'Hero latest',
+            target: manualEditTarget('hero', 'Hero latest'),
+          },
+        }));
+      }
+      originalPostMessage(message, options);
+    });
+
+    await act(async () => {
+      await panelState.props?.onClearSelection();
+    });
+
+    await waitFor(() => expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'od-edit-text-commit-now' }),
+      '*',
+    ));
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).toContain('Hero latest');
+    expect(panelState.props?.selectedTarget).toBeNull();
+  });
 });
 
 function htmlPreviewFile(): ProjectFile {

@@ -634,7 +634,6 @@ export function buildManualEditBridge(enabled: boolean): string {
     debug('bridge:pointer-pick', { eventType: ev.type, id: stableId(el), tag: el.tagName ? el.tagName.toLowerCase() : null, text: el.textContent || '' });
     if (activeTextEdit && activeTextEdit.el === el) {
       ensureInlineTextEditActive();
-      ev.preventDefault();
       ev.stopPropagation();
       return;
     }

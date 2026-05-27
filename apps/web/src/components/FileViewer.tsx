@@ -5215,6 +5215,7 @@ function HtmlViewer({
   }
 
   async function clearManualEditTargetSelection() {
+    if (!(await flushManualEditContentSave())) return;
     if (!(await flushManualEditStyleSave())) return;
     setSelectedManualEditTarget(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
