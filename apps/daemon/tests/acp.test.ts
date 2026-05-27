@@ -231,6 +231,28 @@ test('attachAcpSession exposes abort and sends session cancel after session crea
   assert.deepEqual(cancelRequest.params, { sessionId: 'session-1' });
 });
 
+test('attachAcpSession.abort closes stdin so the agent shuts down on EOF', () => {
+  const child = new FakeAcpChild();
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: () => {},
+  });
+
+  child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+  child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+  assert.equal(child.stdin.writableEnded, false);
+  session.abort();
+  // EOF on stdin lets the vela ACP bridge tear down its OpenCode server
+  // without waiting for the caller's SIGTERM fallback.
+  assert.equal(child.stdin.writableEnded, true);
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')

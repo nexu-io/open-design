@@ -708,6 +708,15 @@ export function attachAcpSession({
       } catch {
         // The caller owns process-signal fallback if the ACP transport is gone.
       }
+      // Close stdin so the agent receives EOF and shuts down its own runtime
+      // — the vela ACP bridge tears down its private OpenCode server on EOF —
+      // instead of lingering (and leaking that server) until the caller's
+      // SIGTERM fallback fires. Mirrors the clean-completion path above.
+      try {
+        child.stdin.end();
+      } catch {
+        // Best effort; the caller still owns the SIGTERM/SIGKILL fallback.
+      }
     },
   };
 }
