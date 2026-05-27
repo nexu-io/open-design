@@ -223,4 +223,32 @@ describe('AssistantMessage recovered produced files', () => {
 
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
   });
+
+  it('does not infer user sketches as turn output files (#3089)', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'Claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus' } as ChatMessage['events'][number],
+          ],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'board.sketch.json',
+            path: 'board.sketch.json',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('board.sketch.json')).toBeNull();
+  });
 });

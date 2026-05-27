@@ -151,6 +151,17 @@ describe('computeProducedFiles', () => {
     expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
   });
 
+  it('excludes user sketch files from turn output attribution (#3089)', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0, kind: 'html' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 2, updatedAt: 0, kind: 'sketch' },
+      { name: 'new.pptx', path: '/p/new.pptx', size: 3, updatedAt: 0, kind: 'pdf' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
+  });
+
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
   });
