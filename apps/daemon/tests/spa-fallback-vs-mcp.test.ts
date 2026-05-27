@@ -6,10 +6,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 /**
  * Regression test: the SPA catch-all fallback must not swallow GET /mcp.
  *
- * In a packaged/build runtime where STATIC_DIR/index.html exists, Express
- * registers a wildcard `app.get('*', …)` that returns index.html for any
- * non-/api path.  The MCP streamable-HTTP endpoint `GET /mcp` is registered
- * later, so without an explicit exclusion the wildcard matches first.
+ * In a packaged/build runtime where STATIC_DIR/index.html exists, the daemon
+ * registers a middleware fallback that returns index.html for any non-/api,
+ * non-/mcp GET path.
  */
 
 /** Builds a test app replicating the current server.ts SPA fallback pattern. */
@@ -21,9 +20,9 @@ function makeTestApp(opts: { excludeMcp: boolean; staticDir: string }) {
     app.use(express.static(opts.staticDir));
     const indexHtml = `${opts.staticDir}/index.html`;
     if (fs.existsSync(indexHtml)) {
-      app.get('/*', (req, res, next) => {
+      app.use((req, res, next) => {
+        if (req.method !== 'GET') return next();
         if (req.path.startsWith('/api')) return next();
-        // This is the fix — omit it to reproduce the bug.
         if (opts.excludeMcp && req.path.startsWith('/mcp')) return next();
         res.sendFile(indexHtml);
       });
@@ -91,4 +90,3 @@ describe('SPA fallback does not intercept MCP routes', () => {
     expect(body).toEqual({ ok: true });
   });
 });
-
