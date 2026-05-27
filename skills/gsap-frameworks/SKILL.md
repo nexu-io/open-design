@@ -33,7 +33,7 @@ Apply when writing or reviewing GSAP code in Vue (or Nuxt), Svelte (or SvelteKit
 
 ## Vue 3 (Composition API)
 
-See `examples/vue/` for a runnable Vite + Vue 3 project demonstrating these patterns.
+For a runnable Vite + Vue 3 project demonstrating these patterns, see the upstream example at https://github.com/greensock/gsap-skills/tree/main/examples/vue.
 
 Use **onMounted** to run GSAP after the component is in the DOM. Use **onUnmounted** to clean up.
 
@@ -104,7 +104,7 @@ onUnmounted(() => {
 
 ## Nuxt 4
 
-> See `examples/nuxt/` for a runnable Nuxt 4 project with plugin registration, lazy loading, and SSR-safe patterns.
+> For a runnable Nuxt 4 project with plugin registration, lazy loading, and SSR-safe patterns, see https://github.com/greensock/gsap-skills/tree/main/examples/nuxt.
 
 Use a **reusable composable** to register GSAP Plugins and also to lazy load Plugins that are not extensively used in your application:
 
@@ -112,35 +112,6 @@ Use a **reusable composable** to register GSAP Plugins and also to lazy load Plu
 // composables/useGSAP.ts
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-const PLUGINS = [
-  "CSSRulePlugin",
-  "CustomBounce",
-  "CustomEase",
-  "CustomWiggle",
-  "Draggable",
-  "DrawSVGPlugin",
-  "EaselPlugin",
-  "EasePack",
-  "Flip",
-  "GSDevTools",
-  "InertiaPlugin",
-  "MorphSVGPlugin",
-  "MotionPathHelper",
-  "MotionPathPlugin",
-  "Observer",
-  "Physics2DPlugin",
-  "PhysicsPropsPlugin",
-  "PixiPlugin",
-  "ScrambleTextPlugin",
-  "ScrollSmoother",
-  "ScrollToPlugin",
-  "ScrollTrigger",
-  "SplitText",
-  "TextPlugin",
-] as const;
-
-type Plugins = (typeof PLUGINS)[number];
 
 // In order to dynamically load all the GSAP plugins
 const pluginMap = {
@@ -171,12 +142,12 @@ const pluginMap = {
 } as const;
 
 type PluginMap = typeof pluginMap;
-type Plugins = keyof PluginMap;
+type LoadablePlugin = keyof PluginMap;
 
 // Resolves the module type for a given key, then picks the named export matching the key
 // this allows to have the type definitions for autocomplete in your code editor
-type PluginModule<K extends Plugins> = Awaited<ReturnType<PluginMap[K]>>;
-type PluginExport<K extends Plugins> = PluginModule<K>[K & keyof PluginModule<K>];
+type PluginModule<K extends LoadablePlugin> = Awaited<ReturnType<PluginMap[K]>>;
+type PluginExport<K extends LoadablePlugin> = PluginModule<K>[K & keyof PluginModule<K>];
 
 export default function () {
   // Register all the GSAP Plugins you want at this point
@@ -187,7 +158,7 @@ export default function () {
     not widely used in your app (for example in just a couple
     of components or a single route), you can use this method
   */
-  async function lazyLoadPlugin<K extends Plugins>(plugin: K): Promise<PluginExport<K>> {
+  async function lazyLoadPlugin<K extends LoadablePlugin>(plugin: K): Promise<PluginExport<K>> {
     const loader = pluginMap[plugin];
     const m = await loader();
     const p = (m as any)[plugin];

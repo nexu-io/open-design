@@ -245,13 +245,15 @@ A common pattern: **pin** a section, then as the user scrolls **vertically**, co
 const scrollingEl = document.querySelector(".horizontal-el");
 // Panel = pinned viewport-sized section. .horizontal-wrap = inner content that moves left.
 const scrollTween = gsap.to(scrollingEl, { 
-  xPercent: () => Max.max(0, window.innerWidth - scrollingEl.offsetWidth), 
+  x: () => Math.min(0, window.innerWidth - scrollingEl.scrollWidth),
   ease: "none", // ease: "none" is required
   scrollTrigger: {
     trigger: scrollingEl,
     pin: scrollingEl.parentNode, // wrapper so that we're not animating the pinned element
     start: "top top",
-    end: "+=1000"
+    end: () => `+=${Math.max(0, scrollingEl.scrollWidth - window.innerWidth)}`,
+    invalidateOnRefresh: true,
+    scrub: true
   }
 }); 
 
@@ -306,4 +308,3 @@ In React, use the `useGSAP()` hook (@gsap/react NPM package) to ensure proper cl
 ### Learn More
 
 https://gsap.com/docs/v3/Plugins/ScrollTrigger/
-
