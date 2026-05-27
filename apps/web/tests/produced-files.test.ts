@@ -13,6 +13,7 @@ function file(name: string, kind: ProjectFile['kind']): ProjectFile {
     size: 1,
     mtime: 0,
     kind,
+    mime: kind === 'sketch' ? 'application/json' : 'text/html',
   };
 }
 
