@@ -745,7 +745,13 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (ev.data.type === 'od-edit-selected-target') {
       var selectedId = ev.data.id || null;
+      var forceClear = !!ev.data.forceClear;
       debug('bridge:selected-target-message', { id: selectedId });
+      if (!selectedId && forceClear) {
+        if (activeTextEdit) clearInlineTextEdit(true);
+        clearSelectedTarget();
+        return;
+      }
       if (activeTextEdit && !selectedId) return;
       if (activeTextEdit && activeTextEdit.id === selectedId) {
         setSelectedTarget(selectedId, false);

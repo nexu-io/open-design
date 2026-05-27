@@ -4632,6 +4632,7 @@ function HtmlViewer({
     id: string | null,
     target: HTMLIFrameElement | null = iframeRef.current,
     focus = false,
+    forceClear = false,
   ) {
     const win = target?.contentWindow;
     if (!win) return;
@@ -4648,8 +4649,8 @@ function HtmlViewer({
         // receives the selected target and can mark it editable.
       }
     }
-    logManualEditDebug('host:post-selected-target', { id, focus, hasWindow: !!win });
-    win.postMessage({ type: 'od-edit-selected-target', id }, '*');
+    logManualEditDebug('host:post-selected-target', { id, focus, forceClear, hasWindow: !!win });
+    win.postMessage({ type: 'od-edit-selected-target', id, forceClear }, '*');
   }
 
   useEffect(() => {
@@ -5217,6 +5218,7 @@ function HtmlViewer({
     setSelectedManualEditTarget(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
     setManualEditError(null);
+    postSelectedManualEditTargetToIframe(null, iframeRef.current, false, true);
   }
 
   async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {

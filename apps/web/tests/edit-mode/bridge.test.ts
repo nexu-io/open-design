@@ -451,6 +451,27 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('clears active inline text editing on explicit clear-selection sync', () => {
+    const dom = new JSDOM(
+      `<main>
+        <h1 data-od-id="title">Title</h1>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="title"]')!;
+
+    title.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-selected-target', id: null, forceClear: true },
+    }));
+
+    expect(title.getAttribute('contenteditable')).toBeNull();
+    expect(title.getAttribute('data-od-editing-text')).toBeNull();
+    expect(title.hasAttribute('data-od-edit-selected')).toBe(false);
+
+    dom.window.close();
+  });
+
   it('restores inline text editing if the editable marker is stripped after selection', async () => {
     const dom = new JSDOM(
       `<main>
