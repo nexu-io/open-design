@@ -10,16 +10,36 @@
  *   preview → OpenDesignPreview
  */
 
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const REG_RUN_KEY = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`;
+
+// ─── Electron binary resolution ─────────────────────────────────────────────
+
+/**
+ * Resolve the absolute path to the electron executable.
+ *
+ * `process.execPath` is NOT reliable here because in a dev environment the
+ * tray may be launched via tsx/pnpm wrappers, in which case execPath points
+ * to node.exe rather than electron.exe.  Instead, we read the
+ * `dist/path.txt` file inside the electron package — this is the file
+ * Electron itself uses at runtime to locate its own binary.  This always
+ * returns a path inside `dist/`, never the top-level `electron.exe` stub.
+ */
+function resolveElectronBinary(): string {
+  const electronRequire = createRequire(import.meta.url);
+  const pkgDir = dirname(electronRequire.resolve("electron/package.json"));
+  const pathTxt = readFileSync(join(pkgDir, "dist", "path.txt"), "utf8").trim();
+  return join(pkgDir, "dist", pathTxt);
+}
 
 // ─── Name resolution ──────────────────────────────────────────────────────────
 
@@ -79,7 +99,7 @@ function validateElectronPath(path: string): void {
  * handled correctly without any further escaping.
  */
 function buildRunCommand(namespace: string, ipc: string): string {
-  const electronExe = process.argv[0] ?? process.execPath;
+  const electronExe = resolveElectronBinary();
 
   if (!existsSync(electronExe)) {
     throw new Error(`electron not found at: ${electronExe}`);

@@ -22,6 +22,7 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { DaemonManager } from "./daemon-manager.js";
 import { buildTrayMenu, buildTooltip, type TrayCallbacks, type TrayState } from "./tray-menu.js";
+import { t } from "./i18n.js";
 import {
   disableAutoStart,
   enableAutoStart,
@@ -225,7 +226,7 @@ export async function runTrayMain(
 
   const { Tray } = await import("electron");
   const tray = new Tray(icon);
-  tray.setToolTip("Open Design — 启动中...");
+  tray.setToolTip(t().tooltipStarting);
 
   // Daemon manager
   const manager = new DaemonManager({
@@ -247,7 +248,7 @@ export async function runTrayMain(
   }
 
   async function startDaemon(): Promise<void> {
-    tray.setToolTip("Open Design — 启动服务中...");
+    tray.setToolTip(t().tooltipStartingDaemon);
     await manager.start();
     // Query the actual daemon status so we always have the correct URL/port,
     // even when the daemon was already running (start() returned early).
@@ -259,19 +260,19 @@ export async function runTrayMain(
   }
 
   async function stopDaemon(): Promise<void> {
-    tray.setToolTip("Open Design — 停止服务中...");
+    tray.setToolTip(t().tooltipStoppingDaemon);
     await manager.stop();
     await refreshTray();
   }
 
   async function restartDaemon(): Promise<void> {
-    tray.setToolTip("Open Design — 重启守护进程...");
+    tray.setToolTip(t().tooltipRestartingDaemon);
     await manager.restart();
     await refreshTray();
   }
 
   async function restartTray(): Promise<void> {
-    tray.setToolTip("Open Design — 重启主程序...");
+    tray.setToolTip(t().tooltipRestartingApp);
     // Relaunch the electron app
     app.relaunch();
     app.exit(0);
