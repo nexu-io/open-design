@@ -4,10 +4,11 @@ import {
   buildPersistedConfig,
   isAutosaveDraftOnlyChange,
   persistComposioConfigChange,
+  projectsWithClearedPendingPrompt,
   resolveSettingsCloseConfig,
   shouldSyncMediaProvidersOnSave,
 } from '../src/App';
-import type { AppConfig } from '../src/types';
+import type { AppConfig, Project } from '../src/types';
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -121,5 +122,22 @@ describe('resolveSettingsCloseConfig', () => {
       onboardingCompleted: true,
       orbit: { enabled: true, time: '11:30', templateSkillId: 'fresh-template' },
     });
+  });
+});
+
+describe('projectsWithClearedPendingPrompt', () => {
+  const projects: Project[] = [
+    { id: 'a', name: 'A', pendingPrompt: 'keep me' } as Project,
+    { id: 'b', name: 'B', pendingPrompt: 'stale seed' } as Project,
+  ];
+
+  it('clears pendingPrompt for the target project (#2878)', () => {
+    const next = projectsWithClearedPendingPrompt(projects, 'b');
+    expect(next.find((p) => p.id === 'b')?.pendingPrompt).toBeUndefined();
+    expect(next.find((p) => p.id === 'a')?.pendingPrompt).toBe('keep me');
+  });
+
+  it('returns the original list when projectId is missing', () => {
+    expect(projectsWithClearedPendingPrompt(projects, null)).toBe(projects);
   });
 });

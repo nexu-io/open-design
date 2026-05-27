@@ -170,6 +170,16 @@ export function resolveSettingsCloseConfig(
   return base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
 }
 
+export function projectsWithClearedPendingPrompt(
+  projects: Project[],
+  projectId: string | null | undefined,
+): Project[] {
+  if (!projectId) return projects;
+  return projects.map((p) =>
+    p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
+  );
+}
+
 export function App() {
   const { t } = useI18n();
   const clientType = useMemo(() => detectClientType(), []);
@@ -1090,11 +1100,7 @@ export function App() {
   const handleBack = useCallback(() => {
     const projectId = route.kind === 'project' ? route.projectId : null;
     if (projectId) {
-      setProjects((curr) =>
-        curr.map((p) =>
-          p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
-        ),
-      );
+      setProjects((curr) => projectsWithClearedPendingPrompt(curr, projectId));
       void patchProject(projectId, { pendingPrompt: null });
     }
     navigate({ kind: 'home', view: 'home' });
@@ -1103,11 +1109,7 @@ export function App() {
   const handleClearPendingPrompt = useCallback(() => {
     const projectId = route.kind === 'project' ? route.projectId : null;
     if (!projectId) return;
-    setProjects((curr) =>
-      curr.map((p) =>
-        p.id === projectId ? { ...p, pendingPrompt: undefined } : p,
-      ),
-    );
+    setProjects((curr) => projectsWithClearedPendingPrompt(curr, projectId));
     void patchProject(projectId, { pendingPrompt: null });
   }, [route]);
 
