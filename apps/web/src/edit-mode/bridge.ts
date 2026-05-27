@@ -639,8 +639,9 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (activeTextEdit) clearInlineTextEdit(true);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
+    var directTextTarget = isDirectTextEditable(el);
     beginInlineTextEdit(el);
-    ev.preventDefault();
+    if (!directTextTarget) ev.preventDefault();
     ev.stopPropagation();
   }
   function preventManualEditActivation(ev){
