@@ -566,7 +566,7 @@ function AppInner() {
       if (prev.agentId) return prev;
       const next: AppConfig = { ...prev, agentId: firstAvailable.id };
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       return next;
     });
   }, [daemonConfigLoaded, agentsLoading, agents, config.agentId]);
@@ -583,7 +583,7 @@ function AppInner() {
       if (prev.designSystemId) return prev;
       const next: AppConfig = { ...prev, designSystemId: id };
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       return next;
     });
   }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId]);
@@ -738,7 +738,7 @@ function AppInner() {
     (theme: AppConfig['theme']) => {
       const next = { ...config, theme };
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       setConfig(next);
     },
     [config],
@@ -748,7 +748,7 @@ function AppInner() {
     (agentId: string) => {
       const next = { ...config, agentId };
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       setConfig(next);
     },
     [config],
@@ -764,7 +764,7 @@ function AppInner() {
       };
       const next = { ...config, agentModels: nextAgentModels };
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       setConfig(next);
     },
     [config],
@@ -778,7 +778,7 @@ function AppInner() {
     (protocol: ApiProtocol) => {
       const next = switchApiProtocolConfig(config, protocol);
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       setConfig(next);
     },
     [config],
@@ -791,7 +791,7 @@ function AppInner() {
     (model: string) => {
       const next = updateCurrentApiProtocolConfig(config, { model });
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       setConfig(next);
     },
     [config],
@@ -801,7 +801,7 @@ function AppInner() {
     (designSystemId: string | null) => {
       const next = { ...config, designSystemId };
       saveConfig(next);
-      void syncConfigToDaemon(next, { swallowWriteErrors: true });
+      void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
       setConfig(next);
     },
     [config],
@@ -1287,7 +1287,7 @@ function AppInner() {
     const next: AppConfig = { ...current, onboardingCompleted: true };
     latestPersistedConfigRef.current = next;
     saveConfig(next);
-    void syncConfigToDaemon(next, { swallowWriteErrors: true });
+    void syncConfigToDaemon(next, { omitKeys: ['agentCliEnv'] });
     setConfig(next);
   }, []);
 

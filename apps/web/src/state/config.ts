@@ -800,9 +800,9 @@ export class DaemonConfigWriteError extends Error {
 
 export async function syncConfigToDaemon(
   config: AppConfig,
-  options?: { throwOnError?: boolean; swallowWriteErrors?: boolean },
+  options?: { throwOnError?: boolean; swallowWriteErrors?: boolean; omitKeys?: ReadonlyArray<keyof AppConfigPrefs> },
 ): Promise<void> {
-  const prefs: AppConfigPrefs = {
+  const fullPrefs: AppConfigPrefs = {
     onboardingCompleted: config.onboardingCompleted,
     agentId: config.agentId,
     agentModels: config.agentModels,
@@ -817,6 +817,12 @@ export async function syncConfigToDaemon(
     privacyDecisionAt: config.privacyDecisionAt,
     customInstructions: config.customInstructions ?? null,
   };
+  const omitSet = options?.omitKeys ? new Set(options.omitKeys) : undefined;
+  const prefs = omitSet
+    ? (Object.fromEntries(
+        Object.entries(fullPrefs).filter(([k]) => !omitSet.has(k as keyof AppConfigPrefs)),
+      ) as AppConfigPrefs)
+    : fullPrefs;
   try {
     const response = await fetch('/api/app-config', {
       method: 'PUT',
