@@ -669,4 +669,35 @@ describe("wellKnownUserToolchainBins", () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it("includes Windows fnm node installs, multishell shims, and npm globals (#3062)", () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+    const home = mkdtempSync(join(tmpdir(), "wkutb-win-fnm-"));
+    const localAppData = join(home, "AppData", "Local");
+    const appData = join(home, "AppData", "Roaming");
+    const fnmNodeBin = join(localAppData, "fnm", "node-versions", "v20.20.2", "installation", "bin");
+    const fnmMultishell = join(localAppData, "fnm_multishells", "12345-abcd");
+    const npmGlobal = join(appData, "npm");
+    try {
+      mkdirSync(fnmNodeBin, { recursive: true });
+      mkdirSync(fnmMultishell, { recursive: true });
+      mkdirSync(npmGlobal, { recursive: true });
+      writeFileSync(join(fnmNodeBin, "marker"), "");
+      writeFileSync(join(fnmMultishell, "marker"), "");
+      writeFileSync(join(npmGlobal, "marker"), "");
+
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { LOCALAPPDATA: localAppData, APPDATA: appData },
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(fnmNodeBin);
+      expect(dirs).toContain(fnmMultishell);
+      expect(dirs).toContain(npmGlobal);
+    } finally {
+      Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

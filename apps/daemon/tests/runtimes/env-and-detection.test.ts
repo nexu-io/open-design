@@ -363,6 +363,30 @@ test('resolveAgentExecutable accepts Windows CODEX_BIN overrides with executable
   }
 });
 
+test('resolveAgentExecutable searches Windows fnm multishell shims under a minimal GUI PATH (#3062)', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-agent-fnm-multishell-'));
+  const localAppData = join(home, 'AppData', 'Local');
+  const fnmMultishell = join(localAppData, 'fnm_multishells', '12345-abcd');
+  try {
+    return withEnvSnapshot(['PATH', 'PATHEXT', 'OD_AGENT_HOME', 'LOCALAPPDATA'], () => {
+      mkdirSync(fnmMultishell, { recursive: true });
+      writeFileSync(join(fnmMultishell, 'codex.CMD'), '@echo off\r\nexit /b 0\r\n');
+      process.env.OD_AGENT_HOME = home;
+      process.env.LOCALAPPDATA = localAppData;
+      process.env.PATH = '';
+      process.env.PATHEXT = '.EXE;.CMD;.BAT';
+
+      const resolved = withPlatform('win32', () =>
+        resolveAgentExecutable(minimalAgentDef({ id: 'codex', bin: 'codex' })),
+      );
+
+      assert.equal(resolved, join(fnmMultishell, 'codex.CMD'));
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('detectAgents applies configured env while probing the CLI', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agent-env-'));
   try {

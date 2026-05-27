@@ -625,6 +625,28 @@ export function wellKnownUserToolchainBins(
       dirs.push(dir);
     }
   }
+  if (process.platform === "win32") {
+    const localAppData =
+      resolveUserScopedHome(env.LOCALAPPDATA, home) ?? join(home, "AppData", "Local");
+    const appData =
+      resolveUserScopedHome(env.APPDATA, home) ?? join(home, "AppData", "Roaming");
+    dirs.push(join(appData, "npm"));
+    const fnmDir = typeof env.FNM_DIR === "string" ? env.FNM_DIR.trim() : "";
+    for (const root of [
+      join(localAppData, "fnm", "node-versions"),
+      ...(fnmDir.length > 0 ? [join(fnmDir, "node-versions")] : []),
+    ]) {
+      for (const dir of existingChildBinDirs(root, ["installation", "bin"])) {
+        dirs.push(dir);
+      }
+    }
+    // fnm exposes npm-global CLIs via per-shell shims under fnm_multishells
+    // after `fnm env`. GUI-launched Electron inherits a stripped PATH without
+    // those ephemeral dirs (issue #3062).
+    for (const dir of existingChildBinDirs(join(localAppData, "fnm_multishells"), [])) {
+      dirs.push(dir);
+    }
+  }
   return dirs;
 }
 
