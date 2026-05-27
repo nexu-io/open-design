@@ -693,7 +693,7 @@ function AppInner() {
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
             force: options?.forceMediaProviderSync,
             daemonProviders: daemonMediaProviders,
-            throwOnError: options?.forceMediaProviderSync,
+            throwOnError: true,
           })
         : Promise.resolve(),
       syncConfigToDaemon(persisted),
@@ -1610,7 +1610,11 @@ function AppInner() {
             if (!next.onboardingCompleted || !config.onboardingCompleted) {
               latestPersistedConfigRef.current = next;
               saveConfig(next);
-              void syncConfigToDaemon(next, { swallowWriteErrors: true });
+              void syncConfigToDaemon(next).catch(() => {
+                // Close-path sync is fire-and-forget, but validation errors
+                // (4xx) should not be silently swallowed — log them so the
+                // user can diagnose browser/daemon state divergence.
+              });
               setConfig(next);
             }
             setSettingsOpen(false);

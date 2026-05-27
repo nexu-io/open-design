@@ -186,7 +186,6 @@ export function spawnEnvForAgent(
     }
   }
   return env;
-  return env;
 }
 
 // Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty
