@@ -68,6 +68,7 @@ interface Props {
 	onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
 	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 	onRename?: (id: string, name: string) => void;
+	onNewProject?: () => void;
 }
 
 export function DesignsTab({
@@ -78,6 +79,7 @@ export function DesignsTab({
 	onOpenLiveArtifact,
 	onDelete,
 	onRename,
+	onNewProject,
 }: Props) {
 	const t = useT();
 	const analytics = useAnalytics();
@@ -550,9 +552,29 @@ export function DesignsTab({
 			</div>
 			{filtered.length === 0 ? (
 				<div className="tab-empty">
-					{projects.length === 0
-						? t("designs.emptyNoProjects")
-						: t("designs.emptyNoMatch")}
+					<div className="tab-empty__message">
+						{projects.length === 0
+							? t("designs.emptyNoProjects")
+							: t("designs.emptyNoMatch")}
+					</div>
+					{projects.length === 0 && onNewProject ? (
+						<div className="tab-empty__actions">
+							<button
+								type="button"
+								className="primary"
+								onClick={() => {
+									trackProjectsListControlsClick(analytics.track, {
+										page_name: "projects",
+										area: "list_controls",
+										element: "create_project",
+									});
+									onNewProject();
+								}}
+							>
+								{t("entry.navNewProject")}
+							</button>
+						</div>
+					) : null}
 				</div>
 			) : view === "grid" ? (
 				<div className="design-grid">

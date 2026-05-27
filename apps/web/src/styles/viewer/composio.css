@@ -1697,8 +1697,7 @@ button.filter-pill.active:hover:not(:disabled) {
   font-size: 11px;
   opacity: 0.7;
 }
-button.filter-pill:hover:not(:disabled) .filter-pill-count,
-.filter-pill.active .filter-pill-count {
+button.filter-pill:hover:not(:disabled) .filter-pill-count, .filter-pill.active .filter-pill-count {
   color: currentColor;
   opacity: 0.9;
 }

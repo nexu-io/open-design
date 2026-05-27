@@ -638,6 +638,7 @@ export function EntryShell({
                     skills={skills}
                     designSystems={designSystems}
                     onOpen={onOpenProject}
+                    onNewProject={openNewProject}
                     onOpenLiveArtifact={onOpenLiveArtifact}
                     onDelete={onDeleteProject}
                     onRename={onRenameProject}
