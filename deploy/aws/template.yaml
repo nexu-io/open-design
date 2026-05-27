@@ -19,7 +19,9 @@ Parameters:
   ProxyPort:
     Type: Number
     Default: 8080
-    Description: 'The dynamic port used by the Nginx proxy and exposed to the Load Balancer.'
+    MinValue: 1024
+    MaxValue: 65535
+    Description: 'The dynamic port used by the Nginx proxy (must be >= 1024 for unprivileged container).'
   AppStoragePath:
     Type: String
     Description: 'Container path where the .od SQLite directory is stored.'
@@ -453,7 +455,7 @@ Resources:
   LogGroup:
       Type: AWS::Logs::LogGroup
       Properties:
-        LogGroupName: /ecs/opendesign-app
+        LogGroupName: !Sub '/ecs/${AWS::StackName}/opendesign-app'
         RetentionInDays: 7
 
   # SECRETS (Secrets Manager)
