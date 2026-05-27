@@ -14,6 +14,13 @@ function extractDeckBridgeScript(srcdoc: string): string {
 
 function setupTransformDeck() {
   const bodyHtml = `
+    <style>
+      html, body { margin: 0; }
+      body { overflow-x: hidden; }
+      .deck-shell { width: 100vw; overflow: hidden; }
+      .deck-track { display: flex; width: 300vw; }
+      .slide { flex: 0 0 100vw; }
+    </style>
     <div class="deck-shell">
       <div class="deck-track" id="deck-track">
         <section class="slide active">One</section>
@@ -36,6 +43,62 @@ function setupTransformDeck() {
     configurable: true,
     value: { postMessage: parentPostMessage },
   });
+  Object.defineProperty(win, 'innerWidth', {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(win.document.body, 'scrollWidth', {
+    configurable: true,
+    value: 3000,
+  });
+  Object.defineProperty(win.document.body, 'clientWidth', {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(win.document.documentElement, 'scrollWidth', {
+    configurable: true,
+    value: 3000,
+  });
+  Object.defineProperty(win.document.documentElement, 'clientWidth', {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(win.document, 'scrollingElement', {
+    configurable: true,
+    value: win.document.documentElement,
+  });
+  let bodyScrollLeft = 0;
+  let documentScrollLeft = 0;
+  Object.defineProperty(win.document.body, 'scrollLeft', {
+    configurable: true,
+    get: () => bodyScrollLeft,
+    set: (value: number) => {
+      bodyScrollLeft = value;
+    },
+  });
+  Object.defineProperty(win.document.documentElement, 'scrollLeft', {
+    configurable: true,
+    get: () => documentScrollLeft,
+    set: (value: number) => {
+      documentScrollLeft = value;
+    },
+  });
+  Object.defineProperty(win.document.body, 'scrollTo', {
+    configurable: true,
+    value: ({ left }: { left?: number }) => {
+      if (typeof left === 'number') {
+        bodyScrollLeft = left;
+      }
+    },
+  });
+  Object.defineProperty(win.document.documentElement, 'scrollTo', {
+    configurable: true,
+    value: ({ left }: { left?: number }) => {
+      if (typeof left === 'number') {
+        documentScrollLeft = left;
+      }
+    },
+  });
 
   const slides = Array.from(win.document.querySelectorAll<HTMLElement>('.slide'));
   const track = win.document.getElementById('deck-track') as HTMLElement;
@@ -57,11 +120,11 @@ function setupTransformDeck() {
 
   const evaluate = new win.Function(script);
   evaluate.call(win);
-  return { dom, win, parentPostMessage, track };
+  return { win, parentPostMessage, track };
 }
 
-describe('deck bridge — transform-driven decks', () => {
-  it('routes host navigation through the deck runtime when active classes alone do not move the stage', async () => {
+describe('deck bridge - transform-driven decks', () => {
+  it('routes host navigation through the deck runtime even when the transformed track overflows horizontally', async () => {
     const { win, track, parentPostMessage } = setupTransformDeck();
 
     win.dispatchEvent(new win.MessageEvent('message', {
@@ -70,6 +133,8 @@ describe('deck bridge — transform-driven decks', () => {
     await new Promise<void>((resolve) => win.setTimeout(resolve, 360));
 
     expect(track.style.transform).toBe('translateX(-100vw)');
+    expect(win.document.body.scrollLeft).toBe(0);
+    expect(win.document.documentElement.scrollLeft).toBe(0);
     const slideStates = parentPostMessage.mock.calls
       .map((call) => call[0])
       .filter((message) => message?.type === 'od:slide-state');

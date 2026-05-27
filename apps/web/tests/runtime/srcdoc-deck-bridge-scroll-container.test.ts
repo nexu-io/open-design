@@ -22,6 +22,9 @@ function lastSlideState(parentPostMessage: ReturnType<typeof vi.fn>) {
 describe('deck bridge - scroll container fallback', () => {
   it('tracks slide state from documentElement when body scrollLeft stays at zero', async () => {
     const bodyHtml = `
+      <style>
+        body { overflow-x: auto; }
+      </style>
       <section class="slide">One</section>
       <section class="slide">Two</section>
       <section class="slide">Three</section>
