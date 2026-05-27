@@ -701,17 +701,23 @@ export function attachAcpSession({
       aborted = true;
       finished = true;
       clearStageTimer();
-      if (!sessionId || !child.stdin || child.stdin.destroyed || child.stdin.writableEnded) return;
-      try {
-        sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
-        nextId += 1;
-      } catch {
-        // The caller owns process-signal fallback if the ACP transport is gone.
+      if (!child.stdin || child.stdin.destroyed || child.stdin.writableEnded)
+        return;
+      // Only cancel an established session; before session/new resolves there
+      // is no sessionId to cancel, but we must still close stdin below.
+      if (sessionId) {
+        try {
+          sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
+          nextId += 1;
+        } catch {
+          // The caller owns process-signal fallback if the ACP transport is gone.
+        }
       }
-      // Close stdin so the agent receives EOF and shuts down its own runtime
-      // — the vela ACP bridge tears down its private OpenCode server on EOF —
-      // instead of lingering (and leaking that server) until the caller's
-      // SIGTERM fallback fires. Mirrors the clean-completion path above.
+      // Always close stdin so the agent receives EOF and shuts down its own
+      // runtime — the vela ACP bridge tears down its private OpenCode server on
+      // EOF — instead of lingering (and leaking that server) until the caller's
+      // SIGTERM fallback fires. This also covers aborts during ACP startup,
+      // before session/new returns. Mirrors the clean-completion path above.
       try {
         child.stdin.end();
       } catch {

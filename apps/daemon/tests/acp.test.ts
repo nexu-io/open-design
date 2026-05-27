@@ -253,6 +253,33 @@ test('attachAcpSession.abort closes stdin so the agent shuts down on EOF', () =>
   assert.equal(child.stdin.writableEnded, true);
 });
 
+test('attachAcpSession.abort during startup ends stdin without sending session/cancel', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: () => {},
+  });
+
+  // Abort before session/new resolves (no sessionId yet) — e.g. the user
+  // cancels during ACP startup. stdin must still close so OpenCode tears down.
+  assert.equal(child.stdin.writableEnded, false);
+  session.abort();
+  assert.equal(child.stdin.writableEnded, true);
+
+  // No session to cancel yet, so no session/cancel RPC should be emitted.
+  const cancelRequests = parseRpcWrites(writes).filter(
+    (entry) => entry.method === 'session/cancel',
+  );
+  assert.equal(cancelRequests.length, 0);
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')
