@@ -21,9 +21,3 @@
 /zh-TW/*  /zh-tw/:splat  301
 /pt-BR/*  /pt-br/:splat  301
 /es-ES/*  /es/:splat     301
-
-# Community / contributors page. Currently a Vercel preview deploy of the
-# honor-cards page; redirect rather than proxy so the destination owns its
-# own canonical / OG metadata. Update the target when this is aliased to a
-# stable subdomain (e.g. community.open-design.ai).
-/community/  https://d5458c46-0f08-4ca7-9279-682a6e4e765.vercel.app/  302

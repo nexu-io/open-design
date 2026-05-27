@@ -251,17 +251,16 @@ export function Header({
               </a>
             </li>
             {/*
-              Community lives on a separate Vercel deploy (the contributors
-              honor-cards page). `/community/` is a Cloudflare Pages 302 in
-              `public/_redirects` so the marketing nav can keep a stable
-              first-party URL even though the destination moves.
+              Community is a static contributors / ambassadors page served
+              from `apps/landing-page/public/community/index.html` — Astro
+              copies `public/` verbatim, so this hits Cloudflare Pages as a
+              first-party route at `/community/`.
 
               The href is the literal `/community/` rather than
-              `href('/community/')` because the destination is a single
-              external page that is not locale-aware — locale-prefixed
-              variants like `/zh/community/` would fall through to a
-              Cloudflare 404 since neither the redirect rule nor the
-              `[locale]/[...path].astro` catch-all knows about them.
+              `href('/community/')` because the page is a single non-
+              locale-aware destination — locale-prefixed variants like
+              `/zh/community/` would fall through to a 404 since the
+              `[locale]/[...path].astro` catch-all does not generate it.
             */}
             <li>
               <a href='/community/' className={linkClass('community')}>
