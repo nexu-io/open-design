@@ -1609,15 +1609,22 @@ function AppInner() {
             const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
             if (!next.onboardingCompleted || !config.onboardingCompleted) {
               latestPersistedConfigRef.current = next;
-              saveConfig(next);
-              void syncConfigToDaemon(next).catch(() => {
-                // Close-path sync is fire-and-forget, but validation errors
-                // (4xx) should not be silently swallowed — log them so the
-                // user can diagnose browser/daemon state divergence.
-              });
-              setConfig(next);
+              void syncConfigToDaemon(next)
+                .then(() => {
+                  saveConfig(next);
+                  setConfig(next);
+                  setSettingsOpen(false);
+                })
+                .catch(() => {
+                  // Daemon rejected the write (e.g. invalid agentCliEnv).
+                  // Keep the dialog open so the user can fix the invalid
+                  // config instead of leaving with browser/daemon state
+                  // out of sync. Do not save to localStorage or update
+                  // React state — the daemon did not accept the write.
+                });
+            } else {
+              setSettingsOpen(false);
             }
-            setSettingsOpen(false);
             setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
