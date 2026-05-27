@@ -131,4 +131,35 @@ describe('run-end artifact manifest reconciliation (#2893)', () => {
     expect(manifest.kind).toBe('html');
     expect(manifest.entry).toBe('page.htm');
   });
+
+  it('skips pre-existing HTML files whose mtime is before the run start (imported-folder guard)', async () => {
+    setup();
+
+    // Pre-existing file: write it, then backdate its mtime to before the run
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'old-index.html', '<p>old</p>');
+    const oldPath = path.join(projectsRoot, PROJECT_ID, 'old-index.html');
+    const pastTime = new Date('2020-01-01T00:00:00Z');
+    fs.utimesSync(oldPath, pastTime, pastTime);
+
+    // File written during the run
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'new-output.html', '<p>new</p>');
+
+    const runStartTimeMs = Date.now();
+
+    // Simulate the close-handler reconciliation with mtime filter
+    const dir = path.join(projectsRoot, PROJECT_ID);
+    const files = fs.readdirSync(dir);
+    for (const name of files) {
+      const ext = path.extname(name).toLowerCase();
+      if (ext !== '.html' && ext !== '.htm') continue;
+      const st = fs.statSync(path.join(dir, name));
+      if (st.mtimeMs < runStartTimeMs) continue;
+      await reconcileHtmlArtifactManifest(projectsRoot, PROJECT_ID, name);
+    }
+
+    // Pre-existing file should NOT have a sidecar
+    expect(fs.existsSync(path.join(dir, 'old-index.html.artifact.json'))).toBe(false);
+    // New file should have a sidecar
+    expect(fs.existsSync(path.join(dir, 'new-output.html.artifact.json'))).toBe(true);
+  });
 });

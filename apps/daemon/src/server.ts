@@ -10178,6 +10178,7 @@ export async function startServer({
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
+    const runStartTimeMs = Date.now();
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
@@ -10968,10 +10969,12 @@ export async function startServer({
           ));
         }
       }
-      // Reconcile any HTML artifacts that were written without a manifest
-      // sidecar (e.g. agent used write_file instead of create_artifact, or
-      // the run terminated between HTML write and sidecar write). This is
-      // best-effort — a failure here must not block run finalisation.
+      // Reconcile any HTML artifacts that were written during this run
+      // without a manifest sidecar (e.g. agent used write_file instead of
+      // create_artifact, or the run terminated between HTML write and
+      // sidecar write). Only files modified after the run started are
+      // touched — pre-existing HTML in imported-folder projects must not
+      // receive spurious manifests. Best-effort; must not block finalisation.
       // See issue #2893.
       if (run.projectId) {
         (async () => {
@@ -10980,10 +10983,14 @@ export async function startServer({
             const files = await listFiles(PROJECTS_DIR, run.projectId, {
               metadata: project?.metadata,
             });
+            const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
             for (const f of files) {
               const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
               if (ext !== '.html' && ext !== '.htm') continue;
               try {
+                const filePath = path.join(dir, f.name);
+                const st = await fs.promises.stat(filePath);
+                if (st.mtimeMs < runStartTimeMs) continue;
                 await reconcileHtmlArtifactManifest(
                   PROJECTS_DIR,
                   run.projectId,
