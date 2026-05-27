@@ -1607,23 +1607,22 @@ function AppInner() {
             // re-prompting on every refresh, regardless of whether
             // the user changed anything during the session.
             const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
-            if (!next.onboardingCompleted || !config.onboardingCompleted) {
-              // Route the close-path write through the same persist
-              // path the autosave uses, so daemon write failures
-              // surface through the existing autosave/error UI instead
-              // of silently swallowing or leaving the dialog in a
-              // dead-looking state.
-              void handleConfigPersist(next)
-                .then(() => setSettingsOpen(false))
-                .catch(() => {
-                  // handleConfigPersist rejection is already surfaced
-                  // by the SettingsDialog autosave error indicator.
-                  // Keep the dialog open so the user can fix the
-                  // invalid config.
-                });
-            } else {
-              setSettingsOpen(false);
-            }
+            // Route the close-path write through the same persist
+            // path the autosave uses, so daemon write failures
+            // surface through the existing autosave/error UI instead
+            // of silently swallowing or leaving the dialog in a
+            // dead-looking state. Always attempt the write so a
+            // rejected first close gets retried on subsequent clicks
+            // instead of falling through a stale onboardingCompleted
+            // guard.
+            void handleConfigPersist(next)
+              .then(() => setSettingsOpen(false))
+              .catch(() => {
+                // handleConfigPersist rejection is already surfaced
+                // by the SettingsDialog autosave error indicator.
+                // Keep the dialog open so the user can fix the
+                // invalid config.
+              });
             setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
