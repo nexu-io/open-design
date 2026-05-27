@@ -48,6 +48,13 @@ describe('manual edit bridge target normalization', () => {
     expect(isMeaningfulManualEditElement(script, { width: 80, height: 24 })).toBe(false);
   });
 
+  it('treats list items as meaningful manual-edit elements', () => {
+    const dom = new JSDOM('<main><ul><li data-od-source-path="path-0-0-0">First item</li></ul></main>');
+    const item = dom.window.document.querySelector('li')!;
+
+    expect(isMeaningfulManualEditElement(item, { width: 80, height: 24 })).toBe(true);
+  });
+
   it('keeps source-mappable display:none targets available for the layers panel', async () => {
     const posts: Array<{ type?: string; targets?: Array<{ id: string; isHidden?: boolean }> }> = [];
     const dom = new JSDOM(
