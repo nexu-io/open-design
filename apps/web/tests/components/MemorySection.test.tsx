@@ -1589,6 +1589,57 @@ describe('MemorySection', () => {
     await waitFor(() => {
       expect(screen.getByText('Remember I prefer dark mode')).toBeTruthy();
     });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(deletedUrls).toEqual(['/api/memory/extractions/ex-1']);
+  });
+
+  it('restores the extraction history item when the DELETE fetch rejects', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const deletedUrls: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          extractions: [
+            {
+              id: 'ex-1',
+              phase: 'success',
+              kind: 'llm',
+              startedAt: Date.now(),
+              userMessagePreview: 'Remember I prefer dark mode',
+              writtenCount: 1,
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions/ex-1' && init?.method === 'DELETE') {
+        deletedUrls.push(url);
+        throw new Error('daemon offline');
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByText('Extraction history'));
+    const row = (await screen.findByText('Remember I prefer dark mode')).closest('li') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Remember I prefer dark mode')).toBeTruthy();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(deletedUrls).toEqual(['/api/memory/extractions/ex-1']);
   });
 

@@ -1347,23 +1347,33 @@ export function MemorySection({
     // instant. The SSE 'deleted' event will arrive moments later and is
     // a no-op against an already-removed id; if the request fails we
     // re-fetch to put the row back instead of silently lying.
+    const beforeDelete = extractions;
     setExtractions((prev) => prev.filter((r) => r.id !== id));
-    const ok = await deleteExtraction(id);
-    if (!ok) {
-      void reloadExtractions();
+    try {
+      const ok = await deleteExtraction(id);
+      if (!ok) {
+        setExtractions(beforeDelete);
+        void reloadExtractions();
+      }
+    } catch (error) {
+      setExtractions(beforeDelete);
+      throw error;
     }
-  }, [reloadExtractions]);
+  }, [extractions, reloadExtractions]);
 
   const onConfirmDeleteExtraction = useCallback(async () => {
     if (!pendingExtractionDeleteId) return;
     setIsDeletingExtraction(true);
     try {
       await onDeleteExtraction(pendingExtractionDeleteId);
-      setPendingExtractionDeleteId(null);
+    } catch {
+      // fetch threw (e.g. network failure) — reload to restore the missing row
+      void reloadExtractions();
     } finally {
       setIsDeletingExtraction(false);
+      setPendingExtractionDeleteId(null);
     }
-  }, [onDeleteExtraction, pendingExtractionDeleteId]);
+  }, [onDeleteExtraction, pendingExtractionDeleteId, reloadExtractions]);
 
   const onClearExtractions = useCallback(async () => {
     if (!window.confirm(t('settings.memoryExtractionsClearConfirm'))) return;
@@ -1560,7 +1570,7 @@ export function MemorySection({
                   className="memory-info-btn"
                   onClick={() => void onCopyPath()}
                   title={rootDir}
-                  aria-label="Memory storage path — click to copy"
+                  aria-label={t('settings.memoryFlashPathCopied')}
                 >
                   <Icon name="info" size={13} />
                 </button>
