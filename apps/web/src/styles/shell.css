@@ -167,7 +167,11 @@
   box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 6%, transparent);
 }
 .workspace-tab:hover::before,
-.workspace-tab.is-active::before {
+.workspace-tab:hover + .workspace-tab::before,
+.workspace-tab:focus-within::before,
+.workspace-tab:focus-within + .workspace-tab::before,
+.workspace-tab.is-active::before,
+.workspace-tab.is-active + .workspace-tab::before {
   opacity: 0;
 }
 .workspace-tab__main {
