@@ -55,3 +55,6 @@
 {"ts":"2026-05-27T09:20:54.691Z","type":"pr_merged","user":"alchemistklk","pr":3099,"delta":12,"promoted":null}
 {"ts":"2026-05-27T09:25:01.241Z","type":"pr_merged","user":"jinmeihong0201-gif","pr":3094,"delta":12,"promoted":null}
 {"ts":"2026-05-27T09:34:16.145Z","type":"issue_opened_accepted","user":"AmyShang-alt","issue":3104,"delta":5}
+{"ts":"2026-05-27T09:39:46.132Z","type":"pr_merged","user":"Siri-Ray","pr":3085,"delta":30,"promoted":"signal"}
+{"ts":"2026-05-27T09:47:20.316Z","type":"pr_merged","user":"elihahah666","pr":3098,"delta":30,"promoted":"signal"}
+{"ts":"2026-05-27T09:53:45.574Z","type":"pr_merged","user":"522700967-wq","pr":3010,"delta":30,"promoted":"signal"}

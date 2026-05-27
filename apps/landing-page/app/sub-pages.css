@@ -1682,3 +1682,73 @@ body.sub-page {
   .detail-share-dialog-form { padding: 20px 22px 24px; }
   .detail-share-dialog-actions { flex-direction: column; }
 }
+
+/*
+ * Plugins hub — 4-tile grid for the /plugins/ landing surface. Used
+ * by `app/pages/plugins/index.astro` (default locale) and the
+ * `[locale]/[...path].astro` catch-all (prefixed locales) so the
+ * localized chrome reuses the same style without rendering twice.
+ */
+.plugins-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 32px 0 64px;
+}
+@media (max-width: 720px) {
+  .plugins-tile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.plugins-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px 28px 24px;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+.plugins-tile:hover {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.4);
+}
+.plugins-tile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.plugins-tile-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: -0.015em;
+  line-height: 1;
+}
+.plugins-tile-count {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-tile-blurb {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-mute);
+}
+.plugins-tile-cta {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}

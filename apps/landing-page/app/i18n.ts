@@ -159,6 +159,13 @@ export interface HeaderCopy {
   nav: {
     /** Top-level dropdown grouping the four catalog facets. */
     library: string;
+    /**
+     * Trigger label for the Plugins dropdown. The dropdown groups Templates,
+     * Skills, Systems and Craft under one parent — surfaced as "Plugins"
+     * since the new `/plugins/` hub. Kept distinct from `library` so each
+     * locale can pick the term that reads naturally as a button.
+     */
+    plugins: string;
     skills: string;
     systems: string;
     templates: string;
@@ -951,6 +958,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: 'Library',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systems',
         templates: 'Templates',
@@ -982,6 +990,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: '柏林 / 开放 / 地球',
       nav: {
         library: '资源库',
+        plugins: '插件',
         skills: '技能',
         systems: '设计系统',
         templates: '模板',
@@ -1013,6 +1022,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: '柏林 / 開放 / 地球',
       nav: {
         library: '資源庫',
+        plugins: '外掛',
         skills: '技能',
         systems: '設計系統',
         templates: '模板',
@@ -1044,6 +1054,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: 'ライブラリ',
+        plugins: 'プラグイン',
         skills: 'スキル',
         systems: 'システム',
         templates: 'テンプレート',
@@ -1075,6 +1086,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: '라이브러리',
+        plugins: '플러그인',
         skills: '스킬',
         systems: '시스템',
         templates: '템플릿',
@@ -1106,6 +1118,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Offen / Erde',
       nav: {
         library: 'Bibliothek',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systeme',
         templates: 'Vorlagen',
@@ -1137,6 +1150,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Ouvert / Terre',
       nav: {
         library: 'Bibliothèque',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systèmes',
         templates: 'Modèles',
@@ -1168,6 +1182,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Берлин / Open / Earth',
       nav: {
         library: 'Библиотека',
+        plugins: 'Плагины',
         skills: 'Skills',
         systems: 'Системы',
         templates: 'Шаблоны',
@@ -1199,6 +1214,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlín / Abierto / Tierra',
       nav: {
         library: 'Biblioteca',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Sistemas',
         templates: 'Plantillas',
@@ -1230,6 +1246,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlim / Aberto / Terra',
       nav: {
         library: 'Biblioteca',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Sistemas',
         templates: 'Modelos',
@@ -1261,6 +1278,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlino / Aperto / Terra',
       nav: {
         library: 'Libreria',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Sistemi',
         templates: 'Template',
@@ -1292,6 +1310,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Mở / Trái Đất',
       nav: {
         library: 'Thư viện',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Hệ thống',
         templates: 'Mẫu',
@@ -1323,6 +1342,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Otwarte / Ziemia',
       nav: {
         library: 'Biblioteka',
+        plugins: 'Wtyczki',
         skills: 'Skills',
         systems: 'Systemy',
         templates: 'Szablony',
@@ -1354,6 +1374,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Terbuka / Bumi',
       nav: {
         library: 'Pustaka',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Sistem',
         templates: 'Templat',
@@ -1385,6 +1406,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlijn / Open / Aarde',
       nav: {
         library: 'Bibliotheek',
+        plugins: 'Plug-ins',
         skills: 'Skills',
         systems: 'Systemen',
         templates: 'Sjablonen',
@@ -1416,6 +1438,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'برلين / مفتوح / الأرض',
       nav: {
         library: 'المكتبة',
+        plugins: 'الإضافات',
         skills: 'Skills',
         systems: 'أنظمة',
         templates: 'قوالب',
@@ -1447,6 +1470,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Açık / Dünya',
       nav: {
         library: 'Kütüphane',
+        plugins: 'Eklentiler',
         skills: 'Skill',
         systems: 'Sistemler',
         templates: 'Şablonlar',
@@ -1478,6 +1502,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Берлін / Open / Earth',
       nav: {
         library: 'Бібліотека',
+        plugins: 'Плагіни',
         skills: 'Skills',
         systems: 'Системи',
         templates: 'Шаблони',

@@ -173,13 +173,11 @@ export function Header({
               </ul>
             </li>
             {/*
-              Library — catalog facets (Skills / Systems / Templates / Craft)
+              Plugins — catalog facets (Templates / Skills / Systems / Craft)
               collapsed under one parent. Each row keeps its count badge
               inside the panel and the trigger highlights when any of the
               four facet pages is active. Same CSS-only :hover /
-              :focus-within mechanic from Product. Hardcoded "Library" /
-              "Learn" labels until per-locale translations land — the
-              brand-name pattern.
+              :focus-within mechanic from Product.
             */}
             <li className='has-dropdown'>
               <a
@@ -197,7 +195,7 @@ export function Header({
                 aria-haspopup='true'
                 aria-expanded='false'
               >
-                Plugins
+                {headerCopy.nav.plugins}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
               <ul className='nav-dropdown' role='menu'>
@@ -207,7 +205,7 @@ export function Header({
                     href={href('/plugins/templates/')}
                     className={linkClass('templates')}
                   >
-                    <span className='dropdown-name'>Templates</span>
+                    <span className='dropdown-name'>{headerCopy.nav.templates}</span>
                   </a>
                 </li>
                 <li role='none'>
@@ -216,7 +214,7 @@ export function Header({
                     href={href('/plugins/skills/')}
                     className={linkClass('skills')}
                   >
-                    <span className='dropdown-name'>Skills</span>
+                    <span className='dropdown-name'>{headerCopy.nav.skills}</span>
                   </a>
                 </li>
                 <li role='none'>
@@ -225,7 +223,7 @@ export function Header({
                     href={href('/plugins/systems/')}
                     className={linkClass('systems')}
                   >
-                    <span className='dropdown-name'>Systems</span>
+                    <span className='dropdown-name'>{headerCopy.nav.systems}</span>
                   </a>
                 </li>
                 <li role='none'>
@@ -234,7 +232,7 @@ export function Header({
                     href={href('/plugins/craft/')}
                     className={linkClass('craft')}
                   >
-                    <span className='dropdown-name'>Craft</span>
+                    <span className='dropdown-name'>{headerCopy.nav.craft}</span>
                   </a>
                 </li>
               </ul>

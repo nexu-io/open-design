@@ -1244,6 +1244,14 @@ export interface TweaksPopoverClickProps {
   status_after: 'on' | 'off';
 }
 
+export interface CommentPopoverClickProps {
+  page_name: 'artifact';
+  area: 'comment_popover';
+  element: 'save_comment' | 'send_to_chat' | 'add_note';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
 export interface ArtifactHeaderClickProps {
   page_name: 'artifact';
   area: 'artifact_header';
@@ -1496,6 +1504,7 @@ export type UiClickProps =
   | FileManagerClickProps
   | ArtifactToolbarClickProps
   | TweaksPopoverClickProps
+  | CommentPopoverClickProps
   | ArtifactHeaderClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps

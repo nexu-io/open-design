@@ -20,10 +20,22 @@ on:
       - design-systems/**
       - craft/**
       - templates/**
+      # Plugin manifests power the bundled-plugin catalog and the new
+      # `_lib/bundled-plugins.ts` reader; CI must rerun when their
+      # `title_i18n` / `description_i18n` maps or other fields change.
+      - plugins/**
       # Workspace plumbing
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
+  # Merge queue trigger so PRs that touch the same paths can clear
+  # `Validate landing page` / `Strict PR visual tests` while queued.
+  # Without this branch ruleset blocks merges (the queue waits forever
+  # for a check name that never gets dispatched against the merge_group
+  # ref), which is the exact deadlock observed during the 5/26 release
+  # window.
+  merge_group:
+    types: [checks_requested]
   push:
     branches:
       - main

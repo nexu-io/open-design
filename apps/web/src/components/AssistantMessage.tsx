@@ -104,6 +104,177 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
   );
 }
 
+type SkillPluginCandidateBlock = Extract<Block, { kind: "plugin-candidate" }>;
+
+function SkillPluginCandidateCard({
+  block,
+  projectId,
+  onDismissed,
+  onRequestOpenFile,
+}: {
+  block: SkillPluginCandidateBlock;
+  projectId: string | null;
+  onDismissed: (candidateId: string) => void;
+  onRequestOpenFile?: (name: string) => void;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState<null | "draft" | "publish" | "contribute" | "dismiss">(null);
+  const [notice, setNotice] = useState<ActionNotice | null>(null);
+  const disabled = !projectId || busy !== null;
+  const description =
+    block.description === "Reusable skill material detected from a repository link." ||
+    block.description === "This repo looks like it could work as a plugin."
+      ? t("skillPluginCandidate.repoDescription")
+      : block.description || t("skillPluginCandidate.repoDescription");
+
+  async function post(path: string, body: Record<string, unknown> = {}) {
+    const resp = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const message =
+        data?.message ??
+        (typeof data?.error === "string" ? data.error : data?.error?.message) ??
+        resp.statusText;
+      throw new Error(message || "Plugin candidate action failed.");
+    }
+    return data;
+  }
+
+  async function createDraft() {
+    if (!projectId) return;
+    setBusy("draft");
+    setNotice(null);
+    try {
+      const data = await post(
+        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/draft`,
+      );
+      const draftPath = String(data?.draftPath ?? "");
+      if (data?.validation?.ok === false) {
+        setNotice({ message: "Draft created with validation issues." });
+      } else if (draftPath) {
+        const install = await post(
+          `/api/projects/${encodeURIComponent(projectId)}/plugins/install-folder`,
+          { path: draftPath },
+        );
+        if (install?.ok === false) {
+          setNotice({ message: install?.message ?? "Plugin draft created, but install failed." });
+        } else {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("open-design:plugins-changed"));
+          }
+          setNotice({ message: install?.message ?? "Plugin draft created and added to My plugins." });
+        }
+      } else {
+        setNotice({ message: "Plugin draft created." });
+      }
+      if (draftPath && onRequestOpenFile) onRequestOpenFile(`${draftPath}/open-design.json`);
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function share(action: "publish-github" | "contribute-open-design") {
+    if (!projectId) return;
+    setBusy(action === "publish-github" ? "publish" : "contribute");
+    setNotice(null);
+    try {
+      const data = await post(
+        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/share-tasks`,
+        { action },
+      );
+      setNotice({
+        message:
+          action === "publish-github"
+            ? `GitHub publish task started for ${data?.path ?? "the draft"}.`
+            : `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+      });
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function dismiss() {
+    if (!projectId) return;
+    setBusy("dismiss");
+    try {
+      await post(
+        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/dismiss`,
+      );
+      onDismissed(block.candidateId);
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : String(err) });
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="plugin-action-panel" data-testid={`skill-plugin-candidate-${block.candidateId}`}>
+      <div className="plugin-action-card">
+        <div className="plugin-action-card__body">
+          <div className="plugin-action-card__title">
+            <Icon name="sparkles" size={14} />
+            <span>{block.title}</span>
+          </div>
+          <p className="plugin-action-card__description">
+            {description}
+          </p>
+          <div className="plugin-action-card__actions">
+            <button
+              type="button"
+              className="plugin-action-button plugin-action-button--primary"
+              disabled={disabled}
+              onClick={() => void createDraft()}
+            >
+              <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
+              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
+            </button>
+            <button
+              type="button"
+              className="plugin-action-button"
+              disabled={disabled}
+              onClick={() => void share("contribute-open-design")}
+            >
+              <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
+              <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
+            </button>
+            <button
+              type="button"
+              className="plugin-action-button"
+              disabled={disabled}
+              onClick={() => void share("publish-github")}
+            >
+              <Icon name={busy === "publish" ? "spinner" : "github"} size={13} />
+              <span>{busy === "publish" ? "Starting..." : t("skillPluginCandidate.publishRepo")}</span>
+            </button>
+            <button
+              type="button"
+              className="plugin-action-button"
+              disabled={disabled}
+              onClick={() => void dismiss()}
+            >
+              <Icon name={busy === "dismiss" ? "spinner" : "close"} size={13} />
+              <span>{t("skillPluginCandidate.dismiss")}</span>
+            </button>
+          </div>
+          {notice ? (
+            <div className="plugin-action-card__notice" role="status">
+              <ActionNoticeView notice={notice} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   message: ChatMessage;
   streaming: boolean;
@@ -299,6 +470,9 @@ export function AssistantMessage({
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
     () => new Set()
   );
+  const [dismissedCandidateIds, setDismissedCandidateIds] = useState<Set<string>>(
+    () => new Set()
+  );
   // Route interactive tool answers (currently AskUserQuestion) back to the
   // still-open stream-json child via the daemon. We resolve to `true` on
   // success so the card can flip into its answered state; on `false` (run
@@ -373,6 +547,24 @@ export function AssistantMessage({
                 isLast={!!isLast}
                 onSubmitForm={onSubmitForm}
                 onAnswerToolUse={onAnswerToolUse}
+              />
+            );
+          }
+          if (b.kind === "plugin-candidate") {
+            if (dismissedCandidateIds.has(b.candidateId)) return null;
+            return (
+              <SkillPluginCandidateCard
+                key={i}
+                block={b}
+                projectId={projectId}
+                onDismissed={(candidateId) =>
+                  setDismissedCandidateIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(candidateId);
+                    return next;
+                  })
+                }
+                onRequestOpenFile={onRequestOpenFile}
               />
             );
           }
@@ -1877,6 +2069,14 @@ type Block =
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string }
   | { kind: "tool-group"; items: ToolItem[] }
+  | {
+      kind: "plugin-candidate";
+      candidateId: string;
+      title: string;
+      description?: string | undefined;
+      confidence?: number | undefined;
+      draftPath?: string | null | undefined;
+    }
   | { kind: "status"; label: string; detail?: string | undefined };
 
 /**
@@ -1961,6 +2161,17 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
     if (ev.kind === "tool_result") continue;
+    if (ev.kind === "plugin_candidate") {
+      out.push({
+        kind: "plugin-candidate",
+        candidateId: ev.candidateId,
+        title: ev.title,
+        description: ev.description,
+        confidence: ev.confidence,
+        draftPath: ev.draftPath,
+      });
+      continue;
+    }
     if (ev.kind === "status") {
       if (
         ev.label === "streaming" ||

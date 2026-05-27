@@ -918,6 +918,11 @@ export interface Dict {
   'pluginCard.publishTitle': string;
   'pluginCard.contributeAria': string;
   'pluginCard.contributeTitle': string;
+  'skillPluginCandidate.createForMe': string;
+  'skillPluginCandidate.contributeToMain': string;
+  'skillPluginCandidate.publishRepo': string;
+  'skillPluginCandidate.dismiss': string;
+  'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;
   'integrations.agentReady': string;
