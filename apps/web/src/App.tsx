@@ -1608,19 +1608,18 @@ function AppInner() {
             // the user changed anything during the session.
             const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
             if (!next.onboardingCompleted || !config.onboardingCompleted) {
-              latestPersistedConfigRef.current = next;
-              void syncConfigToDaemon(next)
-                .then(() => {
-                  saveConfig(next);
-                  setConfig(next);
-                  setSettingsOpen(false);
-                })
+              // Route the close-path write through the same persist
+              // path the autosave uses, so daemon write failures
+              // surface through the existing autosave/error UI instead
+              // of silently swallowing or leaving the dialog in a
+              // dead-looking state.
+              void handleConfigPersist(next)
+                .then(() => setSettingsOpen(false))
                 .catch(() => {
-                  // Daemon rejected the write (e.g. invalid agentCliEnv).
-                  // Keep the dialog open so the user can fix the invalid
-                  // config instead of leaving with browser/daemon state
-                  // out of sync. Do not save to localStorage or update
-                  // React state — the daemon did not accept the write.
+                  // handleConfigPersist rejection is already surfaced
+                  // by the SettingsDialog autosave error indicator.
+                  // Keep the dialog open so the user can fix the
+                  // invalid config.
                 });
             } else {
               setSettingsOpen(false);

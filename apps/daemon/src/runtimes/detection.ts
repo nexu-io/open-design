@@ -239,9 +239,11 @@ async function safeProbe(
         authMessage: err.message,
       };
     }
-    // Other unexpected probe failures still get isolated so the
-    // /api/agents response can return the remaining agents.
-    return unavailableAgent(def);
+    // Other unexpected probe failures are not user-fixable config
+    // mistakes — they are broken invariants or subprocess/probe
+    // defects that should stay observable. Rethrow so detectAgents()
+    // callers notice and can diagnose the failure.
+    throw err;
   }
 }
 
