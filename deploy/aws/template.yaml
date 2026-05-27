@@ -46,6 +46,10 @@ Parameters:
     Type: String
     Default: '10.42.2.0/24'
     Description: 'The CIDR block for the Private Subnet'
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: '10.42.4.0/24'
+    Description: 'The CIDR block for Private Subnet 2 (AZ2)'
   FargateCpu:
     Type: String
     Default: '512'
@@ -58,6 +62,13 @@ Parameters:
 
 Conditions:
   UseCustomDomain: !Not [!Equals [!Ref CustomDomainName, '']]
+
+Rules:
+  RequireCertificateWithDomain:
+    RuleCondition: !Not [!Equals [!Ref CustomDomainName, '']]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AcmCertificateArn, '']]
+        AssertDescription: 'You must provide an AcmCertificateArn when specifying a CustomDomainName.'
 
 Resources:
   # NETWORKING (VPC, Subnets, NAT)
@@ -105,6 +116,13 @@ Resources:
       CidrBlock: !Ref PrivateSubnetCidr
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
 
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+
   NatGatewayEIP:
     Type: AWS::EC2::EIP
     Properties:
@@ -146,6 +164,12 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
   # SECURITY GROUPS
@@ -199,6 +223,14 @@ Resources:
     Properties:
       FileSystemId: !Ref FileSystem
       SubnetId: !Ref PrivateSubnet
+      SecurityGroups:
+        - !Ref EfsSecurityGroup
+
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref PrivateSubnet2
       SecurityGroups:
         - !Ref EfsSecurityGroup
 
@@ -445,6 +477,7 @@ Resources:
           AssignPublicIp: DISABLED
           Subnets:
             - !Ref PrivateSubnet
+            - !Ref PrivateSubnet2
           SecurityGroups:
             - !Ref FargateSecurityGroup
       LoadBalancers:

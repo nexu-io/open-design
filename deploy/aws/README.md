@@ -31,12 +31,12 @@ When deploying the CloudFormation stack, you can customize the following paramet
 | :--- | :--- | :--- |
 | `AllowedSourceIp` | **(Required)** The CIDR block allowed to access the Load Balancer (e.g., your office VPN IP). Must end in `/32` for a single IP. | *None* |
 | `ApiToken` | **(Required)** The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager. |  |
-| `AllowedSourceIp` | **(Required)** The CIDR block allowed to access the Load Balancer (e.g., your office VPN IP). Must end in `/32` for a single IP. | *None* |
 | `DockerImage` | The Open Design Docker image to deploy. | `vanjayak/open-design:latest` |
 | `VpcCidr` | The CIDR block for the VPC. | `10.42.0.0/16` |
 | `PublicSubnet1Cidr` | The CIDR block for Public Subnet 1 (AZ1). | `10.42.1.0/24` |
 | `PublicSubnet2Cidr` | The CIDR block for Public Subnet 2 (AZ2). | `10.42.3.0/24` |
 | `PrivateSubnetCidr` | The CIDR block for the Private Subnet. | `10.42.2.0/24` |
+| `PrivateSubnet2Cidr` | The CIDR block for Private Subnet 2 (AZ2). | `10.42.4.0/24` |
 | `FargateCpu` | Fargate task CPU units (1024 = 1 vCPU). Allowed values: 256, 512, 1024, 2048, 4096. | `512` |
 | `FargateMemory` | Fargate task memory in MiB. | `1024` |
 | `CustomDomainName` | *(Optional)* Your custom domain name (e.g., `design.yourcompany.com`). If blank, the default ALB DNS name is used over HTTP. | *None* |
