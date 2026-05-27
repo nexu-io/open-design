@@ -1609,9 +1609,12 @@ function AppInner() {
             // Use the dialog's latest debounced draft (if available)
             // instead of the parent App snapshot, so in-progress
             // edits like a CodeBuddy env field change are included
-            // in the close-path write.
+            // in the close-path write. Merge onboardingCompleted
+            // directly instead of going through
+            // resolveSettingsCloseConfig, which falls back to a
+            // stale persisted snapshot when rendered !== latestPersisted.
             const base = latestDraft ?? config;
-            const next = resolveSettingsCloseConfig(base, latestPersistedConfigRef.current);
+            const next = base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
             // Route the close-path write through the same persist
             // path the autosave uses, so daemon write failures
             // surface through the existing autosave/error UI instead
