@@ -394,13 +394,21 @@ integration boundaries.
 | B. Daemon owns raw events | `<OD_DATA_DIR>/memory/<userId>/raw_events.jsonl`, or a `raw_events` table inside `<OD_DATA_DIR>/app.sqlite` | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
 | C. Hybrid — daemon writes, engine reads | Daemon appends under the `OD_DATA_DIR` precedence; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
 
-`<OD_DATA_DIR>` here means the resolved daemon data root per the precedence
-documented in [`AGENTS.md`](../../AGENTS.md) FAQ "Where is data written?":
-`OD_MEDIA_CONFIG_DIR` (narrower) > `OD_DATA_DIR` (broader) >
-`<projectRoot>/.od` (fallback only when neither env var is set). Packaged
-installs and Home Manager / NixOS modules already point `OD_DATA_DIR` at a
-writable directory because the install root may be read-only; raw events
-must ride that contract rather than hard-code a repo-rooted `.od/` path.
+`<OD_DATA_DIR>` here means the resolved daemon data root: `OD_DATA_DIR` if
+set, otherwise `<projectRoot>/.od`. The path is resolved with `~/` expansion
+and relative paths anchored to `<projectRoot>`. Packaged installs and Home
+Manager / NixOS modules already point `OD_DATA_DIR` at a writable directory
+because the install root may be read-only; raw events must ride that
+contract rather than hard-code a repo-rooted `.od/` path.
+
+`OD_MEDIA_CONFIG_DIR` is **not** part of this precedence. Per
+[`AGENTS.md`](../../AGENTS.md) FAQ "Where is data written?",
+`OD_MEDIA_CONFIG_DIR` is a narrower override that relocates *only*
+`media-config.json` (API credentials). Raw events are general daemon
+runtime data and follow the daemon data-root contract above; an
+implementation that respected `OD_MEDIA_CONFIG_DIR` for raw events would
+route preference event data into the credentials directory, which is the
+wrong contract.
 
 Lean: **C**. Event capture is intrinsically a host concern — the daemon is
 where the pipeline events fire from, where debounce/coalesce happens, and where
