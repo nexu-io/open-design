@@ -165,12 +165,18 @@ composition that block lands, how it relates to the existing `## Personal
 memory` slot the daemon composer already populates, and whether critique sees
 the same block.
 
-### Live composer order (today, on `main`)
+### Memory-relevant prefix of the live composer order
 
-`apps/daemon/src/prompts/system.ts` composes the system prompt in this
-order. Each block is gated on its input being non-empty.
+`apps/daemon/src/prompts/system.ts` composes a longer system prompt than the
+prefix below; this section enumerates only the blocks that bear on memory
+placement. Blocks 1–13 are the ones the new memory layer has to insert into
+or alongside; the tail blocks (summarized at the end of this subsection)
+are mode-specific overrides that creative memory neither displaces nor sits
+between. Each block below is gated on its input being non-empty.
 
-1. Locale prompt (optional)
+0. `API_MODE_OVERRIDE` (plain-stream daemon agents only) — pinned at the
+   absolute top, before block 1. Out of scope for memory placement.
+1. Locale prompt (optional).
 2. `DISCOVERY_AND_PHILOSOPHY` + `BASE_SYSTEM_PROMPT` — identity / workflow
    charter.
 3. `## Personal memory (auto-extracted from past chats)` — facts sedimented
@@ -193,6 +199,30 @@ order. Each block is gated on its input being non-empty.
 12. `## Active craft references` — universal brand-agnostic rules opted into
     via `od.craft.requires`.
 13. `## Active skill` — the skill body the agent must follow.
+
+#### Tail blocks (mode-specific, after `## Active skill`)
+
+The composer keeps appending after block 13. These blocks are noted here so
+implementers do not treat block 13 as the tail of the stack and miss
+precedence layers a creative-memory block has to coexist with. None of them
+are candidate placements for the memory block itself; each is gated by mode,
+agent identity, or feature flag.
+
+- Plugin block and per-stage atom blocks (active plugin + stage-bundled
+  atom guidance).
+- Metadata block (project metadata, skill template, audio voice options).
+- Deck framework directive — pinned for deck projects without a skill seed,
+  conditional variant for kind=other projects.
+- Media generation contract — for image/video/audio surfaces.
+- Codex imagegen override — gated on agent + metadata.
+- Critique theater addendum — gated on `cfg.enabled`, suppressed on media.
+- Active-design visual-direction override — gated on the brand being bound.
+- Connected external MCP directive — gated on connected MCP servers.
+- Claude-only `AskUserQuestion` clarifying-questions block — gated on
+  agent identity.
+
+Source: `apps/daemon/src/prompts/system.ts:430-650`. The exact line numbers
+are unstable; the gating conditions and order are the durable shape.
 
 The existing precedence rule, declared in the `## Personal memory` block's
 own narrative, is: **personal memory is preferences, not hard rules; brand
@@ -361,8 +391,16 @@ integration boundaries.
 | Option | Where raw events live | Implication |
 |---|---|---|
 | A. Engine package owns raw events | `<storage_root>/<userId>/raw_events.jsonl` alongside `preferences.json` | Engine boundary expands to include event log. Re-derivation runs inside the package. |
-| B. Daemon owns raw events | `.od/memory/raw_events.jsonl` or SQLite table in `app.sqlite` | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
-| C. Hybrid — daemon writes, engine reads | Daemon appends; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
+| B. Daemon owns raw events | `<OD_DATA_DIR>/memory/<userId>/raw_events.jsonl`, or a `raw_events` table inside `<OD_DATA_DIR>/app.sqlite` | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
+| C. Hybrid — daemon writes, engine reads | Daemon appends under the `OD_DATA_DIR` precedence; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
+
+`<OD_DATA_DIR>` here means the resolved daemon data root per the precedence
+documented in [`AGENTS.md`](../../AGENTS.md) FAQ "Where is data written?":
+`OD_MEDIA_CONFIG_DIR` (narrower) > `OD_DATA_DIR` (broader) >
+`<projectRoot>/.od` (fallback only when neither env var is set). Packaged
+installs and Home Manager / NixOS modules already point `OD_DATA_DIR` at a
+writable directory because the install root may be read-only; raw events
+must ride that contract rather than hard-code a repo-rooted `.od/` path.
 
 Lean: **C**. Event capture is intrinsically a host concern — the daemon is
 where the pipeline events fire from, where debounce/coalesce happens, and where
