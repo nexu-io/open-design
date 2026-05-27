@@ -45,7 +45,8 @@ export interface HeaderProps {
     | 'templates'
     | 'craft'
     | 'blog'
-    | 'tutorials';
+    | 'tutorials'
+    | 'community';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -247,6 +248,17 @@ export function Header({
             <li>
               <a href={href('/blog/')} className={linkClass('blog')}>
                 {headerCopy.nav.blog}
+              </a>
+            </li>
+            {/*
+              Community lives on a separate Vercel deploy (the contributors
+              honor-cards page). `/community/` is a Cloudflare Pages 302 in
+              `public/_redirects` so the marketing nav can keep a stable
+              first-party URL even though the destination moves.
+            */}
+            <li>
+              <a href={href('/community/')} className={linkClass('community')}>
+                {headerCopy.nav.community}
               </a>
             </li>
             {/*
