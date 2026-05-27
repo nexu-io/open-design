@@ -19,6 +19,7 @@
 // same callback wiring.
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { createPortal } from 'react-dom';
 import { inferPluginPreview } from './plugins-home/preview';
 import { PluginScenarioDetail } from './plugin-details/PluginScenarioDetail';
 import { PluginExampleDetail } from './plugin-details/PluginExampleDetail';
@@ -39,9 +40,10 @@ export function PluginDetailsModal({
   isApplying,
 }: Props) {
   const preview = inferPluginPreview(record);
+  let detail: JSX.Element;
 
   if (preview.kind === 'media') {
-    return (
+    detail = (
       <PluginMediaDetail
         record={record}
         onClose={onClose}
@@ -49,10 +51,8 @@ export function PluginDetailsModal({
         isApplying={isApplying}
       />
     );
-  }
-
-  if (preview.kind === 'html') {
-    return (
+  } else if (preview.kind === 'html') {
+    detail = (
       <PluginExampleDetail
         record={record}
         exampleStem={
@@ -63,11 +63,18 @@ export function PluginDetailsModal({
         isApplying={isApplying}
       />
     );
-  }
-
-  if (preview.kind === 'design') {
-    return (
+  } else if (preview.kind === 'design') {
+    detail = (
       <PluginDesignSystemDetail
+        record={record}
+        onClose={onClose}
+        onUse={onUse}
+        isApplying={isApplying}
+      />
+    );
+  } else {
+    detail = (
+      <PluginScenarioDetail
         record={record}
         onClose={onClose}
         onUse={onUse}
@@ -76,12 +83,6 @@ export function PluginDetailsModal({
     );
   }
 
-  return (
-    <PluginScenarioDetail
-      record={record}
-      onClose={onClose}
-      onUse={onUse}
-      isApplying={isApplying}
-    />
-  );
+  if (typeof document === 'undefined') return detail;
+  return createPortal(detail, document.body);
 }
