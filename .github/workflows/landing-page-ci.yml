@@ -5,7 +5,8 @@ on:
     paths:
       # Workflow files
       - .github/workflows/landing-page-ci.yml
-      - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/landing-page-staging.yml
+      - .github/workflows/landing-page-production.yml
       - .github/workflows/blog-indexing-on-deploy.yml
       - .github/workflows/blog-indexing-monitor.yml
       # Landing page sources
@@ -28,7 +29,8 @@ on:
       - main
     paths:
       - .github/workflows/landing-page-ci.yml
-      - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/landing-page-staging.yml
+      - .github/workflows/landing-page-production.yml
       - .github/workflows/blog-indexing-on-deploy.yml
       - .github/workflows/blog-indexing-monitor.yml
       - apps/landing-page/**
@@ -44,6 +46,10 @@ on:
 
 permissions:
   contents: read
+  # Needed to post/update the preview-URL comment on the PR. Fork PRs run
+  # with a read-only token regardless, so the preview steps below are gated
+  # to same-repo branches.
+  pull-requests: write
 
 concurrency:
   group: landing-page-ci-${{ github.event.pull_request.number || github.ref }}
@@ -94,9 +100,13 @@ jobs:
       - name: Generate skill + template previews
         run: pnpm --filter @open-design/landing-page previews
 
+      # No PUBLIC_GA_MEASUREMENT_ID for PR/CI builds: the per-PR preview must
+      # not report into the production GA property. OD_LANDING_NOINDEX=1 keeps
+      # the PR preview (pr-<n>.open-design-landing-staging.pages.dev) out of
+      # search engines. Only `landing-page-production` builds without these.
       - name: Build landing page
         env:
-          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
+          OD_LANDING_NOINDEX: '1'
         run: pnpm --filter @open-design/landing-page build:static
 
       - name: Lint changed blog SEO
@@ -153,3 +163,74 @@ jobs:
             process.exit(1);
           }
           NODE
+
+      # --- PR preview deploy -------------------------------------------------
+      # Publish this PR's built site to its own preview URL in the STAGING
+      # project (`--branch=pr-<number>`) so reviewers see the rendered result
+      # before merge. It lands in the staging project, never the production
+      # project. Gated to same-repo branches: fork PRs run without the
+      # Cloudflare secrets and with a read-only token, so they skip the
+      # deploy/comment and keep just the validation above.
+      - name: Deploy PR preview to Cloudflare Pages
+        id: preview
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          command: >
+            pages deploy out
+            --project-name=open-design-landing-staging
+            --branch=pr-${{ github.event.pull_request.number }}
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_URL: ${{ steps.preview.outputs.deployment-url }}
+          ALIAS_URL: ${{ steps.preview.outputs.pages-deployment-alias-url }}
+        with:
+          script: |
+            const marker = '<!-- landing-preview -->';
+            const deploy = process.env.DEPLOY_URL || '';
+            const alias =
+              process.env.ALIAS_URL ||
+              `https://pr-${context.issue.number}.open-design-landing-staging.pages.dev`;
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+            const body = [
+              marker,
+              '### 🚀 Landing page preview',
+              '',
+              'This PR is deployed to a Cloudflare Pages preview — **not** staging or production:',
+              '',
+              `- Stable alias: ${alias}`,
+              deploy ? `- This build: ${deploy}` : '',
+              '',
+              `Updated for commit \`${sha}\`.`,
+            ]
+              .filter(Boolean)
+              .join('\n');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

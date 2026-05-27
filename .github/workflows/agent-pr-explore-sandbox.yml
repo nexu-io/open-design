@@ -1,25 +1,20 @@
 name: agent-pr-explore-sandbox
 
-# Trusted-orchestrator workflow for PR exploration. It intentionally uses
-# pull_request_target so the workflow file and runner script come from the
-# protected base branch. The PR head is never checked out on the host runner;
-# the sandbox script fetches and executes it inside Docker.
+# Trusted-orchestrator workflow for manual PR exploration. Keep this dispatch
+# only while the self-hosted runner and approval flow are being stabilized, so
+# ordinary PRs do not accumulate waiting checks.
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "apps/web/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - ".github/workflows/agent-pr-explore-sandbox.yml"
-      - ".github/scripts/agent-pr-explore-sandbox.sh"
   workflow_dispatch:
     inputs:
       pr_number:
         description: Pull request number to explore.
         required: true
         type: string
+      skip_comment:
+        description: Skip posting the exploration report comment on the PR (the report is still uploaded as an artifact). Use for validation/dry runs.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -33,17 +28,30 @@ concurrency:
 jobs:
   sandbox:
     name: Sandbox PR runtime
-    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft }}
     runs-on: [self-hosted, agent-pr-explore]
     environment: agent-pr-explore
     timeout-minutes: 45
 
     steps:
-      - name: Checkout trusted base scripts
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
-          persist-credentials: false
+      - name: Fetch trusted base script
+        # Only the self-contained sandbox script is needed on the trusted host;
+        # PR code is checked out inside Docker. A full actions/checkout of this
+        # large repo stalled on the self-hosted runner before the agent ever
+        # ran, so fetch just the one trusted file via the API instead. The ref
+        # is pinned to the trusted base/dispatch commit, never PR head.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_REF: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p .github/scripts
+          gh api \
+            -H 'Accept: application/vnd.github.raw' \
+            "repos/$GITHUB_REPOSITORY/contents/.github/scripts/agent-pr-explore-sandbox.sh?ref=$TRUSTED_REF" \
+            > .github/scripts/agent-pr-explore-sandbox.sh
+          chmod +x .github/scripts/agent-pr-explore-sandbox.sh
+          echo "Fetched trusted agent-pr-explore-sandbox.sh at $TRUSTED_REF"
 
       - name: Resolve PR metadata
         id: pr
@@ -106,11 +114,12 @@ jobs:
           OD_EXPECT_TIMEOUT_SECONDS: "1200"
           OD_EXPECT_CONTEXT_MAX_BYTES: "120000"
           OD_TRACE_R2_UPLOAD: "1"
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET || secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT || secrets.CLOUDFLARE_R2_RELEASES_URL }}
         run: .github/scripts/agent-pr-explore-sandbox.sh
 
       - name: Upload sandbox artifacts
@@ -123,7 +132,7 @@ jobs:
           retention-days: 7
 
       - name: Comment exploration report
-        if: always()
+        if: ${{ always() && !inputs.skip_comment }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,7 +167,8 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body" --silent
           fi
 
-          case "${PR_AUTHOR,,}" in
+          pr_author_lc="$(printf '%s' "$PR_AUTHOR" | tr '[:upper:]' '[:lower:]')"
+          case "$pr_author_lc" in
             nettee|mrcfps|alchemistklk|siri-ray)
               ;;
             *)
