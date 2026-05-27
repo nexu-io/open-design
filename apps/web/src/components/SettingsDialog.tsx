@@ -184,7 +184,7 @@ interface Props {
    * saved state with `''` before the daemon's response lands.
    */
   composioConfigLoading?: boolean;
-  onClose: (latestDraft?: AppConfig) => void;
+  onClose: (latestDraft?: AppConfig) => Promise<void> | void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
@@ -1830,12 +1830,24 @@ export function SettingsDialog({
     };
   }, [onPersist]);
 
+  // Central close handler: routes daemon write failures from the
+  // close path into the autosave error UI so the user sees which
+  // field is invalid instead of a dead-looking dialog.
+  const handleClose = useCallback(() => {
+    const result = onClose(autosaveLatestRef.current);
+    if (result && typeof result === 'object' && 'then' in result) {
+      result.catch(() => {
+        setAutosaveStatus('error');
+      });
+    }
+  }, [onClose]);
+
   // Global Escape closes the dialog. With no footer button anymore the
   // close affordances are: top-right X · backdrop click · Escape.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
-      onClose(autosaveLatestRef.current);
+      handleClose();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -2271,7 +2283,7 @@ export function SettingsDialog({
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => onClose(autosaveLatestRef.current)}>
+    <div className="modal-backdrop" onClick={handleClose}>
       <div
         className="modal modal-settings"
         role="dialog"
@@ -2320,7 +2332,7 @@ export function SettingsDialog({
           <button
             type="button"
             className="settings-close"
-            onClick={() => onClose(autosaveLatestRef.current)}
+            onClick={handleClose}
             aria-label={t('common.close')}
             title={t('common.close')}
           >
@@ -3636,7 +3648,7 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'routines' ? <RoutinesSection onClose={() => onClose(autosaveLatestRef.current)} /> : null}
+          {activeSection === 'routines' ? <RoutinesSection onClose={handleClose} /> : null}
 
           {activeSection === 'orbit' ? (
             <OrbitSection
@@ -3654,7 +3666,7 @@ export function SettingsDialog({
                 // down. Closing the dialog drops the user on the
                 // /projects/orbit view where the agent run streams in.
                 void onPersist(runConfig);
-                onClose(autosaveLatestRef.current);
+                handleClose();
               }}
             />
           ) : null}

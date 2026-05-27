@@ -1615,23 +1615,12 @@ function AppInner() {
             // stale persisted snapshot when rendered !== latestPersisted.
             const base = latestDraft ?? config;
             const next = base.onboardingCompleted ? base : { ...base, onboardingCompleted: true };
-            // Route the close-path write through the same persist
-            // path the autosave uses, so daemon write failures
-            // surface through the existing autosave/error UI instead
-            // of silently swallowing or leaving the dialog in a
-            // dead-looking state. Always attempt the write so a
-            // rejected first close gets retried on subsequent clicks
-            // instead of falling through a stale onboardingCompleted
-            // guard.
-            void handleConfigPersist(next)
-              .then(() => setSettingsOpen(false))
-              .catch(() => {
-                // handleConfigPersist rejection is already surfaced
-                // by the SettingsDialog autosave error indicator.
-                // Keep the dialog open so the user can fix the
-                // invalid config.
-              });
-            setSettingsHighlight(null);
+            // Return the promise so SettingsDialog's handleClose can
+            // catch rejections and set autosaveStatus='error', giving
+            // the user a visible clue which field is invalid instead
+            // of a dead-looking dialog.
+            return handleConfigPersist(next)
+              .then(() => { setSettingsOpen(false); setSettingsHighlight(null); });
           }}
           onRefreshAgents={refreshAgents}
           onSkillsRefresh={refreshSkills}
