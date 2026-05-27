@@ -98,7 +98,7 @@
   .section-head .right{font:400 15px/1.55 var(--body);color:var(--ink-mute);max-width:38ch;text-align:right;padding-bottom:12px}
   .section-head .kicker{margin-bottom:20px;display:block}
 
-  /* --------- this week's signal ---------- */
+  /* --------- recent signal ---------- */
   .signal{background:linear-gradient(180deg, var(--paper) 0%, var(--paper-warm) 100%)}
   .signal-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:48px}
   .signal-feature{background:var(--ink);color:var(--bone);border-radius:18px;padding:42px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;min-height:520px}
@@ -489,34 +489,34 @@
     </div>
   </div>
 </section>
-<!-- ============ THIS WEEK'S SIGNAL ============ -->
+<!-- ============ RECENT SIGNAL ============ -->
 <section class="section signal weekly" id="signal">
   <div class="wrap">
     <div class="section-head">
       <div>
-        <span class="kicker"><span class="dot"></span>This week's signal</span>
-        <h2 class="h-display">The <em>top ten</em> who shipped most this week.</h2>
+        <span class="kicker"><span class="dot"></span>Recent signal</span>
+        <h2 class="h-display">Ten contributors with <em>recent momentum</em>.</h2>
       </div>
-      <p class="right">The community is moving every week: sharp contributors are landing PRs, improving the product, and making Open Design feel alive.</p>
+      <p class="right">A snapshot of sharp contributors landing PRs, improving the product, and making Open Design feel alive.</p>
     </div>
 
     <div class="signal-grid">
 
       <article class="signal-feature" id="feature-card">
         <div class="top">
-          <div class="rank"><span class="badge">01</span> This week's leader</div>
-          <div class="week">Last 7 days</div>
+          <div class="rank"><span class="badge">01</span> A recent leader</div>
+          <div class="week">Snapshot</div>
         </div>
         <div class="body">
           <div class="avatar"><img id="feat-avatar" src="" alt="" /></div>
           <div class="name" id="feat-name">—</div>
           <div class="handle" id="feat-handle">—</div>
-          <p class="quote" id="feat-blurb">A contributor is taking the lead this week with focused, generous work.</p>
+          <p class="quote" id="feat-blurb">A contributor taking the lead with focused, generous work.</p>
           <p class="quote-prs" id="feat-prs-list" style="margin-top:14px;font-family:var(--body);font-style:normal;font-size:14px;line-height:1.55;color:rgba(255,255,255,.62);font-weight:400;letter-spacing:0"></p>
         </div>
         <div class="feature-stats">
           <div class="item"><div class="v coral" id="feat-rank">#01</div><div class="l">Rank</div></div>
-          <div class="item"><div class="v" id="feat-prs">—</div><div class="l">PRs · 7d</div></div>
+          <div class="item"><div class="v" id="feat-prs">—</div><div class="l">Recent PRs</div></div>
         </div>
       </article>
 
@@ -573,7 +573,7 @@
     </div>
 
     <div class="issues-foot">
-      <span>Showing first <span class="num" id="issue-count">—</span> · resets every 30 minutes</span>
+      <span>Showing first <span class="num" id="issue-count">—</span> open good-first-issues</span>
       <a href="https://github.com/nexu-io/open-design/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22" target="_blank" rel="noopener" style="color:var(--coral)">See all on GitHub →</a>
     </div>
   </div>
@@ -689,19 +689,23 @@ const HEADERS = (() => {
 /* Open Design core team and internal accounts. Lowercased GitHub logins. */
 const CORE_TEAM = new Set([
   'pftom','mrcfps','sophia','ashleyashli','qiongyu1999','zoeforfun',
-  'leon wang','perishcode','nettee','anthhub','siri-ray','lefarcen',
+  'perishcode','nettee','anthhub','siri-ray','lefarcen',
   'alchemistklk','shangxinyu1','joeylee12629-star','tuola-waj',
   'leilei926524-tech','nagendhra-web','sid-qin','chaoxiaoche'
 ].map(s => s.toLowerCase()));
 function isCore(login){ return login && CORE_TEAM.has(String(login).toLowerCase()); }
 const BOT_LOGINS = new Set(['open-design-bot','opendesign-bot','nexu-bot','open-design-bot[bot]']);
+/* Whole-token match on bot/cursor/agent so real logins like
+   'agentina', 'cursorsmith', 'robothai' are not silently dropped.
+   Token boundaries are start, end, '-', or '_'. */
+const BOT_TOKEN_RE = /(?:^|[-_])(?:bot|cursor|agent)(?:$|[-_])/;
 function isBot(c){
   if (!c) return false;
   if (c.type === 'Bot') return true;
   const login = String(c.login || '').toLowerCase();
   if (!login) return false;
   if (login.endsWith('[bot]')) return true;
-  if (login.includes('bot') || login.includes('cursor') || login.includes('agent')) return true;
+  if (BOT_TOKEN_RE.test(login)) return true;
   return BOT_LOGINS.has(login);
 }
 function isExcluded(c){
@@ -712,8 +716,7 @@ function isExcluded(c){
 const RANKING_SNAPSHOT = {
   generatedAt: '2026-05-26T12:25:59Z',
   source: 'Curated contributor records for the Open Design community page.',
-  since: '2026-05-19',
-  filters: ['core maintainers', 'known internal staff', 'type:Bot', '[bot] suffix', 'login contains bot', 'login contains cursor', 'login contains agent'],
+  filters: ['core maintainers', 'known internal staff', 'type:Bot', '[bot] suffix', 'whole-token match: bot / cursor / agent'],
   weekly: [
     { login:'bulai0408', avatar:'https://avatars.githubusercontent.com/u/31983330?v=4', prs:19, lastMerged:'2026-05-26', examples:[{number:2006,title:'fix(daemon): fail disallowed connector tool selections'},{number:2331,title:'fix(web): align HomeHero prompt overlay metrics'}] },
     { login:'522700967-wq', avatar:'https://avatars.githubusercontent.com/u/270050048?v=4', prs:14, lastMerged:'2026-05-26', examples:[{number:2958,title:'feat(landing-page): plugin detail page interactive preview + share dialog'},{number:2880,title:'fix(landing-page): copy example.html sibling assets in post-build'}] },
@@ -775,8 +778,8 @@ async function loadWeeklyTop(){
   document.getElementById('feat-avatar').src = f.avatar;
   document.getElementById('feat-avatar').alt = f.login;
   setText('feat-name', f.login);
-  setText('feat-handle', '@' + f.login + ' · active this week');
-  setText('feat-blurb', `${f.login} is setting the pace this week with ${f.prs} merged PR${f.prs === 1 ? '' : 's'} and the kind of steady craft that keeps Open Design moving.`);
+  setText('feat-handle', '@' + f.login + ' · recent contribution');
+  setText('feat-blurb', `${f.login} has set the pace with ${f.prs} merged PR${f.prs === 1 ? '' : 's'} and the kind of steady craft that keeps Open Design moving.`);
   setText('feat-prs-list', exampleCopy(f));
   setText('feat-rank', '#01');
   setText('feat-prs', f.prs);
