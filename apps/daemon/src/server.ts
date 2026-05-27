@@ -5298,7 +5298,7 @@ export async function startServer({
     app.use(express.static(STATIC_DIR));
     const indexHtml = path.join(STATIC_DIR, 'index.html');
     if (fs.existsSync(indexHtml)) {
-      app.get('*', (req, res, next) => {
+      app.get('/*', (req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/mcp')) return next();
         res.sendFile(indexHtml);
       });
