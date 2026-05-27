@@ -1600,13 +1600,18 @@ function AppInner() {
           composioConfigLoading={composioConfigLoading}
           onPersist={handleConfigPersist}
           onPersistComposioKey={handleConfigPersistComposioKey}
-          onClose={() => {
+          onClose={(latestDraft) => {
             // Closing the dialog is the canonical "I'm done" gesture
             // now that there is no global Save button. We mark
             // onboardingCompleted on close so the welcome modal stops
             // re-prompting on every refresh, regardless of whether
             // the user changed anything during the session.
-            const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
+            // Use the dialog's latest debounced draft (if available)
+            // instead of the parent App snapshot, so in-progress
+            // edits like a CodeBuddy env field change are included
+            // in the close-path write.
+            const base = latestDraft ?? config;
+            const next = resolveSettingsCloseConfig(base, latestPersistedConfigRef.current);
             // Route the close-path write through the same persist
             // path the autosave uses, so daemon write failures
             // surface through the existing autosave/error UI instead

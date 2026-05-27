@@ -184,7 +184,7 @@ interface Props {
    * saved state with `''` before the daemon's response lands.
    */
   composioConfigLoading?: boolean;
-  onClose: () => void;
+  onClose: (latestDraft?: AppConfig) => void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
@@ -1835,7 +1835,7 @@ export function SettingsDialog({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
-      onClose();
+      onClose(autosaveLatestRef.current);
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -2271,7 +2271,7 @@ export function SettingsDialog({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => onClose(autosaveLatestRef.current)}>
       <div
         className="modal modal-settings"
         role="dialog"
@@ -2320,7 +2320,7 @@ export function SettingsDialog({
           <button
             type="button"
             className="settings-close"
-            onClick={onClose}
+            onClick={() => onClose(autosaveLatestRef.current)}
             aria-label={t('common.close')}
             title={t('common.close')}
           >
@@ -3636,7 +3636,7 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'routines' ? <RoutinesSection onClose={onClose} /> : null}
+          {activeSection === 'routines' ? <RoutinesSection onClose={() => onClose(autosaveLatestRef.current)} /> : null}
 
           {activeSection === 'orbit' ? (
             <OrbitSection
@@ -3654,7 +3654,7 @@ export function SettingsDialog({
                 // down. Closing the dialog drops the user on the
                 // /projects/orbit view where the agent run streams in.
                 void onPersist(runConfig);
-                onClose();
+                onClose(autosaveLatestRef.current);
               }}
             />
           ) : null}
