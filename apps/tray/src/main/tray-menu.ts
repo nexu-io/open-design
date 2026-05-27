@@ -2,6 +2,8 @@ import * as Electron from "electron";
 const { Menu, shell } = Electron;
 type MenuItemConstructorOptions = Electron.MenuItemConstructorOptions;
 
+import { t } from "./i18n.js";
+
 export type TrayState = {
   isRunning: boolean;
   daemonPort: number;
@@ -20,18 +22,19 @@ export type TrayCallbacks = {
 };
 
 export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Electron.Menu {
+  const TR = t();
   const items: MenuItemConstructorOptions[] = [];
 
   // Status line (disabled, informational only)
   const statusLabel = state.isRunning
-    ? `● 运行中 (端口 ${state.daemonPort || "—"})`
-    : "○ 已停止";
-  items.push({ label: `状态: ${statusLabel}`, enabled: false });
+    ? `${TR.running} (${TR.port} ${state.daemonPort || TR.auto})`
+    : TR.stopped;
+  items.push({ label: `${TR.statusLabel}: ${statusLabel}`, enabled: false });
 
   // Web UI — only when running
   if (state.isRunning && state.webUrl) {
     items.push({
-      label: `Web UI: ${state.webUrl}`,
+      label: `${TR.webUi}: ${state.webUrl}`,
       click: () => {
         shell.openExternal(state.webUrl!);
       },
@@ -43,14 +46,14 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
   // Start / Stop
   if (state.isRunning) {
     items.push({
-      label: "■ 停止服务",
+      label: TR.stopService,
       click: () => {
         void callbacks.stopDaemon();
       },
     });
   } else {
     items.push({
-      label: "▶ 启动服务",
+      label: TR.startService,
       click: () => {
         void callbacks.startDaemon();
       },
@@ -59,7 +62,7 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
 
   // Restart daemon
   items.push({
-    label: "⟳ 重启守护进程",
+    label: TR.restartDaemon,
     click: () => {
       void callbacks.restartDaemon();
     },
@@ -68,7 +71,7 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
 
   // Relaunch application
   items.push({
-    label: "↻ 重启主程序",
+    label: TR.restartApp,
     click: () => {
       void callbacks.restartTray();
     },
@@ -78,16 +81,14 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
 
   // Settings submenu
   items.push({
-    label: "⚙ 设置",
+    label: TR.settings,
     submenu: [
       {
-        label: state.daemonPort > 0
-          ? `端口: ${state.daemonPort}`
-          : "端口: 自动分配",
+        label: `${TR.port}: ${state.daemonPort > 0 ? state.daemonPort : TR.auto}`,
         enabled: false,
       },
       {
-        label: "开机自启动",
+        label: TR.autoStart,
         type: "checkbox",
         checked: state.autoStart,
         click: () => {
@@ -101,7 +102,7 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
 
   // About / version
   items.push({
-    label: `关于 Open Design v${state.version}`,
+    label: TR.about(state.version),
     enabled: false,
   });
 
@@ -109,7 +110,7 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
 
   // Quit
   items.push({
-    label: "退出 Open Design",
+    label: TR.quit,
     click: () => {
       callbacks.quit();
     },
@@ -119,11 +120,12 @@ export function buildTrayMenu(state: TrayState, callbacks: TrayCallbacks): Elect
 }
 
 export function buildTooltip(state: TrayState): string {
+  const TR = t();
   if (state.isRunning && state.webUrl) {
-    return `Open Design — 运行中\nWeb: ${state.webUrl}`;
+    return TR.tooltipRunning(state.webUrl);
   }
   if (state.isRunning) {
-    return `Open Design — 运行中 (端口 ${state.daemonPort || "—"})`;
+    return `Open Design — ${TR.running} (${TR.port} ${state.daemonPort || TR.auto})`;
   }
-  return "Open Design — 已停止";
+  return TR.tooltipStopped;
 }

@@ -54,8 +54,15 @@ function getWorkspaceRoot(): string {
   const appsIdx = parts.indexOf("apps");
   if (appsIdx >= 2) return parts.slice(0, appsIdx).join("/");
 
-  // Last resort: assume standard location
-  return "C:/Users/ljm37/open design";
+  // 4. Try environment variable or current working directory
+  if (process.env.PWD) {
+    const pwdParts = process.env.PWD.split(/[/\\]/);
+    const pwdAppsIdx = pwdParts.indexOf("apps");
+    if (pwdAppsIdx >= 2) return pwdParts.slice(0, pwdAppsIdx).join("/");
+  }
+
+  // Last resort — this should not happen in a normal dev environment
+  throw new Error("Could not resolve workspace root for daemon-manager");
 }
 
 const WORKSPACE_ROOT = getWorkspaceRoot();
