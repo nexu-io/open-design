@@ -303,6 +303,7 @@ import {
   resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
+  reconcileHtmlArtifactManifest,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
@@ -10966,6 +10967,33 @@ export async function startServer({
             { retryable: diagnostic.retryable, details: { detail: diagnostic.detail } },
           ));
         }
+      }
+      // Reconcile any HTML artifacts that were written without a manifest
+      // sidecar (e.g. agent used write_file instead of create_artifact, or
+      // the run terminated between HTML write and sidecar write). This is
+      // best-effort — a failure here must not block run finalisation.
+      // See issue #2893.
+      if (run.projectId) {
+        (async () => {
+          try {
+            const project = getProject(db, run.projectId);
+            const files = await listFiles(PROJECTS_DIR, run.projectId, {
+              metadata: project?.metadata,
+            });
+            for (const f of files) {
+              const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+              if (ext !== '.html' && ext !== '.htm') continue;
+              try {
+                await reconcileHtmlArtifactManifest(
+                  PROJECTS_DIR,
+                  run.projectId,
+                  f.name,
+                  project?.metadata,
+                );
+              } catch { /* per-file best-effort */ }
+            }
+          } catch { /* project-level best-effort */ }
+        })();
       }
       design.runs.finish(run, status, code, signal);
     });
