@@ -255,9 +255,16 @@ export function Header({
               honor-cards page). `/community/` is a Cloudflare Pages 302 in
               `public/_redirects` so the marketing nav can keep a stable
               first-party URL even though the destination moves.
+
+              The href is the literal `/community/` rather than
+              `href('/community/')` because the destination is a single
+              external page that is not locale-aware — locale-prefixed
+              variants like `/zh/community/` would fall through to a
+              Cloudflare 404 since neither the redirect rule nor the
+              `[locale]/[...path].astro` catch-all knows about them.
             */}
             <li>
-              <a href={href('/community/')} className={linkClass('community')}>
+              <a href='/community/' className={linkClass('community')}>
                 {headerCopy.nav.community}
               </a>
             </li>
