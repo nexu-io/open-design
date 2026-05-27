@@ -412,6 +412,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   deepseek: 'DeepSeek terminal UI',
   hermes: 'ACP agent CLI',
   'grok-build': 'xAI coding CLI',
+  reasonix: 'DeepSeek native coding CLI',
 };
 
 function cleanAgentVersionLabel(
