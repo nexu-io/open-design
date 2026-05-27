@@ -1482,9 +1482,42 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
-  function scroller(){
-    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
-    return document.scrollingElement || document.documentElement;
+  function scrollOverflow(el){
+    if (!el) return 0;
+    return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+  }
+  function overflowMode(el){
+    if (!el || !window.getComputedStyle) return '';
+    try {
+      return String(window.getComputedStyle(el).overflowX || '').toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+  function isScrollableOverflowMode(mode){
+    return mode === 'auto' || mode === 'scroll' || mode === 'overlay';
+  }
+  function isClippedOverflowMode(mode){
+    return mode === 'hidden' || mode === 'clip';
+  }
+  function isRootScrollContainer(el){
+    return !!el && (
+      el === document.scrollingElement ||
+      el === document.documentElement ||
+      el === document.body
+    );
+  }
+  function rootScrollerClipped(){
+    return isClippedOverflowMode(overflowMode(document.documentElement)) ||
+      isClippedOverflowMode(overflowMode(document.body));
+  }
+  function scrollLeftOf(el){
+    if (!el) return 0;
+    try {
+      return Number(el.scrollLeft) || 0;
+    } catch (_) {
+      return 0;
+    }
   }
   function scrollTargets(){
     var targets = [];
@@ -1514,7 +1547,15 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     return false;
   }
   function isScrollDeck(){
-    return hasHorizontalScroll();
+    var targets = scrollTargets();
+    for (var i=0; i<targets.length; i++) {
+      var candidate = targets[i];
+      if (scrollOverflow(candidate) <= 1) continue;
+      var mode = overflowMode(candidate);
+      if (isScrollableOverflowMode(mode)) return true;
+      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return true;
+    }
+    return false;
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
@@ -1566,8 +1607,27 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     }
     return 'active';
   }
+  function hasComputedHiddenSibling(list, active){
+    if (active < 0) return false;
+    for (var i=0; i<list.length; i++) {
+      if (i === active) continue;
+      try {
+        var cs = window.getComputedStyle(list[i]);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
+      } catch (_) {}
+    }
+    return false;
+  }
   function canSetActive(list){
-    if (findActiveByClass(list) >= 0) return true;
+    // A bare active-class marker is not enough to prove the host can drive the
+    // deck by class mutation alone. Many generated decks keep that marker in
+    // sync for counters / dots but move the visible slide via a translated
+    // stage or track, so flipping classes in the host bridge updates the
+    // reported slide index while leaving the canvas on the old page. Only
+    // treat class-driven decks as directly mutable when inactive siblings are
+    // actually hidden by computed visibility rules.
+    var active = findActiveByClass(list);
+    if (active >= 0 && hasComputedHiddenSibling(list, active)) return true;
     for (var i=0; i<list.length; i++) {
       if (list[i].style.display === 'none') return true;
       if (list[i].style.visibility === 'hidden') return true;

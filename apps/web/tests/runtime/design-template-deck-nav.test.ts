@@ -7,6 +7,9 @@ import type { DOMWindow } from 'jsdom';
 const tasteEditorialExamplePath = fileURLToPath(
   new URL('../../../../design-templates/html-ppt-taste-editorial/example.html', import.meta.url),
 );
+const simpleDeckExamplePath = fileURLToPath(
+  new URL('../../../../design-templates/simple-deck/example.html', import.meta.url),
+);
 
 function setupTasteEditorialDeck() {
   const html = readFileSync(tasteEditorialExamplePath, 'utf8');
@@ -15,6 +18,70 @@ function setupTasteEditorialDeck() {
     runScripts: 'dangerously',
     url: 'https://example.test/taste-editorial.html',
     virtualConsole: new VirtualConsole(),
+  });
+  return dom;
+}
+
+function setupSimpleDeck() {
+  const html = readFileSync(simpleDeckExamplePath, 'utf8');
+  const dom = new JSDOM(html, {
+    pretendToBeVisual: true,
+    runScripts: 'dangerously',
+    url: 'https://example.test/simple-deck.html',
+    virtualConsole: new VirtualConsole(),
+  });
+  const { window: win } = dom;
+  Object.defineProperty(win, 'innerWidth', {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(win.document.body, 'scrollWidth', {
+    configurable: true,
+    value: 6000,
+  });
+  Object.defineProperty(win.document.body, 'clientWidth', {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(win.document.documentElement, 'scrollWidth', {
+    configurable: true,
+    value: 6000,
+  });
+  Object.defineProperty(win.document.documentElement, 'clientWidth', {
+    configurable: true,
+    value: 1000,
+  });
+  Object.defineProperty(win.document, 'scrollingElement', {
+    configurable: true,
+    value: win.document.documentElement,
+  });
+  let bodyScrollLeft = 0;
+  let documentScrollLeft = 0;
+  Object.defineProperty(win.document.body, 'scrollLeft', {
+    configurable: true,
+    get: () => bodyScrollLeft,
+    set: (_value: number) => {
+      bodyScrollLeft = 0;
+    },
+  });
+  Object.defineProperty(win.document.documentElement, 'scrollLeft', {
+    configurable: true,
+    get: () => documentScrollLeft,
+    set: (value: number) => {
+      documentScrollLeft = value;
+    },
+  });
+  Object.defineProperty(win.document.body, 'scrollTo', {
+    configurable: true,
+    value: () => {},
+  });
+  Object.defineProperty(win.document.documentElement, 'scrollTo', {
+    configurable: true,
+    value: ({ left }: { left?: number }) => {
+      if (typeof left === 'number') {
+        documentScrollLeft = left;
+      }
+    },
   });
   return dom;
 }
@@ -70,5 +137,34 @@ describe('design template deck navigation', () => {
     expect(activeSlideIndex(win)).toBe(6);
     expect(dots[6]?.classList.contains('active')).toBe(true);
     expect(dots[6]?.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('keeps simple-deck keyboard navigation single-step and synced to documentElement scroll', () => {
+    const dom = setupSimpleDeck();
+    const { window: win } = dom;
+    const counter = win.document.getElementById('counter');
+
+    expect(counter?.textContent?.trim()).toBe('1 / 6');
+    expect(win.document.documentElement.scrollLeft).toBe(0);
+
+    win.document.body.dispatchEvent(new win.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowRight',
+    }));
+    win.document.dispatchEvent(new win.Event('scroll', { bubbles: true }));
+
+    expect(counter?.textContent?.trim()).toBe('2 / 6');
+    expect(win.document.documentElement.scrollLeft).toBe(1000);
+
+    win.document.body.dispatchEvent(new win.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowRight',
+    }));
+    win.document.dispatchEvent(new win.Event('scroll', { bubbles: true }));
+
+    expect(counter?.textContent?.trim()).toBe('3 / 6');
+    expect(win.document.documentElement.scrollLeft).toBe(2000);
   });
 });
