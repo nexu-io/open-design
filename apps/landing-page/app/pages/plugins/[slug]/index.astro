@@ -16,8 +16,11 @@
 import Layout from '../../../_components/sub-page-layout.astro';
 import {
   getBundledPlugins,
+  resolveBundledDescription,
+  resolveBundledTitle,
   type BundledPluginRecord,
 } from '../../../_lib/bundled-plugins';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
 import { localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
@@ -34,6 +37,13 @@ interface Props {
 const { plugin } = Astro.props as Props;
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+// Localized name + blurb resolved at render time via the `title_i18n` /
+// `description_i18n` maps shipped alongside each manifest. The static-paths
+// pass runs once for all locales, so the prop carries English baselines and
+// the per-locale lookup happens here.
+const pluginTitle = resolveBundledTitle(plugin, locale);
+const pluginDescription = resolveBundledDescription(plugin, locale);
 
 /*
  * Author normalisation. First-party manifests authored by Open Design
@@ -51,41 +61,19 @@ const authorUrl = plugin.authorUrl
   ? (ORG_TO_REPO[plugin.authorUrl.replace(/\/$/, '')] ?? plugin.authorUrl)
   : undefined;
 
-const bucketLabel: Record<BundledPluginRecord['bucket'], string> = {
-  examples: 'Example',
-  'image-templates': 'Image template',
-  'video-templates': 'Video template',
-  scenarios: 'Scenario',
-  'design-systems': 'Design system',
-  atoms: 'Atom',
-};
-
-const title = `${plugin.title} · Open Design plugin`;
-const description = plugin.description;
+const title = `${pluginTitle} · Open Design plugin`;
+const description = pluginDescription;
 
 /*
- * Share-dialog copy. Single English template for now — bundled-plugin
- * manifests are English-source and the new /plugins/ routes only
- * generate English pages, so adding 17 locale variants would lie
- * about coverage. The legacy share dialog on /skills/<slug>/ keeps
- * its own multilingual table; this one inherits the same DOM shape
- * (header-enhancer.astro listens for the same `data-share-open` /
- * `data-share-copy` / `data-copy-link` attributes) so the trigger
- * logic is shared with no extra script bundle.
+ * Share-dialog copy. The English template stays as a fallback inside
+ * `getPluginsCopy('en')` and locale-specific share copy lives in the
+ * same table — `header-enhancer.astro`'s click handlers are shared
+ * across `/skills/<slug>/`, `/templates/<slug>/`, and
+ * `/plugins/<slug>/` via the data-* attributes, so we get the same
+ * UX without a per-page script bundle.
  */
 const pluginUrl = `https://open-design.ai${plugin.detailHref}`;
-const shareCopy = `🎨 Just discovered ${plugin.title} on @opendesignai — the open-source Claude Design alternative.
-✨ Local-first · BYOK · your agent does the design.
-
-→ ${pluginUrl}`;
-const shareUi = {
-  open: 'Share ↗',
-  title: 'Share this plugin',
-  lead: 'Copy the message below, then jump to the platform you want to share on and paste.',
-  copyText: 'Copy text',
-  copyLink: 'Copy link only',
-  jumpTo: 'Then jump to:',
-};
+const shareCopy = pcopy.shareTemplate({ title: pluginTitle, url: pluginUrl });
 
 const jsonLd = [
   {
@@ -93,14 +81,14 @@ const jsonLd = [
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
-      { '@type': 'ListItem', position: 2, name: 'Plugins', item: new URL('/plugins/', Astro.site).toString() },
-      { '@type': 'ListItem', position: 3, name: plugin.title, item: new URL(plugin.detailHref, Astro.site).toString() },
+      { '@type': 'ListItem', position: 2, name: pcopy.hubLabel, item: new URL('/plugins/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: pluginTitle, item: new URL(plugin.detailHref, Astro.site).toString() },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'SoftwareSourceCode',
-    name: plugin.title,
+    name: pluginTitle,
     description,
     codeRepository: plugin.sourceUrl,
     programmingLanguage: 'JSON',
@@ -111,31 +99,31 @@ const jsonLd = [
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
+  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <a href={href('/plugins/')}>Plugins</a>
+    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
     <span>/</span>
-    <span aria-current="page">{plugin.title}</span>
+    <span aria-current="page">{pluginTitle}</span>
   </nav>
 
   <article class="detail">
     <header class="detail-head">
       <span class="label">
-        Plugin · {bucketLabel[plugin.bucket]}
+        {pcopy.hubLabel} · {pcopy.detailBucketLabel[plugin.bucket]}
       </span>
-      <h1 class="display">{plugin.title}<span class="dot">.</span></h1>
+      <h1 class="display">{pluginTitle}<span class="dot">.</span></h1>
       <p class="lead">{description}</p>
       <div class="detail-actions">
         <a class="btn btn-primary" href="https://github.com/nexu-io/open-design/releases" target="_blank" rel="noopener">
-          Use this plugin →
+          {pcopy.detailUseCta}
         </a>
         <a class="btn btn-ghost" href={plugin.sourceUrl} target="_blank" rel="noopener">
-          Find on GitHub →
+          {pcopy.detailFindOnGithub}
         </a>
         {plugin.homepage && plugin.homepage !== plugin.sourceUrl && (
           <a class="btn btn-ghost" href={plugin.homepage} target="_blank" rel="noopener">
-            Homepage ↗
+            {pcopy.detailHomepage}
           </a>
         )}
         <button
@@ -143,7 +131,7 @@ const jsonLd = [
           class="btn btn-ghost detail-share-trigger"
           data-share-open={`plugin:${plugin.manifestId}`}
         >
-          {shareUi.open}
+          {pcopy.shareOpen}
         </button>
       </div>
     </header>
@@ -183,23 +171,23 @@ const jsonLd = [
           <details class="detail-preview-live">
             <summary
               class="detail-preview-thumb-trigger"
-              aria-label={`Open interactive preview for ${plugin.title}`}
+              aria-label={pcopy.previewSummaryAria(pluginTitle)}
             >
               <img
                 class="detail-preview-static"
                 src={plugin.previewPoster}
-                alt={`${plugin.title} preview`}
+                alt={pcopy.previewImageAlt(pluginTitle)}
                 loading="eager"
                 fetchpriority="high"
               />
               <span class="detail-preview-thumb-overlay" aria-hidden="true">
-                <span class="detail-preview-thumb-cta">Click for live preview ↗</span>
+                <span class="detail-preview-thumb-cta">{pcopy.detailClickForLivePreview}</span>
               </span>
             </summary>
             <div class="detail-preview-frame-wrap">
               <iframe
                 src={plugin.previewEntryUrl}
-                title={`${plugin.title} interactive preview`}
+                title={pcopy.previewIframeTitle(pluginTitle)}
                 loading="lazy"
                 sandbox="allow-scripts allow-same-origin"
                 class="detail-preview-frame"
@@ -209,9 +197,9 @@ const jsonLd = [
                 href={plugin.previewEntryUrl}
                 target="_blank"
                 rel="noopener"
-                aria-label="Open preview in new tab"
+                aria-label={pcopy.detailOpenInNewTabAria}
               >
-                Open in new tab ↗
+                {pcopy.detailOpenInNewTab}
               </a>
             </div>
           </details>
@@ -219,12 +207,12 @@ const jsonLd = [
           <img
             class="detail-preview-static"
             src={plugin.previewPoster}
-            alt={`${plugin.title} preview`}
+            alt={pcopy.previewImageAlt(pluginTitle)}
             loading="eager"
             fetchpriority="high"
           />
         )}
-        <figcaption>Preview from the bundled-plugin manifest.</figcaption>
+        <figcaption>{pcopy.detailPreviewCaption}</figcaption>
       </figure>
     )}
 
@@ -242,15 +230,15 @@ const jsonLd = [
     >
       <form method="dialog" class="detail-share-dialog-form">
         <header class="detail-share-dialog-head">
-          <h2>{shareUi.title}</h2>
+          <h2>{pcopy.shareTitle}</h2>
           <button
             type="submit"
             class="detail-share-dialog-close"
-            aria-label="Close"
+            aria-label={pcopy.shareDialogClose}
             value="cancel"
           >×</button>
         </header>
-        <p class="detail-share-dialog-lead">{shareUi.lead}</p>
+        <p class="detail-share-dialog-lead">{pcopy.shareLead}</p>
         <textarea
           class="detail-share-dialog-text"
           readonly
@@ -263,18 +251,18 @@ const jsonLd = [
             class="btn btn-primary detail-share-dialog-copy"
             data-share-copy
           >
-            {shareUi.copyText}
+            {pcopy.shareCopyText}
           </button>
           <button
             type="button"
             class="btn btn-ghost detail-share-dialog-copy-link"
             data-copy-link={pluginUrl}
           >
-            {shareUi.copyLink}
+            {pcopy.shareCopyLink}
           </button>
         </div>
         <div class="detail-share-dialog-platforms">
-          <span class="detail-share-dialog-platforms-label">{shareUi.jumpTo}</span>
+          <span class="detail-share-dialog-platforms-label">{pcopy.shareJumpTo}</span>
           <a class="detail-share-platform-btn" href="https://x.com/compose/post" target="_blank" rel="noopener" aria-label="X">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
             <span class="sr-only">X</span>
@@ -298,31 +286,31 @@ const jsonLd = [
     <dl class="detail-meta">
       {plugin.mode && (
         <Fragment>
-          <dt>Mode</dt>
+          <dt>{pcopy.detailMode}</dt>
           <dd>{plugin.mode}</dd>
         </Fragment>
       )}
       {plugin.scenario && (
         <Fragment>
-          <dt>Scenario</dt>
+          <dt>{pcopy.detailScenario}</dt>
           <dd>{plugin.scenario}</dd>
         </Fragment>
       )}
       {plugin.platform && (
         <Fragment>
-          <dt>Platform</dt>
+          <dt>{pcopy.detailPlatform}</dt>
           <dd>{plugin.platform}</dd>
         </Fragment>
       )}
       {plugin.surface && plugin.surface !== plugin.mode && (
         <Fragment>
-          <dt>Surface</dt>
+          <dt>{pcopy.detailSurface}</dt>
           <dd>{plugin.surface}</dd>
         </Fragment>
       )}
       {plugin.authorName && (
         <Fragment>
-          <dt>Author</dt>
+          <dt>{pcopy.detailAuthor}</dt>
           <dd>
             {authorUrl ? (
               <a href={authorUrl} target="_blank" rel="noopener">{plugin.authorName} ↗</a>
@@ -331,14 +319,14 @@ const jsonLd = [
         </Fragment>
       )}
       <Fragment>
-        <dt>Manifest id</dt>
+        <dt>{pcopy.detailManifestId}</dt>
         <dd><code>{plugin.manifestId}</code></dd>
       </Fragment>
     </dl>
 
     {plugin.tags.length > 0 && (
       <section class="detail-block">
-        <h2>Tags</h2>
+        <h2>{pcopy.detailTags}</h2>
         <ul class="trigger-list">
           {plugin.tags.map((t) => <li><code>{t}</code></li>)}
         </ul>

@@ -21,6 +21,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_LOCALE,
+  getLocaleDefinition,
+  type LandingLocaleCode,
+} from '../i18n';
 
 const SOURCE_ROOTS = [
   // Build run from monorepo root.
@@ -54,10 +59,19 @@ export interface BundledPluginRecord {
   manifestId: string;
   /** Source bucket. */
   bucket: BundledBucket;
-  /** Manifest `title`. */
+  /** Manifest `title` (English baseline; pre-localization fallback). */
   title: string;
+  /**
+   * Manifest `title_i18n` map keyed by locale (long code, e.g. `zh-CN`,
+   * `zh-TW`, `pt-BR`, `ja`). Authors fill this opportunistically; consumers
+   * should resolve via {@link resolveBundledTitle} so the lookup chain
+   * (long code → short code → English fallback) stays consistent.
+   */
+  titleI18n?: Readonly<Record<string, string>>;
   /** Manifest `description`. */
   description: string;
+  /** Manifest `description_i18n` map. See {@link titleI18n} comment. */
+  descriptionI18n?: Readonly<Record<string, string>>;
   /** Manifest `tags`. */
   tags: ReadonlyArray<string>;
   /** Manifest `author.name`. */
@@ -100,7 +114,9 @@ export interface BundledPluginRecord {
 interface BundledManifestRaw {
   name?: unknown;
   title?: unknown;
+  title_i18n?: unknown;
   description?: unknown;
+  description_i18n?: unknown;
   tags?: unknown;
   author?: { name?: unknown; url?: unknown };
   homepage?: unknown;
@@ -148,6 +164,66 @@ function asString(v: unknown): string | undefined {
 function asStringArray(v: unknown): ReadonlyArray<string> {
   if (!Array.isArray(v)) return [];
   return v.filter((x): x is string => typeof x === 'string');
+}
+
+/**
+ * Coerce a manifest's `title_i18n` / `description_i18n` payload to a plain
+ * `{ [locale]: string }` map. Anything that isn't a string-valued object is
+ * dropped — the schema permits one of two shapes (omitted or `Record<string,
+ * string>`) and we don't want a malformed manifest to poison the loader.
+ */
+function asLocaleMap(v: unknown): Readonly<Record<string, string>> | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.length > 0) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? Object.freeze(out) : undefined;
+}
+
+/**
+ * Resolve a localized field from a manifest's `title_i18n` /
+ * `description_i18n` map. Manifest authors store keys using the long codes
+ * preferred by the `LocalizedText` schema (`zh-CN`, `zh-TW`, `pt-BR`, `ja`),
+ * while landing pages thread the short `LandingLocaleCode` (`zh`, `zh-tw`,
+ * `pt-br`, `ja`). The lookup chain mirrors `resolveLocalizedText` from
+ * `packages/contracts/src/plugins/manifest.ts`: long code → short code →
+ * primary language tag → English → caller-supplied fallback.
+ */
+function resolveLocalized(
+  map: Readonly<Record<string, string>> | undefined,
+  fallback: string,
+  locale: LandingLocaleCode,
+): string {
+  if (!map) return fallback;
+  const def = getLocaleDefinition(locale);
+  const candidates = [
+    def?.htmlLang,
+    locale,
+    def?.htmlLang?.split('-')[0],
+    'en',
+  ].filter((c): c is string => Boolean(c));
+  for (const candidate of candidates) {
+    const value = map[candidate];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return fallback;
+}
+
+/** Resolve a bundled plugin's title for a given locale, falling back to English. */
+export function resolveBundledTitle(
+  record: BundledPluginRecord,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): string {
+  return resolveLocalized(record.titleI18n, record.title, locale);
+}
+
+/** Resolve a bundled plugin's description for a given locale. */
+export function resolveBundledDescription(
+  record: BundledPluginRecord,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): string {
+  return resolveLocalized(record.descriptionI18n, record.description, locale);
 }
 
 function REPO_FOR_BUCKET(bucket: BundledBucket): string {
@@ -200,7 +276,9 @@ function loadOne(
 
   const manifestId = asString(raw.name) ?? slug;
   const title = asString(raw.title) ?? manifestId;
+  const titleI18n = asLocaleMap(raw.title_i18n);
   const description = asString(raw.description) ?? '';
+  const descriptionI18n = asLocaleMap(raw.description_i18n);
 
   // Preference order:
   //   1. Manifest poster URL (R2/CDN, fastest, already bandwidth-paid).
@@ -220,7 +298,9 @@ function loadOne(
     manifestId,
     bucket,
     title,
+    titleI18n,
     description,
+    descriptionI18n,
     tags: asStringArray(raw.tags),
     authorName: asString(raw.author?.name),
     authorUrl: asString(raw.author?.url),

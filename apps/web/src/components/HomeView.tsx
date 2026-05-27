@@ -579,6 +579,7 @@ export function HomeView({
   ) {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
+    setActiveSkill(null);
     const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(
@@ -992,9 +993,13 @@ export function HomeView({
   }
 
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
-    setActiveSkill(skill);
+    activePluginApplyRequestRef.current += 1;
+    setActive(null);
+    setPendingChipId(null);
+    setPendingApplyId(null);
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
+    setActiveSkill(skill);
     setError(null);
     const replacement = nextPrompt ?? localizeSkillPrompt(locale, skill) ?? '';
     if (replacement.trim().length > 0) {
@@ -1248,10 +1253,13 @@ export function HomeView({
           submittedActive?.inputs ?? null,
           submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
         );
+    // Scenario plugins (chips / preset cards) and explicit skill picks are
+    // mutually exclusive routing sources — never send both (#2972).
+    const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
     onSubmit({
       prompt: trimmed,
       pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
-      skillId: activeSkill?.id ?? null,
+      skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
       taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,

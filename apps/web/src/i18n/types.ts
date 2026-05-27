@@ -88,6 +88,13 @@ export interface Dict {
   'plugins.availableDetails.integrity': string;
   'plugins.availableDetails.permissions': string;
   'plugins.availableDetails.capabilitySummary': string;
+  'plugins.actions.copyInstallCommand': string;
+  'plugins.actions.copyPluginId': string;
+  'plugins.actions.copyReadmeBadge': string;
+  'plugins.actions.openSourceGithub': string;
+  'plugins.actions.openSource': string;
+  'plugins.actions.openHomepage': string;
+  'plugins.actions.openMarketplace': string;
 
   // App / brand
   'app.brand': string;
@@ -921,6 +928,11 @@ export interface Dict {
   'pluginCard.publishTitle': string;
   'pluginCard.contributeAria': string;
   'pluginCard.contributeTitle': string;
+  'skillPluginCandidate.createForMe': string;
+  'skillPluginCandidate.contributeToMain': string;
+  'skillPluginCandidate.publishRepo': string;
+  'skillPluginCandidate.dismiss': string;
+  'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;
   'integrations.agentReady': string;
@@ -1735,6 +1747,22 @@ export interface Dict {
 
   // Preview modal
   'preview.shareMenu': string;
+  'preview.exportMenu': string;
+  'preview.shareTemplateBadge': string;
+  'preview.shareToX': string;
+  'preview.shareToReddit': string;
+  'preview.shareToFacebook': string;
+  'preview.shareToLinkedIn': string;
+  'preview.shareToInstagram': string;
+  'preview.shareToXiaohongshu': string;
+  'preview.copyTemplateLink': string;
+  'preview.copyShareText': string;
+  'preview.shareSocialGroup': string;
+  'preview.shareCopyGroup': string;
+  'preview.shareExportGroup': string;
+  'preview.shareCopied': string;
+  'preview.shareCopyFailed': string;
+  'preview.shareTextDefault': string;
   'preview.openInNewTab': string;
   'preview.exit': string;
   'preview.fullscreen': string;

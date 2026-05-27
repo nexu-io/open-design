@@ -1,4 +1,11 @@
-name: landing-page-deploy
+name: landing-page-staging
+
+# Pushes to `main` deploy the landing page to the STAGING Cloudflare Pages
+# project (`open-design-landing-staging`, served at staging.open-design.ai).
+# Production (the separate `open-design-landing` project → open-design.ai) is
+# never named here — it is reached exclusively through the manual
+# `landing-page-production` workflow. This is the safety gate: project
+# separation means a merge to main can only ever change staging.
 
 on:
   push:
@@ -6,7 +13,8 @@ on:
       - main
     paths:
       # Workflow files
-      - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/landing-page-staging.yml
+      - .github/workflows/landing-page-production.yml
       - .github/workflows/landing-page-ci.yml
       # Landing page sources
       - apps/landing-page/**
@@ -31,15 +39,18 @@ permissions:
   deployments: write
 
 concurrency:
-  group: landing-page-deploy-${{ github.ref }}
+  group: landing-page-staging-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy landing page
+    name: Deploy landing page to staging
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: landing-staging
+      url: https://staging.open-design.ai
 
     steps:
       - name: Checkout
@@ -95,9 +106,15 @@ jobs:
       - name: Generate skill + template previews
         run: pnpm --filter @open-design/landing-page previews
 
+      # No PUBLIC_GA_MEASUREMENT_ID on staging: leaving it unset omits the
+      # Google Analytics tag entirely, so test-environment traffic does not
+      # pollute the production GA property. OD_LANDING_NOINDEX=1 makes every
+      # page emit <meta name="robots" content="noindex"> so the staging mirror
+      # stays out of search engines. Only `landing-page-production` builds
+      # without these (GA on, indexable).
       - name: Build landing page
         env:
-          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
+          OD_LANDING_NOINDEX: '1'
         run: pnpm --filter @open-design/landing-page build:static
 
       - name: Verify zero external JavaScript
@@ -134,7 +151,11 @@ jobs:
           }
           NODE
 
-      - name: Deploy to Cloudflare Pages
+      # Deploys to the dedicated STAGING project. `--branch=main` is that
+      # project's production branch, so it serves at its custom domain
+      # staging.open-design.ai. The production project (open-design-landing)
+      # is a different project and is never named here.
+      - name: Deploy to Cloudflare Pages (staging)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -143,5 +164,5 @@ jobs:
           packageManager: npm
           command: >
             pages deploy out
-            --project-name=open-design-landing
-            --branch=${{ github.ref_name }}
+            --project-name=open-design-landing-staging
+            --branch=main

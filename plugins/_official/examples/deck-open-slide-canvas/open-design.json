@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-deck-open-slide-canvas",
   "title": "Open-Slide 1920 Canvas Deck",
+  "title_i18n": {
+    "en": "Open-Slide 1920 Canvas Deck",
+    "zh-CN": "1920 画布自由 Deck",
+    "zh-TW": "Open-Slide 1920 畫布卡組",
+    "ja": "Open-Slide 1920 キャンバスデッキ",
+    "ko": "Open-Slide 1920 캔버스 덱",
+    "de": "Open-Slide 1920 Canvas Deck",
+    "fr": "Open-Slide 1920 Canvas Deck",
+    "ru": "Open-Slide 1920 Canvas Deck",
+    "es": "Open-Slide 1920 Canvas Deck",
+    "pt-BR": "Open-Slide 1920 Canvas Deck",
+    "it": "Open-Slide 1920 Canvas Deck",
+    "vi": "Open-Slide 1920 Canvas Deck",
+    "pl": "Open-Slide 1920 Canvas Deck",
+    "id": "Open-Slide 1920 Canvas Deck",
+    "nl": "Open-Slide 1920 Canvas Deck",
+    "ar": "Open-Slide 1920 Canvas Deck",
+    "tr": "Open-Slide 1920 Canvas Deck",
+    "uk": "Open-Slide 1920 Canvas Deck"
+  },
   "version": "0.1.0",
   "description": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
+  "description_i18n": {
+    "en": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
+    "zh-CN": "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板",
+    "zh-TW": "鎖定 1920x1080 畫布卡組，支援 React 元件級自由組合，不受固定範本限制。",
+    "ja": "1920x1080 固定キャンバスデッキ。React コンポーネントレベルでの自由な構成が可能で、固定テンプレートに縛られません。",
+    "ko": "1920x1080 고정 캔버스 덱으로 React 컴포넌트 레벨의 자유로운 구성을 지원하며 고정 템플릿에 구속되지 않습니다.",
+    "de": "Gesperrtes 1920x1080 Canvas Deck mit freier Komposition auf React-Komponentenebene, nicht an feste Vorlagen gebunden.",
+    "fr": "Deck de canevas verrouillé 1920x1080 avec composition libre au niveau des composants React, sans être lié à un modèle fixe.",
+    "ru": "Фиксированный холст 1920x1080 со свободной компоновкой на уровне React-компонентов, не привязанный к жёсткому шаблону.",
+    "es": "Deck de lienzo bloqueado 1920x1080 con composición libre a nivel de componente React, sin estar vinculado a una plantilla fija.",
+    "pt-BR": "Deck de tela fixo 1920x1080 com composição livre em nível de componente React, sem estar vinculado a um template fixo.",
+    "it": "Deck canvas bloccato 1920x1080 con composizione libera a livello di componente React, non vincolato a un template fisso.",
+    "vi": "Bộ canvas khóa 1920x1080 với khả năng tự do sắp xếp ở cấp độ component React, không bị ràng buộc bởi template cố định.",
+    "pl": "Zablokowany deck canvas 1920x1080 z swobodną kompozycją na poziomie komponentów React, nie związany ze stałym szablonem.",
+    "id": "Deck kanvas terkunci 1920x1080 dengan komposisi bebas tingkat komponen React, tidak terikat pada template tetap.",
+    "nl": "Vergrendeld 1920x1080 canvas deck met vrije compositie op React-componentniveau, niet gebonden aan een vast sjabloon.",
+    "ar": "مجموعة لوحة مقفلة 1920x1080 مع تركيب حر على مستوى مكونات React، غير مقيدة بقالب ثابت.",
+    "tr": "1920x1080 kilitli canvas deck ile React bileşen seviyesinde serbest kompozisyon, sabit şablona bağlı değil.",
+    "uk": "Зафіксована canvas deck 1920x1080 з вільною композицією на рівні React-компонентів, не прив'язана до фіксованого шаблону."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -82,13 +122,5 @@
       "prompt:inject",
       "fs:write"
     ]
-  },
-  "title_i18n": {
-    "en": "Open-Slide 1920 Canvas Deck",
-    "zh-CN": "1920 画布自由 Deck"
-  },
-  "description_i18n": {
-    "en": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
-    "zh-CN": "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板"
   }
 }

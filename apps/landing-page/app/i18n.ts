@@ -159,6 +159,13 @@ export interface HeaderCopy {
   nav: {
     /** Top-level dropdown grouping the four catalog facets. */
     library: string;
+    /**
+     * Trigger label for the Plugins dropdown. The dropdown groups Templates,
+     * Skills, Systems and Craft under one parent — surfaced as "Plugins"
+     * since the new `/plugins/` hub. Kept distinct from `library` so each
+     * locale can pick the term that reads naturally as a button.
+     */
+    plugins: string;
     skills: string;
     systems: string;
     templates: string;
@@ -166,6 +173,8 @@ export interface HeaderCopy {
     /** Standalone link to the YouTube tutorials channel. */
     tutorials: string;
     blog: string;
+    /** External community / contributors page (currently a Vercel deploy). */
+    community: string;
     contact: string;
   };
   download: string;
@@ -951,12 +960,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: 'Library',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systems',
         templates: 'Templates',
         craft: 'Craft',
         tutorials: 'Tutorials',
         blog: 'Blog',
+        community: 'Community',
         contact: 'Contact',
       },
       download: 'Download',
@@ -982,12 +993,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: '柏林 / 开放 / 地球',
       nav: {
         library: '资源库',
+        plugins: '插件',
         skills: '技能',
         systems: '设计系统',
         templates: '模板',
         craft: '工艺',
         tutorials: '教程',
         blog: '博客',
+        community: '社区',
         contact: '联系',
       },
       download: '下载',
@@ -1013,12 +1026,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: '柏林 / 開放 / 地球',
       nav: {
         library: '資源庫',
+        plugins: '外掛',
         skills: '技能',
         systems: '設計系統',
         templates: '模板',
         craft: '工藝',
         tutorials: '教程',
         blog: '部落格',
+        community: '社群',
         contact: '聯絡',
       },
       download: '下載',
@@ -1044,12 +1059,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: 'ライブラリ',
+        plugins: 'プラグイン',
         skills: 'スキル',
         systems: 'システム',
         templates: 'テンプレート',
         craft: 'クラフト',
         tutorials: 'チュートリアル',
         blog: 'ブログ',
+        community: 'コミュニティ',
         contact: '連絡',
       },
       download: 'ダウンロード',
@@ -1075,12 +1092,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: '라이브러리',
+        plugins: '플러그인',
         skills: '스킬',
         systems: '시스템',
         templates: '템플릿',
         craft: '크래프트',
         tutorials: '튜토리얼',
         blog: '블로그',
+        community: '커뮤니티',
         contact: '문의',
       },
       download: '다운로드',
@@ -1106,12 +1125,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Offen / Erde',
       nav: {
         library: 'Bibliothek',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systeme',
         templates: 'Vorlagen',
         craft: 'Gestaltung',
         tutorials: 'Tutorials',
         blog: 'Blog',
+        community: 'Community',
         contact: 'Kontakt',
       },
       download: 'Download',
@@ -1137,12 +1158,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Ouvert / Terre',
       nav: {
         library: 'Bibliothèque',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systèmes',
         templates: 'Modèles',
         craft: 'Conception',
         tutorials: 'Tutoriels',
         blog: 'Blog',
+        community: 'Communauté',
         contact: 'Contact',
       },
       download: 'Télécharger',
@@ -1168,12 +1191,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Берлин / Open / Earth',
       nav: {
         library: 'Библиотека',
+        plugins: 'Плагины',
         skills: 'Skills',
         systems: 'Системы',
         templates: 'Шаблоны',
         craft: 'Правила',
         tutorials: 'Уроки',
         blog: 'Блог',
+        community: 'Сообщество',
         contact: 'Контакт',
       },
       download: 'Скачать',
@@ -1199,12 +1224,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlín / Abierto / Tierra',
       nav: {
         library: 'Biblioteca',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Sistemas',
         templates: 'Plantillas',
         craft: 'Oficio',
         tutorials: 'Tutoriales',
         blog: 'Blog',
+        community: 'Comunidad',
         contact: 'Contacto',
       },
       download: 'Descargar',
@@ -1230,12 +1257,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlim / Aberto / Terra',
       nav: {
         library: 'Biblioteca',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Sistemas',
         templates: 'Modelos',
         craft: 'Ofício',
         tutorials: 'Tutoriais',
         blog: 'Blog',
+        community: 'Comunidade',
         contact: 'Contato',
       },
       download: 'Baixar',
@@ -1261,12 +1290,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlino / Aperto / Terra',
       nav: {
         library: 'Libreria',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Sistemi',
         templates: 'Template',
         craft: 'Regole',
         tutorials: 'Tutorial',
         blog: 'Blog',
+        community: 'Comunità',
         contact: 'Contatto',
       },
       download: 'Scarica',
@@ -1292,12 +1323,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Mở / Trái Đất',
       nav: {
         library: 'Thư viện',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Hệ thống',
         templates: 'Mẫu',
         craft: 'Quy tắc',
         tutorials: 'Hướng dẫn',
         blog: 'Blog',
+        community: 'Cộng đồng',
         contact: 'Liên hệ',
       },
       download: 'Tải xuống',
@@ -1323,12 +1356,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Otwarte / Ziemia',
       nav: {
         library: 'Biblioteka',
+        plugins: 'Wtyczki',
         skills: 'Skills',
         systems: 'Systemy',
         templates: 'Szablony',
         craft: 'Reguły',
         tutorials: 'Samouczki',
         blog: 'Blog',
+        community: 'Społeczność',
         contact: 'Kontakt',
       },
       download: 'Pobierz',
@@ -1354,12 +1389,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Terbuka / Bumi',
       nav: {
         library: 'Pustaka',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Sistem',
         templates: 'Templat',
         craft: 'Aturan',
         tutorials: 'Tutorial',
         blog: 'Blog',
+        community: 'Komunitas',
         contact: 'Kontak',
       },
       download: 'Unduh',
@@ -1385,12 +1422,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlijn / Open / Aarde',
       nav: {
         library: 'Bibliotheek',
+        plugins: 'Plug-ins',
         skills: 'Skills',
         systems: 'Systemen',
         templates: 'Sjablonen',
         craft: 'Regels',
         tutorials: 'Tutorials',
         blog: 'Blog',
+        community: 'Community',
         contact: 'Contact',
       },
       download: 'Download',
@@ -1416,12 +1455,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'برلين / مفتوح / الأرض',
       nav: {
         library: 'المكتبة',
+        plugins: 'الإضافات',
         skills: 'Skills',
         systems: 'أنظمة',
         templates: 'قوالب',
         craft: 'حرفة',
         tutorials: 'الدروس',
         blog: 'المدونة',
+        community: 'المجتمع',
         contact: 'تواصل',
       },
       download: 'تنزيل',
@@ -1447,12 +1488,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Açık / Dünya',
       nav: {
         library: 'Kütüphane',
+        plugins: 'Eklentiler',
         skills: 'Skill',
         systems: 'Sistemler',
         templates: 'Şablonlar',
         craft: 'Kurallar',
         tutorials: 'Eğitimler',
         blog: 'Blog',
+        community: 'Topluluk',
         contact: 'İletişim',
       },
       download: 'İndir',
@@ -1478,12 +1521,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Берлін / Open / Earth',
       nav: {
         library: 'Бібліотека',
+        plugins: 'Плагіни',
         skills: 'Skills',
         systems: 'Системи',
         templates: 'Шаблони',
         craft: 'Правила',
         tutorials: 'Туторіали',
         blog: 'Блог',
+        community: 'Спільнота',
         contact: 'Контакт',
       },
       download: 'Завантажити',

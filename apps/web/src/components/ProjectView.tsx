@@ -78,6 +78,7 @@ import {
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import { effectiveMaxTokens } from '../state/maxTokens';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import {
@@ -165,7 +166,10 @@ import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
 import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { effectiveMaxTokens } from '../state/maxTokens';
+import {
+  buildFinalizeCredentialsMissingToast,
+  buildFinalizeRequest,
+} from '../lib/resolve-finalize-request';
 
 type ProjectChatSendMeta = ChatSendMeta & {
   retryOfAssistantId?: string;
@@ -3990,17 +3994,12 @@ export function ProjectView({
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
   const handleFinalize = useCallback(() => {
-    const protocol = config.apiProtocol ?? 'anthropic';
-    void finalize.trigger({
-      protocol,
-      apiKey: config.apiKey,
-      baseUrl: config.baseUrl,
-      model: config.model,
-      maxTokens: effectiveMaxTokens(config),
-      ...(protocol === 'azure' && config.apiVersion?.trim()
-        ? { apiVersion: config.apiVersion.trim() }
-        : {}),
-    }).then((result) => {
+    const request = buildFinalizeRequest(config);
+    if (!request) {
+      setProjectActionsToast(buildFinalizeCredentialsMissingToast(config));
+      return;
+    }
+    void finalize.trigger(request).then((result) => {
       if (result) void designMdState.refresh();
     });
   }, [finalize, config, designMdState]);

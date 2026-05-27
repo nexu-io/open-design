@@ -20,7 +20,6 @@ import {
   localizeCategory,
   type Locale,
 } from '../../_lib/i18n';
-import { getPublicPlugins, getRegistryCounts } from '../../plugin-registry';
 import '../../globals.css';
 import '../../sub-pages.css';
 
@@ -39,7 +38,12 @@ export async function getStaticPaths() {
     'craft',
     'templates',
     'blog',
-    'plugins',
+    // Plugins library is generated via short-code wrappers under
+    // `app/pages/[locale]/plugins/` (mirroring the `[locale]/skills/`,
+    // `[locale]/systems/`, etc. pattern), so it does NOT participate
+    // in this long-code catch-all. Both surfaces co-exist in `out/`
+    // because `_redirects` maps `/zh-CN/*` → `/zh/*` for the long-form
+    // routes; plugins lives under the short-form path only.
     ...skillModes.map((item) => `skills/mode/${item.slug}`),
     ...skillScenarios.map((item) => `skills/scenario/${item.slug}`),
     ...systemCategories.map((item) => `systems/category/${item.slug}`),
@@ -65,8 +69,6 @@ const [skills, systems, craft, templates, posts] = await Promise.all([
   getTemplateRecords(),
   getCollection('blog'),
 ]);
-const plugins = getPublicPlugins();
-
 // All cross-locale subpage links resolve to canonical (English) URLs.
 const href = (path: string) => path;
 const titleSuffix = 'Open Design';
@@ -80,7 +82,6 @@ const modeTags = await getSkillModeIndex();
 const scenarioTags = await getSkillScenarioIndex();
 const systemCategories = await getSystemCategoryIndex();
 const platformTally = tally(skills.map((skill) => skill.platform).filter((item): item is string => Boolean(item)));
-const pluginCounts = getRegistryCounts(plugins);
 
 const pageTitle = routeRoot === 'skills'
   ? `${copy.skillsTitle} — ${skills.length} | ${titleSuffix}`
@@ -90,9 +91,7 @@ const pageTitle = routeRoot === 'skills'
       ? `${copy.templatesTitle} — ${templates.length} | ${titleSuffix}`
       : routeRoot === 'craft'
         ? `${copy.craftTitle} — ${craft.length} | ${titleSuffix}`
-        : routeRoot === 'plugins'
-          ? `${copy.pluginsTitle} — ${pluginCounts.all} | ${titleSuffix}`
-          : `${copy.blog} — ${titleSuffix}`;
+        : `${copy.blog} — ${titleSuffix}`;
 
 const pageDescription = `Open Design ${routeRoot || 'landing'} page.`;
 ---
@@ -193,10 +192,4 @@ const pageDescription = `Open Design ${routeRoot || 'landing'} page.`;
       </>
     )}
 
-    {routeRoot === 'plugins' && (
-      <>
-        <header class='catalog-head'><span class='label'>Plugin Registry</span><h1 class='display'><em>{copy.pluginsTitle}</em> — {pluginCounts.all} installable entries<span class='dot'>.</span></h1><p class='lead'>Discover installable workflows, decks, image templates, design systems, and agent-native capabilities.</p></header>
-        <section class='catalog-grid'><ol>{plugins.map((plugin, index) => <li class='catalog-row'><a href={href(plugin.detailHref)}><span class='row-index'>{String(index + 1).padStart(2, '0')}</span><span class='row-body'><span class='row-name'>{plugin.title}</span><span class='row-desc'>{plugin.description}</span></span><span class='meta-tag'>{plugin.registryName}</span></a></li>)}</ol></section>
-      </>
-    )}
   </Layout>
