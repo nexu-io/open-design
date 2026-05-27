@@ -242,6 +242,12 @@ describe('preview comment attachment helpers', () => {
     expect(content).toContain('<attached-preview-comments>');
     expect(content).toContain('selector: [data-od-id="hero-title"]');
     expect(content).toContain('comment: Only shorten this title');
+    // The hard-scope sentence IS the behavior change. Assert its key phrases
+    // so a future edit that softens or drops the directive lights the suite
+    // red instead of silently re-opening the over-broad edit bug.
+    expect(content).toContain('Hard scope: change ONLY');
+    expect(content).toContain('Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules');
+    expect(content).toContain('ask the user before proceeding');
   });
 
   it('adds hidden comment context only to the current user message sent to API providers', () => {
