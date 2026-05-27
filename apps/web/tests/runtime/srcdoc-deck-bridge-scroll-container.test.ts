@@ -20,6 +20,93 @@ function lastSlideState(parentPostMessage: ReturnType<typeof vi.fn>) {
 }
 
 describe('deck bridge - scroll container fallback', () => {
+  it('treats a wide default root scroller as a scroll deck even without explicit overflow-x styling', async () => {
+    const bodyHtml = `
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+      <section class="slide">Three</section>
+    `;
+    const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+      deck: true,
+    });
+    const script = extractDeckBridgeScript(srcdoc);
+    const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+      runScripts: 'outside-only',
+      pretendToBeVisual: true,
+    });
+    const win = dom.window;
+    const parentPostMessage = vi.fn();
+    Object.defineProperty(win, 'parent', {
+      configurable: true,
+      value: { postMessage: parentPostMessage },
+    });
+    Object.defineProperty(win, 'innerWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(win.document.body, 'scrollWidth', {
+      configurable: true,
+      value: 3000,
+    });
+    Object.defineProperty(win.document.body, 'clientWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(win.document.documentElement, 'scrollWidth', {
+      configurable: true,
+      value: 3000,
+    });
+    Object.defineProperty(win.document.documentElement, 'clientWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(win.document, 'scrollingElement', {
+      configurable: true,
+      value: win.document.documentElement,
+    });
+    let bodyScrollLeft = 0;
+    let documentScrollLeft = 0;
+    Object.defineProperty(win.document.body, 'scrollLeft', {
+      configurable: true,
+      get: () => bodyScrollLeft,
+      set: (_value: number) => {
+        bodyScrollLeft = 0;
+      },
+    });
+    Object.defineProperty(win.document.documentElement, 'scrollLeft', {
+      configurable: true,
+      get: () => documentScrollLeft,
+      set: (value: number) => {
+        documentScrollLeft = value;
+      },
+    });
+    Object.defineProperty(win.document.body, 'scrollTo', {
+      configurable: true,
+      value: () => {},
+    });
+    Object.defineProperty(win.document.documentElement, 'scrollTo', {
+      configurable: true,
+      value: ({ left }: { left?: number }) => {
+        if (typeof left === 'number') {
+          win.document.documentElement.scrollLeft = left;
+        }
+      },
+    });
+
+    const evaluate = new win.Function(script);
+    evaluate.call(win);
+    win.dispatchEvent(new win.Event('load'));
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'next' },
+    }));
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 420));
+
+    expect(win.document.body.scrollLeft).toBe(0);
+    expect(win.document.documentElement.scrollLeft).toBe(1000);
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 3 });
+  });
+
   it('tracks slide state from documentElement when body scrollLeft stays at zero', async () => {
     const bodyHtml = `
       <style>
