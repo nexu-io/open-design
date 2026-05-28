@@ -1012,6 +1012,7 @@ export const ja: Dict = {
   'fileViewer.exportImageFailed': '画像のキャプチャに失敗しました。再試行するか、ブラウザのスクリーンショット機能をご利用ください。',
   'fileViewer.exportJsx': 'JSX としてエクスポート',
   'fileViewer.exportReactHtml': 'プレビューを HTML としてエクスポート',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'テンプレートとして保存…',
   'fileViewer.savingTemplate': 'テンプレートを保存中…',
   'fileViewer.savedTemplate': '"{name}" として保存しました',

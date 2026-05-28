@@ -1014,6 +1014,7 @@ export const esES: Dict = {
   'fileViewer.exportImageFailed': 'Error al capturar la imagen. Inténtalo de nuevo o usa la herramienta de captura de pantalla de tu navegador.',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar vista previa como HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Guardar como plantilla…',
   'fileViewer.savingTemplate': 'Guardando plantilla…',
   'fileViewer.savedTemplate': 'Guardado como «{name}»',

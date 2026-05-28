@@ -1125,6 +1125,7 @@ export const ar: Dict = {
   'fileViewer.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
   'fileViewer.exportJsx': 'تصدير كـ JSX',
   'fileViewer.exportReactHtml': 'تصدير المعاينة كـ HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'حفظ كقالب...',
   'fileViewer.savingTemplate': 'جاري حفظ القالب...',
   'fileViewer.savedTemplate': 'تم الحفظ باسم "{name}"',

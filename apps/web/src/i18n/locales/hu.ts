@@ -1125,6 +1125,7 @@ export const hu: Dict = {
   'fileViewer.exportImageFailed': 'A képrögzítés sikertelen. Kérjük, próbálja újra, vagy használja a böngészője képernyőkép eszközét.',
   'fileViewer.exportJsx': 'Exportálás JSX-ként',
   'fileViewer.exportReactHtml': 'Előnézet exportálása HTML-ként',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Mentés sablonként…',
   'fileViewer.savingTemplate': 'Sablon mentése…',
   'fileViewer.savedTemplate': 'Mentve „{name}" néven',

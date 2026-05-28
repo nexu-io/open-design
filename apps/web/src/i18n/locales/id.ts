@@ -1242,6 +1242,7 @@ export const id: Dict = {
   'fileViewer.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
   'fileViewer.exportJsx': 'Ekspor JSX',
   'fileViewer.exportReactHtml': 'Ekspor React HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Simpan sebagai templat',
   'fileViewer.savingTemplate': 'Menyimpan templat...',
   'fileViewer.savedTemplate': 'Disimpan sebagai "{name}"',

@@ -1013,6 +1013,7 @@ export const de: Dict = {
   'fileViewer.exportImageFailed': 'Bildaufnahme fehlgeschlagen. Bitte versuchen Sie es erneut oder verwenden Sie das Screenshot-Tool Ihres Browsers.',
   'fileViewer.exportJsx': 'Als JSX exportieren',
   'fileViewer.exportReactHtml': 'Vorschau als HTML exportieren',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Als Template speichern…',
   'fileViewer.savingTemplate': 'Template wird gespeichert…',
   'fileViewer.savedTemplate': 'Als „{name}“ gespeichert',

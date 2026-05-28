@@ -1031,6 +1031,7 @@ export const it: Dict = {
   'fileViewer.exportMd': 'Esporta in Markdown',
   'fileViewer.exportJsx': 'Esporta in JSX',
   'fileViewer.exportReactHtml': 'Esporta anteprima in HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Salva come modello…',
   'fileViewer.savingTemplate': 'Salvataggio del modello…',
   'fileViewer.savedTemplate': 'Salvato come « {name} »',

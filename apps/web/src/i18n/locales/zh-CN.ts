@@ -1722,6 +1722,7 @@ export const zhCN: Dict = {
   'fileViewer.exportImageFailed': '图片捕获失败，请重试或使用浏览器的截图工具。',
   'fileViewer.exportJsx': '导出为 JSX',
   'fileViewer.exportReactHtml': '导出预览 HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': '保存为模板…',
   'fileViewer.savingTemplate': '正在保存模板…',
   'fileViewer.savedTemplate': '已保存为「{name}」',

@@ -1057,6 +1057,7 @@ export const th: Dict = {
   'fileViewer.exportImageFailed': 'การจับภาพล้มเหลว กรุณาลองอีกครั้งหรือใช้เครื่องมือจับภาพหน้าจอของเบราว์เซอร์',
   'fileViewer.exportJsx': 'นำโค้ดในรูปแบบ React JSX ออก',
   'fileViewer.exportReactHtml': 'แยกโหลดมาแค่โครง HTML เท่านั้น',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'จัดเก็บในหมวดเทมเพลต…',
   'fileViewer.savingTemplate': 'ระบบคอยเซฟแม่แบบให้…',
   'fileViewer.savedTemplate': 'ได้สร้างเทมเพลตใหม่ชื่อ "{name}"',

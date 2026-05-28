@@ -1125,6 +1125,7 @@ export const pl: Dict = {
   'fileViewer.exportImageFailed': 'Przechwytywanie obrazu nie powiodło się. Spróbuj ponownie lub użyj narzędzia do zrzutów ekranu w przeglądarce.',
   'fileViewer.exportJsx': 'Eksportuj jako JSX',
   'fileViewer.exportReactHtml': 'Eksportuj podgląd jako HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Zapisz jako szablon…',
   'fileViewer.savingTemplate': 'Zapisywanie szablonu…',
   'fileViewer.savedTemplate': 'Zapisano jako „{name}”',

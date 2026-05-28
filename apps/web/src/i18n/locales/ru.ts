@@ -1148,6 +1148,7 @@ export const ru: Dict = {
   'fileViewer.exportImageFailed': 'Не удалось сделать снимок. Попробуйте ещё раз или воспользуйтесь инструментом скриншотов вашего браузера.',
   'fileViewer.exportJsx': 'Экспорт как JSX',
   'fileViewer.exportReactHtml': 'Экспорт предпросмотра как HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Сохранить как шаблон…',
   'fileViewer.savingTemplate': 'Сохранение шаблона…',
   'fileViewer.savedTemplate': 'Сохранено как «{name}»',

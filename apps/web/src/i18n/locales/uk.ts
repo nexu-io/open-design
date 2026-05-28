@@ -1167,6 +1167,7 @@ export const uk: Dict = {
   'fileViewer.exportImageFailed': 'Не вдалося захопити зображення. Спробуйте ще раз або скористайтеся інструментом знімків екрана вашого браузера.',
   'fileViewer.exportJsx': 'Експортувати як JSX',
   'fileViewer.exportReactHtml': 'Експортувати попередній перегляд як HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Зберегти як шаблон…',
   'fileViewer.savingTemplate': 'Збереження шаблону…',
   'fileViewer.savedTemplate': 'Збережено як "{name}"',

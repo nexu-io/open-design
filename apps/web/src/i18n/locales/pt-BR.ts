@@ -1148,6 +1148,7 @@ export const ptBR: Dict = {
   'fileViewer.exportImageFailed': 'Falha ao capturar a imagem. Tente novamente ou use a ferramenta de captura de tela do seu navegador.',
   'fileViewer.exportJsx': 'Exportar como JSX',
   'fileViewer.exportReactHtml': 'Exportar prévia como HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Salvar como template…',
   'fileViewer.savingTemplate': 'Salvando template…',
   'fileViewer.savedTemplate': 'Salvo como "{name}"',

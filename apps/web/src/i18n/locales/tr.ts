@@ -1112,6 +1112,7 @@ export const tr: Dict = {
   'fileViewer.exportImageFailed': 'Görsel yakalama başarısız oldu. Lütfen tekrar deneyin veya tarayıcınızın ekran görüntüsü aracını kullanın.',
   'fileViewer.exportJsx': 'JSX olarak dışa aktar',
   'fileViewer.exportReactHtml': 'Önizlemeyi HTML olarak dışa aktar',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Şablon olarak kaydet…',
   'fileViewer.savingTemplate': 'Şablon kaydediliyor…',
   'fileViewer.savedTemplate': '"{name}" olarak kaydedildi',

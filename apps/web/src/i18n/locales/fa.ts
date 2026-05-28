@@ -1149,6 +1149,7 @@ export const fa: Dict = {
   'fileViewer.exportImageFailed': 'گرفتن تصویر ناموفق بود. لطفاً دوباره تلاش کنید یا از ابزار اسکرین‌شات مرورگرتان استفاده کنید.',
   'fileViewer.exportJsx': 'صادرکردن به JSX',
   'fileViewer.exportReactHtml': 'صادرکردن پیش‌نمایش به HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'ذخیره به عنوان قالب…',
   'fileViewer.savingTemplate': 'در حال ذخیره قالب…',
   'fileViewer.savedTemplate': 'به عنوان «{name}» ذخیره شد',

@@ -1664,6 +1664,7 @@ export const fr: Dict = {
   'fileViewer.exportImageFailed': 'La capture d\'image a échoué. Veuillez réessayer ou utiliser l\'outil de capture d\'écran de votre navigateur.',
   'fileViewer.exportJsx': 'Exporter en JSX',
   'fileViewer.exportReactHtml': 'Exporter l\'aperçu en HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Enregistrer comme modèle…',
   'fileViewer.savingTemplate': 'Enregistrement du modèle…',
   'fileViewer.savedTemplate': 'Enregistré comme « {name} »',

@@ -1734,6 +1734,7 @@ export const en: Dict = {
   'fileViewer.exportImageFailed': 'Image capture failed. Please try again or use your browser\'s screenshot tool.',
   'fileViewer.exportJsx': 'Export as JSX',
   'fileViewer.exportReactHtml': 'Export preview as HTML',
+  'fileViewer.exportStarted': 'Export started',
   'fileViewer.saveAsTemplate': 'Save as template…',
   'fileViewer.savingTemplate': 'Saving template…',
   'fileViewer.savedTemplate': 'Saved as "{name}"',
