@@ -4,6 +4,11 @@ import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
+import {
+  applySandboxRuntimeEnv,
+  isSandboxModeEnabled,
+  resolveSandboxRuntimeConfig,
+} from '../sandbox-mode.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 
@@ -58,20 +63,30 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return env;
+    return reapplySandboxRuntimeEnv(env);
   }
   if (agentId === 'claude') {
     stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
-    return env;
+    return reapplySandboxRuntimeEnv(env);
   }
   if (agentId === 'codex') {
     stripUnlessCustomBaseUrl(env, 'OPENAI_BASE_URL', [
       'OPENAI_API_KEY',
       'CODEX_API_KEY',
     ]);
-    return env;
+    return reapplySandboxRuntimeEnv(env);
   }
-  return env;
+  return reapplySandboxRuntimeEnv(env);
+}
+
+function reapplySandboxRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (!isSandboxModeEnabled(env)) return env;
+  const dataDir = env.OD_DATA_DIR?.trim();
+  if (!dataDir) return env;
+  return applySandboxRuntimeEnv(
+    env,
+    resolveSandboxRuntimeConfig(true, dataDir),
+  );
 }
 
 // Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty

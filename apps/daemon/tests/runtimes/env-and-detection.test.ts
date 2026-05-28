@@ -55,6 +55,62 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-'));
+  try {
+    const codexEnv = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+      },
+    );
+    assert.equal(
+      codexEnv.CODEX_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.codex'),
+    );
+    assert.equal(codexEnv.HOME, join(dataDir, 'sandbox', 'agent-home'));
+
+    const claudeEnv = spawnEnvForAgent(
+      'claude',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CLAUDE_CONFIG_DIR: '/Users/test/.claude-host',
+      },
+    );
+    assert.equal(
+      claudeEnv.CLAUDE_CONFIG_DIR,
+      join(dataDir, 'sandbox', 'config', 'claude'),
+    );
+
+    const amrEnv = spawnEnvForAgent(
+      'amr',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        OPENCODE_TEST_HOME: '/Users/test/.opencode-host',
+      },
+    );
+    assert.equal(
+      amrEnv.OPENCODE_TEST_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.opencode'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
   const env = spawnEnvForAgent(
     'gemini',

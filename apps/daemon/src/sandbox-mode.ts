@@ -81,6 +81,7 @@ export function applySandboxRuntimeEnv(
   const { roots } = config;
   const codexHome = path.join(roots.agentHomeDir, '.codex');
   const claudeConfigDir = path.join(roots.configDir, 'claude');
+  const opencodeHome = path.join(roots.agentHomeDir, '.opencode');
   const npmUserConfig = path.join(roots.toolConfigDir, 'npmrc');
 
   env[SANDBOX_MODE_ENV] = '1';
@@ -97,6 +98,7 @@ export function applySandboxRuntimeEnv(
   env.TMP = roots.tempDir;
   env.CODEX_HOME = codexHome;
   env.CLAUDE_CONFIG_DIR = claudeConfigDir;
+  env.OPENCODE_TEST_HOME = opencodeHome;
   env.NPM_CONFIG_USERCONFIG = npmUserConfig;
   env.npm_config_userconfig = npmUserConfig;
 
