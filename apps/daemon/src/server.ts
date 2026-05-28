@@ -2889,6 +2889,11 @@ function authorizeToolRequest(req, res, operation) {
   return validation.grant;
 }
 
+function optionalToolGrantFromRequest(req) {
+  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req));
+  return validation.ok ? validation.grant : null;
+}
+
 function requestProjectOverride(projectId, tokenProjectId) {
   return typeof projectId === 'string' && projectId.length > 0 && projectId !== tokenProjectId;
 }
@@ -5280,6 +5285,7 @@ export async function startServer({
     desktopAuthSecret: getDesktopAuthSecret,
     isDesktopAuthGateActive,
     pruneExpiredImportNonces,
+    optionalToolGrantFromRequest,
     requestProjectOverride,
     requestRunOverride,
     verifyDesktopImportToken,
