@@ -87,7 +87,7 @@ function deployProviderQuery(providerId?: WebDeployProviderId): string {
 
 export async function fetchAgents(options?: { throwOnError?: boolean }): Promise<AgentInfo[]> {
   try {
-    const resp = await fetch('/api/agents');
+    const resp = await fetch('/api/agents', { cache: 'no-store' });
     if (!resp.ok) {
       if (options?.throwOnError) throw new Error(`agents ${resp.status}`);
       return [];

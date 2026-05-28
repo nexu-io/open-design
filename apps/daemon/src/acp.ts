@@ -70,6 +70,7 @@ interface AttachAcpSessionOptions {
   clientName?: string;
   clientVersion?: string;
   stageTimeoutMs?: number;
+  modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
 }
 
 function errorMessage(err: unknown): string {
@@ -426,6 +427,7 @@ export function attachAcpSession({
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
+  modelUnavailableErrorCode,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -443,6 +445,7 @@ export function attachAcpSession({
   let modelConfigId: string | null = null;
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
+  let emittedTextChunk = false;
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -467,12 +470,41 @@ export function attachAcpSession({
     stageTimer = null;
   };
 
-  const fail = (message: string) => {
+  const amrModelUnavailablePayload = (message: string) => ({
+    message,
+    error: {
+      code: 'AMR_MODEL_UNAVAILABLE',
+      message,
+      retryable: false,
+      details: { kind: 'amr_model', action: 'choose_model' },
+    },
+  });
+
+  const isModelUnavailableError = (message: string) => {
+    const value = message.toLowerCase();
+    return (
+      value.includes('model not found') ||
+      value.includes('providermodelnotfounderror') ||
+      value.includes('unknown model') ||
+      value.includes('invalid model')
+    );
+  };
+
+  const fail = (
+    message: string,
+    options: { forceModelUnavailable?: boolean } = {},
+  ) => {
     if (finished) return;
     finished = true;
     fatal = true;
     clearStageTimer();
-    send('error', { message });
+    const useModelUnavailable =
+      modelUnavailableErrorCode &&
+      (options.forceModelUnavailable || isModelUnavailableError(message));
+    send(
+      'error',
+      useModelUnavailable ? amrModelUnavailablePayload(message) : { message },
+    );
     if (!child.killed) child.kill('SIGTERM');
   };
 
@@ -575,6 +607,7 @@ export function attachAcpSession({
       if (update.sessionUpdate === 'agent_message_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
+          emittedTextChunk = true;
           if (!emittedFirstTokenStatus) {
             emittedFirstTokenStatus = true;
             send('agent', {
@@ -638,6 +671,13 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
+      if (!emittedTextChunk && modelUnavailableErrorCode) {
+        fail(
+          'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
+          { forceModelUnavailable: true },
+        );
+        return;
+      }
       const usage = formatUsage(result.usage);
       if (usage) {
         send('agent', {
@@ -672,9 +712,12 @@ export function attachAcpSession({
   });
 
   stdout.on('data', (chunk: string) => parser.feed(chunk));
-  child.on('close', () => {
+  child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
+    if (!finished && !aborted && !fatal) {
+      fail(`ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`);
+    }
   });
   child.on('error', (err: Error) => fail(err.message));
   stdin.on('error', (err: Error) => fail(`stdin error: ${err.message}`));
@@ -701,12 +744,27 @@ export function attachAcpSession({
       aborted = true;
       finished = true;
       clearStageTimer();
-      if (!sessionId || !child.stdin || child.stdin.destroyed || child.stdin.writableEnded) return;
+      if (!child.stdin || child.stdin.destroyed || child.stdin.writableEnded)
+        return;
+      // Only cancel an established session; before session/new resolves there
+      // is no sessionId to cancel, but we must still close stdin below.
+      if (sessionId) {
+        try {
+          sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
+          nextId += 1;
+        } catch {
+          // The caller owns process-signal fallback if the ACP transport is gone.
+        }
+      }
+      // Always close stdin so the agent receives EOF and shuts down its own
+      // runtime — the vela ACP bridge tears down its private OpenCode server on
+      // EOF — instead of lingering (and leaking that server) until the caller's
+      // SIGTERM fallback fires. This also covers aborts during ACP startup,
+      // before session/new returns. Mirrors the clean-completion path above.
       try {
-        sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
-        nextId += 1;
+        child.stdin.end();
       } catch {
-        // The caller owns process-signal fallback if the ACP transport is gone.
+        // Best effort; the caller still owns the SIGTERM/SIGKILL fallback.
       }
     },
   };

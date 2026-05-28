@@ -1,6 +1,7 @@
 import { symlinkSync } from 'node:fs';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { homedir } from 'node:os';
+import * as platform from '@open-design/platform';
 import {
   assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
@@ -54,6 +55,86 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
+  const env = spawnEnvForAgent(
+    'gemini',
+    {
+      HTTPS_PROXY: 'http://user-env:9000',
+      PATH: '/usr/bin',
+    },
+    {},
+    {
+      HTTP_PROXY: 'http://system-http:7890',
+      HTTPS_PROXY: 'http://system-https:7891',
+      ALL_PROXY: 'socks5://system-socks:1080',
+      NO_PROXY: '.local,localhost',
+      NODE_USE_ENV_PROXY: '1',
+    },
+  );
+
+  assert.equal(env.HTTP_PROXY, 'http://system-http:7890');
+  assert.equal(env.HTTPS_PROXY, 'http://user-env:9000');
+  assert.equal(env.ALL_PROXY, 'socks5://system-socks:1080');
+  assert.equal(env.NO_PROXY, '.local,localhost');
+  assert.equal(env.NODE_USE_ENV_PROXY, '1');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent resolves system proxy env for each default agent launch', () => {
+  const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+    HTTPS_PROXY: 'http://system-https:7891',
+    NODE_USE_ENV_PROXY: '1',
+  });
+
+  try {
+    const env = spawnEnvForAgent('gemini', { PATH: '/usr/bin' });
+
+    assert.deepEqual(proxySpy.mock.calls, [[]]);
+    assert.equal(env.HTTPS_PROXY, 'http://system-https:7891');
+    assert.equal(env.PATH, '/usr/bin');
+  } finally {
+    proxySpy.mockRestore();
+  }
+});
+
+test('spawnEnvForAgent lets explicit lowercase proxy env override system uppercase proxy env', () => {
+  const env = spawnEnvForAgent(
+    'gemini',
+    {
+      https_proxy: 'http://user-lowercase:9000',
+      PATH: '/usr/bin',
+    },
+    {},
+    {
+      HTTPS_PROXY: 'http://system-uppercase:7891',
+      NODE_USE_ENV_PROXY: '1',
+    },
+  );
+
+  assert.equal(env.HTTPS_PROXY, 'http://user-lowercase:9000');
+  if (process.platform !== 'win32') {
+    assert.equal(env.https_proxy, 'http://user-lowercase:9000');
+  }
+});
+
+test('spawnEnvForAgent enables Node env proxy support for inherited lowercase proxy env', () => {
+  const env = spawnEnvForAgent(
+    'gemini',
+    {
+      http_proxy: 'http://user-lowercase:9000',
+      PATH: '/usr/bin',
+    },
+    {},
+    {},
+  );
+
+  assert.equal(env.HTTP_PROXY, 'http://user-lowercase:9000');
+  assert.equal(env.NODE_USE_ENV_PROXY, '1');
+  if (process.platform !== 'win32') {
+    assert.equal(env.http_proxy, 'http://user-lowercase:9000');
+  }
+});
+
 test('spawnEnvForAgent expands configured env home paths', () => {
   const env = spawnEnvForAgent('codex', { PATH: '/usr/bin' }, {
     CODEX_HOME: '~/.codex-alt',
@@ -63,6 +144,84 @@ test('spawnEnvForAgent expands configured env home paths', () => {
   assert.equal(env.CODEX_HOME, join(homedir(), '.codex-alt'));
   assert.equal(env.CODEX_CACHE, homedir());
   assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent injects the resolved AMR profile after configured env', () => {
+  const env = spawnEnvForAgent(
+    'amr',
+    {
+      OPEN_DESIGN_AMR_PROFILE: 'test',
+      VELA_PROFILE: 'prod',
+      PATH: '/usr/bin',
+    },
+    {
+      VELA_PROFILE: 'local',
+    },
+  );
+
+  assert.equal(env.VELA_PROFILE, 'test');
+  assert.equal(env.OPEN_DESIGN_AMR_PROFILE, 'test');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent gives AMR a stable OpenCode home under OD_DATA_DIR', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-amr-data-'));
+  try {
+    const env = spawnEnvForAgent('amr', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+    });
+
+    assert.equal(
+      env.OPENCODE_TEST_HOME,
+      join(dataDir, 'amr', 'opencode-home'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent preserves a configured AMR OpenCode home override', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-amr-data-'));
+  try {
+    const configuredHome = join(dataDir, 'custom-opencode-home');
+    const env = spawnEnvForAgent(
+      'amr',
+      {
+        OD_DATA_DIR: dataDir,
+        PATH: '/usr/bin',
+      },
+      {
+        OPENCODE_TEST_HOME: configuredHome,
+      },
+    );
+
+    assert.equal(env.OPENCODE_TEST_HOME, configuredHome);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent gives AMR a discovered OpenCode binary under a minimal child PATH', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-amr-opencode-home-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
+      const opencodeBinDir = join(dir, '.opencode', 'bin');
+      const opencodeBin = join(opencodeBinDir, 'opencode');
+      mkdirSync(opencodeBinDir, { recursive: true });
+      writeFileSync(opencodeBin, '#!/bin/sh\nexit 0\n');
+      chmodSync(opencodeBin, 0o755);
+      process.env.PATH = '/usr/bin';
+      process.env.OD_AGENT_HOME = dir;
+
+      const env = spawnEnvForAgent('amr', { PATH: '/usr/bin' });
+
+      assert.equal(env.PATH, '/usr/bin');
+      assert.equal(env.VELA_OPENCODE_BIN, opencodeBin);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('resolveAgentExecutable prefers a configured CODEX_BIN override over PATH resolution', () => {
@@ -247,6 +406,75 @@ fsTest('detectAgents marks Codex available when nvm exposes a node shim but laun
     });
   } finally {
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('detectAgents keeps packaged built-in AMR unavailable when OpenCode cannot be resolved', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-detect-amr-built-in-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'OD_RESOURCE_ROOT', 'VELA_OPENCODE_BIN'], async () => {
+      const resourceRoot = join(root, 'resources', 'open-design');
+      const builtInVela = join(resourceRoot, 'bin', 'vela');
+      mkdirSync(join(resourceRoot, 'bin'), { recursive: true });
+      writeFileSync(
+        builtInVela,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "vela manual-amr"; exit 0; fi\nexit 0\n',
+      );
+      chmodSync(builtInVela, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'empty-home');
+      process.env.OD_RESOURCE_ROOT = resourceRoot;
+      delete process.env.VELA_OPENCODE_BIN;
+
+      const agents = await detectAgents();
+      const amrAgent = agents.find((agent) => agent.id === 'amr');
+
+      assert.ok(amrAgent);
+      assert.equal(amrAgent.available, false);
+      assert.equal(amrAgent.path, undefined);
+      assert.equal(amrAgent.version, undefined);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+fsTest('detectAgents marks AMR available from packaged built-in Vela with the bundled OpenCode companion tree', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-detect-amr-built-in-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'OD_RESOURCE_ROOT', 'VELA_OPENCODE_BIN'], async () => {
+      const resourceRoot = join(root, 'resources', 'open-design');
+      const builtInVela = join(resourceRoot, 'bin', 'vela');
+      const companionTree = join(resourceRoot, 'bin', 'libexec', 'opencode');
+      mkdirSync(join(resourceRoot, 'bin'), { recursive: true });
+      mkdirSync(companionTree, { recursive: true });
+      writeFileSync(
+        builtInVela,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "vela manual-amr"; exit 0; fi\nexit 0\n',
+      );
+      chmodSync(builtInVela, 0o755);
+      // The companion tree is only "valid" when an actual `opencode`
+      // executable lives inside — directory-only checks were treating an
+      // empty/partial copy as available and the first real run had nothing
+      // to launch. Match the resources.test.ts packaging contract.
+      const companionExe = join(companionTree, 'opencode');
+      writeFileSync(companionExe, '#!/bin/sh\nexit 0\n');
+      chmodSync(companionExe, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'empty-home');
+      process.env.OD_RESOURCE_ROOT = resourceRoot;
+      delete process.env.VELA_OPENCODE_BIN;
+
+      const agents = await detectAgents();
+      const amrAgent = agents.find((agent) => agent.id === 'amr');
+
+      assert.ok(amrAgent);
+      assert.equal(amrAgent.available, true);
+      assert.equal(amrAgent.path, builtInVela);
+      assert.equal(amrAgent.version, 'vela manual-amr');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

@@ -123,9 +123,12 @@ jobs:
 
       - name: Lint changed blog SEO
         run: |
-          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            BASE="HEAD^"
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            # merge_group (and first-push) events have no base SHA. Resolve a
+            # concrete commit instead of passing the literal "HEAD^", which the
+            # blog-indexing scripts' assertSafeGitRef rejects (no "^" allowed).
+            BASE="$(git rev-parse HEAD^)"
           fi
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/lint-blog-seo.ts \
             --base "$BASE" \
@@ -134,9 +137,12 @@ jobs:
 
       - name: Guard blog URL changes
         run: |
-          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            BASE="HEAD^"
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            # merge_group (and first-push) events have no base SHA. Resolve a
+            # concrete commit instead of passing the literal "HEAD^", which the
+            # blog-indexing scripts' assertSafeGitRef rejects (no "^" allowed).
+            BASE="$(git rev-parse HEAD^)"
           fi
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/check-blog-url-changes.ts \
             --base "$BASE" \

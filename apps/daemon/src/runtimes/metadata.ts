@@ -3,6 +3,10 @@ const AGENT_INSTALL_LINKS: Record<
   string,
   { installUrl?: string; docsUrl?: string }
 > = {
+  amr: {
+    installUrl: 'https://github.com/nexu-io/vela',
+    docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
+  },
   claude: {
     installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
     docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',

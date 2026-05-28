@@ -121,11 +121,17 @@ const jsonLd = [
         <a class="btn btn-ghost" href={plugin.sourceUrl} target="_blank" rel="noopener">
           {pcopy.detailFindOnGithub}
         </a>
-        {plugin.homepage && plugin.homepage !== plugin.sourceUrl && (
-          <a class="btn btn-ghost" href={plugin.homepage} target="_blank" rel="noopener">
-            {pcopy.detailHomepage}
-          </a>
-        )}
+        {/*
+         * The Homepage CTA was removed per product feedback: surfacing the
+         * upstream / author homepage on a marketing detail page led visitors
+         * away from Open Design before they explored the plugin in-app. The
+         * `plugin.homepage` field stays in the manifest reader so other
+         * surfaces (the in-app catalog, JSON-LD, future authored bios) can
+         * still consume it; the marketing CTA is the only call site that
+         * removed it. The unused `pcopy.detailHomepage` i18n key stays for
+         * the same reason — it's `Partial<>` everywhere and removing it
+         * would touch 18 locale blocks for no functional gain.
+         */}
         <button
           type="button"
           class="btn btn-ghost detail-share-trigger"

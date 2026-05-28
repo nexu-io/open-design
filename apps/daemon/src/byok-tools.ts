@@ -260,6 +260,15 @@ export interface BYOKToolContext {
   defaultImageModel?: string;
   defaultVideoModel?: string;
   defaultAudioModel?: string;
+  /** Test-only override for the video polling interval (ms). Production
+   *  uses 5 s (SenseAudio's recommendation) — tests pass small values
+   *  (e.g. 1 ms) to keep the suite fast without changing the polling
+   *  semantics. */
+  videoPollIntervalMs?: number;
+  /** Optional per-request init copied from the live chat turn. Used to
+   *  forward the current proxy dispatcher into every upstream/download
+   *  fetch the BYOK tool executor performs. */
+  requestInit?: Pick<RequestInit, 'dispatcher'>;
 }
 
 export interface MediaToolResult {
@@ -342,6 +351,7 @@ export async function executeGenerateImage(
       model,
       prompt,
       aspect: sanitizeImageAspect(args.aspect_ratio),
+      ...(ctx.requestInit ? { requestInit: ctx.requestInit } : {}),
       // No silent placeholder: a model whose provider isn't configured must
       // surface a real error to the chat, not a stub that looks like success.
       allowStub: false,
@@ -380,6 +390,7 @@ export async function executeGenerateVideo(
       ...(typeof args.resolution === 'string' && args.resolution.trim()
         ? { resolution: args.resolution.trim() }
         : {}),
+      ...(ctx.requestInit ? { requestInit: ctx.requestInit } : {}),
       allowStub: false,
     });
     return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'video' };
@@ -419,6 +430,7 @@ export async function executeGenerateAudio(
       ...(typeof args.duration === 'number' && Number.isFinite(args.duration)
         ? { duration: Math.round(args.duration) }
         : {}),
+      ...(ctx.requestInit ? { requestInit: ctx.requestInit } : {}),
       allowStub: false,
     });
     return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'audio' };

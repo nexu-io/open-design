@@ -333,6 +333,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1050.0
         version: 3.1050.0
+      '@open-design/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
       '@playwright/test':
         specifier: 1.60.0
         version: 1.60.0
@@ -596,6 +599,10 @@ importers:
       vitest:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+    optionalDependencies:
+      '@powerformer/vela-cli':
+        specifier: 0.0.3
+        version: 0.0.3
 
   tools/serve:
     dependencies:
@@ -1634,6 +1641,15 @@ packages:
 
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
+
+  '@powerformer/vela-cli-darwin-arm64@0.0.3':
+    resolution: {integrity: sha512-tNFNiYVMfp64SHojvpcVV8zIw5RHgaqu8tLcI7SZdk1zS3dAv1gZ20ayebBpxWWAoj2wNMsuA6W006mRRRyjdQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@powerformer/vela-cli@0.0.3':
+    resolution: {integrity: sha512-ZUrFNFJ/2gvSmQbXLPqRZCeeOR/bNyj0pxhJwKHxiAbGQWVNlTDFy9lDzyID3gD+UH3VMZacmbvSPQyhuRyxAQ==}
+    hasBin: true
 
   '@rollup/pluginutils@5.3.0':
     resolution: {integrity: sha512-5EdhGZtnu3V88ces7s53hhfK5KSASnJZv8Lulpc04cWO3REESroJXg73DFsOmgbU2BhwV0E20bu2IDZb3VKW4Q==}
@@ -6026,6 +6042,14 @@ snapshots:
       '@posthog/types': 1.374.2
 
   '@posthog/types@1.374.2': {}
+
+  '@powerformer/vela-cli-darwin-arm64@0.0.3':
+    optional: true
+
+  '@powerformer/vela-cli@0.0.3':
+    optionalDependencies:
+      '@powerformer/vela-cli-darwin-arm64': 0.0.3
+    optional: true
 
   '@rollup/pluginutils@5.3.0(rollup@4.60.2)':
     dependencies:

@@ -323,10 +323,12 @@
   color: white;
   border-radius: 4px;
 }
+/* Run-failure error card. Neutral gray (not red): the actionable next step
+   lives in the AMR card below it; this card just states what happened. */
 .msg.error {
-  border: 1px solid var(--red-border);
-  background: var(--red-bg);
-  color: var(--red);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   display: flex;
@@ -335,11 +337,111 @@
   gap: 10px;
 }
 .chat-error-text { min-width: 0; }
+.chat-error-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .chat-error-retry {
   flex: 0 0 auto;
-  border-color: var(--red-border);
-  color: var(--red);
   padding: 4px 10px;
+}
+/* Contextual primary action in the gray error card (Authorize & retry / Top up). */
+.chat-error-action {
+  flex: 0 0 auto;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-error-action:hover {
+  background: var(--accent-hover, var(--accent));
+}
+
+/* AMR guidance card under the gray error card. Theme-color tinted; two
+   content variants (switch / recharge) share the shell. */
+.amr-card {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.amr-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.amr-card__icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+}
+.amr-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.amr-card__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.amr-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.amr-card__chip {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.amr-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.amr-card__cta {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.amr-card__cta:hover {
+  background: var(--accent-hover, var(--accent));
 }
 
 /* -------- Composer -------------------------------------------------- */

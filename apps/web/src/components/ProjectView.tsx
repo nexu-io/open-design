@@ -16,6 +16,7 @@ import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
 import {
   fetchChatRunStatus,
+  fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
   reattachDaemonRun,
@@ -166,10 +167,12 @@ import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
 import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { effectiveAgentModelChoice } from './agentModelSelection';
 import {
   buildFinalizeCredentialsMissingToast,
   buildFinalizeRequest,
 } from '../lib/resolve-finalize-request';
+
 
 type ProjectChatSendMeta = ChatSendMeta & {
   retryOfAssistantId?: string;
@@ -213,6 +216,7 @@ interface Props {
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: (section?: SettingsSection) => void;
+  onOpenAmrSettings?: () => void;
   onOpenMcpSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
@@ -495,6 +499,7 @@ export function ProjectView({
   onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
+  onOpenAmrSettings,
   onOpenMcpSettings,
   onAdoptPetInline,
   onTogglePet,
@@ -1698,12 +1703,15 @@ export function ProjectView({
     [updateMessageById, activeConversationId, project.id],
   );
 
+  // `code` is the structured API error code (e.g. AGENT_AUTH_REQUIRED); it
+  // rides along on the error status event so AssistantMessage can render the
+  // hosted-AMR nudge for model/auth/quota failures on non-AMR agents.
   const appendAssistantErrorEvent = useCallback(
-    (messageId: string, message: string) => {
+    (messageId: string, message: string, code?: string) => {
       if (!message) return;
       updateMessageById(
         messageId,
-        (prev) => appendErrorStatusEvent(prev, message),
+        (prev) => appendErrorStatusEvent(prev, message, code),
         true,
       );
     },
@@ -2102,14 +2110,19 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: (err) => {
+              const errorCode = (err as Error & { code?: string }).code;
               textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
               setError(err.message);
-              appendAssistantErrorEvent(message.id, err.message);
+              appendAssistantErrorEvent(message.id, err.message, errorCode);
               updateMessageById(
                 message.id,
-                (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+                (prev) => ({
+                  ...prev,
+                  runStatus: 'failed',
+                  endedAt: prev.endedAt ?? Date.now(),
+                }),
                 true,
               );
               completedReattachRunsRef.current.add(runId);
@@ -2285,6 +2298,10 @@ export function ProjectView({
         config.mode === 'daemon' && config.agentId
           ? config.agentModels?.[config.agentId]
           : undefined;
+      const effectiveSelectedAgentChoice = effectiveAgentModelChoice(
+        selectedAgent,
+        selectedAgentChoice,
+      );
       const assistantAgentId =
         config.mode === 'daemon'
           ? config.agentId ?? undefined
@@ -2294,7 +2311,7 @@ export function ProjectView({
           ? agentModelDisplayName(
               config.agentId,
               selectedAgent?.name,
-              selectedAgentChoice?.model,
+              effectiveSelectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const preTurnFileNames = projectFiles.map((f) => f.name);
@@ -2654,11 +2671,12 @@ export function ProjectView({
         },
         onError: (err: Error) => {
           const endedAt = Date.now();
+          const errorCode = (err as Error & { code?: string }).code;
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
           setError(err.message);
-          appendAssistantErrorEvent(assistantId, err.message);
+          appendAssistantErrorEvent(assistantId, err.message, errorCode);
           updateAssistant((prev) => ({
             ...prev,
             endedAt,
@@ -2725,7 +2743,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
-        const choice = selectedAgentChoice;
+        const choice = effectiveSelectedAgentChoice;
         // v2 analytics: when the active project is a DS workspace
         // (created by `prepareCreatedDesignSystemProject`, identifiable
         // by `metadata.importedFrom === 'design-system'`), every run
@@ -2990,6 +3008,50 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
+  // "Switch to AMR & retry" from the failed-run card: switch the run to AMR,
+  // open Settings on the AMR controls so the user can sign in / authorize /
+  // top up, and arm an auto-retry that fires once AMR is selected AND signed
+  // in (see the effect below).
+  const [pendingAmrRetry, setPendingAmrRetry] = useState<ChatMessage | null>(null);
+  const handleSwitchToAmrAndRetry = useCallback(
+    (failedAssistant: ChatMessage) => {
+      if (currentConversationActionDisabled) return;
+      onModeChange('daemon');
+      onAgentChange('amr');
+      onOpenAmrSettings?.();
+      setPendingAmrRetry(failedAssistant);
+    },
+    [currentConversationActionDisabled, onModeChange, onAgentChange, onOpenAmrSettings],
+  );
+  // Poll the AMR login status while a retry is armed, rather than only reacting
+  // to the AmrLoginPill's status event — the user may close Settings (which
+  // unmounts the pill and stops its polling) before finishing sign-in in the
+  // browser. Polling here keeps working regardless of the pill's lifecycle.
+  // Fires once AMR is the selected agent AND the account is signed in.
+  useEffect(() => {
+    if (!pendingAmrRetry) return;
+    let cancelled = false;
+    const tryRetry = async () => {
+      if (cancelled) return;
+      if (!(config.mode === 'daemon' && config.agentId === 'amr')) return;
+      const status = await fetchVelaLoginStatus().catch(() => null);
+      if (cancelled || status?.loggedIn !== true) return;
+      setPendingAmrRetry(null);
+      handleRetry(pendingAmrRetry);
+    };
+    void tryRetry();
+    const interval = setInterval(() => void tryRetry(), 2000);
+    // Give up after a few minutes so we never poll forever.
+    const stop = setTimeout(() => {
+      if (!cancelled) setPendingAmrRetry(null);
+    }, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [pendingAmrRetry, config.mode, config.agentId, handleRetry]);
+
   useEffect(() => {
     if (!autoAuditRepairSeed) return;
     if (!activeConversationId) return;
@@ -3046,12 +3108,16 @@ export function ProjectView({
     config.mode === 'daemon' && config.agentId
       ? config.agentModels?.[config.agentId]
       : undefined;
+  const effectiveSelectedPluginActionChoice = effectiveAgentModelChoice(
+    selectedPluginActionAgent,
+    selectedPluginActionChoice,
+  );
   const pluginWorkflowAgentName =
     config.mode === 'daemon'
       ? agentModelDisplayName(
           config.agentId,
           selectedPluginActionAgent?.name,
-          selectedPluginActionChoice?.model,
+          effectiveSelectedPluginActionChoice?.model,
         )
       : apiProtocolModelLabel(config.apiProtocol, config.model);
 
@@ -4433,6 +4499,8 @@ export function ProjectView({
               onDeleteConversation={handleDeleteConversation}
               onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
+              onOpenAmrSettings={onOpenAmrSettings}
+              onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
               onOpenMcpSettings={onOpenMcpSettings}
               connectRepoNeeded={connectRepoNeeded}
               githubConnected={githubConnected}

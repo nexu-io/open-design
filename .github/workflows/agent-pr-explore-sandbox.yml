@@ -1,8 +1,10 @@
 name: agent-pr-explore-sandbox
 
-# Trusted-orchestrator workflow for manual PR exploration. Keep this dispatch
-# only while the self-hosted runner and approval flow are being stabilized, so
-# ordinary PRs do not accumulate waiting checks.
+# Trusted-orchestrator workflow for PR exploration on the self-hosted runner.
+# Triggered by manual workflow_dispatch, or by a maintainer commenting
+# "/explore" on a PR (write-access gated). It deliberately does not auto-run on
+# every PR, so ordinary PRs do not accumulate waiting checks; PR code only ever
+# runs inside the Docker sandbox without secrets.
 on:
   workflow_dispatch:
     inputs:
@@ -15,6 +17,12 @@ on:
         required: false
         default: false
         type: boolean
+  # A maintainer commenting "/explore" on a PR explores that PR. issue_comment
+  # runs in the base (trusted) context with secrets, so the job `if` gate below
+  # restricts it to users with write access; untrusted PR code still runs only
+  # inside the Docker sandbox without secrets.
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -22,17 +30,53 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: agent-pr-explore-sandbox-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: agent-pr-explore-sandbox-${{ github.event.issue.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
   sandbox:
     name: Sandbox PR runtime
     runs-on: [self-hosted, agent-pr-explore]
-    environment: agent-pr-explore
+    # No environment approval gate: both triggers are already write-access
+    # gated (workflow_dispatch needs repo write; the "/explore" comment path is
+    # gated on author_association below), and PR code runs only in the sandbox.
+    # R2 credentials are repo-level secrets, so they remain available here.
     timeout-minutes: 45
+    # Manual dispatch is always allowed. A "/explore" PR comment is allowed only
+    # from a user with write access (OWNER/MEMBER/COLLABORATOR), never on issues.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/explore') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
 
     steps:
+      - name: Acknowledge /explore command
+        if: ${{ github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # 👀 on the command comment = picked up.
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes --silent || true
+          # Post a placeholder carrying the report marker; the report step later
+          # PATCHes this same comment, so the run produces one evolving comment.
+          marker="<!-- agent-pr-explore-sandbox:${PR_NUMBER} -->"
+          body="🔍 Exploring this PR in an isolated sandbox — [follow the run]($RUN_URL). The report will replace this comment when it is ready.
+
+          $marker"
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$marker\"))) | .id" | tail -n 1)"
+          if [ -n "$existing" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -X PATCH -f body="$body" --silent || true
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body" --silent || true
+          fi
+
       - name: Fetch trusted base script
         # Only the self-contained sandbox script is needed on the trusted host;
         # PR code is checked out inside Docker. A full actions/checkout of this
@@ -58,7 +102,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          EVENT_PR_NUMBER: ${{ inputs.pr_number || github.event.issue.number }}
         run: |
           set -euo pipefail
           if ! [[ "$EVENT_PR_NUMBER" =~ ^[0-9]+$ ]]; then
@@ -247,4 +291,40 @@ jobs:
               -F line="$inline_line" \
               -f side=RIGHT \
               --silent
+          fi
+
+      - name: React done on /explore command
+        if: ${{ success() && github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=rocket --silent || true
+
+      - name: Report /explore command failure
+        if: ${{ failure() && github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # If a report was produced before the non-zero exit, the report step
+          # already posted it — leave it rather than clobbering useful output.
+          if [ -s "$RUNNER_TEMP/agent-pr-explore-sandbox/artifacts/agent-pr-exploration-report.md" ]; then
+            echo "A report exists despite the non-zero exit; leaving it in place."
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content="-1" --silent || true
+          marker="<!-- agent-pr-explore-sandbox:${PR_NUMBER} -->"
+          body="⚠️ Exploration run failed before producing a report — see [the run]($RUN_URL).
+
+          $marker"
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$marker\"))) | .id" | tail -n 1)"
+          if [ -n "$existing" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -X PATCH -f body="$body" --silent || true
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body" --silent || true
           fi

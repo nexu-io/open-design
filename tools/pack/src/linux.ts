@@ -28,6 +28,7 @@ import {
 
 import type { ToolPackConfig } from "./config.js";
 import { copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
 import { processWebSourcemaps } from "./web-sourcemaps.js";
 
@@ -176,6 +177,9 @@ export function buildDockerArgs(
     `--namespace ${config.namespace}`,
     "--dir /tools-pack",
   ];
+  if (config.requireVelaCli) {
+    innerArgs.push("--require-vela-cli");
+  }
   if (config.portable) {
     innerArgs.push("--portable");
   }
@@ -210,6 +214,23 @@ export function buildDockerArgs(
   ];
   if (config.telemetryRelayUrl != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
+  }
+  const velaBinHost = process.env.OPEN_DESIGN_VELA_CLI_BIN?.trim();
+  if (velaBinHost) {
+    // The container only mounts /project, /tools-pack and cache/home dirs by
+    // default, so a Vela CLI living outside those (a host path like
+    // `~/.local/bin/vela` is the common dev case) would be invisible inside.
+    // Bind-mount the containing directory read-only and rewrite the env to
+    // the container-side path so `copyOptionalVelaCliBinary` can actually
+    // read it.
+    const hostVelaDir = dirname(velaBinHost);
+    const velaBinBase = basename(velaBinHost);
+    const containerVelaDir = "/opt/vela-cli";
+    dockerArgs.push("-v", `${hostVelaDir}:${containerVelaDir}:ro`);
+    dockerArgs.push("-e", `OPEN_DESIGN_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
+  }
+  if (config.amrProfile != null) {
+    dockerArgs.push("-e", `OPEN_DESIGN_AMR_PROFILE=${config.amrProfile}`);
   }
   dockerArgs.push(
     "-w",
@@ -431,6 +452,11 @@ async function copyResourceTree(config: ToolPackConfig, paths: LinuxPaths): Prom
   await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await cp(process.execPath, join(paths.resourceRoot, "bin", "node"));
   await chmod(join(paths.resourceRoot, "bin", "node"), 0o755);
+  await copyOptionalVelaCliBinary({
+    platform: "linux",
+    requireBundled: config.requireVelaCli,
+    resourceRoot: paths.resourceRoot,
+  });
 }
 
 // --- Step 4: writeAssembledApp helper ---
@@ -476,6 +502,7 @@ async function writeAssembledApp(
     paths.packagedConfigPath,
     `${JSON.stringify(
       {
+        ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
         appVersion: version,
         namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",

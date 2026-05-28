@@ -933,7 +933,23 @@ cat > "$artifacts/manifest.json" <<JSON
 }
 JSON
 
-gh pr diff "$PR_NUMBER" --repo "$BASE_REPO" --name-only > "$changed_files_file"
+# gh hits api.github.com under the hood; a single transient blip there
+# (timeout / 5xx) would otherwise abort the whole run before exploration.
+# Retry each read-only PR-context call, buffering its output to a file per
+# attempt (> truncates on open) so a partial/paginated failure cannot
+# duplicate output into the context the agent later reads.
+gh_retry_file() {
+  local out="$1"; shift
+  local attempt
+  for attempt in 1 2 3 4; do
+    if "$@" > "$out"; then return 0; fi
+    [ "$attempt" = 4 ] && return 1
+    echo "::warning::gh call failed (attempt ${attempt}/4): $* — retrying" >&2
+    sleep $((attempt * 4))
+  done
+}
+
+gh_retry_file "$changed_files_file" gh pr diff "$PR_NUMBER" --repo "$BASE_REPO" --name-only
 
 while IFS= read -r changed_path; do
   if is_app_surface_path "$changed_path"; then
@@ -951,6 +967,14 @@ echo "$agent_fixture" > "$artifacts/agent-fixture.txt"
 deterministic_verifier="$(select_deterministic_verifier)"
 echo "$deterministic_verifier" > "$artifacts/deterministic-verifier.txt"
 
+# Fetch PR body + patches to files first (buffered retry), then assemble the
+# context from the files so a retried/paginated call can never duplicate output.
+pr_body_file="$artifacts/pr-body.txt"
+gh_retry_file "$pr_body_file" gh pr view "$PR_NUMBER" --repo "$BASE_REPO" --json title,body --jq '"# " + .title + "\n\n" + (.body // "")'
+pr_patches_file="$artifacts/pr-patches.txt"
+gh_retry_file "$pr_patches_file" gh api --paginate "repos/${BASE_REPO}/pulls/${PR_NUMBER}/files" --jq \
+  '.[] | "### " + .filename + " (" + .status + ", +" + (.additions | tostring) + "/-" + (.deletions | tostring) + ")\n```diff\n" + (if .patch == null then "[binary or generated patch omitted]" else (.patch[0:'"$file_patch_max_chars"'] + (if (.patch | length) > '"$file_patch_max_chars"' then "\n[patch truncated]" else "" end)) end) + "\n```\n"'
+
 {
   echo "# PR #$PR_NUMBER context"
   echo
@@ -960,14 +984,13 @@ echo "$deterministic_verifier" > "$artifacts/deterministic-verifier.txt"
   echo "Head SHA: $HEAD_SHA"
   echo
   echo "## PR body"
-  gh pr view "$PR_NUMBER" --repo "$BASE_REPO" --json title,body --jq '"# " + .title + "\n\n" + (.body // "")'
+  cat "$pr_body_file"
   echo
   echo "## Changed files"
   cat "$changed_files_file"
   echo
   echo "## Text patches"
-  gh api --paginate "repos/${BASE_REPO}/pulls/${PR_NUMBER}/files" --jq \
-    '.[] | "### " + .filename + " (" + .status + ", +" + (.additions | tostring) + "/-" + (.deletions | tostring) + ")\n```diff\n" + (if .patch == null then "[binary or generated patch omitted]" else (.patch[0:'"$file_patch_max_chars"'] + (if (.patch | length) > '"$file_patch_max_chars"' then "\n[patch truncated]" else "" end)) end) + "\n```\n"'
+  cat "$pr_patches_file"
 } > "$context_file"
 head -c "$context_max_bytes" "$context_file" > "$trimmed_context_file"
 if [ "$(wc -c < "$context_file" | tr -d " ")" -gt "$context_max_bytes" ]; then

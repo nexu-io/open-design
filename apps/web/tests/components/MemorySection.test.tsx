@@ -929,6 +929,65 @@ describe('MemorySection', () => {
     expect((within(remountedGithubRow).getByRole('button', { name: 'Connect GitHub' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('shows reconnect guidance for memory connectors with stale authorization', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const lastError = 'GitHub authorization expired. Reconnect GitHub.';
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/connectors/discovery?hydrateTools=false') {
+        return new Response(JSON.stringify({
+          connectors: [
+            {
+              id: 'github',
+              name: 'GitHub',
+              provider: 'composio',
+              category: 'Developer',
+              status: 'error',
+              lastError,
+              tools: [],
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/status') {
+        return new Response(JSON.stringify({
+          statuses: {
+            github: { status: 'error', lastError },
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
+
+    const githubRow = await waitFor(() => {
+      const row = document.querySelector('[data-memory-connector-id="github"]');
+      expect(row).toBeTruthy();
+      return row as HTMLElement;
+    });
+    expect(within(githubRow).getByText(lastError)).toBeTruthy();
+    expect(within(githubRow).getByRole('button', { name: 'Reconnect GitHub' })).toBeTruthy();
+    expect(within(githubRow).queryByText('Select')).toBeNull();
+  });
+
   it('shows connector read failures instead of a generic empty state', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
 

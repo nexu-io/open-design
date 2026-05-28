@@ -177,6 +177,7 @@ jobs:
             --mac-compression normal
             --to dmg
             --json
+            --require-vela-cli
             --signed
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then

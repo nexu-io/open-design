@@ -231,7 +231,10 @@ export interface ChatCommentAttachment {
 }
 
 export type PersistedAgentEvent =
-  | { kind: 'status'; label: string; detail?: string }
+  // `code` carries the structured API error code for `label: 'error'`
+  // status events (e.g. AGENT_AUTH_REQUIRED, RATE_LIMITED). Clients use it to
+  // decide error-specific affordances such as the hosted-AMR nudge.
+  | { kind: 'status'; label: string; detail?: string; code?: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; text: string }
   | {
