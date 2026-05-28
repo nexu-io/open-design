@@ -658,7 +658,12 @@ export function ChatPane({
       snapshot(target);
       const distance =
         target.scrollHeight - target.scrollTop - target.clientHeight;
-      setScrolledFromBottom(distance > 120);
+      // Functional updater bails out when the value is unchanged so a flood
+      // of scroll events (e.g. programmatic scrollTop + ResizeObserver
+      // follow-up during streaming) does not schedule a re-render per tick
+      // and trip React's "Maximum update depth exceeded" guard.
+      const next = distance > 120;
+      setScrolledFromBottom((prev) => (prev === next ? prev : next));
       pinnedToBottomRef.current = distance < 80;
     }
     el.addEventListener('scroll', onScroll);
