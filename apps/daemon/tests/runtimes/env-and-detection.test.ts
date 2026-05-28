@@ -372,6 +372,13 @@ fsTest('detectAgents marks AMR available from packaged built-in Vela with the bu
         '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "vela manual-amr"; exit 0; fi\nexit 0\n',
       );
       chmodSync(builtInVela, 0o755);
+      // The companion tree is only "valid" when an actual `opencode`
+      // executable lives inside — directory-only checks were treating an
+      // empty/partial copy as available and the first real run had nothing
+      // to launch. Match the resources.test.ts packaging contract.
+      const companionExe = join(companionTree, 'opencode');
+      writeFileSync(companionExe, '#!/bin/sh\nexit 0\n');
+      chmodSync(companionExe, 0o755);
       process.env.PATH = '';
       process.env.OD_AGENT_HOME = join(root, 'empty-home');
       process.env.OD_RESOURCE_ROOT = resourceRoot;

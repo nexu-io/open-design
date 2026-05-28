@@ -143,12 +143,19 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("OPEN_DESIGN_AMR_PROFILE=test");
   });
 
-  it("passes the Vela binary override into containerized builds when configured on the host", () => {
+  it("bind-mounts the host Vela binary directory and rewrites the env path into the container", () => {
     const previous = process.env.OPEN_DESIGN_VELA_CLI_BIN;
     process.env.OPEN_DESIGN_VELA_CLI_BIN = "/host/bin/vela";
     try {
       const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
-      expect(args).toContain("OPEN_DESIGN_VELA_CLI_BIN=/host/bin/vela");
+      // The container only mounts /project, /tools-pack, and cache/home by
+      // default — a host-path env value like `/host/bin/vela` would resolve
+      // to a non-existent path inside. The directory must be bind-mounted
+      // and the env rewritten to the container-side path so the resource
+      // copier can actually read the binary.
+      expect(args).toContain("/host/bin:/opt/vela-cli:ro");
+      expect(args).toContain("OPEN_DESIGN_VELA_CLI_BIN=/opt/vela-cli/vela");
+      expect(args).not.toContain("OPEN_DESIGN_VELA_CLI_BIN=/host/bin/vela");
     } finally {
       if (previous === undefined) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
       else process.env.OPEN_DESIGN_VELA_CLI_BIN = previous;

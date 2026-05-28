@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import { createCommandInvocation } from '@open-design/platform';
+
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { getAgentDef } from '../runtimes/registry.js';
@@ -244,10 +246,17 @@ export async function spawnVelaLogin(
     throw new Error('vela binary not found; install vela or configure VELA_BIN');
   }
   const env = spawnEnvForAgent('amr', baseEnv, configuredEnv);
-  const child = spawn(bin, ['login'], {
+  // Route through createCommandInvocation so an npm/Node-style `vela.cmd` or
+  // `vela.bat` shim on Windows gets wrapped under `cmd.exe /d /s /c …` with
+  // verbatim args, matching what `execAgentFile` / chat-run spawning do. A
+  // direct `spawn(bin, args)` on a `.cmd` shim quietly fails to find the
+  // shim's actual entry point. POSIX is unchanged (no wrapping needed).
+  const invocation = createCommandInvocation({ command: bin, args: ['login'], env });
+  const child = spawn(invocation.command, invocation.args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env,
     detached: false,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
   if (typeof child.pid !== 'number') {
     throw new Error('failed to spawn vela login');

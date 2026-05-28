@@ -1417,6 +1417,15 @@ function OnboardingView({
       const nextAgents = await onRefreshAgents();
       if (cliScanTokenRef.current !== scanToken) return;
       const availableAgents = nextAgents.filter((agent) => agent.available && agent.id !== 'amr');
+      // If the user previously had AMR selected (e.g. it was auto-picked once
+      // we detected vela) and they have now chosen the Local CLI path, the
+      // persisted agentId is still 'amr' and would survive Continue without
+      // an explicit click on a local agent card. Switch the selection to the
+      // first available local agent as soon as we have one, so the runtime
+      // and the persisted agent always agree.
+      if (config.agentId === 'amr' && availableAgents[0]) {
+        onAgentChange(availableAgents[0].id);
+      }
       // Scan-result semantics: zero available CLIs is a `failed` outcome
       // because the user's runtime path is blocked, even though the
       // detect call itself returned successfully. `detected_cli_count`

@@ -53,6 +53,13 @@ fsTest(
         mkdirSync(companionTree, { recursive: true });
         writeFileSync(builtInVela, '#!/bin/sh\nexit 0\n');
         chmodSync(builtInVela, 0o755);
+        // Match the resources.test.ts packaging contract: the companion tree
+        // is only valid when `<libexec>/opencode/opencode` actually exists +
+        // is executable. Directory-only checks were producing a false-positive
+        // availability path.
+        const companionExe = join(companionTree, 'opencode');
+        writeFileSync(companionExe, '#!/bin/sh\nexit 0\n');
+        chmodSync(companionExe, 0o755);
         process.env.PATH = '';
         process.env.OD_AGENT_HOME = join(root, 'empty-home');
         process.env.OD_RESOURCE_ROOT = resourceRoot;

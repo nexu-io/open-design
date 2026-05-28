@@ -215,8 +215,19 @@ export function buildDockerArgs(
   if (config.telemetryRelayUrl != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
   }
-  if (process.env.OPEN_DESIGN_VELA_CLI_BIN?.trim()) {
-    dockerArgs.push("-e", `OPEN_DESIGN_VELA_CLI_BIN=${process.env.OPEN_DESIGN_VELA_CLI_BIN.trim()}`);
+  const velaBinHost = process.env.OPEN_DESIGN_VELA_CLI_BIN?.trim();
+  if (velaBinHost) {
+    // The container only mounts /project, /tools-pack and cache/home dirs by
+    // default, so a Vela CLI living outside those (a host path like
+    // `~/.local/bin/vela` is the common dev case) would be invisible inside.
+    // Bind-mount the containing directory read-only and rewrite the env to
+    // the container-side path so `copyOptionalVelaCliBinary` can actually
+    // read it.
+    const hostVelaDir = dirname(velaBinHost);
+    const velaBinBase = basename(velaBinHost);
+    const containerVelaDir = "/opt/vela-cli";
+    dockerArgs.push("-v", `${hostVelaDir}:${containerVelaDir}:ro`);
+    dockerArgs.push("-e", `OPEN_DESIGN_VELA_CLI_BIN=${containerVelaDir}/${velaBinBase}`);
   }
   if (config.amrProfile != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_AMR_PROFILE=${config.amrProfile}`);

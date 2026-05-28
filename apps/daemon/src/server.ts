@@ -10873,12 +10873,47 @@ export async function startServer({
         liveModels.map((candidate) => candidate?.id).filter(Boolean),
       );
       if (liveModelIds.size === 0) {
+        // An empty AMR catalog usually means the user is signed out — `vela
+        // models` returns 401 and the catch above leaves `liveModels` empty.
+        // Surface AMR_AUTH_REQUIRED first so the chat shows the relogin
+        // affordance; otherwise the user sees a misleading "choose a model"
+        // when the real fix is to sign in.
+        if (def.id === 'amr') {
+          const loginStatus = readVelaLoginStatus(
+            modelProbeEnv ?? process.env,
+            configuredAgentEnv,
+          );
+          if (!loginStatus.loggedIn) {
+            sendAmrAccountFailure({
+              code: 'AMR_AUTH_REQUIRED',
+              message:
+                'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
+              action: 'relogin',
+            });
+            return design.runs.finish(run, 'failed', 1, null);
+          }
+        }
         send('error', createAmrModelUnavailablePayload(safeModel, {
           reason: 'model_catalog_unavailable',
         }));
         return design.runs.finish(run, 'failed', 1, null);
       }
-      if (!safeModel || safeModel === 'default') {
+      // `safeModel` was pre-resolved via the agent-wide cached model order,
+      // so a request that came in as 'default' (or empty) is already a
+      // concrete id by this point — `safeModel === 'default'` is rarely true.
+      // If the user actually asked for the agent default and the cached id no
+      // longer appears in the FRESH catalog (e.g. the AMR Link catalog rolled
+      // since `/api/agents` last responded), fall back to `liveModels[0]` from
+      // the fresh probe instead of rejecting their run as `AMR_MODEL_UNAVAILABLE`.
+      const userAskedForDefault =
+        typeof model !== 'string' ||
+        !model.trim() ||
+        model.trim().toLowerCase() === 'default';
+      if (
+        !safeModel ||
+        safeModel === 'default' ||
+        (userAskedForDefault && !liveModelIds.has(safeModel))
+      ) {
         safeModel = liveModels[0]?.id ?? null;
         agentOptions.model = safeModel;
       }

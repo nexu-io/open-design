@@ -138,13 +138,49 @@ export function resolveAmrOpenCodeExecutable(
 ): string | null {
   const configured = executableFilePath(env.VELA_OPENCODE_BIN);
   if (configured) return configured;
+  // In packaged builds prefer the bundled companion under
+  // `OD_RESOURCE_ROOT/bin/libexec/opencode/opencode` so a stale global
+  // `opencode` on the user's PATH can't override the known-good build that
+  // shipped with this app. PATH is only consulted as a last resort.
+  const resourceRoot = (
+    env.OD_RESOURCE_ROOT ?? process.env.OD_RESOURCE_ROOT
+  )?.trim();
+  if (resourceRoot) {
+    const bundledDir = packagedVelaOpenCodeCompanionTree(resourceRoot);
+    if (bundledDir) {
+      const bundled = executableFilePath(
+        path.join(
+          bundledDir,
+          process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+        ),
+      );
+      if (bundled) return bundled;
+    }
+  }
   return resolveOnPath('opencode-cli') ?? resolveOnPath('opencode');
 }
 
+// `tools/pack/tests/resources.test.ts` ships the AMR OpenCode companion as a
+// `<resourceRoot>/bin/libexec/opencode/opencode` *executable file*, not just
+// the directory. Treating any directory there as a valid companion produces a
+// false-positive availability path: `detectAgents()` would surface AMR as
+// available even though the first real run can't launch (`vela` would spawn
+// a missing/non-executable inner binary). Verify the inner executable too.
 function packagedVelaOpenCodeCompanionTree(resourceRoot: string): string | null {
   const candidate = path.join(resourceRoot, 'bin', 'libexec', 'opencode');
+  const exe = path.join(
+    candidate,
+    process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+  );
   try {
-    return statSync(candidate).isDirectory() ? candidate : null;
+    if (!statSync(candidate).isDirectory()) return null;
+    if (!statSync(exe).isFile()) return null;
+    if (process.platform === 'win32') {
+      if (!looksExecutableOnWindows(exe)) return null;
+    } else {
+      accessSync(exe, constants.X_OK);
+    }
+    return candidate;
   } catch {
     return null;
   }
