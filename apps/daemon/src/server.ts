@@ -316,7 +316,10 @@ import {
   readMcpConfig,
   writeMcpConfig,
 } from './mcp-config.js';
-import { resolveExternalMcpServersForRun } from './run-tool-bundle.js';
+import {
+  parseRunToolBundleForRequest,
+  resolveExternalMcpServersForRun,
+} from './run-tool-bundle.js';
 import {
   beginAuth,
   exchangeCodeForToken,
@@ -13014,9 +13017,14 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const mediaExecution = parseMediaExecutionPolicyInput(req.body?.mediaExecution);
+    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
+    }
+    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
+    if (!toolBundle.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
     // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
     // before the run is created. The resolver returns null when the body
@@ -13033,7 +13041,7 @@ export async function startServer({
     // bundled scenario that is not installed leaves the run plugin-less,
     // which matches the legacy path.
     let resolvedSnapshot = null;
-    if (typeof req.body?.projectId === 'string' && req.body.projectId) {
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let registryView;
       try {
         registryView = await loadPluginRegistryView();
@@ -13041,26 +13049,26 @@ export async function startServer({
         return res.status(500).json({ error: String(err) });
       }
       const explicitPlugin =
-        req.body && (req.body.pluginId || req.body.appliedPluginSnapshotId);
-      let runResolveBody = req.body;
+        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
+      let runResolveBody = requestBody;
       if (!explicitPlugin) {
-        const projectRow = getProject(db, req.body.projectId);
+        const projectRow = getProject(db, requestBody.projectId);
         const hasPin =
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
         if (!hasPin) {
           const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-            runResolveBody = { ...req.body, pluginId: fallbackPluginId };
+            runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
           }
         }
       }
       const resolved = resolvePluginSnapshot({
         db,
         body: runResolveBody,
-        projectId: req.body.projectId,
-        conversationId: typeof req.body.conversationId === 'string'
-          ? req.body.conversationId
+        projectId: requestBody.projectId,
+        conversationId: typeof requestBody.conversationId === 'string'
+          ? requestBody.conversationId
           : null,
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
@@ -13068,7 +13076,7 @@ export async function startServer({
       if (resolved && !resolved.ok) {
         if (!explicitPlugin) {
           console.warn(
-            `[plugins] default-scenario fallback skipped for run on project ${req.body.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
+            `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
           );
         } else {
           return res.status(resolved.status).json(resolved.body);
@@ -13077,7 +13085,11 @@ export async function startServer({
         resolvedSnapshot = resolved;
       }
     }
-    const meta = { ...(req.body || {}), mediaExecution: mediaExecution.policy };
+    const meta = {
+      ...requestBody,
+      mediaExecution: mediaExecution.policy,
+      toolBundle: toolBundle.bundle,
+    };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
       if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
@@ -13586,11 +13598,20 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const mediaExecution = parseMediaExecutionPolicyInput(req.body?.mediaExecution);
+    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
     }
-    const meta = { ...(req.body || {}), mediaExecution: mediaExecution.policy };
+    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
+    if (!toolBundle.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    const meta = {
+      ...requestBody,
+      mediaExecution: mediaExecution.policy,
+      toolBundle: toolBundle.bundle,
+    };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(meta, run));

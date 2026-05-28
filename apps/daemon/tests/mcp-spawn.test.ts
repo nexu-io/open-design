@@ -347,6 +347,45 @@ describe('spawn writes external MCP config for Claude Code', () => {
     });
   }, 30_000);
 
+  it('rejects malformed run-scoped MCP bundles before creating runs', async () => {
+    const { id } = await createProject();
+
+    const invalidRunsRes = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        projectId: id,
+        message: 'bad tools',
+        toolBundle: {
+          mcpServers: [
+            {
+              id: 'missing-command',
+              transport: 'stdio',
+            },
+          ],
+        },
+      }),
+    });
+    expect(invalidRunsRes.status).toBe(400);
+    const runsBody = (await invalidRunsRes.json()) as { error?: { message?: string } };
+    expect(runsBody.error?.message).toContain('toolBundle.mcpServers[0] is invalid');
+
+    const invalidChatRes = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        projectId: id,
+        message: 'bad tools',
+        toolBundle: 'bad',
+      }),
+    });
+    expect(invalidChatRes.status).toBe(400);
+    const chatBody = (await invalidChatRes.json()) as { error?: { message?: string } };
+    expect(chatBody.error?.message).toContain('toolBundle must be an object');
+  });
+
   it('does not write .mcp.json for ACP agents (Hermes wires via session args)', async () => {
     // ACP agents (Hermes/Kimi) consume the `mcpServers` array via the ACP
     // session/new params instead of `.mcp.json`. The `.mcp.json` write path

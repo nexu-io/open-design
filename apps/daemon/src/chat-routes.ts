@@ -21,6 +21,7 @@ import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectio
 import { googleStreamGenerateContentUrl } from './google-models.js';
 import { parseMediaExecutionPolicyInput } from './media-policy.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
+import { parseRunToolBundleForRequest } from './run-tool-bundle.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -229,7 +230,17 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
     }
-    const runBody = { ...body, mediaExecution: mediaExecution.policy };
+    const toolBundle = parseRunToolBundleForRequest(
+      (body as { toolBundle?: unknown }).toolBundle,
+    );
+    if (!toolBundle.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    const runBody = {
+      ...body,
+      mediaExecution: mediaExecution.policy,
+      toolBundle: toolBundle.bundle,
+    };
     const run = design.runs.create(runBody);
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(runBody, run));

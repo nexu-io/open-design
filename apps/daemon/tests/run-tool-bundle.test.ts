@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   normalizeRunToolBundleForRun,
+  parseRunToolBundleForRequest,
   resolveExternalMcpServersForRun,
   summarizeRunToolBundle,
 } from '../src/run-tool-bundle.js';
@@ -89,6 +90,45 @@ describe('run-scoped tool bundles', () => {
 
     expect(selection.enabledServers.map((server) => server.id)).toEqual(['run-only']);
     expect([...selection.persistedTokenServerIds]).toEqual([]);
+  });
+
+  it('rejects malformed run-scoped MCP server entries for request payloads', () => {
+    expect(parseRunToolBundleForRequest('bad')).toEqual({
+      ok: false,
+      message: 'toolBundle must be an object',
+    });
+    expect(parseRunToolBundleForRequest({ mcpServers: 'bad' })).toEqual({
+      ok: false,
+      message: 'toolBundle.mcpServers must be an array',
+    });
+    expect(parseRunToolBundleForRequest({
+      mcpServers: [
+        {
+          id: 'missing-command',
+          transport: 'stdio',
+        },
+      ],
+    })).toEqual({
+      ok: false,
+      message: 'toolBundle.mcpServers[0] is invalid',
+    });
+    expect(parseRunToolBundleForRequest({
+      mcpServers: [
+        {
+          id: 'dup',
+          transport: 'stdio',
+          command: 'node',
+        },
+        {
+          id: 'dup',
+          transport: 'http',
+          url: 'https://example.test/mcp',
+        },
+      ],
+    })).toEqual({
+      ok: false,
+      message: 'toolBundle.mcpServers[1] duplicates server id "dup"',
+    });
   });
 
   it('lets a run-scoped server override persisted config without inheriting persisted tokens', () => {

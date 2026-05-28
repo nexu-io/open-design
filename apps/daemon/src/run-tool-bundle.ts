@@ -1,5 +1,5 @@
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp-config.js';
-import { sanitizeMcpConfig } from './mcp-config.js';
+import { sanitizeMcpConfig, sanitizeMcpServer } from './mcp-config.js';
 
 export interface RunToolBundle {
   mcpServers: McpServerConfig[];
@@ -21,6 +21,10 @@ export interface ExternalMcpSelection {
   persistedTokenServerIds: Set<string>;
 }
 
+export type RunToolBundleParseResult =
+  | { ok: true; bundle: RunToolBundle }
+  | { ok: false; message: string };
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -30,6 +34,38 @@ export function normalizeRunToolBundleForRun(raw: unknown): RunToolBundle {
   return {
     mcpServers: sanitizeMcpConfig({ servers: raw.mcpServers }).servers,
   };
+}
+
+export function parseRunToolBundleForRequest(raw: unknown): RunToolBundleParseResult {
+  if (raw == null) return { ok: true, bundle: { mcpServers: [] } };
+  if (!isPlainObject(raw)) {
+    return { ok: false, message: 'toolBundle must be an object' };
+  }
+  if (raw.mcpServers == null) return { ok: true, bundle: { mcpServers: [] } };
+  if (!Array.isArray(raw.mcpServers)) {
+    return { ok: false, message: 'toolBundle.mcpServers must be an array' };
+  }
+
+  const seen = new Set<string>();
+  const servers: McpServerConfig[] = [];
+  for (const [index, entry] of raw.mcpServers.entries()) {
+    const server = sanitizeMcpServer(entry);
+    if (!server) {
+      return {
+        ok: false,
+        message: `toolBundle.mcpServers[${index}] is invalid`,
+      };
+    }
+    if (seen.has(server.id)) {
+      return {
+        ok: false,
+        message: `toolBundle.mcpServers[${index}] duplicates server id "${server.id}"`,
+      };
+    }
+    seen.add(server.id);
+    servers.push(server);
+  }
+  return { ok: true, bundle: { mcpServers: servers } };
 }
 
 export function summarizeRunToolBundle(bundle: RunToolBundle | null | undefined): RunToolBundleSummary {
