@@ -197,6 +197,72 @@ describe('spawn writes external MCP config for Claude Code', () => {
     });
   }, 30_000);
 
+  it('injects run-scoped MCP servers without saving them to the persistent registry', async () => {
+    await withFakeClaude(async () => {
+      const { id, dir } = await createProject();
+
+      const chatRes = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: id,
+          message: 'hello run-scoped mcp',
+          toolBundle: {
+            mcpServers: [
+              {
+                id: 'run-local',
+                transport: 'stdio',
+                command: 'node',
+                args: ['run-tool.js'],
+                env: { RUN_ONLY: '1' },
+              },
+              {
+                id: 'run-remote',
+                transport: 'http',
+                enabled: true,
+                authMode: 'none',
+                url: 'https://example.test/mcp',
+                headers: { 'X-Run': 'ok' },
+              },
+            ],
+          },
+        }),
+      });
+      expect(chatRes.status).toBe(202);
+      const { runId } = (await chatRes.json()) as { runId: string };
+      const status = await waitForRunStatus(baseUrl, runId) as {
+        status: string;
+        toolBundle?: { mcpServers?: Array<{ id: string }> };
+      };
+      expect(status.status).toBe('succeeded');
+      expect(status.toolBundle?.mcpServers?.map((server) => server.id)).toEqual([
+        'run-local',
+        'run-remote',
+      ]);
+
+      const target = join(dir, '.mcp.json');
+      expect(existsSync(target)).toBe(true);
+      const written = JSON.parse(await fsp.readFile(target, 'utf8'));
+      expect(written.mcpServers.run_local).toBeUndefined();
+      expect(written.mcpServers['run-local']).toMatchObject({
+        command: 'node',
+        args: ['run-tool.js'],
+        env: { RUN_ONLY: '1' },
+      });
+      expect(written.mcpServers['run-remote']).toMatchObject({
+        type: 'http',
+        url: 'https://example.test/mcp',
+        headers: { 'X-Run': 'ok' },
+      });
+
+      const persistedRes = await fetch(`${baseUrl}/api/mcp/servers`);
+      expect(persistedRes.ok).toBe(true);
+      const persisted = (await persistedRes.json()) as { servers: unknown[] };
+      expect(persisted.servers).toEqual([]);
+    });
+  }, 30_000);
+
   it('does not write .mcp.json for ACP agents (Hermes wires via session args)', async () => {
     // ACP agents (Hermes/Kimi) consume the `mcpServers` array via the ACP
     // session/new params instead of `.mcp.json`. The `.mcp.json` write path
