@@ -521,30 +521,81 @@ async function runAuth(args) {
     process.exit(2);
   }
   const keySub = args.find((a, i) => i > 0 && !a.startsWith('-')) || '';
-  const path = await import('node:path');
-  const { resolveProjectRoot, resolveDataDir } = await import('./server.js');
-  const { generateKey, listKeys, revokeKey } = await import('./auth-store.js');
-  const PROJECT_ROOT = resolveProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
-  const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+
+  let daemonAvailable = false;
+  let base = '';
+  try {
+    base = (await cliDaemonBaseUrl(parseFlags(args))).replace(/\/$/, '');
+    const probe = await fetch(`${base}/api/health`);
+    daemonAvailable = probe.ok;
+  } catch {}
 
   if (keySub === 'generate') {
     const labelIdx = args.indexOf('--label');
     const label = labelIdx >= 0 ? args[labelIdx + 1] : '';
-    const entry = await generateKey(dataDir, label);
-    console.log(`Generated API key (id: ${entry.id}):`);
-    console.log(entry.key);
-    console.log('\nStore this key securely. It will not be shown again.');
+
+    if (daemonAvailable) {
+      const resp = await daemonFetch(base, '/api/auth/keys', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(`daemon ${resp.status}: ${text}`);
+        process.exit(1);
+      }
+      const entry = await resp.json();
+      console.log(`Generated API key (id: ${entry.id}):`);
+      console.log(entry.key);
+      console.log('\nStore this key securely. It will not be shown again.');
+      console.log('Auth is now active on the running daemon.');
+    } else {
+      const path = await import('node:path');
+      const { resolveProjectRoot, resolveDataDir } = await import('./server.js');
+      const { generateKey } = await import('./auth-store.js');
+      const PROJECT_ROOT = resolveProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
+      const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+      const entry = await generateKey(dataDir, label);
+      console.log(`Generated API key (id: ${entry.id}):`);
+      console.log(entry.key);
+      console.log('\nStore this key securely. It will not be shown again.');
+      console.log('WARNING: The daemon is not running. Restart it for this key to take effect.');
+    }
     process.exit(0);
   }
 
   if (keySub === 'list') {
-    const keys = await listKeys(dataDir);
-    if (keys.length === 0) {
-      console.log('No API keys configured.');
+    if (daemonAvailable) {
+      const resp = await daemonFetch(base, '/api/auth/keys');
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(`daemon ${resp.status}: ${text}`);
+        process.exit(1);
+      }
+      const keys = await resp.json();
+      if (keys.length === 0) {
+        console.log('No API keys configured.');
+      } else {
+        for (const k of keys) {
+          const lbl = k.label ? ` (${k.label})` : '';
+          console.log(`  ${k.id}${lbl}  created: ${new Date(k.createdAt).toISOString()}`);
+        }
+      }
     } else {
-      for (const k of keys) {
-        const label = k.label ? ` (${k.label})` : '';
-        console.log(`  ${k.id}${label}  created: ${new Date(k.createdAt).toISOString()}`);
+      const path = await import('node:path');
+      const { resolveProjectRoot, resolveDataDir } = await import('./server.js');
+      const { listKeys } = await import('./auth-store.js');
+      const PROJECT_ROOT = resolveProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
+      const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+      const keys = await listKeys(dataDir);
+      if (keys.length === 0) {
+        console.log('No API keys configured.');
+      } else {
+        for (const k of keys) {
+          const lbl = k.label ? ` (${k.label})` : '';
+          console.log(`  ${k.id}${lbl}  created: ${new Date(k.createdAt).toISOString()}`);
+        }
       }
     }
     process.exit(0);
@@ -556,12 +607,37 @@ async function runAuth(args) {
       console.error('Usage: od auth key revoke <id>');
       process.exit(2);
     }
-    const removed = await revokeKey(dataDir, id);
-    if (removed) {
-      console.log(`Key ${id} revoked.`);
+
+    if (daemonAvailable) {
+      const resp = await daemonFetch(base, `/api/auth/keys/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error(`daemon ${resp.status}: ${text}`);
+        process.exit(1);
+      }
+      const data = await resp.json();
+      if (data.ok) {
+        console.log(`Key ${id} revoked.`);
+      } else {
+        console.error(`Key ${id} not found.`);
+        process.exit(1);
+      }
     } else {
-      console.error(`Key ${id} not found.`);
-      process.exit(1);
+      const path = await import('node:path');
+      const { resolveProjectRoot, resolveDataDir } = await import('./server.js');
+      const { revokeKey } = await import('./auth-store.js');
+      const PROJECT_ROOT = resolveProjectRoot(path.dirname(fileURLToPath(import.meta.url)));
+      const dataDir = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+      const removed = await revokeKey(dataDir, id);
+      if (removed) {
+        console.log(`Key ${id} revoked.`);
+        console.log('WARNING: The daemon is not running. Restart it for revocation to take effect.');
+      } else {
+        console.error(`Key ${id} not found.`);
+        process.exit(1);
+      }
     }
     process.exit(0);
   }
@@ -919,6 +995,19 @@ async function cliDaemonUrl(flags) {
 
 async function cliDaemonBaseUrl(flags) {
   return (await cliDaemonUrl(flags)).replace(/\/$/, '');
+}
+
+function cliAuthHeaders(): Record<string, string> {
+  const key = process.env.OD_API_KEY;
+  return key ? { authorization: `Bearer ${key}` } : {};
+}
+
+async function daemonFetch(base: string, path: string, init?: RequestInit): Promise<Response> {
+  const merged: Record<string, string> = {
+    ...cliAuthHeaders(),
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  return fetch(`${base}${path}`, { ...init, headers: merged });
 }
 
 function printMediaHelp() {
@@ -1486,9 +1575,9 @@ Exit codes:
     const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
     try {
       const [skillsResp, dsResp, atomsResp] = await Promise.all([
-        fetch(`${base}/api/skills`).catch(() => null),
-        fetch(`${base}/api/design-systems`).catch(() => null),
-        fetch(`${base}/api/atoms`).catch(() => null),
+        daemonFetch(base, '/api/skills').catch(() => null),
+        daemonFetch(base, '/api/design-systems').catch(() => null),
+        daemonFetch(base, '/api/atoms').catch(() => null),
       ]);
       const skills = (skillsResp?.ok ? (await skillsResp.json())?.skills : []) ?? [];
       const designSystems = (dsResp?.ok ? (await dsResp.json())?.designSystems : []) ?? [];
@@ -1797,7 +1886,7 @@ view is the single source of truth.`);
     ? flags.out
     : process.cwd();
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
-  const resp = await fetch(`${base}/api/applied-plugins/export`, {
+  const resp = await daemonFetch(base, '/api/applied-plugins/export', {
     method:  'POST',
     headers: { 'content-type': 'application/json' },
     body:    JSON.stringify({
@@ -1845,7 +1934,7 @@ Common options:
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}/api/marketplaces`);
+      const resp = await daemonFetch(base, '/api/marketplaces');
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return structuredHttpFailure(resp);
       if (flags.json) {
@@ -1872,7 +1961,7 @@ Common options:
         process.exit(2);
       }
       const tag = typeof flags.tag === 'string' ? flags.tag.toLowerCase() : null;
-      const resp = await fetch(`${base}/api/marketplaces`);
+      const resp = await daemonFetch(base, '/api/marketplaces');
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       const matches = [];
@@ -1917,7 +2006,7 @@ Common options:
         console.error('Usage: od marketplace plugins <id> [--json]');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/marketplaces/${encodeURIComponent(id)}/plugins`);
+      const resp = await daemonFetch(base, `/api/marketplaces/${encodeURIComponent(id)}/plugins`);
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         console.error(`plugins failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -1941,8 +2030,8 @@ Common options:
       const strict = flags.strict === true;
       const id = rest.find((a) => !a.startsWith('-'));
       const resp = id
-        ? await fetch(`${base}/api/marketplaces/${encodeURIComponent(id)}`)
-        : await fetch(`${base}/api/marketplaces`);
+        ? await daemonFetch(base, `/api/marketplaces/${encodeURIComponent(id)}`)
+        : await daemonFetch(base, '/api/marketplaces');
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         console.error(`doctor failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -1993,7 +2082,7 @@ Common options:
         process.exit(2);
       }
       const trust = flags.trust ?? 'restricted';
-      const resp = await fetch(`${base}/api/marketplaces`, {
+      const resp = await daemonFetch(base, '/api/marketplaces', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ url, trust }),
@@ -2092,8 +2181,8 @@ async function runPluginSnapshots(args) {
     }
     const [idA, idB] = positional;
     const [respA, respB] = await Promise.all([
-      fetch(`${base}/api/applied-plugins/${encodeURIComponent(idA)}`),
-      fetch(`${base}/api/applied-plugins/${encodeURIComponent(idB)}`),
+      daemonFetch(base, `/api/applied-plugins/${encodeURIComponent(idA)}`),
+      daemonFetch(base, `/api/applied-plugins/${encodeURIComponent(idB)}`),
     ]);
     if (respA.status === 404) { console.error(`snapshot ${idA} not found`); process.exit(72); }
     if (respB.status === 404) { console.error(`snapshot ${idB} not found`); process.exit(72); }
@@ -2201,7 +2290,7 @@ async function runPluginRun(rest) {
     : [];
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
   // 1. Apply (returns ApplyResult + manifestSourceDigest).
-  const applyResp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}/apply`, {
+  const applyResp = await daemonFetch(base, `/api/plugins/${encodeURIComponent(id)}/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ inputs, grantCaps, projectId: flags.project }),
@@ -2213,7 +2302,7 @@ async function runPluginRun(rest) {
   }
   // 2. Start the run with pluginId so the daemon resolver pins the
   //    snapshot to the run object.
-  const runResp = await fetch(`${base}/api/runs`, {
+  const runResp = await daemonFetch(base, '/api/runs', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -2461,7 +2550,7 @@ async function runPluginInfo(rest) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
-  const mpResp = await fetch(`${base}/api/marketplaces`);
+  const mpResp = await daemonFetch(base, '/api/marketplaces');
   if (mpResp.ok) {
     const mpData = await mpResp.json().catch(() => ({}));
     const resolved = resolveMarketplacePluginFromList(
@@ -2758,7 +2847,7 @@ Lifecycle vocabulary:
       console.error('[events purge] refusing without --confirm. This drops every event in the in-memory buffer.');
       process.exit(2);
     }
-    const resp = await fetch(`${base}/api/plugins/events/purge`, { method: 'POST' });
+    const resp = await daemonFetch(base, '/api/plugins/events/purge', { method: 'POST' });
     if (!resp.ok) {
       console.error(`POST /api/plugins/events/purge failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
@@ -2773,7 +2862,7 @@ Lifecycle vocabulary:
   }
 
   if (sub === 'stats') {
-    const resp = await fetch(`${base}/api/plugins/events/stats`);
+    const resp = await daemonFetch(base, '/api/plugins/events/stats');
     if (!resp.ok) {
       console.error(`GET /api/plugins/events/stats failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
@@ -2932,7 +3021,7 @@ Exit codes:
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
 
   // 1. Resolve the plugin record (fsPath + manifest).
-  const pluginResp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}`);
+  const pluginResp = await daemonFetch(base, `/api/plugins/${encodeURIComponent(id)}`);
   if (pluginResp.status === 404) {
     console.error(`plugin ${id} not found`);
     process.exit(65);
@@ -2970,7 +3059,7 @@ Exit codes:
     c === 'doctor' || c === 'simulate' || c === 'canon'));
   let doctorReport = null;
   if (enabledSet.has('doctor')) {
-    const doctorResp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}/doctor`);
+    const doctorResp = await daemonFetch(base, `/api/plugins/${encodeURIComponent(id)}/doctor`);
     if (doctorResp.ok) {
       doctorReport = await doctorResp.json();
     }
@@ -3102,7 +3191,7 @@ Closed signal vocabulary:
   // Fetch the plugin from the daemon so we get the resolved
   // manifest (including pipeline).
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
-  const resp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}`);
+  const resp = await daemonFetch(base, `/api/plugins/${encodeURIComponent(id)}`);
   if (resp.status === 404) {
     console.error(`plugin ${id} not found`);
     process.exit(65);
@@ -3257,8 +3346,8 @@ into 'added' / 'removed' / 'changed' with one line per field.`);
   const [idA, idB] = positional;
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
   const [respA, respB] = await Promise.all([
-    fetch(`${base}/api/plugins/${encodeURIComponent(idA)}`),
-    fetch(`${base}/api/plugins/${encodeURIComponent(idB)}`),
+    daemonFetch(base, `/api/plugins/${encodeURIComponent(idA)}`),
+    daemonFetch(base, `/api/plugins/${encodeURIComponent(idB)}`),
   ]);
   if (!respA.ok) {
     console.error(`GET /api/plugins/${idA} failed: ${respA.status}`);
@@ -3489,7 +3578,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
   if (sub === 'list') {
     const qs = flags['include-dismissed'] ? '?includeDismissed=true' : '';
-    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates${qs}`);
+    const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates${qs}`);
     const data = await resp.json().catch(() => null);
     if (!resp.ok) {
       console.error(`GET plugin candidates failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -3512,7 +3601,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
     process.exit(2);
   }
   if (sub === 'draft') {
-    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/draft`, {
+    const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/draft`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
@@ -3529,7 +3618,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
     process.exit(resp.ok ? 0 : resp.status === 422 ? 4 : 1);
   }
   if (sub === 'dismiss') {
-    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/dismiss`, {
+    const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/dismiss`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
@@ -3587,7 +3676,7 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   // SQLite handle; everything stays loopback-mediated.
   let meta = { pluginId: id, pluginVersion: '0.0.0' };
   try {
-    const resp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}`);
+    const resp = await daemonFetch(base, `/api/plugins/${encodeURIComponent(id)}`);
     if (resp.ok) {
       const row = await resp.json();
       // The daemon's plugin row carries a stored `version` plus the full
@@ -4948,7 +5037,7 @@ Common options:
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}/api/projects`);
+      const resp = await daemonFetch(base, '/api/projects');
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -4966,7 +5055,7 @@ Common options:
         console.error('Usage: od project info <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`);
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5002,7 +5091,7 @@ Common options:
       if (flags['grant-caps']) {
         body.grantCaps = String(flags['grant-caps']).split(',').map((c) => c.trim()).filter(Boolean);
       }
-      const resp = await fetch(`${base}/api/projects`, {
+      const resp = await daemonFetch(base, '/api/projects', {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
@@ -5041,7 +5130,7 @@ Common options:
       if (importToken != null) {
         headers['x-od-desktop-import-token'] = importToken;
       }
-      const resp = await fetch(`${base}/api/import/folder`, {
+      const resp = await daemonFetch(base, '/api/import/folder', {
         method:  'POST',
         headers,
         body:    JSON.stringify(body),
@@ -5079,13 +5168,13 @@ Common options:
         console.error('Usage: od project delete <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       console.log(`[project] deleted ${id}`);
       return;
     }
     case 'editors': {
-      const resp = await fetch(`${base}/api/editors`);
+      const resp = await daemonFetch(base, '/api/editors');
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5107,7 +5196,7 @@ Common options:
         console.error('--editor <slug> is required. Run `od project editors` to list options.');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/open-in`, {
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/open-in`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ editorId: editor }),
@@ -5171,7 +5260,7 @@ Common options:
         console.error('Usage: od run info <runId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
+      const resp = await daemonFetch(base, `/api/runs/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5183,7 +5272,7 @@ Common options:
         console.error('Usage: od run cancel <runId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+      const resp = await daemonFetch(base, `/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       console.log(`[run] cancelled ${id}`);
       return;
@@ -5278,7 +5367,7 @@ Common options:
         body.grantCaps = String(flags['grant-caps']).split(',').map((c) => c.trim()).filter(Boolean);
       }
       if (flags['snapshot-id']) body.appliedPluginSnapshotId = flags['snapshot-id'];
-      const resp = await fetch(`${base}/api/runs`, {
+      const resp = await daemonFetch(base, '/api/runs', {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
@@ -5319,7 +5408,7 @@ Common options:
 // Each line is one event: { event, data } so a code agent can parse it
 // without needing an SSE library.
 async function streamRunEvents(base, runId) {
-  const resp = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, {
+  const resp = await daemonFetch(base, `/api/runs/${encodeURIComponent(runId)}/events`, {
     headers: { accept: 'text/event-stream' },
   });
   if (!resp.ok || !resp.body) {
@@ -5502,7 +5591,7 @@ Common options:
         console.error('Usage: od files list <projectId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`);
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/files`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5517,7 +5606,7 @@ Common options:
         console.error('Usage: od files read <projectId> <relpath>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`);
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const buf = Buffer.from(await resp.arrayBuffer());
       process.stdout.write(buf);
@@ -5537,7 +5626,7 @@ Common options:
       const desiredName = typeof flags.as === 'string' && flags.as.length > 0
         ? flags.as
         : path.basename(localPath);
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify({
@@ -5570,7 +5659,7 @@ Common options:
         process.exit(1);
       }
       const body = Buffer.concat(chunks);
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify({
@@ -5592,7 +5681,7 @@ Common options:
         console.error('Usage: od files delete <projectId> <name>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
       if (!resp.ok) return structuredHttpFailure(resp);
       console.log(`[files] deleted ${name}`);
       return;
@@ -5967,7 +6056,7 @@ Common options:
         }
         body.forkAfterMessageId = flags['fork-after'];
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/conversations`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
@@ -5985,7 +6074,7 @@ Common options:
         console.error('Usage: od conversation list <projectId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`);
+      const resp = await daemonFetch(base, `/api/projects/${encodeURIComponent(id)}/conversations`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5997,7 +6086,7 @@ Common options:
         console.error('Usage: od conversation info <conversationId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
+      const resp = await daemonFetch(base, `/api/conversations/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -6167,7 +6256,7 @@ vacuum:
   }
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   if (sub === 'vacuum') {
-    const resp = await fetch(`${base}/api/daemon/db/vacuum`, { method: 'POST' });
+    const resp = await daemonFetch(base, '/api/daemon/db/vacuum', { method: 'POST' });
     if (!resp.ok) {
       console.error(`POST /api/daemon/db/vacuum failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
@@ -6211,7 +6300,7 @@ vacuum:
     console.error(`unknown subcommand: od daemon db ${sub}`);
     process.exit(2);
   }
-  const resp = await fetch(`${base}/api/daemon/db`);
+  const resp = await daemonFetch(base, '/api/daemon/db');
   if (!resp.ok) {
     console.error(`GET /api/daemon/db failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
@@ -6280,7 +6369,7 @@ async function runDaemonStatus(flags) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
   try {
-    resp = await fetch(`${base}/api/daemon/status`);
+    resp = await daemonFetch(base, '/api/daemon/status');
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
@@ -6297,7 +6386,7 @@ async function runDaemonStop(flags) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
   try {
-    resp = await fetch(`${base}/api/daemon/shutdown`, { method: 'POST' });
+    resp = await daemonFetch(base, '/api/daemon/shutdown', { method: 'POST' });
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
@@ -6338,7 +6427,7 @@ Common options:
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}/api/atoms`);
+      const resp = await daemonFetch(base, '/api/atoms');
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -6354,7 +6443,7 @@ Common options:
         console.error('Usage: od atoms show <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/atoms`);
+      const resp = await daemonFetch(base, '/api/atoms');
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       const atom = (data?.atoms ?? []).find((a) => a.id === id);
@@ -6371,7 +6460,7 @@ Common options:
         console.error('Usage: od atoms info <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/atoms/${encodeURIComponent(id)}`);
+      const resp = await daemonFetch(base, `/api/atoms/${encodeURIComponent(id)}`);
       if (resp.status === 404) {
         console.error(`atom ${id} not found`);
         process.exit(65);
@@ -6413,7 +6502,7 @@ async function runLibraryList(name, args) {
   const apiPath = name === 'design-systems' ? '/api/design-systems' : `/api/${name}`;
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}${apiPath}`);
+      const resp = await daemonFetch(base, `${apiPath}`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -6430,7 +6519,7 @@ async function runLibraryList(name, args) {
         console.error(`Usage: od ${name} show <id>`);
         process.exit(2);
       }
-      const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`);
+      const resp = await daemonFetch(base, `${apiPath}/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -6656,7 +6745,7 @@ Renames an editable (user-created) design system. Built-in systems are read-only
     boolean: LIBRARY_BOOLEAN_FLAGS,
   });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
-  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(parsed.id)}`, {
+  const resp = await daemonFetch(base, `/api/design-systems/${encodeURIComponent(parsed.id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: parsed.title }),
@@ -6726,7 +6815,7 @@ diagnostics produces.
 
   let resp;
   try {
-    resp = await fetch(`${base}${DIAGNOSTICS_EXPORT_PATH}`);
+    resp = await daemonFetch(base, `${DIAGNOSTICS_EXPORT_PATH}`);
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
@@ -6751,7 +6840,7 @@ async function runVersion(args) {
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   let resp;
   try {
-    resp = await fetch(`${base}/api/version`);
+    resp = await daemonFetch(base, '/api/version');
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
@@ -6806,7 +6895,7 @@ or the daemon cannot be reached.`);
 
   // Daemon status
   try {
-    const resp = await fetch(`${base}/api/daemon/status`);
+    const resp = await daemonFetch(base, '/api/daemon/status');
     if (!resp.ok) {
       report.issues.push({ severity: 'error', code: 'daemon-status', message: `HTTP ${resp.status}` });
     } else {
@@ -6825,9 +6914,9 @@ or the daemon cannot be reached.`);
   // Library inventory
   try {
     const [skillsResp, dsResp, atomsResp] = await Promise.all([
-      fetch(`${base}/api/skills`),
-      fetch(`${base}/api/design-systems`),
-      fetch(`${base}/api/atoms`),
+      daemonFetch(base, '/api/skills'),
+      daemonFetch(base, '/api/design-systems'),
+      daemonFetch(base, '/api/atoms'),
     ]);
     if (skillsResp.ok) {
       const data = await skillsResp.json();
@@ -6847,13 +6936,13 @@ or the daemon cannot be reached.`);
 
   // Plugin doctor — runs the daemon's per-plugin check on every install.
   try {
-    const listResp = await fetch(`${base}/api/plugins`);
+    const listResp = await daemonFetch(base, '/api/plugins');
     if (listResp.ok) {
       const list = await listResp.json();
       const plugins = list?.plugins ?? [];
       for (const p of plugins) {
         try {
-          const doctorResp = await fetch(`${base}/api/plugins/${encodeURIComponent(p.id)}/doctor`, { method: 'POST' });
+          const doctorResp = await daemonFetch(base, `/api/plugins/${encodeURIComponent(p.id)}/doctor`, { method: 'POST' });
           const data = await doctorResp.json().catch(() => ({}));
           report.plugins.push({ id: p.id, version: p.version, ok: !!data?.ok, issues: data?.issues ?? [] });
           if (!data?.ok) {
@@ -6914,13 +7003,13 @@ Common options:
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
 
   const fetchConfig = async () => {
-    const resp = await fetch(`${base}/api/app-config`);
+    const resp = await daemonFetch(base, '/api/app-config');
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
     return data?.config ?? {};
   };
   const writeConfig = async (next) => {
-    const resp = await fetch(`${base}/api/app-config`, {
+    const resp = await daemonFetch(base, '/api/app-config', {
       method:  'PUT',
       headers: { 'content-type': 'application/json' },
       body:    JSON.stringify(next),
@@ -7087,7 +7176,7 @@ function printMemoryEntry(entry) {
 async function fetchMemoryTree(base) {
   let resp;
   try {
-    resp = await fetch(`${base}/api/memory/tree`);
+    resp = await daemonFetch(base, '/api/memory/tree');
   } catch (err) {
     surfaceFetchError(err, base);
     process.exit(3);
@@ -7099,7 +7188,7 @@ async function fetchMemoryTree(base) {
 async function patchMemoryTreeNode(base, id, body) {
   let resp;
   try {
-    resp = await fetch(`${base}/api/memory/tree/${encodeURIComponent(id)}`, {
+    resp = await daemonFetch(base, `/api/memory/tree/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -7172,7 +7261,7 @@ async function runMemory(args) {
     }
     let resp;
     try {
-      resp = await fetch(`${base}/api/memory/${encodeURIComponent(id)}`);
+      resp = await daemonFetch(base, `/api/memory/${encodeURIComponent(id)}`);
     } catch (err) {
       surfaceFetchError(err, base);
       process.exit(3);
@@ -7513,7 +7602,7 @@ async function runAutomation(args) {
       if (action === 'list') {
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-templates`);
+          resp = await daemonFetch(base, '/api/automation-templates');
         } catch (err) {
           surfaceFetchError(err, base);
           process.exit(3);
@@ -7548,7 +7637,7 @@ async function runAutomation(args) {
         }
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-templates/${encodeURIComponent(id)}`);
+          resp = await daemonFetch(base, `/api/automation-templates/${encodeURIComponent(id)}`);
         } catch (err) {
           surfaceFetchError(err, base);
           process.exit(3);
@@ -7582,7 +7671,7 @@ async function runAutomation(args) {
           : undefined;
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-ingestions`, {
+          resp = await daemonFetch(base, '/api/automation-ingestions', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
@@ -7628,7 +7717,7 @@ async function runAutomation(args) {
         const query = flags.limit ? `?limit=${encodeURIComponent(String(flags.limit))}` : '';
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-source-packets${query}`);
+          resp = await daemonFetch(base, `/api/automation-source-packets${query}`);
         } catch (err) {
           surfaceFetchError(err, base);
           process.exit(3);
@@ -7661,7 +7750,7 @@ async function runAutomation(args) {
         }
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-source-packets/${encodeURIComponent(id)}`);
+          resp = await daemonFetch(base, `/api/automation-source-packets/${encodeURIComponent(id)}`);
         } catch (err) {
           surfaceFetchError(err, base);
           process.exit(3);
@@ -7681,7 +7770,7 @@ async function runAutomation(args) {
         const query = flags.status ? `?status=${encodeURIComponent(String(flags.status))}` : '';
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-proposals${query}`);
+          resp = await daemonFetch(base, `/api/automation-proposals${query}`);
         } catch (err) {
           surfaceFetchError(err, base);
           process.exit(3);
@@ -7715,7 +7804,7 @@ async function runAutomation(args) {
         }
         let resp;
         try {
-          resp = await fetch(`${base}/api/automation-proposals/${encodeURIComponent(id)}`);
+          resp = await daemonFetch(base, `/api/automation-proposals/${encodeURIComponent(id)}`);
         } catch (err) {
           surfaceFetchError(err, base);
           process.exit(3);
@@ -7758,7 +7847,7 @@ async function runAutomation(args) {
     case 'list': {
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines`);
+        resp = await daemonFetch(base, '/api/routines');
       } catch (err) {
         surfaceFetchError(err, base);
         process.exit(3);
@@ -7779,7 +7868,7 @@ async function runAutomation(args) {
       const id = requireId('get');
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines/${encodeURIComponent(id)}`);
+        resp = await daemonFetch(base, `/api/routines/${encodeURIComponent(id)}`);
       } catch (err) {
         surfaceFetchError(err, base);
         process.exit(3);
@@ -7896,7 +7985,7 @@ async function runAutomation(args) {
       if (flags.agent) body.agentId = String(flags.agent);
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines`, {
+        resp = await daemonFetch(base, '/api/routines', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
@@ -7951,7 +8040,7 @@ async function runAutomation(args) {
       }
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines/${encodeURIComponent(id)}`, {
+        resp = await daemonFetch(base, `/api/routines/${encodeURIComponent(id)}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(patch),
@@ -7976,7 +8065,7 @@ async function runAutomation(args) {
       const enabled = sub === 'resume';
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines/${encodeURIComponent(id)}`, {
+        resp = await daemonFetch(base, `/api/routines/${encodeURIComponent(id)}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ enabled }),
@@ -7998,7 +8087,7 @@ async function runAutomation(args) {
       const id = requireId('run');
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines/${encodeURIComponent(id)}/run`, {
+        resp = await daemonFetch(base, `/api/routines/${encodeURIComponent(id)}/run`, {
           method: 'POST',
         });
       } catch (err) {
@@ -8021,7 +8110,7 @@ async function runAutomation(args) {
       const id = requireId('delete');
       let resp;
       try {
-        resp = await fetch(`${base}/api/routines/${encodeURIComponent(id)}`, {
+        resp = await daemonFetch(base, `/api/routines/${encodeURIComponent(id)}`, {
           method: 'DELETE',
         });
       } catch (err) {
