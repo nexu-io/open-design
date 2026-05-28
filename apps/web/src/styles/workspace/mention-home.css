@@ -2384,3 +2384,102 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-soft);
 }
+
+/* -------- Settings dialog utilities --------------------------------- */
+
+/* Settings subsection — groups a field label + control pair. */
+.settings-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Settings callout card — info/warning/success with left accent border. */
+.settings-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.settings-card.warn {
+  border-left-color: var(--amber);
+  background: var(--amber-bg);
+}
+.settings-card.danger {
+  border-left-color: var(--red);
+  background: var(--red-bg);
+  color: var(--red);
+}
+.settings-card.success {
+  border-left-color: var(--green);
+  background: var(--green-bg);
+}
+
+/* MCP snippet code block */
+.mcp-snippet { position: relative; }
+.mcp-snippet pre {
+  background: var(--bg-muted);
+  color: var(--text);
+  padding: 40px 104px 12px 14px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  user-select: text;
+  min-height: 60px;
+}
+
+/* MCP key list row */
+.mcp-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.mcp-key-row code { font-size: 11px; padding: 2px 6px; }
+
+/* Section label (uppercase muted) */
+.settings-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* Settings actions row */
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Settings key list */
+.settings-key-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.settings-key-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+/* New key display */
+.settings-new-key {
+  background: var(--green-bg);
+  border: 1px solid var(--green-border);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+.settings-new-key code { display: block; margin-top: 4px; user-select: all; }

@@ -681,6 +681,16 @@
   font-size: 12px;
   background: var(--bg-subtle);
 }
+.empty-card.warn {
+  border-left: 3px solid var(--amber);
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+.empty-card.danger {
+  border-left: 3px solid var(--red);
+  background: var(--red-bg);
+  color: var(--red);
+}
 
 .agent-scan-card {
   position: relative;
