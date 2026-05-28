@@ -77,6 +77,8 @@ export const fa: Dict = {
   'common.exportPdf': 'صادرکردن به PDF',
   'common.exportZip': 'دانلود به صورت .zip',
   'common.exportHtml': 'صادرکردن به HTML مستقل',
+  'common.exportImage': 'صادرکردن به صورت تصویر',
+  'common.exportImageFailed': 'عکس‌برداری ناموفق بود. لطفاً دوباره تلاش کنید یا از ابزار عکس‌برداری مرورگر خود استفاده کنید.',
   'common.justNow': 'همین الان',
   'common.minutesAgo': '{n} دقیقه پیش',
   'common.hoursAgo': '{n} ساعت پیش',

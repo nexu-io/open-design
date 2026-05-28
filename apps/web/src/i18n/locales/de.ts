@@ -77,6 +77,8 @@ export const de: Dict = {
   'common.exportPdf': 'Als PDF exportieren',
   'common.exportZip': 'Als .zip herunterladen',
   'common.exportHtml': 'Als eigenständiges HTML exportieren',
+  'common.exportImage': 'Als Bild exportieren',
+  'common.exportImageFailed': 'Bildaufnahme fehlgeschlagen. Bitte versuchen Sie es erneut oder verwenden Sie das Screenshot-Tool Ihres Browsers.',
   'common.justNow': 'gerade eben',
   'common.minutesAgo': 'vor {n} Min.',
   'common.hoursAgo': 'vor {n} Std.',

@@ -77,6 +77,8 @@ export const ru: Dict = {
   'common.exportPdf': 'Экспорт в PDF',
   'common.exportZip': 'Скачать как .zip',
   'common.exportHtml': 'Экспорт как HTML',
+  'common.exportImage': 'Экспорт как изображение',
+  'common.exportImageFailed': 'Не удалось захватить изображение. Попробуйте еще раз или воспользуйтесь инструментом создания снимков экрана в браузере.',
   'common.justNow': 'только что',
   'common.minutesAgo': '{n} мин. назад',
   'common.hoursAgo': '{n} ч. назад',

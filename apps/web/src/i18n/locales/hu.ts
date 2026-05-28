@@ -77,6 +77,8 @@ export const hu: Dict = {
   'common.exportPdf': 'Exportálás PDF-ként',
   'common.exportZip': 'Letöltés .zip-ként',
   'common.exportHtml': 'Exportálás önálló HTML-ként',
+  'common.exportImage': 'Exportálás képként',
+  'common.exportImageFailed': 'A kép rögzítése sikertelen. Próbálja újra, vagy használja a böngésző képernyőkép eszközét.',
   'common.justNow': 'az imént',
   'common.minutesAgo': '{n} perce',
   'common.hoursAgo': '{n} órája',

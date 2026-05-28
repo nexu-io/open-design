@@ -58,6 +58,8 @@ export interface Dict {
   'common.exportPdf': string;
   'common.exportZip': string;
   'common.exportHtml': string;
+  'common.exportImage': string;
+  'common.exportImageFailed': string;
   'common.justNow': string;
   'common.minutesAgo': string;
   'common.hoursAgo': string;

@@ -77,6 +77,8 @@ export const uk: Dict = {
   'common.exportPdf': 'Експортувати як PDF',
   'common.exportZip': 'Завантажити як .zip',
   'common.exportHtml': 'Експортувати як HTML автономно',
+  'common.exportImage': 'Експортувати як зображення',
+  'common.exportImageFailed': 'Не вдалося захопити зображення. Спробуйте ще раз або скористайтеся інструментом знімків екрана браузера.',
   'common.justNow': 'щойно',
   'common.minutesAgo': '{n}хв тому',
   'common.hoursAgo': '{n}г тому',

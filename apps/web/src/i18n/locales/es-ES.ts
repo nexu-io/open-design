@@ -77,6 +77,8 @@ export const esES: Dict = {
   'common.exportPdf': 'Exportar como PDF',
   'common.exportZip': 'Descargar como .zip',
   'common.exportHtml': 'Exportar como HTML independiente',
+  'common.exportImage': 'Exportar como imagen',
+  'common.exportImageFailed': 'Error al capturar la imagen. Inténtalo de nuevo o usa la herramienta de captura de pantalla de tu navegador.',
   'common.justNow': 'justo ahora',
   'common.minutesAgo': 'hace {n} min',
   'common.hoursAgo': 'hace {n} h',

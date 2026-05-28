@@ -77,6 +77,8 @@ export const id: Dict = {
   'common.exportPdf': 'Ekspor sebagai PDF',
   'common.exportZip': 'Unduh sebagai .zip',
   'common.exportHtml': 'Ekspor sebagai HTML mandiri',
+  'common.exportImage': 'Ekspor sebagai gambar',
+  'common.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
   'common.justNow': 'baru saja',
   'common.minutesAgo': '{n}m lalu',
   'common.hoursAgo': '{n}j lalu',

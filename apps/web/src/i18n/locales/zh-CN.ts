@@ -38,6 +38,8 @@ export const zhCN: Dict = {
   'common.exportPdf': '导出为 PDF',
   'common.exportZip': '下载为 .zip',
   'common.exportHtml': '导出为独立 HTML',
+  'common.exportImage': '导出为图片',
+  'common.exportImageFailed': '图片截图失败，请重试或使用浏览器的截图工具。',
   'common.justNow': '刚刚',
   'common.minutesAgo': '{n} 分钟前',
   'common.hoursAgo': '{n} 小时前',

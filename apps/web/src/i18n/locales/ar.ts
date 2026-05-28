@@ -77,6 +77,8 @@ export const ar: Dict = {
   'common.exportPdf': 'تصدير كـ PDF',
   'common.exportZip': 'تحميل كـ zip.',
   'common.exportHtml': 'تصدير كـ HTML مستقل',
+  'common.exportImage': 'تصدير كصورة',
+  'common.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
   'common.justNow': 'الآن',
   'common.minutesAgo': 'منذ {n} دقيقة',
   'common.hoursAgo': 'منذ {n} ساعة',

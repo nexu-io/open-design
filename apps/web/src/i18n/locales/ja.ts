@@ -77,6 +77,8 @@ export const ja: Dict = {
   'common.exportPdf': 'PDFとしてエクスポート',
   'common.exportZip': '.zipとしてダウンロード',
   'common.exportHtml': 'スタンドアロンHTMLとしてエクスポート',
+  'common.exportImage': '画像としてエクスポート',
+  'common.exportImageFailed': '画像のキャプチャに失敗しました。再試行するか、ブラウザのスクリーンショットツールを使用してください。',
   'common.justNow': 'たった今',
   'common.minutesAgo': '{n}分前',
   'common.hoursAgo': '{n}時間前',

@@ -77,6 +77,8 @@ export const pl: Dict = {
   'common.exportPdf': 'Eksportuj jako PDF',
   'common.exportZip': 'Pobierz jako .zip',
   'common.exportHtml': 'Eksportuj jako samodzielny HTML',
+  'common.exportImage': 'Eksportuj jako obraz',
+  'common.exportImageFailed': 'Przechwytywanie obrazu nie powiodło się. Spróbuj ponownie lub użyj narzędzia do zrzutów ekranu przeglądarki.',
   'common.justNow': 'przed chwilą',
   'common.minutesAgo': '{n} min temu',
   'common.hoursAgo': '{n} godz. temu',

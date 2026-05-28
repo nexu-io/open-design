@@ -80,6 +80,8 @@ export const zhTW: Dict = {
   'common.exportPdf': '匯出為 PDF',
   'common.exportZip': '下載為 .zip',
   'common.exportHtml': '匯出為獨立 HTML',
+  'common.exportImage': '匯出為圖片',
+  'common.exportImageFailed': '圖片截圖失敗，請重試或使用瀏覽器的截圖工具。',
   'common.justNow': '剛剛',
   'common.minutesAgo': '{n} 分鐘前',
   'common.hoursAgo': '{n} 小時前',

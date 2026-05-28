@@ -77,6 +77,8 @@ export const ptBR: Dict = {
   'common.exportPdf': 'Exportar como PDF',
   'common.exportZip': 'Baixar como .zip',
   'common.exportHtml': 'Exportar como HTML independente',
+  'common.exportImage': 'Exportar como imagem',
+  'common.exportImageFailed': 'Falha ao capturar imagem. Tente novamente ou use a ferramenta de captura de tela do seu navegador.',
   'common.justNow': 'agora mesmo',
   'common.minutesAgo': 'há {n} min',
   'common.hoursAgo': 'há {n} h',

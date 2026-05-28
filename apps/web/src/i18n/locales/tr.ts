@@ -77,6 +77,8 @@ export const tr: Dict = {
   'common.exportPdf': 'PDF olarak dışa aktar',
   'common.exportZip': 'ZIP olarak indir',
   'common.exportHtml': 'Tekil HTML olarak dışa aktar',
+  'common.exportImage': 'Görüntü olarak dışa aktar',
+  'common.exportImageFailed': 'Görüntü yakalama başarısız oldu. Lütfen tekrar deneyin veya tarayıcınızın ekran görüntüsü aracını kullanın.',
   'common.justNow': 'şimdi',
   'common.minutesAgo': '{n} dakika önce',
   'common.hoursAgo': '{n} saat önce',

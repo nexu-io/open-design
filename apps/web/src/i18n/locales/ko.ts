@@ -77,6 +77,8 @@ export const ko: Dict = {
   'common.exportPdf': 'PDF로 내보내기',
   'common.exportZip': '.zip으로 다운로드',
   'common.exportHtml': '독립 실행형 HTML로 내보내기',
+  'common.exportImage': '이미지로 내보내기',
+  'common.exportImageFailed': '이미지 캡처에 실패했습니다. 다시 시도하거나 브라우저의 스크린샷 도구를 사용하세요.',
   'common.justNow': '방금 전',
   'common.minutesAgo': '{n}분 전',
   'common.hoursAgo': '{n}시간 전',

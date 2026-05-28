@@ -47,6 +47,8 @@ export const fr: Dict = {
   'common.exportPdf': 'Exporter en PDF',
   'common.exportZip': 'Télécharger en .zip',
   'common.exportHtml': 'Exporter en HTML autonome',
+  'common.exportImage': 'Exporter en image',
+  'common.exportImageFailed': 'Échec de la capture d\'image. Veuillez réessayer ou utiliser l\'outil de capture d\'écran de votre navigateur.',
   'common.justNow': 'à l\'instant',
   'common.minutesAgo': 'il y a {n} min',
   'common.hoursAgo': 'il y a {n} h',
