@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HandoffButton } from '../../src/components/HandoffButton';
 import { I18nProvider, type Locale } from '../../src/i18n';
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
 afterEach(() => {
   cleanup();
@@ -34,14 +35,26 @@ function renderLocalized(locale: Locale) {
 }
 
 describe('HandoffButton i18n', () => {
+  it('keeps the header trigger as an icon-sized split control', () => {
+    const css = readExpandedIndexCss();
+
+    expect(css).toContain('.app .handoff-split');
+    expect(css).toContain('border: 1px solid transparent;');
+    expect(css).toContain('.app .handoff-trigger');
+    expect(css).toContain('width: 32px;');
+    expect(css).toContain('height: 30px;');
+    expect(css).toContain('.app .handoff-caret');
+    expect(css).toContain('width: 24px;');
+  });
+
   it('localizes the primary handoff label', async () => {
     stubEditors([{ id: 'finder', label: 'Finder', available: true }]);
 
     renderLocalized('en');
 
     const trigger = await screen.findByTestId('handoff-trigger');
-    expect(trigger.getAttribute('title')).toBe('Hand off to Finder');
-    expect(trigger.textContent).toContain('Hand off to Finder');
+    expect(trigger.getAttribute('title')).toBe('Open in Finder');
+    expect(trigger.querySelector('.handoff-trigger-label')?.classList.contains('sr-only')).toBe(true);
   });
 
   it('localizes the unavailable editor section', async () => {

@@ -48,8 +48,8 @@ Node `~24` et pnpm `10.33.x` sont requis. `nvm` / `fnm` sont optionnels ;
 utilisez `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` si
 vous gérez Node comme cela. macOS, Linux et WSL2 sont les environnements
 principaux pris en charge.
-Windows natif devrait fonctionner, mais ce n'est pas la cible principale :
-ouvrez une issue si ce n'est pas le cas.
+Windows natif est supporté ; voir [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md)
+pour les pièges de configuration les plus courants.
 
 Vous n'avez pas besoin d'une CLI d'agent dans votre `PATH` pour développer OD.
 Le daemon indiquera "no agents found" ; utilisez alors le mode API/BYOK
@@ -357,6 +357,11 @@ Au-delà de ça :
   dépendance : ce sont trois PR.
 - **Titre impératif + scope.** `add dating-web skill`,
   `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
+- **Utilisez le template de PR.** Remplissez chaque section de
+  [`.github/pull_request_template.md`](.github/pull_request_template.md) — Why,
+  What users will see, Surface area, Screenshots (si UI), Bug fix verification
+  (si correctif), Validation. Les sections vides recevront un commentaire
+  « please fill in ».
 - **Le body explique le pourquoi.** Le diff montre souvent le quoi ; le pourquoi
   est rarement évident.
 - **Référencez une issue** s'il y en a une. S'il n'y en a pas et que la PR est

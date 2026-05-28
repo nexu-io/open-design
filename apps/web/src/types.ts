@@ -522,4 +522,5 @@ export type {
 export interface OpenTabsState {
   tabs: ProjectWorkspaceTabId[];
   active: ProjectWorkspaceTabId | null;
+  hasSavedState?: boolean;
 }

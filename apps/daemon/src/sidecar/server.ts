@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -7,6 +9,7 @@ import {
   type DaemonStatusSnapshot,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type MintImportTokenResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import {
@@ -18,7 +21,13 @@ import {
 } from "@open-design/sidecar";
 
 import { startDaemonRuntime, type StartedDaemonRuntime } from "../daemon-startup.js";
-import { isDesktopAuthGateActive, setDesktopAuthSecret } from "../desktop-auth.js";
+import {
+  getDesktopAuthSecret,
+  isDesktopAuthGateActive,
+  isDesktopAuthRegistered,
+  setDesktopAuthSecret,
+  signDesktopImportToken,
+} from "../desktop-auth.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live
@@ -36,6 +45,7 @@ export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): Daem
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
+const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export type DaemonSidecarHandle = {
   status(): Promise<DaemonStatusSnapshot>;
@@ -76,6 +86,33 @@ function attachParentMonitor(stop: () => Promise<void>): void {
     void stop().finally(() => process.exit(0));
   }, 1000);
   timer.unref();
+}
+
+export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
+  if (!isDesktopAuthGateActive()) {
+    return {
+      ok: false,
+      code: "DESKTOP_AUTH_INACTIVE",
+      message: "desktop import auth gate is inactive",
+      retryable: false,
+    };
+  }
+  const secret = getDesktopAuthSecret();
+  if (secret == null || !isDesktopAuthRegistered()) {
+    return {
+      ok: false,
+      code: "DESKTOP_AUTH_PENDING",
+      message: "desktop auth required but secret not yet registered",
+      retryable: true,
+    };
+  }
+  const nonce = randomBytes(16).toString("base64url");
+  const expiresAt = new Date(Date.now() + DESKTOP_IMPORT_TOKEN_TTL_MS).toISOString();
+  return {
+    ok: true,
+    expiresAt,
+    token: signDesktopImportToken(secret, baseDir, { nonce, exp: expiresAt }),
+  };
 }
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
@@ -152,6 +189,8 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
           // renderer→arbitrary-baseDir→shell.openPath bypass.
           setDesktopAuthSecret(Buffer.from(request.input.secret, "base64"));
           return { accepted: true };
+        case SIDECAR_MESSAGES.MINT_IMPORT_TOKEN:
+          return mintImportTokenForCli(request.input.baseDir);
       }
     },
   });

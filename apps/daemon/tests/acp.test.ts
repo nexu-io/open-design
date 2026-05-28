@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
@@ -202,6 +204,39 @@ test('attachAcpSession keeps legacy session/set_model when no model config optio
   assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
 });
 
+test('attachAcpSession includes image attachments as ACP resource links', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-acp-image-'));
+  const imagePath = path.join(tmpDir, 'screenshot.png');
+  fs.writeFileSync(imagePath, 'png');
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe this image',
+    cwd: '/tmp/od-project',
+    model: null,
+    imagePaths: [imagePath],
+    mcpServers: [],
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpResult(child, 3, {});
+
+  const requests = parseRpcWrites(writes);
+  const promptRequest = requests.find((entry) => entry.method === 'session/prompt');
+  assert.deepEqual(promptRequest?.params, {
+    sessionId: 'session-1',
+    prompt: [
+      { type: 'text', text: 'describe this image' },
+      { type: 'resource_link', uri: imagePath },
+    ],
+  });
+});
+
 test('attachAcpSession exposes abort and sends session cancel after session creation', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
@@ -229,6 +264,55 @@ test('attachAcpSession exposes abort and sends session cancel after session crea
   const cancelRequest = cancelRequests[0];
   assert.ok(cancelRequest);
   assert.deepEqual(cancelRequest.params, { sessionId: 'session-1' });
+});
+
+test('attachAcpSession.abort closes stdin so the agent shuts down on EOF', () => {
+  const child = new FakeAcpChild();
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: () => {},
+  });
+
+  child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+  child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+  assert.equal(child.stdin.writableEnded, false);
+  session.abort();
+  // EOF on stdin lets the vela ACP bridge tear down its OpenCode server
+  // without waiting for the caller's SIGTERM fallback.
+  assert.equal(child.stdin.writableEnded, true);
+});
+
+test('attachAcpSession.abort during startup ends stdin without sending session/cancel', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: () => {},
+  });
+
+  // Abort before session/new resolves (no sessionId yet) — e.g. the user
+  // cancels during ACP startup. stdin must still close so OpenCode tears down.
+  assert.equal(child.stdin.writableEnded, false);
+  session.abort();
+  assert.equal(child.stdin.writableEnded, true);
+
+  // No session to cancel yet, so no session/cancel RPC should be emitted.
+  const cancelRequests = parseRpcWrites(writes).filter(
+    (entry) => entry.method === 'session/cancel',
+  );
+  assert.equal(cancelRequests.length, 0);
 });
 
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {

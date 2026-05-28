@@ -449,6 +449,204 @@ test('codex json stream emits command execution tool events', () => {
   ]);
 });
 
+test('codex json stream surfaces disallowed connector tool selections as terminal errors', () => {
+  const { events, handler } = collectEvents('codex');
+  const connectorError = JSON.stringify({
+    ok: false,
+    status: 404,
+    error: {
+      code: 'CONNECTOR_TOOL_NOT_FOUND',
+      message: 'connector tool is not allowed',
+      details: {
+        connectorId: 'github',
+        toolName: 'github.github_list_notifications',
+      },
+    },
+  });
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-connector',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-connector',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: `${connectorError}\n`,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-connector',
+      name: 'Bash',
+      input: {
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-connector',
+      content: `${connectorError}\n`,
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Connector tool github.github_list_notifications is not allowed for connector github. Re-list the connector catalog and choose one of the currently allowed read-only tools.',
+    },
+  ]);
+});
+
+test('codex json stream finds connector tool errors after earlier noise json output', () => {
+  const { events, handler } = collectEvents('codex');
+  const noiseLine = JSON.stringify({
+    event: 'running',
+    message: 'starting connector call',
+  });
+  const connectorError = JSON.stringify({
+    ok: false,
+    status: 404,
+    error: {
+      code: 'CONNECTOR_TOOL_NOT_FOUND',
+      message: 'connector tool is not allowed',
+      details: {
+        connectorId: 'github',
+        toolName: 'github.github_list_notifications',
+      },
+    },
+  });
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-connector-noise',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-connector-noise',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: `${noiseLine}\n${connectorError}\n`,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-connector-noise',
+      name: 'Bash',
+      input: {
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-connector-noise',
+      content: `${noiseLine}\n${connectorError}\n`,
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Connector tool github.github_list_notifications is not allowed for connector github. Re-list the connector catalog and choose one of the currently allowed read-only tools.',
+    },
+  ]);
+});
+
+test('codex json stream surfaces wrapped connector tool errors as terminal errors', () => {
+  const { events, handler } = collectEvents('codex');
+  const connectorError = JSON.stringify({
+    error: {
+      data: {
+        error: {
+          code: 'CONNECTOR_TOOL_NOT_FOUND',
+          message: 'connector tool is not allowed',
+          details: {
+            connectorId: 'github',
+            toolName: 'github.github_list_notifications',
+          },
+        },
+      },
+    },
+  });
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-connector-wrapped',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-connector-wrapped',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: `${connectorError}\n`,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-connector-wrapped',
+      name: 'Bash',
+      input: {
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-connector-wrapped',
+      content: `${connectorError}\n`,
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Connector tool github.github_list_notifications is not allowed for connector github. Re-list the connector catalog and choose one of the currently allowed read-only tools.',
+    },
+  ]);
+});
+
 test('unhandled structured events fall back to raw', () => {
   const { events, handler } = collectEvents('codex');
 

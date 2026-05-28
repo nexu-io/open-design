@@ -1,15 +1,35 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   hasPullApprovalStateDrift,
   isAllowedChangedPath,
+  isAllowedVisualCaptureChangedPath,
   isDeniedChangedPath,
   isPendingApprovalRun,
   listPendingApprovalRuns,
   runTargetsPullRequest,
   waitForPendingApprovalRuns,
 } from "./approve-fork-pr-workflows.ts";
+
+test("visual-pr-comment resolves empty workflow_run.pull_requests from trusted repo/branch metadata and leaves stale SHA handling to trusted-pr", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/visual-pr-comment.yml", import.meta.url), "utf8");
+  const manifestStep = workflow.match(/- name: Read capture manifest[\s\S]*?- name: Validate live PR state for trusted checkout/u)?.[0];
+  const trustedPrStep = workflow.match(/- name: Validate live PR state for trusted checkout[\s\S]*?- name: Checkout trusted base/u)?.[0];
+
+  assert.ok(manifestStep, "Expected Read capture manifest step block in workflow");
+  assert.ok(trustedPrStep, "Expected trusted-pr validation step block in workflow");
+  assert.match(manifestStep, /encoded_head=.*\$head\|@uri/u);
+  assert.match(manifestStep, /pulls\?state=open&head=\$encoded_head&per_page=100/);
+  assert.match(manifestStep, /jq -r --arg repo "\$source_head_repository"/u);
+  assert.doesNotMatch(manifestStep, /select\(\.head\.sha == \$sha/u);
+  assert.match(manifestStep, /match_count=.*wc -w/u);
+  assert.match(manifestStep, /if \[ "\$match_count" -gt 1 \]; then/u);
+  assert.match(manifestStep, /found \$match_count matches/);
+  assert.match(manifestStep, /pr_number="\$manifest_pr_number"/u);
+  assert.match(trustedPrStep, /Skipping stale visual artifact for \$ARTIFACT_HEAD_SHA; current PR head is \$current_head\./u);
+});
 
 test("isPendingApprovalRun matches approval-gated fork PR runs from GitHub's captured payload shape", () => {
   const pull = {
@@ -110,6 +130,23 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
   assert.equal(
     isPendingApprovalRun(
       {
+        id: 26273463771,
+        name: "Visual PR Capture",
+        event: "pull_request",
+        status: "completed",
+        conclusion: "action_required",
+        head_sha: "734076155c44e569304856590019cea54506fdab",
+        path: ".github/workflows/visual-pr-capture.yml@main",
+        pull_requests: [],
+      },
+      pull,
+    ),
+    false,
+  );
+
+  assert.equal(
+    isPendingApprovalRun(
+      {
         id: 26273463770,
         name: "Visual PR Comment",
         event: "pull_request",
@@ -121,6 +158,56 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
       },
       pull,
     ),
+    false,
+  );
+});
+
+test("isPendingApprovalRun approves visual capture only for strict web source changes", () => {
+  const pull = {
+    number: 2683,
+    state: "open",
+    changed_files: 1,
+    head: {
+      ref: "fix/button-copy",
+      sha: "734076155c44e569304856590019cea54506fdab",
+      repo: { full_name: "someone/open-design" },
+    },
+    base: {
+      ref: "main",
+      sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
+      repo: { full_name: "nexu-io/open-design" },
+    },
+  };
+  const run = {
+    id: 26273463771,
+    name: "Visual PR Capture",
+    event: "pull_request",
+    status: "completed",
+    conclusion: "action_required",
+    head_sha: "734076155c44e569304856590019cea54506fdab",
+    path: ".github/workflows/visual-pr-capture.yml@main",
+    pull_requests: [],
+  };
+
+  assert.equal(
+    isPendingApprovalRun(run, pull, [
+      { filename: "apps/web/src/components/Button.tsx", status: "modified" },
+      { filename: "apps/web/src/styles/button.css", status: "modified" },
+    ]),
+    true,
+  );
+  assert.equal(
+    isPendingApprovalRun(run, pull, [{ filename: "apps/web/public/logo.png", status: "modified" }]),
+    false,
+  );
+  assert.equal(
+    isPendingApprovalRun(run, pull, [
+      {
+        filename: "apps/web/src/components/Button.tsx",
+        previous_filename: "scripts/build.ts",
+        status: "renamed",
+      },
+    ]),
     false,
   );
 });
@@ -517,6 +604,68 @@ test("listPendingApprovalRuns paginates all pull_request runs for the head SHA a
   );
 });
 
+test("listPendingApprovalRuns applies strict changed-path filtering only to visual capture", async () => {
+  const pull = {
+    number: 2683,
+    state: "open",
+    changed_files: 1,
+    head: {
+      ref: "fix/readme-copy",
+      sha: "734076155c44e569304856590019cea54506fdab",
+      repo: { full_name: "someone/open-design" },
+    },
+    base: {
+      ref: "main",
+      sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
+      repo: { full_name: "nexu-io/open-design" },
+    },
+  };
+  const workflowRuns = [
+    {
+      id: 26273463769,
+      name: "CI",
+      event: "pull_request",
+      head_branch: pull.head.ref,
+      head_repository: pull.head.repo,
+      status: "completed",
+      conclusion: "action_required",
+      head_sha: pull.head.sha,
+      path: ".github/workflows/ci.yml@main",
+      pull_requests: [],
+    },
+    {
+      id: 26273463770,
+      name: "Visual PR Capture",
+      event: "pull_request",
+      head_branch: pull.head.ref,
+      head_repository: pull.head.repo,
+      status: "completed",
+      conclusion: "action_required",
+      head_sha: pull.head.sha,
+      path: ".github/workflows/visual-pr-capture.yml@main",
+      pull_requests: [],
+    },
+  ];
+  const deps = {
+    loadWorkflowRunsResponsePage: async () => ({ workflow_runs: workflowRuns }),
+    loadPullRequestsForHeadSha: async () => [pull],
+  };
+
+  assert.deepEqual(
+    (await listPendingApprovalRuns("nexu-io/open-design", pull, [{ filename: "README.md", status: "modified" }], deps)).map((run) => run.id),
+    [26273463769],
+  );
+  assert.deepEqual(
+    (await listPendingApprovalRuns(
+      "nexu-io/open-design",
+      pull,
+      [{ filename: "apps/web/src/components/Button.tsx", status: "modified" }],
+      deps,
+    )).map((run) => run.id),
+    [26273463769, 26273463770],
+  );
+});
+
 test("hasPullApprovalStateDrift ignores base tip churn but still rejects base retargeting and head drift", () => {
   const pull = {
     number: 2683,
@@ -580,6 +729,17 @@ test("isAllowedChangedPath allows ordinary app and package source/test paths whi
   assert.equal(isAllowedChangedPath("tools/pack/src/index.ts"), false);
   assert.equal(isAllowedChangedPath("apps/packaged/tsconfig.json"), false);
   assert.equal(isAllowedChangedPath("apps/packaged/vitest.config.ts"), false);
+});
+
+test("isAllowedVisualCaptureChangedPath is limited to web ts tsx and css source", () => {
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/app/page.tsx"), true);
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/lib/theme.ts"), true);
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/components/Button.css"), true);
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/assets/icon.svg"), false);
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/public/logo.png"), false);
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/package.json"), false);
+  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/tests/Button.test.tsx"), false);
+  assert.equal(isAllowedVisualCaptureChangedPath("packages/contracts/src/api.ts"), false);
 });
 
 test("waitForPendingApprovalRuns retries until action_required runs appear and keeps polling through the retry window", async () => {

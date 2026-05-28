@@ -336,7 +336,12 @@ describe('streamViaDaemon', () => {
       handlers,
     });
 
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('typed message'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'typed message',
+        code: 'AGENT_UNAVAILABLE',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -369,6 +374,46 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining('Set CLAUDE_CONFIG_DIR in Settings'),
+      }),
+    );
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('preserves structured AMR SSE error codes and action details', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/wallet"}}}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'AMR balance unavailable',
+        code: 'AMR_INSUFFICIENT_BALANCE',
+        details: {
+          kind: 'amr_account',
+          action: 'recharge',
+          actionUrl: 'https://open-design.ai/amr/wallet',
+        },
       }),
     );
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -445,6 +490,45 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(new Error('agent exited with code 1'));
     expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('suppresses AMR exit code 130 lifecycle noise from the chat error surface', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"opencode server listening on http://127.0.0.1:1234\\n"}',
+              '',
+              'event: end',
+              'data: {"code":130,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(onRunStatus).toHaveBeenCalledWith('failed');
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledWith('');
   });
 
   it('still surfaces an error when the end event has a signal but no status field', async () => {

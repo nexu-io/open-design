@@ -64,6 +64,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
   afterEach(() => {
     cleanup();
+    document.querySelector('[data-testid="blank-workspace-area"]')?.remove();
   });
 
   it('keeps Home tab as a singleton and avoids duplication', async () => {
@@ -201,5 +202,26 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(labels[0]).toContain('Home');
     });
     expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('dismisses tab search when a blank page area handles the mouse down', async () => {
+    const outsideArea = document.createElement('div');
+    outsideArea.setAttribute('data-testid', 'blank-workspace-area');
+    outsideArea.addEventListener('mousedown', (event) => event.stopPropagation());
+    document.body.append(outsideArea);
+
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search tabs' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Search tabs' })).toBeTruthy();
+    });
+
+    fireEvent.mouseDown(outsideArea);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
+    });
   });
 });

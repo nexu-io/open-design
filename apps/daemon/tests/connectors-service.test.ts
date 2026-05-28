@@ -74,6 +74,20 @@ class OutputTestConnectorService extends TestConnectorService {
   }
 }
 
+class FailingConnectorService extends TestConnectorService {
+  constructor(
+    definition: ConnectorCatalogDefinition,
+    statusService: ConnectorStatusService,
+    private readonly error: Error,
+  ) {
+    super(definition, statusService, true);
+  }
+
+  protected override async executeConnectorProviderTool(_request: ConnectorExecuteRequest, _context: ConnectorExecutionContext): Promise<BoundedJsonObject> {
+    throw this.error;
+  }
+}
+
 function readOnlyDefinition(): ConnectorCatalogDefinition {
   return externalConnector({
     tools: [{
@@ -85,6 +99,33 @@ function readOnlyDefinition(): ConnectorCatalogDefinition {
     }],
     allowedToolNames: ['docs.search'],
     minimumApproval: 'auto',
+  });
+}
+
+function githubReadDefinition(): ConnectorCatalogDefinition {
+  return externalConnector({
+    id: 'github',
+    name: 'GitHub',
+    provider: 'composio',
+    category: 'Developer',
+    authentication: 'composio',
+    providerConnectorId: 'github',
+    tools: [{
+      name: 'github.search',
+      title: 'Search GitHub',
+      requiredScopes: ['repo:read'],
+      safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only GitHub search' },
+      refreshEligible: true,
+    }],
+    allowedToolNames: ['github.search'],
+    minimumApproval: 'auto',
+  });
+}
+
+function connectGithub(statusService: ConnectorStatusService): void {
+  statusService.connect(githubReadDefinition(), 'octocat@example.com', {
+    provider: 'composio',
+    providerConnectionId: 'ca_stale_github',
   });
 }
 
@@ -536,6 +577,93 @@ describe('connector execution policy', () => {
       { connectorId: 'external_docs', toolName: 'docs.search', input: {}, expectedAccountLabel: 'old-account@example.com' },
       { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
     )).rejects.toMatchObject({ code: 'CONNECTOR_NOT_CONNECTED' });
+  });
+
+  it('marks a persisted Composio connector as errored when tool execution reports stale auth', async () => {
+    const definition = githubReadDefinition();
+    const credentialStore = new InMemoryConnectorCredentialStore();
+    const statusService = new ConnectorStatusService({ credentialStore });
+    connectGithub(statusService);
+    const service = new FailingConnectorService(
+      definition,
+      statusService,
+      new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio tool execution failed', 502, {
+        connectorId: 'github',
+        toolName: 'github.search',
+        error: {
+          message: 'Bad credentials',
+          documentation_url: 'https://docs.github.com/rest',
+          status: '401',
+        },
+      }),
+    );
+
+    await expect(service.execute(
+      { connectorId: 'github', toolName: 'github.search', input: {} },
+      { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
+    )).rejects.toMatchObject({ code: 'CONNECTOR_EXECUTION_FAILED' });
+
+    await expect(service.getConnector('github')).resolves.toMatchObject({
+      status: 'error',
+      accountLabel: 'octocat@example.com',
+      lastError: 'GitHub authorization expired. Reconnect GitHub.',
+    });
+    expect(service.getCredential('github')).toBeUndefined();
+  });
+
+  it('keeps connector credentials when Composio platform auth fails before tool execution', async () => {
+    const definition = githubReadDefinition();
+    const credentialStore = new InMemoryConnectorCredentialStore();
+    const statusService = new ConnectorStatusService({ credentialStore });
+    connectGithub(statusService);
+    const service = new FailingConnectorService(
+      definition,
+      statusService,
+      new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio request failed with HTTP 401', 401, {
+        httpStatus: 401,
+      }),
+    );
+
+    await expect(service.execute(
+      { connectorId: 'github', toolName: 'github.search', input: {} },
+      { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
+    )).rejects.toMatchObject({ code: 'CONNECTOR_EXECUTION_FAILED', status: 401 });
+
+    await expect(service.getConnector('github')).resolves.toMatchObject({
+      status: 'connected',
+      accountLabel: 'octocat@example.com',
+    });
+    expect(service.getCredential('github')).toBeDefined();
+  });
+
+  it('keeps connector credentials when tool execution fails without auth-stale payload', async () => {
+    const definition = githubReadDefinition();
+    const credentialStore = new InMemoryConnectorCredentialStore();
+    const statusService = new ConnectorStatusService({ credentialStore });
+    connectGithub(statusService);
+    const service = new FailingConnectorService(
+      definition,
+      statusService,
+      new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio tool execution failed', 502, {
+        connectorId: 'github',
+        toolName: 'github.search',
+        error: {
+          message: 'Not Found',
+          status: '404',
+        },
+      }),
+    );
+
+    await expect(service.execute(
+      { connectorId: 'github', toolName: 'github.search', input: {} },
+      { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
+    )).rejects.toMatchObject({ code: 'CONNECTOR_EXECUTION_FAILED', status: 502 });
+
+    await expect(service.getConnector('github')).resolves.toMatchObject({
+      status: 'connected',
+      accountLabel: 'octocat@example.com',
+    });
+    expect(service.getCredential('github')).toBeDefined();
   });
 
   it('rejects non-auto connector tools during artifact refresh', async () => {

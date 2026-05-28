@@ -1421,33 +1421,35 @@ export function MemorySection({
 	          {entry.description || '—'}
 	        </div>
 	      </div>
-	      <button
-	        type="button"
-	        className="library-card-expand"
-	        onClick={() => openPreview(entry.id)}
-	        title={t('settings.memoryPreview')}
-	      >
-	        <Icon
-	          name={previewId === entry.id ? 'chevron-down' : 'chevron-right'}
-	          size={14}
-	        />
-	      </button>
-	      <button
-	        type="button"
-	        className="ghost library-card-action"
-	        onClick={() => startEdit(entry.id)}
-	        title={t('settings.memoryEdit')}
-	      >
-	        <Icon name="edit" size={14} />
-	      </button>
-	      <button
-	        type="button"
-	        className="ghost library-card-action"
-	        onClick={() => onDelete(entry.id)}
-	        title={t('settings.memoryDelete')}
-	      >
-	        <Icon name="close" size={14} />
-	      </button>
+	      <div className="memory-card-actions">
+	        <button
+	          type="button"
+	          className="library-card-expand"
+	          onClick={() => openPreview(entry.id)}
+	          title={t('settings.memoryPreview')}
+	        >
+	          <Icon
+	            name={previewId === entry.id ? 'chevron-down' : 'chevron-right'}
+	            size={14}
+	          />
+	        </button>
+	        <button
+	          type="button"
+	          className="ghost library-card-action"
+	          onClick={() => startEdit(entry.id)}
+	          title={t('settings.memoryEdit')}
+	        >
+	          <Icon name="edit" size={14} />
+	        </button>
+	        <button
+	          type="button"
+	          className="ghost library-card-action"
+	          onClick={() => onDelete(entry.id)}
+	          title={t('settings.memoryDelete')}
+	        >
+	          <Icon name="close" size={14} />
+	        </button>
+	      </div>
 	      {previewId === entry.id && (
 	        <div className="library-preview" style={{ width: '100%' }}>
 	          {previewBody === null ? (
@@ -1530,15 +1532,17 @@ export function MemorySection({
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          className="ghost library-card-action"
-          onClick={() => void onDeleteExtraction(record.id)}
-          title={t('settings.memoryExtractionDelete')}
-          aria-label={t('settings.memoryExtractionDelete')}
-        >
-          <Icon name="close" size={14} />
-        </button>
+        <div className="memory-card-actions">
+          <button
+            type="button"
+            className="ghost library-card-action"
+            onClick={() => void onDeleteExtraction(record.id)}
+            title={t('settings.memoryExtractionDelete')}
+            aria-label={t('settings.memoryExtractionDelete')}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
       </div>
     );
   };
@@ -1939,13 +1943,15 @@ export function MemorySection({
                   && !authorizationPending
                   && !connectError
                   && !connecting;
+                const connectorLastError = connector.lastError?.trim();
+                const reconnecting = connector.status === 'error';
                 const connectorHint = connected
                   ? connector.accountLabel || `${connector.tools.length} read tools`
                   : checkingStatus
                     ? 'Checking connection status…'
                     : authorizationPending
                     ? 'Finish authorization in your browser, then return here'
-                    : connectError || 'Connect this app before extraction';
+                    : connectorLastError || connectError || 'Connect this app before extraction';
                 return (
                   <label
                     key={connector.id}
@@ -1983,7 +1989,7 @@ export function MemorySection({
                         className={`memory-connector-connect-button${connecting || authorizationPending || checkingStatus ? ' is-loading' : ''}`}
                         disabled={connecting || authorizationPending || checkingStatus}
                         aria-busy={connecting || authorizationPending || checkingStatus || undefined}
-                        aria-label={`Connect ${connector.name}`}
+                        aria-label={`${reconnecting ? 'Reconnect' : 'Connect'} ${connector.name}`}
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -1996,7 +2002,7 @@ export function MemorySection({
                           className={connecting || authorizationPending || checkingStatus ? 'icon-spin' : ''}
                         />
                         <span>
-                          {checkingStatus ? 'Checking' : authorizationPending ? 'Waiting' : connecting ? 'Connecting' : 'Connect'}
+                          {checkingStatus ? 'Checking' : authorizationPending ? 'Waiting' : connecting ? 'Connecting' : reconnecting ? 'Reconnect' : 'Connect'}
                         </span>
                       </button>
                     )}
@@ -2278,12 +2284,7 @@ export function MemorySection({
                             {children.map((child) => (
                               <li
                                 key={child.id}
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: 'minmax(0, 1fr) auto',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                }}
+                                className="memory-tree-child-row"
                               >
                                 <span style={{ minWidth: 0 }}>
                                   <span className="library-card-name">{child.name}</span>{' '}
@@ -2297,14 +2298,16 @@ export function MemorySection({
                                     </span>
                                   ) : null}
                                 </span>
-                                <button
-                                  type="button"
-                                  className="ghost library-card-action"
-                                  onClick={() => startEdit(child.id)}
-                                  title={t('settings.memoryEdit')}
-                                >
-                                  <Icon name="edit" size={14} />
-                                </button>
+                                <div className="memory-card-actions">
+                                  <button
+                                    type="button"
+                                    className="ghost library-card-action"
+                                    onClick={() => startEdit(child.id)}
+                                    title={t('settings.memoryEdit')}
+                                  >
+                                    <Icon name="edit" size={14} />
+                                  </button>
+                                </div>
                               </li>
                             ))}
                           </ul>

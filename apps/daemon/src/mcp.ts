@@ -18,6 +18,8 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+
 import { postCreateArtifactRequest } from './artifact-create.js';
 
 const SERVER_NAME = 'open-design';
@@ -27,6 +29,7 @@ type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
+interface PluginsPayload { plugins?: CatalogItem[] }
 interface DesignSystemsPayload { designSystems?: CatalogItem[] }
 interface ResourcePayload { skill?: { body?: string; content?: string }; designSystem?: { body?: string; content?: string }; body?: string; content?: string }
 interface ProjectSummary { id: string; name: string; metadata?: JsonObject }
@@ -35,7 +38,7 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
@@ -127,7 +130,7 @@ const TOOL_DEFS = [
   {
     name: 'get_project',
     description:
-      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps, resolvedDir.',
+      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps, resolvedDir, and (when it has an entry file) a browser-openable previewUrl.',
     inputSchema: {
       type: 'object',
       properties: { project: PROJECT_ARG },
@@ -302,13 +305,130 @@ const TOOL_DEFS = [
     },
     annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Open Design project' },
   },
-  // Catalog (skills, design systems) is intentionally NOT exposed as
-  // MCP tools. Skills are recipes that Open Design itself uses to
-  // generate artifacts; an external coding agent consuming Open
-  // Design's output can't run them. Design systems are reference material a
-  // user can opt into via the resource URIs (od://design-systems/...)
-  // when they actually want them, instead of paying tool-description
-  // tokens on every turn.
+  {
+    name: 'create_project',
+    description:
+      'Create a new empty Open Design project to generate into, then call start_run against it. Returns the project (with its id) plus a conversationId. The id is derived from name unless you pass one explicitly.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Human-readable project name.' },
+        id: {
+          type: 'string',
+          description: 'Optional project id slug ([A-Za-z0-9._-], <=128 chars). Derived from name when omitted.',
+        },
+        designSystem: {
+          type: 'string',
+          description: 'Optional design system id to attach (see the od://design-systems/... resources).',
+        },
+        skill: { type: 'string', description: 'Optional skill id to seed the project with.' },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design project' },
+  },
+  // Discovery + generation. An external coding agent does NOT run a
+  // skill itself — it commissions Open Design to, via start_run. The
+  // daemon then spawns ITS OWN agent (Claude Code / API fallback /…)
+  // to do the work. So list_skills / list_plugins exist purely so the
+  // caller can discover what it can ask OD to generate; start_run
+  // kicks off the run and get_run polls it to completion. Design
+  // systems stay resource-only (od://design-systems/...) since they're
+  // reference material the caller opts into, not something to run.
+  {
+    name: 'list_skills',
+    description: 'List Open Design skills you can pass to start_run as a recipe. Discovery only — Open Design runs the skill, not you.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design skills' },
+  },
+  {
+    name: 'list_plugins',
+    description: 'List installed Open Design plugins (packaged design workflows) you can pass to start_run as plugin + inputs.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design plugins' },
+  },
+  {
+    name: 'start_run',
+    description:
+      'Commission Open Design to generate or refine a design. Open Design spawns its own agent to do the work and returns a runId immediately. Poll get_run(runId) until status is terminal, then get_artifact to pull the result. Project optional; defaults to the active project. Requires an existing project (create one first with create_project).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        prompt: {
+          type: 'string',
+          description: 'What to make or change, in natural language. Optional when a plugin supplies its own brief.',
+        },
+        skill: {
+          type: 'string',
+          description: 'Skill id from list_skills to drive the run. Optional.',
+        },
+        plugin: {
+          type: 'string',
+          description: 'Plugin id from list_plugins to drive the run. Optional.',
+        },
+        inputs: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Plugin inputs object (only meaningful with plugin). Optional.',
+        },
+        agent: {
+          type: 'string',
+          description: "Which agent Open Design should run, e.g. 'claude' | 'codex' | 'gemini'. Optional; defaults to the user's configured agent.",
+        },
+        model: {
+          type: 'string',
+          description: 'Model id override for the run. Optional.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Generate with Open Design' },
+  },
+  {
+    name: 'get_run',
+    description:
+      'Poll a run started by start_run. Returns status (queued|running|succeeded|failed|canceled) plus error info. On success, adds previewUrl (open it in a browser to view the rendered design) and agentMessage (the inner agent\'s textual output reassembled from the event stream — show this when there is no previewUrl, e.g. when the agent asked the user a clarifying question instead of producing files).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        runId: { type: 'string', description: 'Run id returned by start_run.' },
+      },
+      required: ['runId'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design run' },
+  },
+  {
+    name: 'cancel_run',
+    description: 'Request cancellation of an in-flight run started by start_run.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        runId: { type: 'string', description: 'Run id returned by start_run.' },
+      },
+      required: ['runId'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Cancel Open Design run' },
+  },
+  {
+    name: 'list_agents',
+    description:
+      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, and up to 10 sample models (modelsCount carries the real total).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        includeUnavailable: {
+          type: 'boolean',
+          description: 'When true, include agents whose binary is not installed. Defaults to false.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design agents' },
+  },
 ];
 
 export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
@@ -356,6 +476,42 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         ' - list_projects to discover what is available on this daemon.',
         ' - get_active_context() if you want the active project/file',
         '    explicitly without making any other tool call.',
+        '',
+        'To make Open Design GENERATE or refine a design (rather than just',
+        'read/edit files), commission a run - you do not run skills yourself:',
+        ' - list_skills / list_plugins to see what you can ask OD to make.',
+        ' - list_agents when you need to pass start_run.agent — do not',
+        '    guess "claude" / "codex" / "gemini"; only agents in the',
+        '    returned list will actually spawn on this machine.',
+        ' - create_project(name) first if you need a fresh project to',
+        '    generate into; start_run requires an existing project.',
+        ' - start_run(prompt, [skill], [plugin], [inputs]) kicks off generation in',
+        '    the active or named project and returns a runId immediately.',
+        '    Open Design spawns its own agent to do the work.',
+        ' - get_run(runId) polls until status is succeeded/failed/canceled;',
+        '    on success it returns a previewUrl you can open in a browser',
+        '    and a hint to pull the files with get_artifact.',
+        ' - cancel_run(runId) aborts an in-flight run.',
+        '',
+        'Generation patience: Open Design runs typically take 5–30',
+        'minutes. Polls returning status:running with unchanged file',
+        'mtimes is the inner agent thinking, not a hang. Do NOT cancel',
+        'and substitute write_file as a "faster" workaround — that',
+        'throws away the pipeline\'s design quality and is exactly the',
+        'failure mode this surface is meant to avoid. Poll every 30–60',
+        'seconds, tell the user "still working" between polls, and let',
+        'the run finish. Only call cancel_run if the user explicitly',
+        'asks you to abort.',
+        '',
+        'Ambiguous-format requests: words like "PPT" / "deck" / "slides" /',
+        '"presentation" / "document" / "PDF" / "doc" map to two different',
+        'deliverables — Open Design natively produces browser-viewable',
+        'HTML/SVG (including HTML-rendered decks), but the user may want a',
+        'real binary file (.pptx / .docx / .pdf) which Open Design does NOT',
+        'produce and which you would have to export yourself from OD\'s',
+        'output. When the user\'s request is ambiguous, ASK them which one',
+        'they want before kicking off work; do not silently pick one and do',
+        'not run both paths in parallel.',
         '',
         'Project arguments accept either a UUID or a name substring',
         '(e.g. "recaptr"); the server resolves the latter. When a project',
@@ -511,13 +667,30 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
         const project = data?.project ?? data;
         const resolvedDir = typeof data?.resolvedDir === 'string' ? data.resolvedDir : null;
+        const declaredEntry = project?.metadata?.entryFile ?? null;
+        const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry);
+        const previewUrl = rawPreviewUrl(baseUrl, id, entryFile);
+        // Build the studio deep link too — needs the project's
+        // default conversation, which we look up once. Cheap to skip
+        // when the daemon has no webBaseUrl configured.
+        const webBase = await getWebBaseUrl(baseUrl);
+        const conversationId = webBase ? await getDefaultConversationId(baseUrl, id) : null;
+        const studioUrl = buildStudioUrl(webBase, id, conversationId, entryFile);
         return ok(
           withActiveEcho(
             {
               ...project,
-              entryFile: project?.metadata?.entryFile ?? null,
+              entryFile,
               kind: project?.metadata?.kind ?? null,
               resolvedDir,
+              // previewUrl: open in a browser to view the rendered
+              // design directly (HTML entries render; see
+              // rawPreviewUrl). studioUrl: open the OD studio page
+              // that shows the rendered file alongside the chat
+              // history for the project. Both omitted when their
+              // prerequisites aren't met.
+              ...(previewUrl ? { previewUrl } : {}),
+              ...(studioUrl ? { studioUrl } : {}),
             },
             active,
             resolved,
@@ -575,6 +748,27 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         return await deleteFile(baseUrl, args);
       case 'delete_project':
         return await deleteProject(baseUrl, args);
+      case 'create_project':
+        return await createProject(baseUrl, args);
+      case 'list_skills':
+        return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
+      case 'list_plugins':
+        return ok(await listPlugins(baseUrl));
+      case 'list_agents':
+        return ok(await listAgents(baseUrl, args.includeUnavailable === true));
+      case 'start_run':
+        return await startRun(baseUrl, args);
+      case 'get_run':
+        return await getRun(baseUrl, args);
+      case 'cancel_run': {
+        requireString(args.runId, 'runId');
+        return ok(
+          await postJson<JsonObject>(
+            `${baseUrl}/api/runs/${encodeURIComponent(args.runId)}/cancel`,
+            {},
+          ),
+        );
+      }
       default:
         return errorResult(`unknown tool: ${name}`);
     }
@@ -664,6 +858,381 @@ async function formatDaemonError(resp: Response, url: string): Promise<string> {
     // body wasn't JSON; fall through with the raw text.
   }
   return `daemon ${resp.status} on ${url}: ${detail}`;
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!resp.ok) {
+    throw new Error(await formatDaemonError(resp, url));
+  }
+  return (await resp.json()) as T;
+}
+
+// Create an empty project to generate into. start_run needs an existing
+// project; without this an external agent could only work on projects
+// the user had already created in Open Design.
+//
+// skipDiscoveryBrief defaults to true: the outer agent (Codex, Cursor,
+// …) IS the user-facing surface, so OD's own interactive discovery
+// stage would create a confusing nested-clarification loop where OD's
+// <question-form> output ends up dropped from the MCP response because
+// no project file is produced. Better to let the outer agent gather
+// requirements directly and pass a precise prompt to start_run.
+async function createProject(baseUrl: string, args: McpArgs) {
+  requireString(args.name, 'name');
+  const id =
+    typeof args.id === 'string' && args.id.length > 0
+      ? args.id
+      : slugifyProjectId(args.name);
+  const body: JsonObject = { id, name: args.name, skipDiscoveryBrief: true };
+  if (typeof args.designSystem === 'string' && args.designSystem.length > 0) {
+    body.designSystemId = args.designSystem;
+  }
+  if (typeof args.skill === 'string' && args.skill.length > 0) {
+    body.skillId = args.skill;
+  }
+  return ok(await postJson<JsonObject>(`${baseUrl}/api/projects`, body));
+}
+
+// Flatten daemon's plugin record into the few fields an external agent
+// needs to pick a plugin: id, title, description, kind, tags. The raw
+// record carries 16+ fields (fsPath, sourceMarketplaceId, installedAt,
+// resolvedSource, …) that an agent never reasons about, and the
+// human-readable description / kind live one level deeper in
+// `manifest.description` / `manifest.od.kind`.
+async function listPlugins(baseUrl: string): Promise<JsonObject> {
+  const raw = await getJson<{ plugins?: JsonObject[] }>(`${baseUrl}/api/plugins`);
+  const plugins = (raw?.plugins ?? []).map((p) => {
+    const manifest = (p?.manifest as JsonObject | undefined) ?? {};
+    const od = (manifest.od as JsonObject | undefined) ?? {};
+    const result: JsonObject = {
+      id: p?.id,
+      title: manifest.title ?? p?.title ?? p?.id,
+    };
+    if (typeof manifest.description === 'string') result.description = manifest.description;
+    const kind = od.taskKind ?? od.kind;
+    if (typeof kind === 'string') result.kind = kind;
+    if (Array.isArray(manifest.tags)) result.tags = manifest.tags;
+    return result;
+  });
+  return { plugins };
+}
+
+// Flatten daemon's agent definition into the few fields an external
+// agent needs to pick a value for start_run.agent. Default filters to
+// `available: true` (only installed CLIs) so the outer agent doesn't
+// pick an agent it can't actually run — the failure mode that left us
+// with zombie "running" runs whose inner Claude binary never spawned.
+// Models are truncated to 10 with `modelsCount` carrying the full
+// total; that keeps the response token-economical even for agents
+// (e.g. opencode) that expose 100+ models.
+async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise<JsonObject> {
+  const raw = await getJson<{ agents?: JsonObject[] }>(`${baseUrl}/api/agents`);
+  const all = raw?.agents ?? [];
+  const filtered = includeUnavailable
+    ? all
+    : all.filter((a) => a?.available === true);
+  const MAX_MODELS = 10;
+  const agents = filtered.map((a) => {
+    const models = Array.isArray(a?.models) ? (a.models as unknown[]) : [];
+    const out: JsonObject = {
+      id: a?.id,
+      name: a?.name,
+      models: models.slice(0, MAX_MODELS),
+      modelsCount: models.length,
+    };
+    if (typeof a?.version === 'string' && a.version.length > 0) out.version = a.version;
+    if (includeUnavailable) {
+      out.available = Boolean(a?.available);
+      if (typeof a?.installUrl === 'string') out.installUrl = a.installUrl;
+    }
+    return out;
+  });
+  return { agents };
+}
+
+// Derive a valid project id ([A-Za-z0-9._-], <=128) from a display name,
+// with a short random suffix so repeated creates with the same name
+// don't collide on the daemon's primary key.
+function slugifyProjectId(name: string): string {
+  const base =
+    name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) ||
+    'project';
+  return `${base}-${randomUUID().replace(/-/g, '').slice(0, 4)}`;
+}
+
+// Commission a generation run. The caller never runs the skill/plugin
+// itself; we POST to /api/runs and the daemon spawns its own agent.
+// Returns the runId immediately so the caller can poll get_run —
+// start+poll because MCP is request/response and generation is
+// minutes-long.
+async function startRun(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const body: JsonObject = { projectId: id };
+  if (typeof args.prompt === 'string' && args.prompt.length > 0) body.message = args.prompt;
+  if (typeof args.skill === 'string' && args.skill.length > 0) body.skillId = args.skill;
+  if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
+  if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
+  if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
+  if (args.inputs !== undefined) {
+    if (args.inputs === null || typeof args.inputs !== 'object' || Array.isArray(args.inputs)) {
+      throw new Error('inputs must be an object');
+    }
+    body.pluginInputs = args.inputs;
+  }
+  const created = await postJson<JsonObject>(`${baseUrl}/api/runs`, body);
+  // Build studioUrl (conversation-level — no entry file yet) so the
+  // outer agent has a URL to give the user right away. The daemon
+  // returns conversationId in the response now that POST /api/runs
+  // falls back to the project's default conversation for MCP callers.
+  const webBase = await getWebBaseUrl(baseUrl);
+  const studioUrl = buildStudioUrl(webBase, id, created?.conversationId, null);
+  return ok(
+    withActiveEcho(
+      {
+        ...created,
+        ...(studioUrl ? { studioUrl } : {}),
+        hint: 'Run started. Open Design generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status the response carries previewUrl + agentMessage which together are the canonical deliverable. When studioUrl is present, ALWAYS show it to the user as a clickable markdown link: `[Open Open Design studio](STUDIO_URL)` — never as inline code or bare text, because Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable.',
+      },
+      active,
+      resolved,
+    ),
+  );
+}
+
+// Poll a run. On terminal status we enrich the daemon's status body
+// with three things the outer agent needs to actually close the loop:
+// (1) previewUrl when there's an entry file — open this in a browser,
+// (2) agentMessage = the inner agent's textual output reassembled from
+//     the SSE event stream, so when the inner agent asked a discovery
+//     question back instead of producing files, the outer agent can
+//     relay it to the user (without this, the run looks like a
+//     "succeeded with empty output" mystery), and
+// (3) a hint that tells the outer agent how to surface both.
+async function getRun(baseUrl: string, args: McpArgs) {
+  requireString(args.runId, 'runId');
+  const status = await getJson<JsonObject>(
+    `${baseUrl}/api/runs/${encodeURIComponent(args.runId)}`,
+  );
+  if (status.status !== 'succeeded' || typeof status.projectId !== 'string' || !status.projectId) {
+    // Non-terminal (or terminal-but-failed) status. Surface
+    // eventsLogPath with a tail hint so the outer agent can watch live
+    // progress in its own shell instead of cancelling because polling
+    // shows nothing changing.
+    const webBase = await getWebBaseUrl(baseUrl);
+    const studioUrl = buildStudioUrl(webBase, status.projectId, status.conversationId, null);
+    const enriched: JsonObject = { ...status };
+    if (studioUrl) enriched.studioUrl = studioUrl;
+    if (typeof status.eventsLogPath === 'string' && status.eventsLogPath.length > 0) {
+      enriched.hint = 'Run still in flight. Tail eventsLogPath in your own shell (e.g. `tail -n 50 -f "' + status.eventsLogPath + '"`) to see live text_delta / tool_use events from the inner agent — that is your in-flight progress signal. Keep polling get_run every 30–60s; do not cancel because file mtimes look static, that is the agent thinking between writes.';
+      if (studioUrl) {
+        enriched.hint += ` Once you have something to show the user, give them a clickable markdown link to studioUrl — render it as \`[Watch progress in Open Design studio](${studioUrl})\`, NEVER as inline code or bare text, so clients like Codex / Cursor / Zed make it navigable in their built-in browser pane.`;
+      }
+    }
+    return ok(enriched);
+  }
+  const [previewUrl, agentMessage, webBase] = await Promise.all([
+    buildRunPreviewUrl(baseUrl, status.projectId),
+    fetchRunAgentMessage(baseUrl, String(status.id ?? args.runId)),
+    getWebBaseUrl(baseUrl),
+  ]);
+  // Reverse-derive entryFile from previewUrl when present so we can
+  // build a fully-specified studio link (project + conversation +
+  // file) rather than just the conversation-level URL.
+  const entryFile = previewUrl
+    ? decodeURIComponent(previewUrl.split('/raw/')[1] ?? '')
+    : null;
+  const studioUrl = buildStudioUrl(webBase, status.projectId, status.conversationId, entryFile);
+  const enriched: JsonObject = { ...status };
+  if (previewUrl) enriched.previewUrl = previewUrl;
+  if (agentMessage) enriched.agentMessage = agentMessage;
+  if (studioUrl) enriched.studioUrl = studioUrl;
+  enriched.hint = previewUrl
+    ? `Run finished. studioUrl (when present) is the BEST link to hand the user — it opens the OD studio page that shows the rendered design AND the chat history (your prompts and the inner agent's replies) side by side. ALWAYS render studioUrl as a clickable markdown link: \`[Open Open Design studio](STUDIO_URL)\` — never as inline code or bare text, because clients like Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable. previewUrl is the raw file URL if the user only wants the rendered output. agentMessage carries the inner agent's explanation; show it alongside the link. Call get_artifact({ project: "${status.projectId}" }) when you need the source files — always pass project explicitly; omitting it falls back to the active project, which may differ. eventsLogPath, when present, holds the full inner-agent event log for forensics.`
+    : 'Run finished but produced no files. The inner agent\'s output is in agentMessage — relay it to the user verbatim. Most often this is a clarifying question (e.g. a <question-form>) you should answer by calling start_run again with a more specific prompt or a chosen plugin. When studioUrl is present, show it as a clickable markdown link (`[Open Open Design studio](STUDIO_URL)`) so the user can navigate to the OD page that shows the chat history — never render it as inline code. eventsLogPath, when present, holds the full event log if you need to inspect what happened.';
+  return ok(enriched);
+}
+
+// Reassemble the inner agent's textual output from the SSE event log.
+// We pull the events one-shot (the endpoint returns the full history
+// for terminal runs and closes), parse out text_delta deltas, and
+// concatenate. Best-effort: any HTTP / parse error returns null so the
+// caller just omits the field.
+async function fetchRunAgentMessage(baseUrl: string, runId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
+    if (!resp.ok) return null;
+    const body = await resp.text();
+    const parts: string[] = [];
+    for (const block of body.split(/\n\n/)) {
+      if (!block.trim()) continue;
+      let eventName = '';
+      let dataLine = '';
+      for (const rawLine of block.split('\n')) {
+        if (rawLine.startsWith('event:')) eventName = rawLine.slice(6).trim();
+        else if (rawLine.startsWith('data:')) dataLine = rawLine.slice(5).trim();
+      }
+      if (eventName !== 'agent' || !dataLine) continue;
+      try {
+        const data = JSON.parse(dataLine) as { type?: string; delta?: unknown };
+        if (data?.type === 'text_delta' && typeof data.delta === 'string') {
+          parts.push(data.delta);
+        }
+      } catch {
+        // Non-JSON data lines (rare) are skipped silently.
+      }
+    }
+    const message = parts.join('');
+    return message.length > 0 ? message : null;
+  } catch {
+    return null;
+  }
+}
+
+// Studio deep links (browser-facing OD page that shows the file
+// preview alongside the conversation history for a run). Built from
+// the daemon's advertised webBaseUrl + project + conversation + entry
+// file. The webBaseUrl is exposed by /api/mcp/install-info; we cache
+// it briefly because each get_run/get_project poll otherwise pays for
+// an extra fetch. Returns null when any required piece is missing —
+// callers omit the field rather than emit a half-built URL.
+
+interface WebBaseUrlCache {
+  t: number;
+  url: string | null;
+}
+const WEB_BASE_URL_TTL_MS = 5_000;
+let webBaseUrlCache: WebBaseUrlCache | null = null;
+
+// Internal — for tests only. Module-scoped caches persist across `it`
+// blocks inside the same vitest module load, so an earlier test that
+// returns `null` would otherwise poison subsequent tests for 5s. Test
+// files call this in afterEach to start each case with a clean cache.
+export function _resetWebBaseUrlCache(): void {
+  webBaseUrlCache = null;
+}
+
+async function getWebBaseUrl(daemonBaseUrl: string): Promise<string | null> {
+  const now = Date.now();
+  if (webBaseUrlCache && now - webBaseUrlCache.t < WEB_BASE_URL_TTL_MS) {
+    return webBaseUrlCache.url;
+  }
+  try {
+    const data = await getJson<{ webBaseUrl?: string | null }>(
+      `${daemonBaseUrl}/api/mcp/install-info`,
+    );
+    const url =
+      typeof data?.webBaseUrl === 'string' && data.webBaseUrl.length > 0
+        ? data.webBaseUrl
+        : null;
+    webBaseUrlCache = { t: now, url };
+    return url;
+  } catch {
+    webBaseUrlCache = { t: now, url: null };
+    return null;
+  }
+}
+
+function buildStudioUrl(
+  webBaseUrl: string | null,
+  projectId: unknown,
+  conversationId: unknown,
+  entryFile: unknown,
+): string | null {
+  if (!webBaseUrl) return null;
+  if (typeof projectId !== 'string' || !projectId) return null;
+  if (typeof conversationId !== 'string' || !conversationId) return null;
+  const base = `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`;
+  if (typeof entryFile === 'string' && entryFile.length > 0) {
+    const segments = entryFile
+      .split('/')
+      .filter((s) => s.length > 0)
+      .map(encodeURIComponent)
+      .join('/');
+    return `${base}/files/${segments}`;
+  }
+  return base;
+}
+
+// For get_project / start_run: pick the project's first / default
+// conversation so the studio link lands the user on a coherent page.
+// create_project seeds a default conversation per project; this just
+// reads the same one back. Returns null on any lookup failure — caller
+// omits studioUrl.
+async function getDefaultConversationId(baseUrl: string, projectId: string): Promise<string | null> {
+  try {
+    const data = await getJson<{ conversations?: Array<{ id?: string }> }>(
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/conversations`,
+    );
+    const first = Array.isArray(data?.conversations) ? data.conversations[0] : null;
+    return typeof first?.id === 'string' && first.id.length > 0 ? first.id : null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve a project's entry file, preferring metadata.entryFile when
+// set and falling back to scanning the file list. This matters because
+// real-world writes (write_file, half-finished inner-agent runs)
+// leave metadata.entryFile null even when a perfectly viewable
+// index.html exists at the project root — without the fallback,
+// get_project/get_run would silently omit previewUrl and force the
+// outer agent to guess a file:// path.
+async function resolveProjectEntry(baseUrl: string, projectId: string, declared: unknown): Promise<string | null> {
+  if (typeof declared === 'string' && declared.length > 0) return declared;
+  try {
+    const data = await getJson<{ files?: Array<{ path?: string; name?: string; kind?: string }> }>(
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/files`,
+    );
+    const files = data?.files ?? [];
+    // index.html wins at any level — the conventional entry signal.
+    const indexHtml = files.find((f) => f?.path === 'index.html' || f?.name === 'index.html');
+    if (indexHtml?.path) return indexHtml.path;
+    // Otherwise: if exactly one .html sits at the project root, that
+    // is unambiguous enough to pick. Don't guess past one match.
+    const htmlAtRoot = files.filter(
+      (f) => typeof f?.path === 'string' && !f.path.includes('/') && f.path.toLowerCase().endsWith('.html'),
+    );
+    if (htmlAtRoot.length === 1 && htmlAtRoot[0]?.path) return htmlAtRoot[0].path;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Build the raw URL that renders a project's entry file. The raw route
+// serves it with the right Content-Type and resolves sibling
+// CSS/JS/img relative to the same dir, so this URL opens directly in a
+// browser (HTML entries render; bare JSX entries that rely on
+// host-injected React/Babel do not — those still need the Open Design
+// UI). Returns null when there's no entry file. Pure: no I/O, so
+// get_project can call it from project data it already has.
+function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): string | null {
+  if (typeof entry !== 'string' || entry.length === 0) return null;
+  const segments = entry.split('/').filter((s) => s.length > 0).map(encodeURIComponent).join('/');
+  return `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments}`;
+}
+
+// Best-effort variant for get_run, which only has a projectId: fetch the
+// project, then build the URL. Returns null on any lookup failure — the
+// run result is still reachable via get_artifact, so this is a
+// convenience only.
+async function buildRunPreviewUrl(baseUrl: string, projectId: string): Promise<string | null> {
+  try {
+    const data = await getJson<ProjectPayload>(
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}`,
+    );
+    const project = data?.project ?? data;
+    const declared = (project as { metadata?: JsonObject } | undefined)?.metadata?.entryFile;
+    const entry = await resolveProjectEntry(baseUrl, projectId, declared);
+    return rawPreviewUrl(baseUrl, projectId, entry);
+  } catch {
+    return null;
+  }
 }
 
 async function createArtifact(baseUrl: string, args: McpArgs) {

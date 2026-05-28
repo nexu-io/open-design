@@ -281,6 +281,89 @@ describe('MemorySection', () => {
     expect(screen.getByDisplayValue('- Keep design-system extraction in the loop')).toBeTruthy();
   });
 
+  it('anchors memory tree entry edit controls in the right-side action zone', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const entry = {
+      id: 'project_design_agent_goal',
+      name: 'Design agent goal',
+      description: 'Open Design should evolve from accepted work',
+      type: 'project',
+      body: '- Keep design-system extraction in the loop',
+      updatedAt: Date.now(),
+    };
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [entry],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/tree') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          tree: [
+            {
+              id: 'folder:project',
+              parentId: null,
+              path: '/project',
+              name: 'Project',
+              kind: 'folder',
+              type: 'project',
+              scope: 'project',
+              sourcePacketIds: [],
+              proposalIds: [],
+              createdAt: new Date(entry.updatedAt).toISOString(),
+              updatedAt: new Date(entry.updatedAt).toISOString(),
+              childrenCount: 1,
+            },
+            {
+              id: entry.id,
+              parentId: 'folder:project',
+              path: `/project/${entry.id}`,
+              name: entry.name,
+              description: entry.description,
+              kind: 'entry',
+              type: 'project',
+              scope: 'project',
+              sourcePacketIds: [],
+              proposalIds: [],
+              createdAt: new Date(entry.updatedAt).toISOString(),
+              updatedAt: new Date(entry.updatedAt).toISOString(),
+              childrenCount: 0,
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    const treeDetails = (await screen.findByText('Memory tree')).closest('details')!;
+    const childRow = within(treeDetails)
+      .getByText('Design agent goal')
+      .closest('.memory-tree-child-row') as HTMLElement;
+    const editButton = within(childRow).getByTitle('Edit');
+    const actionZone = editButton.closest('.memory-card-actions');
+    const childContent = childRow.firstElementChild as HTMLElement;
+
+    expect(actionZone).toBeTruthy();
+    expect(actionZone?.parentElement).toBe(childRow);
+    expect(childContent.contains(editButton)).toBe(false);
+  });
+
   it('shows unsaved index state and saves the updated index', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     let savedIndex = '# Memory\n\n- Existing bullet\n';
@@ -927,6 +1010,65 @@ describe('MemorySection', () => {
     expect(within(remountedGithubRow).getByText('Finish authorization in your browser, then return here')).toBeTruthy();
     expect(within(remountedGithubRow).queryByText('Select')).toBeNull();
     expect((within(remountedGithubRow).getByRole('button', { name: 'Connect GitHub' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows reconnect guidance for memory connectors with stale authorization', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const lastError = 'GitHub authorization expired. Reconnect GitHub.';
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/connectors/discovery?hydrateTools=false') {
+        return new Response(JSON.stringify({
+          connectors: [
+            {
+              id: 'github',
+              name: 'GitHub',
+              provider: 'composio',
+              category: 'Developer',
+              status: 'error',
+              lastError,
+              tools: [],
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/status') {
+        return new Response(JSON.stringify({
+          statuses: {
+            github: { status: 'error', lastError },
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
+
+    const githubRow = await waitFor(() => {
+      const row = document.querySelector('[data-memory-connector-id="github"]');
+      expect(row).toBeTruthy();
+      return row as HTMLElement;
+    });
+    expect(within(githubRow).getByText(lastError)).toBeTruthy();
+    expect(within(githubRow).getByRole('button', { name: 'Reconnect GitHub' })).toBeTruthy();
+    expect(within(githubRow).queryByText('Select')).toBeNull();
   });
 
   it('shows connector read failures instead of a generic empty state', async () => {

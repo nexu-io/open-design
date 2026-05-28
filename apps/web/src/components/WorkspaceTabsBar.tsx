@@ -473,10 +473,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         setTabsMenuOpen(false);
       }
     }
-    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('mousedown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('mousedown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [tabsMenuOpen]);

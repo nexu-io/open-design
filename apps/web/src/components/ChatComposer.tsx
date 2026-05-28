@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from 'react-dom';
 import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
@@ -35,7 +36,7 @@ import type {
   ResearchOptions,
   RunContextSelection,
 } from '@open-design/contracts';
-import { buildVisualAnnotationAttachment } from '../comments';
+import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
@@ -161,6 +162,11 @@ interface Props {
 // push text into the composer without owning its draft state.
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
+  restoreDraft: (draft: {
+    text: string;
+    attachments?: ChatAttachment[];
+    commentAttachments?: ChatCommentAttachment[];
+  }) => void;
   focus: () => void;
 }
 
@@ -680,6 +686,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             ta.setSelectionRange(pos, pos);
           });
         },
+        restoreDraft: ({ text, attachments = [], commentAttachments = [] }) => {
+          setDraft(text);
+          setStaged(attachments);
+          setStagedVisualComments(commentAttachments);
+          setStagedSkills([]);
+          setStagedMcpServers([]);
+          setStagedConnectors([]);
+          setUploadError(null);
+          setMention(null);
+          setSlash(null);
+          seededRef.current = true;
+          requestAnimationFrame(() => {
+            const ta = textareaRef.current;
+            if (!ta) return;
+            ta.focus();
+            const pos = text.length;
+            ta.setSelectionRange(pos, pos);
+          });
+        },
         focus: () => {
           textareaRef.current?.focus();
         },
@@ -812,19 +837,50 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    async function uploadClipboardImagesFromAsyncClipboard() {
+      if (!navigator.clipboard?.read) return false;
+      try {
+        const items = await navigator.clipboard.read();
+        const files: File[] = [];
+        const stamp = Date.now();
+        for (const item of items) {
+          const imageType = item.types.find((type) => type.startsWith('image/'));
+          if (!imageType) continue;
+          const blob = await item.getType(imageType);
+          const extension = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+          files.push(new File([blob], `clipboard-screenshot-${stamp}.${extension}`, { type: imageType }));
+        }
+        if (files.length === 0) return false;
+        await uploadFiles(files);
+        return true;
+      } catch (err) {
+        console.warn('Could not read image from clipboard', err);
+        return false;
+      }
+    }
+
     useEffect(() => {
       function onAnnotation(e: Event) {
         const detail = (e as CustomEvent<AnnotationEventDetail>).detail;
         if (!detail) return;
         void (async () => {
+          let acked = false;
+          const ack = (result: { ok: boolean; message?: string }) => {
+            if (acked) return;
+            acked = true;
+            detail.ack?.(result);
+          };
           let uploaded: ChatAttachment[] = [];
           let visualAttachmentInput: Parameters<typeof buildVisualAnnotationAttachment>[0] | null = null;
           let visualAttachment: ChatCommentAttachment | null = null;
-          if (detail.file) {
-            const id = await ensureProject();
-            if (!id) return;
-            setUploading(true);
-            try {
+          try {
+            if (detail.file) {
+              const id = await ensureProject();
+              if (!id) {
+                ack({ ok: false, message: t('chat.annotationProjectCreateFailed') });
+                return;
+              }
+              setUploading(true);
               const result = await uploadProjectFiles(id, [detail.file]);
               if (result.uploaded.length > 0) {
                 uploaded = result.uploaded;
@@ -869,45 +925,57 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               if (result.failed.length > 0) {
                 const detailText = result.error ? ` (${result.error})` : '';
                 setUploadError(`Attachment upload failed for ${result.failed.length} file(s)${detailText}.`);
+                if (uploaded.length === 0) {
+                  ack({ ok: false, message: t('chat.annotationUploadFailed') });
+                  return;
+                }
               }
-            } finally {
-              setUploading(false);
             }
-          }
+            setUploading(false);
 
-          if (detail.action === 'send') {
-            if (streaming) {
-              if (uploaded.length > 0) setStaged((s) => [...s, ...uploaded]);
-              if (visualAttachmentInput) {
-                setStagedVisualComments((current) => [
-                  ...current,
-                  buildVisualAnnotationAttachment({
-                    ...visualAttachmentInput!,
-                    order: commentAttachments.length + current.length + 1,
-                  }),
-                ]);
+            if (detail.action === 'send') {
+              if (streaming) {
+                if (uploaded.length > 0) setStaged((s) => [...s, ...uploaded]);
+                if (visualAttachmentInput) {
+                  setStagedVisualComments((current) => [
+                    ...current,
+                    buildVisualAnnotationAttachment({
+                      ...visualAttachmentInput!,
+                      order: commentAttachments.length + current.length + 1,
+                    }),
+                  ]);
+                }
+                if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+                setStreamingAnnotationSendPending(true);
+                textareaRef.current?.focus();
+                ack({ ok: true });
+                return;
               }
-              if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
-              setStreamingAnnotationSendPending(true);
-              textareaRef.current?.focus();
+              if (visualAttachmentInput) {
+                visualAttachment = buildVisualAnnotationAttachment({
+                  ...visualAttachmentInput,
+                  order: commentAttachments.length + stagedVisualComments.length + 1,
+                });
+              }
+              const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
+              const attachments = [...staged, ...uploaded];
+              const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
+              ack({ ok: true });
               return;
             }
-            if (visualAttachmentInput) {
-              visualAttachment = buildVisualAnnotationAttachment({
-                ...visualAttachmentInput,
-                order: commentAttachments.length + stagedVisualComments.length + 1,
-              });
-            }
-            const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
-            const attachments = [...staged, ...uploaded];
-            const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-            sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
-            return;
-          }
 
-          if (detail.note) {
-            setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
-            textareaRef.current?.focus();
+            if (detail.note) {
+              setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+              textareaRef.current?.focus();
+            }
+            ack({ ok: true });
+          } catch (err) {
+            console.warn('Could not send annotation', err);
+            setUploadError(err instanceof Error ? err.message : t('chat.annotationFailed'));
+            ack({ ok: false, message: t('chat.annotationFailed') });
+          } finally {
+            setUploading(false);
           }
         })();
       }
@@ -924,6 +992,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       stagedSkills,
       stagedVisualComments,
       streaming,
+      t,
     ]);
 
     useEffect(() => {
@@ -957,7 +1026,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (files.length > 0) {
         e.preventDefault();
         void uploadFiles(files);
+        return;
       }
+      void uploadClipboardImagesFromAsyncClipboard();
     }
 
     function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -1880,7 +1951,7 @@ function StagedAttachments({
           );
         })}
       </div>
-      {preview && previewUrl ? (
+      {preview && previewUrl ? createPortal(
         <div
           className="staged-preview-modal"
           role="dialog"
@@ -1905,7 +1976,8 @@ function StagedAttachments({
             </div>
             <img src={previewUrl} alt={preview.name} />
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </>
   );
@@ -1965,8 +2037,8 @@ function StagedCommentAttachments({
     <div className="staged-row comment-staged-row" data-testid="staged-comment-attachments">
       {visibleAttachments.map((a) => (
         <div key={a.id} className="staged-chip staged-comment">
-          <span className="staged-name" title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${a.elementId}: ${a.comment}`}>
-            <strong>{a.selectionKind === 'visual' ? 'Visual mark' : a.elementId}</strong>
+          <span className="staged-name" title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${commentTargetDisplayName(a)}: ${a.comment}`}>
+            <strong>{commentTargetDisplayName(a)}</strong>
             <span>{a.comment}</span>
           </span>
           <button
