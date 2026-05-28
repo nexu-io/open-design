@@ -30,7 +30,7 @@
 
 import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { cp, lstat, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
@@ -81,6 +81,13 @@ async function copyTreeDereferenced(srcDir: string, destDir: string): Promise<vo
       await copyTreeDereferenced(from, to);
     } else if (entryStat.isFile()) {
       await pipeline(createReadStream(from), createWriteStream(to));
+      // createWriteStream opens the destination with the default 0644, so
+      // restore the source's permission bits (notably the exec bit on
+      // skill helper scripts) and mtime — `fs.cp` preserves these, and
+      // skills shell out to staged scripts. Mask to 0o777 so the
+      // agent-writable staging copy never inherits setuid/setgid/sticky.
+      await chmod(to, entryStat.mode & 0o777);
+      await utimes(to, entryStat.atime, entryStat.mtime);
     }
     // Sockets, FIFOs, and devices can't appear in a sane skill folder and
     // copying them would hang or fail — skip them.

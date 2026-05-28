@@ -1,9 +1,11 @@
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -293,6 +295,41 @@ describe('stageActiveSkill', () => {
     expect(lstatSync(linked).isFile()).toBe(true);
     expect(readFileSync(linked, 'utf8')).toContain('original');
     expect(messages.some((m) => m.includes('stream copy'))).toBe(true);
+  });
+
+  it('preserves the source exec bit through the stream-copy fallback (EPERM path)', async () => {
+    // Regression for PR #3249 review: skills shell out to staged helper
+    // scripts, so the fallback copy must keep the source's exec bit. A
+    // plain stream copy would reset it to the default 0644 and the agent
+    // would hit EACCES on the exact cross-fs path this fallback repairs.
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
+    const script = path.join(sourceDir, 'scripts', 'run.sh');
+    mkdirSync(path.dirname(script));
+    writeFileSync(script, '#!/usr/bin/env bash\necho hi\n');
+    chmodSync(script, 0o755);
+    mkdirSync(cwd);
+
+    const eperm = Object.assign(new Error('EPERM: operation not permitted'), {
+      code: 'EPERM',
+    });
+    const result = await stageActiveSkill(
+      cwd,
+      'blog-post',
+      sourceDir,
+      () => {},
+      () => Promise.reject(eperm),
+    );
+
+    expect(result.staged).toBe(true);
+    const stagedScript = path.join(result.stagedPath!, 'scripts', 'run.sh');
+    // Exec bit survives on the helper script…
+    expect(statSync(stagedScript).mode & 0o111).not.toBe(0);
+    // …while a non-executable sibling is not made executable.
+    expect(statSync(path.join(result.stagedPath!, 'SKILL.md')).mode & 0o111).toBe(
+      0,
+    );
   });
 
   it('degrades to the absolute-path fallback on a non-recoverable copy error', async () => {
