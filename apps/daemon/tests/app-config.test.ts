@@ -317,6 +317,12 @@ describe('app-config', () => {
             CODEX_BIN: '~/bin/codex-next',
             OPENAI_API_KEY: '  sk-proxy-openai  ',
           },
+          amr: {
+            VELA_BIN: '~/bin/vela',
+            OPEN_DESIGN_AMR_PROFILE: '  local  ',
+            OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
+            HOME: 'should-not-persist',
+          },
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
@@ -334,6 +340,11 @@ describe('app-config', () => {
       expect(cfg.agentCliEnv).toEqual({
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_API_KEY: 'sk-proxy-anthropic' },
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_API_KEY: 'sk-proxy-openai' },
+        amr: {
+          VELA_BIN: '~/bin/vela',
+          OPEN_DESIGN_AMR_PROFILE: 'local',
+          OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
+        },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
       });
     });

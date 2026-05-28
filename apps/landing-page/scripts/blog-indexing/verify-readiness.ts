@@ -8,7 +8,7 @@
  *   - page is present in sitemap output
  *
  * Polls each URL with a short backoff so the script can be invoked
- * immediately after `landing-page-deploy` completes (Cloudflare Pages
+ * immediately after `landing-page-production` completes (Cloudflare Pages
  * propagation usually < 60 s but not guaranteed).
  *
  *   Usage: tsx verify-readiness.ts --urls <file.json> [--out file.json] [--timeout-ms 180000]

@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-deck-swiss-international",
   "title": "Swiss International Deck",
+  "title_i18n": {
+    "en": "Swiss International Deck",
+    "zh-CN": "瑞士国际主义 Deck",
+    "zh-TW": "瑞士國際牌組",
+    "ja": "スイス・インターナショナル・デッキ",
+    "ko": "스위스 인터내셔널 덱",
+    "de": "Swiss International Deck",
+    "fr": "Swiss International Deck",
+    "ru": "Swiss International Deck",
+    "es": "Swiss International Deck",
+    "pt-BR": "Swiss International Deck",
+    "it": "Swiss International Deck",
+    "vi": "Swiss International Deck",
+    "pl": "Swiss International Deck",
+    "id": "Swiss International Deck",
+    "nl": "Swiss International Deck",
+    "ar": "Swiss International Deck",
+    "tr": "Swiss International Deck",
+    "uk": "Swiss International Deck"
+  },
   "version": "0.1.0",
   "description": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
+  "description_i18n": {
+    "en": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
+    "zh-CN": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)",
+    "zh-TW": "16欄網格系統，1種飽和強調色，22種鎖定版面（克萊因藍、檸檬黃、薄荷綠、安全橙）。",
+    "ja": "16カラムグリッド、1つの彩度の高いアクセントカラー、22種類の固定レイアウト（クラインブルー、レモン、ミント、セーフティオレンジ）。",
+    "ko": "16열 그리드, 1개의 채도 높은 강조색, 22개의 고정 레이아웃(클라인 블루, 레몬, 민트, 세이프티 오렌지).",
+    "de": "16-spaltiges Raster, eine gesättigte Akzentfarbe und 22 fixierte Layouts (Klein-Blau, Zitrone, Minze, Warnorange).",
+    "fr": "Grille à 16 colonnes, un accent saturé et 22 mises en page verrouillées (Bleu Klein, Citron, Menthe, Orange de sécurité).",
+    "ru": "16-колоночная сетка, один насыщенный акцент и 22 зафиксированных макета (синий Кляйн, лимонный, мятный, сигнальный оранжевый).",
+    "es": "Cuadrícula de 16 columnas, un acento saturado y 22 diseños bloqueados (Azul Klein, Limón, Menta, Naranja de seguridad).",
+    "pt-BR": "Grade de 16 colunas, um destaque saturado e 22 layouts travados (Azul Klein, Limão, Menta, Laranja de segurança).",
+    "it": "Griglia a 16 colonne, un accento saturo e 22 layout bloccati (Blu Klein, Limone, Menta, Arancione di sicurezza).",
+    "vi": "Lưới 16 cột, một màu nhấn bão hòa và 22 bố cục cố định (Xanh Klein, Chanh, Bạc hà, Cam an toàn).",
+    "pl": "Siatka 16-kolumnowa, jeden nasycony akcent i 22 zablokowane układy (błękit Kleina, cytrynowy, miętowy, pomarańczowy ostrzegawczy).",
+    "id": "Grid 16 kolom, satu aksen jenuh, dan 22 tata letak terkunci (Biru Klein, Lemon, Mint, Oranye Keselamatan).",
+    "nl": "16-koloms raster, één verzadigd accent en 22 vergrendelde lay-outs (Kleinblauw, Citroen, Munt, Veiligheidsoranje).",
+    "ar": "شبكة من 16 عمودًا، لون تمييز مشبع واحد، و22 تخطيطًا مقفلاً (أزرق كلاين، ليموني، نعناعي، برتقالي الأمان).",
+    "tr": "16 sütunlu ızgara, bir doygun vurgu rengi ve 22 kilitli düzen (Klein Mavisi, Limon, Nane, Güvenlik Turuncusu).",
+    "uk": "16-колонкова сітка, один насичений акцент і 22 зафіксовані макети (синій Кляйна, лимонний, м'ятний, сигнальний помаранчевий)."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -83,13 +123,5 @@
       "prompt:inject",
       "fs:write"
     ]
-  },
-  "title_i18n": {
-    "en": "Swiss International Deck",
-    "zh-CN": "瑞士国际主义 Deck"
-  },
-  "description_i18n": {
-    "en": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
-    "zh-CN": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)"
   }
 }

@@ -22,6 +22,7 @@ import {
   getSubcategoriesFor,
   type PluginCategorySlug,
 } from '../../../../_lib/plugin-facets';
+import { getPluginsCopy } from '../../../../_lib/plugins-i18n';
 import { localeFromPath, localizedHref } from '../../../../i18n';
 
 export async function getStaticPaths() {
@@ -36,9 +37,10 @@ interface Props {
 }
 
 const { categorySlug } = Astro.props as Props;
-const category = PLUGIN_CATEGORIES.find((c) => c.slug === categorySlug)!;
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+const categoryCopy = pcopy.category[categorySlug];
 
 const all = getBundledPlugins().filter((p) => p.bucket !== 'design-systems');
 
@@ -64,15 +66,15 @@ for (const i of items) {
 }
 
 const totalCount = items.length;
-const title = `${category.label} templates · ${totalCount} · Open Design`;
-const description = category.description;
+const title = `${categoryCopy.label} ${pcopy.tileTemplates} · ${totalCount} · Open Design`;
+const description = categoryCopy.description;
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'CollectionPage',
   name: title,
   description,
-  url: new URL(`/plugins/templates/${category.slug}/`, Astro.site).toString(),
+  url: new URL(`/plugins/templates/${categorySlug}/`, Astro.site).toString(),
   numberOfItems: totalCount,
 };
 ---
@@ -81,31 +83,25 @@ const jsonLd = {
   <nav class="breadcrumb" aria-label="Breadcrumb">
     <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <a href={href('/plugins/')}>Plugins</a>
+    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
     <span>/</span>
-    <a href={href('/plugins/templates/')}>Templates</a>
+    <a href={href('/plugins/templates/')}>{pcopy.tileTemplates}</a>
     <span>/</span>
-    <span aria-current="page">{category.label}</span>
+    <span aria-current="page">{categoryCopy.label}</span>
   </nav>
 
   <header class="catalog-head">
-    <span class="label">Templates · {category.label}</span>
-    <h1 class="display">{totalCount} {category.label.toLowerCase()} templates<span class="dot">.</span></h1>
-    <p class="lead">{category.description}</p>
+    <span class="label">{pcopy.tileTemplates} · {categoryCopy.label}</span>
+    <h1 class="display">{totalCount} {categoryCopy.label}<span class="dot">.</span></h1>
+    <p class="lead">{categoryCopy.description}</p>
   </header>
 
-  {/*
-    Render the artifact-kind chip rail on every category page so the
-    other six kinds stay one click away. Each chip URL ends in
-    `#filter-strip` so cross-page navigation keeps the chip rail in
-    view instead of scrolling back to the header.
-  */}
-  <section class="filter-strip" id="filter-strip" aria-label="Artifact kinds">
+  <section class="filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
     <div class="filter-group">
-      <span class="filter-label">Artifact kind</span>
+      <span class="filter-label">{pcopy.artifactKindLabel}</span>
       <ul>
         <li>
-          <a class="chip chip-link" href={href('/plugins/templates/#filter-strip')}>All</a>
+          <a class="chip chip-link" href={href('/plugins/templates/#filter-strip')}>{pcopy.allChip}</a>
         </li>
         {PLUGIN_CATEGORIES.map((cat) => (
           <li>
@@ -114,7 +110,7 @@ const jsonLd = {
               href={href(`/plugins/templates/${cat.slug}/#filter-strip`)}
               aria-current={cat.slug === categorySlug ? 'page' : undefined}
             >
-              {cat.label}
+              {pcopy.category[cat.slug].label}
             </a>
           </li>
         ))}
@@ -123,13 +119,13 @@ const jsonLd = {
   </section>
 
   {subcategories.length > 0 && (
-    <section class="filter-strip" aria-label="Scenes" data-scene-strip>
+    <section class="filter-strip" aria-label={pcopy.sceneLabel} data-scene-strip>
       <div class="filter-group">
-        <span class="filter-label">Scene</span>
+        <span class="filter-label">{pcopy.sceneLabel}</span>
         <ul>
           <li>
             <button type="button" class="chip chip-link is-active" data-scene-pick="all">
-              All<span class="chip-num">{totalCount}</span>
+              {pcopy.allChip}<span class="chip-num">{totalCount}</span>
             </button>
           </li>
           {subcategories.map((sub) => {
@@ -143,7 +139,7 @@ const jsonLd = {
                   data-scene-pick={sub.slug}
                   title={sub.description}
                 >
-                  {sub.label}<span class="chip-num">{count}</span>
+                  {pcopy.subcategory[sub.slug] ?? sub.label}<span class="chip-num">{count}</span>
                 </button>
               </li>
             );
@@ -153,7 +149,7 @@ const jsonLd = {
     </section>
   )}
 
-  <section class="catalog-grid catalog-grid-skills" aria-label={`All ${category.label} templates`}>
+  <section class="catalog-grid catalog-grid-skills" aria-label={`${categoryCopy.label} ${pcopy.tileTemplates}`}>
     <ol data-scene-list>
       {items.map((item, idx) => (
         <PluginRow

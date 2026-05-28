@@ -23,6 +23,19 @@ vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
 
 import { FileViewer } from '../../src/components/FileViewer';
 
+function openManualTools() {
+  // Manual tools now live directly in the primary toolbar.
+}
+
+function clickManualTool(testId: string) {
+  openManualTools();
+  fireEvent.click(screen.getByTestId(testId));
+}
+
+function clickAgentTool(testId: string) {
+  fireEvent.click(screen.getByTestId(testId));
+}
+
 afterEach(() => {
   cleanup();
   panelState.props = null;
@@ -64,16 +77,17 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    clickManualTool('manual-edit-mode-toggle');
     await waitFor(() => expect(panelState.props).not.toBeNull());
 
     act(() => {
       panelState.props?.onStyleChange?.('hero', { color: '#ef4444' }, 'Style: Hero');
     });
-    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    clickAgentTool('draw-overlay-toggle');
 
     await waitFor(() => expect(savedSources).toHaveLength(1));
     expect(savedSources[0]).toContain('rgb(239, 68, 68)');
+    openManualTools();
     expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('false');
 
@@ -85,7 +99,10 @@ describe('FileViewer manual edit history regressions', () => {
       await saveResponse;
     });
 
-    await waitFor(() => expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false'));
+    await waitFor(() => {
+      openManualTools();
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -123,7 +140,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    clickManualTool('manual-edit-mode-toggle');
     await waitFor(() => expect(panelState.props).not.toBeNull());
 
     act(() => {
@@ -195,8 +212,6 @@ describe('FileViewer manual edit history regressions', () => {
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(panelState.props?.draft.fullSource).toContain('Hero');
     });
-    const postMessageSpy = vi.spyOn(getActivePreviewFrame().contentWindow!, 'postMessage');
-
     act(() => {
       panelState.props?.onApplyPatch(
         { id: 'hero', kind: 'set-text', value: 'Updated hero' },
@@ -207,13 +222,7 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => expect(savedSources).toHaveLength(1));
     await waitFor(() => expect(panelState.props?.draft.fullSource).toContain('Updated hero'));
     await waitFor(() => {
-      expect(postMessageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'od:srcdoc-transport-activate',
-          html: expect.stringContaining('Updated hero'),
-        }),
-        '*',
-      );
+      expect(getActivePreviewFrame().srcdoc).toContain('Updated hero');
     });
   });
 
@@ -280,13 +289,8 @@ describe('FileViewer manual edit history regressions', () => {
       '*',
     );
     await waitFor(() => {
-      expect(postMessageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'od:srcdoc-transport-activate',
-          html: expect.not.stringContaining('data-od-id="hero"'),
-        }),
-        '*',
-      );
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .not.toContain('data-od-id="hero"');
     });
   });
 });

@@ -393,7 +393,7 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  gap: 2px;
+  gap: 4px;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;

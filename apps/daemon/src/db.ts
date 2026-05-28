@@ -138,6 +138,12 @@ function migrate(db: SqliteDb): void {
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS tabs_state (
+      project_id TEXT PRIMARY KEY,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_tabs_project
       ON tabs(project_id, position);
 
@@ -1537,15 +1543,24 @@ export function listTabs(db: SqliteDb, projectId: string) {
          FROM tabs WHERE project_id = ? ORDER BY position ASC`,
     )
     .all(projectId) as DbRow[];
+  const state = db
+    .prepare(`SELECT project_id FROM tabs_state WHERE project_id = ? LIMIT 1`)
+    .get(projectId) as DbRow | undefined;
   const active = (rows as DbRow[]).find((r: DbRow) => r.isActive) ?? null;
   return {
     tabs: (rows as DbRow[]).map((r: DbRow) => r.name),
     active: active ? active.name : null,
+    hasSavedState: rows.length > 0 || Boolean(state),
   };
 }
 
 export function setTabs(db: SqliteDb, projectId: string, names: string[], activeName: string | null) {
   const tx = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO tabs_state (project_id, updated_at)
+       VALUES (?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET updated_at = excluded.updated_at`,
+    ).run(projectId, Date.now());
     db.prepare(`DELETE FROM tabs WHERE project_id = ?`).run(projectId);
     const ins = db.prepare(
       `INSERT INTO tabs (project_id, name, position, is_active)

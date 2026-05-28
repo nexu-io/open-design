@@ -105,10 +105,17 @@ export interface ManualEditPreviewAppliedMessage {
   error?: string;
 }
 
+export interface ManualEditTextCommitMessage {
+  type: 'od-edit-text-commit';
+  id: string;
+  value: string;
+}
+
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
-  | ManualEditPreviewAppliedMessage;
+  | ManualEditPreviewAppliedMessage
+  | ManualEditTextCommitMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',

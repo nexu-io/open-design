@@ -101,6 +101,15 @@ export type RuntimeAgentDef = {
     | 'opencode-env-content';
   installUrl?: string;
   docsUrl?: string;
+  // Optional name of a daemon-process environment variable that overrides
+  // the default model id when the chat run reaches the spawn layer with
+  // null or the synthetic 'default'. Used by adapters whose CLI rejects
+  // 'default' (e.g. AMR / vela) so an operator can swap the hardcoded
+  // fallback without a code change — set the env var on the daemon
+  // process when launching `tools-dev` / `od` daemon. The value must be
+  // present in the daemon's `process.env`; Settings-UI per-agent env
+  // values only reach the spawned child and are NOT consulted here.
+  defaultModelEnvVar?: string;
 };
 
 export type DetectedAgent = Omit<

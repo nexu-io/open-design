@@ -1,25 +1,29 @@
-// Share affordance for the plugin detail modal.
+// Plugin-specific detail actions.
 //
-// Surfaces the small set of actions a user actually wants when
-// they want to spread / install / link to a plugin they like:
+// Surfaces the small set of actions a user wants when they need to install,
+// identify, audit, or embed a plugin:
 //
 //   - Copy plugin id          (raw `<id>` for paste-into-yaml)
 //   - Copy install command    (`od plugin install <ref>`)
-//   - Copy share link         (link to the marketplace detail page)
-//   - Copy markdown badge     (Open Design powered, includes link)
+//   - Copy README badge       (Open Design powered, includes link)
 //   - Open source on GitHub   (when the source is a github repo)
 //   - Open homepage           (when manifest.homepage is set)
 //   - Open in marketplace     (always — the canonical detail page)
 //
-// We render the popover next to the close button in every detail
-// variant header so the affordance reads consistently no matter
-// which preview surface is active. A tiny inline toast confirms
-// every copy action so the user trusts the click landed.
+// We render the popover next to the template Share control in every
+// detail variant header so plugin-specific actions stay available without
+// competing with the user's primary "share this template" intent. A tiny inline
+// toast confirms every copy action so the user trusts the click landed.
 
 import { useEffect, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { Icon } from '../Icon';
+import { useT } from '../../i18n';
+import { copyToClipboard } from '../../lib/copy-to-clipboard';
 import { derivePluginSourceLinks } from '../../runtime/plugin-source';
+
+const PUBLIC_PLUGIN_MARKETPLACE_URL = 'https://open-design.ai/plugins';
+const PUBLIC_OPEN_DESIGN_MARKETPLACE_ID = 'official';
 
 interface Props {
   record: InstalledPluginRecord;
@@ -37,7 +41,6 @@ interface ShareItem {
   label: string;
   icon:
     | 'copy'
-    | 'link'
     | 'github'
     | 'external-link'
     | 'eye';
@@ -72,28 +75,38 @@ function buildInstallCommand(record: InstalledPluginRecord): string {
   return `od plugin install ${record.source}`;
 }
 
-function buildShareUrl(record: InstalledPluginRecord): string {
-  // Browser-side the marketplace detail page is always at
-  // /marketplace/<id>. We use window.location.origin so the
-  // copied link is a fully qualified URL the recipient can open
-  // in a different session / tab without context.
-  if (typeof window === 'undefined') {
-    return `/marketplace/${encodeURIComponent(record.id)}`;
+export function buildPluginShareUrl(record: InstalledPluginRecord): string | null {
+  if (
+    record.sourceMarketplaceId !== PUBLIC_OPEN_DESIGN_MARKETPLACE_ID ||
+    typeof record.sourceMarketplaceEntryName !== 'string' ||
+    record.sourceMarketplaceEntryName.trim().length === 0
+  ) {
+    return null;
   }
-  return `${window.location.origin}/marketplace/${encodeURIComponent(record.id)}`;
+  // Share surfaces must produce recipient-openable links, not local
+  // tools-dev origins such as 127.0.0.1:<port>.
+  return `${PUBLIC_PLUGIN_MARKETPLACE_URL}/${encodeURIComponent(record.id)}`;
 }
 
-function buildMarkdownBadge(record: InstalledPluginRecord): string {
-  const url = buildShareUrl(record);
+function buildPluginMarketplacePath(record: InstalledPluginRecord): string {
+  return `/marketplace/${encodeURIComponent(record.id)}`;
+}
+
+function buildMarkdownBadge(record: InstalledPluginRecord, url: string): string {
   return `[![${record.title} — Open Design plugin](https://img.shields.io/badge/Open%20Design-${encodeURIComponent(record.title)}-d65a31?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2C)](${url})`;
 }
 
 export function PluginShareMenu({ record, variant = 'default' }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    key: string;
+    ok: boolean;
+  } | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const links = derivePluginSourceLinks(record);
+  const publicShareUrl = buildPluginShareUrl(record);
 
   useEffect(() => {
     if (!open) return;
@@ -112,46 +125,45 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
     };
   }, [open]);
 
-  function copyToClipboard(text: string, key: string) {
+  async function copyPluginShareText(text: string, key: string) {
     if (!text) return;
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopiedKey(key);
-      window.setTimeout(() => {
-        setCopiedKey((current) => (current === key ? null : current));
-      }, 1400);
-    });
+    const ok = await copyToClipboard(text);
+    setCopyFeedback({ key, ok });
+    window.setTimeout(() => {
+      setCopyFeedback((current) => (
+        current?.key === key ? null : current
+      ));
+    }, 1600);
   }
 
   const items: ShareItem[] = [
     {
       key: 'install',
-      label: 'Copy install command',
+      label: t('plugins.actions.copyInstallCommand'),
       icon: 'copy',
       copies: true,
-      onSelect: () => copyToClipboard(buildInstallCommand(record), 'install'),
+      onSelect: () => copyPluginShareText(buildInstallCommand(record), 'install'),
     },
     {
       key: 'id',
-      label: 'Copy plugin ID',
+      label: t('plugins.actions.copyPluginId'),
       icon: 'copy',
       copies: true,
-      onSelect: () => copyToClipboard(record.id, 'id'),
-    },
-    {
-      key: 'link',
-      label: 'Copy share link',
-      icon: 'link',
-      copies: true,
-      onSelect: () => copyToClipboard(buildShareUrl(record), 'link'),
-    },
-    {
-      key: 'badge',
-      label: 'Copy markdown badge',
-      icon: 'copy',
-      copies: true,
-      onSelect: () => copyToClipboard(buildMarkdownBadge(record), 'badge'),
+      onSelect: () => copyPluginShareText(record.id, 'id'),
     },
   ];
+  if (publicShareUrl) {
+    items.push({
+      key: 'badge',
+      label: t('plugins.actions.copyReadmeBadge'),
+      icon: 'copy',
+      copies: true,
+      onSelect: () => copyPluginShareText(
+        buildMarkdownBadge(record, publicShareUrl),
+        'badge',
+      ),
+    });
+  }
 
   // Open-in-tab actions are real anchors so users can right-click,
   // copy the link address, or open in a new tab from browser chrome.
@@ -161,8 +173,8 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
       key: 'source',
       label:
         record.sourceKind === 'github' || links.sourceUrl.includes('github.com/')
-          ? 'Open source on GitHub'
-          : 'Open source',
+          ? t('plugins.actions.openSourceGithub')
+          : t('plugins.actions.openSource'),
       icon: links.sourceUrl.includes('github.com/') ? 'github' : 'external-link',
       href: links.sourceUrl,
     });
@@ -170,16 +182,16 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
   if (links.homepageUrl) {
     openItems.push({
       key: 'homepage',
-      label: 'Open homepage',
+      label: t('plugins.actions.openHomepage'),
       icon: 'external-link',
       href: links.homepageUrl,
     });
   }
   openItems.push({
     key: 'marketplace',
-    label: 'Open in marketplace',
+    label: t('plugins.actions.openMarketplace'),
     icon: 'eye',
-    href: buildShareUrl(record),
+    href: buildPluginMarketplacePath(record),
   });
 
   const triggerClass =
@@ -199,10 +211,10 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        title="Share plugin"
+        title={t('designs.menuMore')}
       >
-        <Icon name="share" size={12} />
-        <span>Share</span>
+        <Icon name="more-horizontal" size={12} />
+        <span>{t('homeHero.moreShortcuts')}</span>
       </button>
       {open ? (
         <div className="plugin-share-popover" role="menu">
@@ -216,11 +228,21 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
                 onClick={() => void item.onSelect()}
               >
                 <Icon
-                  name={copiedKey === item.key ? 'check' : item.icon}
+                  name={
+                    copyFeedback?.key === item.key
+                      ? copyFeedback.ok
+                        ? 'check'
+                        : 'close'
+                      : item.icon
+                  }
                   size={12}
                 />
                 <span>
-                  {copiedKey === item.key ? 'Copied' : item.label}
+                  {copyFeedback?.key === item.key
+                    ? copyFeedback.ok
+                      ? t('preview.shareCopied')
+                      : t('preview.shareCopyFailed')
+                    : item.label}
                 </span>
               </button>
             ))}

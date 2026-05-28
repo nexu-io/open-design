@@ -1,6 +1,10 @@
 import type { ChatMessage } from '../types';
 
-export function appendErrorStatusEvent(message: ChatMessage, detail: string): ChatMessage {
+export function appendErrorStatusEvent(
+  message: ChatMessage,
+  detail: string,
+  code?: string,
+): ChatMessage {
   if (!detail) return message;
   const events = message.events ?? [];
   const last = events[events.length - 1];
@@ -12,6 +16,6 @@ export function appendErrorStatusEvent(message: ChatMessage, detail: string): Ch
   }
   return {
     ...message,
-    events: [...events, { kind: 'status', label: 'error', detail }],
+    events: [...events, { kind: 'status', label: 'error', detail, ...(code ? { code } : {}) }],
   };
 }

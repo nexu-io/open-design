@@ -12,6 +12,7 @@ interface Props {
 // only ships a rasterised icon on devin.ai). New brand: drop the optimised
 // file in that folder and add the id here.
 const ICON_EXT: Record<string, 'svg' | 'png'> = {
+  amr: 'svg',
   claude: 'svg',
   codex: 'svg',
   gemini: 'svg',

@@ -109,7 +109,6 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(window.localStorage.getItem(key)).toBeNull());
   });
-
   it('does not re-sync the composer scroll offset on every plain-text keystroke', () => {
     const scrollTopGetter = vi.fn(() => 0);
     const original = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollTop');

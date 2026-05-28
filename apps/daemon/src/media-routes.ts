@@ -1,5 +1,8 @@
 import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
+import { proxyDispatcherRequestInit } from './connectionTest.js';
+
+const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
 
@@ -59,8 +62,16 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     try {
       const rawLimit = Number(req.query.limit);
       const limit = Number.isFinite(rawLimit) ? rawLimit : undefined;
-      const voices = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit });
-      res.json({ voices });
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+      try {
+        const voices = await listElevenLabsVoiceOptions(PROJECT_ROOT, {
+          limit,
+          requestInit: proxyDispatcher.requestInit,
+        });
+        res.json({ voices });
+      } finally {
+        await proxyDispatcher.close();
+      }
     } catch (err: any) {
       const message = String(err && err.message ? err.message : err);
       const status = message.includes('no ElevenLabs API key') ? 400 : 502;
@@ -147,13 +158,14 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       });
     }
 
+    let task: ReturnType<typeof createMediaTask> | null = null;
     try {
       const projectId = req.params.id;
       const project = getProject(db, projectId);
       if (!project) return res.status(404).json({ error: 'project not found' });
 
       const taskId = randomUUID();
-      const task = createMediaTask(taskId, projectId, {
+      task = createMediaTask(taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
       });
@@ -164,6 +176,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
       );
 
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env, {
+        headersTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
+        bodyTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
+      });
       task.status = 'running';
       persistMediaTask(task);
       generateMedia({
@@ -191,6 +207,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
         onProgress: (line: any) => appendTaskProgress(task, line),
+        requestInit: proxyDispatcher.requestInit,
       })
         .then((meta: any) => {
           task.status = 'done';
@@ -217,7 +234,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
               `message=${(task.error.message || '').slice(0, 240)}`,
           );
-        });
+        })
+        .finally(() => proxyDispatcher.close());
 
       res.status(202).json({
         taskId,
@@ -225,6 +243,17 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         startedAt: task.startedAt,
       });
     } catch (err: any) {
+      if (task) {
+        task.status = 'failed';
+        task.error = {
+          message: String(err && err.message ? err.message : err),
+          status: typeof err?.status === 'number' ? err.status : 400,
+          code: err?.code,
+        };
+        task.endedAt = Date.now();
+        persistMediaTask(task);
+        notifyTaskWaiters(task);
+      }
       const status = typeof err?.status === 'number' ? err.status : 400;
       const code = err?.code;
       const body: any = { error: String(err && err.message ? err.message : err) };
@@ -242,18 +271,24 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
 
     try {
-      const result = await searchResearch({
-        projectRoot: PROJECT_ROOT,
-        query: req.body?.query,
-        maxSources:
-          typeof req.body?.maxSources === 'number'
-            ? req.body.maxSources
+      const proxyDispatcher = proxyDispatcherRequestInit(process.env);
+      try {
+        const result = await searchResearch({
+          projectRoot: PROJECT_ROOT,
+          query: req.body?.query,
+          maxSources:
+            typeof req.body?.maxSources === 'number'
+              ? req.body.maxSources
+              : undefined,
+          providers: Array.isArray(req.body?.providers)
+            ? req.body.providers
             : undefined,
-        providers: Array.isArray(req.body?.providers)
-          ? req.body.providers
-          : undefined,
-      });
-      res.json(result);
+          requestInit: proxyDispatcher.requestInit,
+        });
+        res.json(result);
+      } finally {
+        await proxyDispatcher.close();
+      }
     } catch (err: any) {
       if (err instanceof ResearchError) {
         return res.status(err.status).json({

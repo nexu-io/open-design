@@ -1939,13 +1939,15 @@ export function MemorySection({
                   && !authorizationPending
                   && !connectError
                   && !connecting;
+                const connectorLastError = connector.lastError?.trim();
+                const reconnecting = connector.status === 'error';
                 const connectorHint = connected
                   ? connector.accountLabel || `${connector.tools.length} read tools`
                   : checkingStatus
                     ? 'Checking connection status…'
                     : authorizationPending
                     ? 'Finish authorization in your browser, then return here'
-                    : connectError || 'Connect this app before extraction';
+                    : connectorLastError || connectError || 'Connect this app before extraction';
                 return (
                   <label
                     key={connector.id}
@@ -1983,7 +1985,7 @@ export function MemorySection({
                         className={`memory-connector-connect-button${connecting || authorizationPending || checkingStatus ? ' is-loading' : ''}`}
                         disabled={connecting || authorizationPending || checkingStatus}
                         aria-busy={connecting || authorizationPending || checkingStatus || undefined}
-                        aria-label={`Connect ${connector.name}`}
+                        aria-label={`${reconnecting ? 'Reconnect' : 'Connect'} ${connector.name}`}
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
@@ -1996,7 +1998,7 @@ export function MemorySection({
                           className={connecting || authorizationPending || checkingStatus ? 'icon-spin' : ''}
                         />
                         <span>
-                          {checkingStatus ? 'Checking' : authorizationPending ? 'Waiting' : connecting ? 'Connecting' : 'Connect'}
+                          {checkingStatus ? 'Checking' : authorizationPending ? 'Waiting' : connecting ? 'Connecting' : reconnecting ? 'Reconnect' : 'Connect'}
                         </span>
                       </button>
                     )}

@@ -716,14 +716,15 @@ test('home starters html details modal shows metadata links, supports copy query
   const copied = await page.evaluate(() => (window as typeof window & { __copiedTexts?: string[] }).__copiedTexts ?? []);
   expect(copied.at(-1)).toBe('Use the {{topic}} template for a polished launch deck.');
 
-  await page.getByTestId('plugin-share-html-metadata-plugin').getByRole('button', { name: /^Share$/i }).click();
+  await page.getByTestId('plugin-share-html-metadata-plugin').getByRole('button', { name: /^More$/i }).click();
   const shareMenu = page.locator('.plugin-share-popover[role="menu"]');
   await expect(shareMenu).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Copy install command/i })).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Copy plugin ID/i })).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Copy share link/i })).toBeVisible();
+  await expect(shareMenu.getByRole('menuitem', { name: /Copy README badge/i })).toHaveCount(0);
   await expect(shareMenu.getByRole('menuitem', { name: /Open source on GitHub/i })).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Open homepage/i })).toBeVisible();
+  await expect(shareMenu.getByRole('menuitem', { name: /Open in marketplace/i })).toBeVisible();
 });
 
 test('home starters Use plugin from the details modal applies the plugin to the home hero', async ({ page }) => {

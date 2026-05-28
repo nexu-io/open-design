@@ -67,6 +67,14 @@ test('real daemon run streams, persists, and previews an artifact', async ({ pag
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
 
+  const rawResponse = await page.request.get(`/api/projects/${projectId}/raw/${GENERATED_FILE}`, {
+    headers: { Origin: 'null' },
+  });
+  expect(rawResponse.ok(), await rawResponse.text()).toBeTruthy();
+  expect(rawResponse.headers()['access-control-allow-origin']).toBe('*');
+  expect(rawResponse.headers()['content-type']).toContain('text/html');
+  expect(await rawResponse.text()).toContain(GENERATED_HEADING);
+
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 

@@ -512,7 +512,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       }
 
       const project = getProject(db, req.params.id);
-      const splatParam = req.params.splat;
+      const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
 
       // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE

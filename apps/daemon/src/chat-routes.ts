@@ -17,7 +17,7 @@ import {
 } from './byok-tools.js';
 import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
-import { validateBaseUrlResolved } from './connectionTest.js';
+import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
@@ -270,15 +270,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
     try {
-      const result = await listProviderModels({
-        protocol,
-        baseUrl: body.baseUrl,
-        apiKey: body.apiKey,
-        apiVersion:
-          typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
-        signal: controller.signal,
-      });
-      return res.json(result);
+      const proxyDispatcher = proxyDispatcherRequestInit();
+      try {
+        const result = await listProviderModels({
+          protocol,
+          baseUrl: body.baseUrl,
+          apiKey: body.apiKey,
+          apiVersion:
+            typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+          signal: controller.signal,
+          requestInit: proxyDispatcher.requestInit,
+        });
+        return res.json(result);
+      } finally {
+        await proxyDispatcher.close();
+      }
     } catch (err: any) {
       console.warn(
         `[provider:models] uncaught: ${err instanceof Error ? err.message : String(err)}`,
@@ -671,9 +677,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model });
       const response = await fetch(url, {
+        ...proxyDispatcher.requestInit,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -722,6 +731,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       console.error(`[proxy:anthropic] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
+    } finally {
+      await proxyDispatcher?.close();
     }
   });
 
@@ -771,9 +782,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     };
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model });
       const response = await fetch(url, {
+        ...proxyDispatcher.requestInit,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -820,6 +834,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       console.error(`[proxy:openai] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
+    } finally {
+      await proxyDispatcher?.close();
     }
   });
 
@@ -891,9 +907,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     };
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model });
       const requestInit = {
+        ...proxyDispatcher.requestInit,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -962,6 +981,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       console.error(`[proxy:azure] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
+    } finally {
+      await proxyDispatcher?.close();
     }
   });
 
@@ -1011,9 +1032,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model });
       const response = await fetch(url, {
+        ...proxyDispatcher.requestInit,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1061,6 +1085,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       console.error(`[proxy:google] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
+    } finally {
+      await proxyDispatcher?.close();
     }
   });
 
@@ -1098,9 +1124,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      sse.send('start', { model });
       const response = await fetch(url, {
+        ...proxyDispatcher.requestInit,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify(payload),
@@ -1136,6 +1165,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       console.error(`[proxy:ollama] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
+    } finally {
+      await proxyDispatcher?.close();
     }
   });
 
@@ -1231,12 +1262,15 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       ? byokImageModel
       : undefined;
 
+    let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+
     const toolCtx: BYOKToolContext = {
       projectRoot: ctx.paths.PROJECT_ROOT,
       projectsRoot: ctx.paths.PROJECTS_DIR,
       projectId,
       upstreamApiKey: apiKey,
       upstreamBaseUrl: effectiveBaseUrl,
+      requestInit: {},
       // Spread-conditional because tsconfig's exactOptionalPropertyTypes
       // forbids `field: undefined` on an optional slot. The byok-tools
       // executor reads `ctx.defaultImageModel` with `isSenseAudioImageModel`
@@ -1265,6 +1299,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         tool_choice: 'auto',
       };
       const response = await fetch(url, {
+        ...toolCtx.requestInit,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1408,8 +1443,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     };
 
     const sse = createSseResponse(res);
-    sse.send('start', { model });
-
     // SenseAudio's gateway issues one API key that works for both
     // /v1/chat/completions and the image / TTS surfaces. Mirror the
     // BYOK key into media-config so the CLI agent path (`od media
@@ -1436,6 +1469,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       });
 
     try {
+      proxyDispatcher = proxyDispatcherRequestInit();
+      toolCtx.requestInit = proxyDispatcher.requestInit;
+      sse.send('start', { model });
       for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
         const turn = await runSenseAudioTurn(sse, workingMessages);
         if (turn.kind === 'error') return sse.end();
@@ -1495,6 +1531,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       console.error(`[proxy:senseaudio] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
+    } finally {
+      await proxyDispatcher?.close();
     }
   });
 

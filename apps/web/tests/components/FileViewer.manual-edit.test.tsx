@@ -15,6 +15,10 @@ afterEach(() => {
 });
 
 describe('FileViewer manual edit regressions', () => {
+  function clickManualTool(testId: string) {
+    fireEvent.click(screen.getByTestId(testId));
+  }
+
   it('removes invalid fields from pending manual edit style saves without dropping unrelated fields', () => {
     expect(cancelManualEditPendingStyleSnapshot({
       id: 'hero',
@@ -144,6 +148,56 @@ describe('FileViewer manual edit regressions', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('clears a prior manual edit save error after a later successful save', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    let saveAttempts = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        saveAttempts += 1;
+        if (saveAttempts === 1) {
+          return new Response(JSON.stringify({
+            error: { code: 'FORBIDDEN', message: 'Request failed (403).' },
+          }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(source, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    const baseSizeInput = await waitFor(() => {
+      const input = Array.from(document.querySelectorAll('.cc-row'))
+        .find((row) => row.textContent?.includes('Base size'))
+        ?.querySelector('input') as HTMLInputElement | null;
+      if (!input) throw new Error('Base size input not found');
+      return input;
+    });
+
+    fireEvent.change(baseSizeInput, { target: { value: '18' } });
+    await waitFor(() => {
+      expect(screen.getByText(/Could not save the edited file/)).toBeTruthy();
+    });
+
+    fireEvent.change(baseSizeInput, { target: { value: '19' } });
+    await waitFor(() => {
+      expect(screen.queryByText(/Could not save the edited file/)).toBeNull();
+    });
   });
 });
 

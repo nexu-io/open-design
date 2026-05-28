@@ -16,6 +16,7 @@ function stubPlatform(value: NodeJS.Platform): () => void {
 
 function fakeConfig(): PackagedConfig {
   return {
+    amrProfile: null,
     appVersion: null,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
@@ -55,6 +56,7 @@ describe("resolvePackagedNamespacePaths", () => {
 
   it("rejects namespace overrides that would escape the namespace base root", () => {
     const config: PackagedConfig = {
+      amrProfile: null,
       appVersion: "1.2.3",
       daemonCliEntry: null,
       daemonSidecarEntry: null,

@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PreviewDrawOverlay } from '../../src/components/PreviewDrawOverlay';
+
+afterEach(() => {
+  cleanup();
+});
 
 describe('PreviewDrawOverlay', () => {
   it('uses the visible primary send action when Enter submits a note', async () => {
@@ -104,5 +108,18 @@ describe('PreviewDrawOverlay', () => {
     });
 
     expect(scrollBy).toHaveBeenCalledWith({ left: 12, top: 180, behavior: 'auto' });
+  });
+
+  it('closes the draw toolbar from an explicit close button', async () => {
+    const onActiveChange = vi.fn();
+    const { getByRole } = render(
+      <PreviewDrawOverlay active onActiveChange={onActiveChange}>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Close draw toolbar' }));
+
+    expect(onActiveChange).toHaveBeenCalledWith(false);
   });
 });

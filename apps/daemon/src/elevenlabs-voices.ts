@@ -95,7 +95,10 @@ function cloneVoiceOptions(voices: ElevenLabsVoiceOption[]): ElevenLabsVoiceOpti
 
 export async function listElevenLabsVoiceOptions(
   projectRoot: string,
-  options: { limit?: number } = {},
+  options: {
+    limit?: number;
+    requestInit?: Pick<RequestInit, 'dispatcher'>;
+  } = {},
 ): Promise<ElevenLabsVoiceOption[]> {
   const credentials = await resolveProviderConfig(projectRoot, 'elevenlabs');
   if (!credentials.apiKey) {
@@ -122,6 +125,7 @@ export async function listElevenLabsVoiceOptions(
   }
 
   const resp = await fetch(`${baseUrl}/v2/voices?page_size=${pageSize}`, {
+    ...options.requestInit,
     method: 'GET',
     headers: {
       'xi-api-key': credentials.apiKey,

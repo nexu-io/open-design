@@ -107,6 +107,15 @@ const availableAgents: AgentInfo[] = [
   },
 ];
 
+const amrAgent: AgentInfo = {
+  id: 'amr',
+  name: 'AMR (vela)',
+  bin: 'amr',
+  available: true,
+  version: '1.0.0',
+  models: [{ id: 'default', label: 'Default' }],
+};
+
 type OnRefreshAgents = (
   options?: AgentRefreshOptions,
 ) => void | AgentInfo[] | Promise<void | AgentInfo[]>;
@@ -1075,9 +1084,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.getByText(en['settings.agentInstall.pathHint'])).toBeTruthy();
 
     fireEvent.click(codexCard);
-    const modelHead = screen.getByText(/Model for:/);
+    const selectedCard = codexCard.closest('.agent-card') as HTMLElement;
     expect(
-      modelHead.compareDocumentPosition(installGroupSummary) &
+      within(selectedCard).getByRole('combobox', {
+        name: en['settings.modelPicker'],
+      }),
+    ).toBeTruthy();
+    expect(
+      selectedCard.compareDocumentPosition(installGroupSummary) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     await waitForPersist(
@@ -1110,7 +1124,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
     expect(screen.getByText('Live from CLI')).toBeTruthy();
     expect(
-      screen.getByText(/Models were refreshed from the installed CLI/i),
+      screen.getByText(/Model list comes from this CLI/i),
     ).toBeTruthy();
   });
 
@@ -1132,6 +1146,41 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(
       screen.getByText(/Showing built-in defaults/i),
     ).toBeTruthy();
+  });
+
+  it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'amr',
+        agentModels: { amr: { model: 'gpt-5.4-mini', reasoning: 'default' } },
+      },
+      {
+        agents: [
+          {
+            ...amrAgent,
+            modelsSource: 'live',
+            models: [
+              { id: 'glm-5', label: 'GLM 5' },
+              { id: 'glm-5.1', label: 'GLM 5.1' },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Design AMR\b/ }));
+
+    const modelPickers = screen.getAllByRole('combobox', {
+      name: en['settings.modelPicker'],
+    }) as HTMLSelectElement[];
+    expect(modelPickers).toHaveLength(1);
+    expect(modelPickers[0]?.value).toBe('glm-5');
+    expect(
+      Array.from(modelPickers[0]?.options ?? []).map((option) => option.value),
+    ).toEqual(['glm-5', 'glm-5.1']);
+    expect(screen.queryByLabelText(en['settings.modelCustomLabel'])).toBeNull();
   });
 
   it('shows an empty state when no local CLI agents are detected', () => {
@@ -1314,36 +1363,16 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.getByRole('tab', { name: /BYOK.*API provider/i }).getAttribute('aria-selected')).toBe('true');
   });
 
-  it('runs the Local CLI connection test for the selected installed agent', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it('renders a Local CLI connection test for selected installed agents', () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
-      // MemoryModelInline mounts inside the Local CLI section and reads
-      // the current extraction override from /api/memory on mount.
-      // Swallow it here so the assertion below only counts the
-      // test-connection POST the user actually triggered.
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      expect(url).toBe('/api/test/connection');
-      expect(JSON.parse(String(init?.body))).toMatchObject({
-        mode: 'agent',
-        agentId: 'codex',
-        agentCliEnv: {},
-      });
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          kind: 'ok',
-          latencyMs: 31,
-          agentName: 'Codex CLI',
-          model: 'default',
-          sample: 'ready',
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
+      throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -1353,18 +1382,537 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(screen.getByRole('button', { name: /Codex CLI/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+  });
+
+  it('renders the AMR local agent without vela branding and with the Local CLI test action', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.queryByText('1.0.0')).toBeNull();
+    expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
+    expect(screen.queryByText(/vela/i)).toBeNull();
+    expect(screen.queryByText(/Not signed in/i)).toBeNull();
+    expect(screen.getByText('Official')).toBeTruthy();
+    expect(screen.getByText('Lower cost')).toBeTruthy();
+    expect(screen.getByText('Many models')).toBeTruthy();
+    expect(screen.queryByText('Limited bonus: +100%')).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Test' })).toBeNull();
+  });
+
+  it('only shows the AMR authorization action after selecting the AMR card', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({ loggedIn: false, profile: 'local', user: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    const codexAgent = availableAgents.find((agent) => agent.id === 'codex');
+    expect(codexAgent).toBeTruthy();
+    if (!codexAgent) throw new Error('missing codex test agent');
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: codexAgent.id },
+      { agents: [amrAgent, codexAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Open Design AMR\b/ }));
+
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+  });
+
+  it('reveals AMR cancel only while hovering the active card during sign-in', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            profile: 'local',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    const amrCardButton = screen.getByRole('button', { name: /^Open Design AMR\b/ });
+    const amrCard = amrCardButton.closest('.agent-card') as HTMLElement;
+    expect(amrCard).toBeTruthy();
+    expect(await screen.findByText('Signing in…')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+
+    fireEvent.mouseEnter(amrCard);
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
+
+    fireEvent.mouseLeave(amrCard);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+  });
+
+  it('cancels an in-flight AMR sign-in and returns to Authorize after a brief canceled state', async () => {
+    let statusStage: 'pending' | 'signed-out' = 'pending';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify(
+            statusStage === 'pending'
+              ? {
+                  loggedIn: false,
+                  loginInFlight: true,
+                  profile: 'local',
+                  user: null,
+                  configPath: '/Users/test/.amr/config.json',
+                }
+              : {
+                  loggedIn: false,
+                  loginInFlight: false,
+                  profile: 'local',
+                  user: null,
+                  configPath: '/Users/test/.amr/config.json',
+                },
+          ),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        statusStage = 'signed-out';
+        return new Response(JSON.stringify({ canceled: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    const amrCard = screen.getByRole('button', { name: /^Open Design AMR\b/ }).closest('.agent-card') as HTMLElement;
+    expect(await screen.findByText('Signing in…')).toBeTruthy();
+
+    fireEvent.mouseEnter(amrCard);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(await screen.findByText('Canceled')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
 
     await waitFor(() => {
-      expect(screen.getByText('Testing connection…')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Authorize' })).toBeTruthy();
+    }, { timeout: 3000 });
+    expect(screen.queryByText('Canceled')).toBeNull();
+  });
+
+  // Regression for the race called out on #3158 by both codex-connector and
+  // looper: the daemon's `cancelVelaLogin()` only SIGTERMs the vela child
+  // and keeps it in `activeLoginProcs` until it actually exits, so a
+  // `/api/integrations/vela/status` read right after a successful cancel
+  // can legally still report `loginInFlight: true`. If the AmrLoginPill
+  // listener self-refreshed on the local cancel path it would bounce back
+  // into `Signing in…` polling and surface the timeout/error path even
+  // though the user already canceled.
+  it('does not bounce back to Signing in… when daemon /status still reports loginInFlight after a local cancel (#3158)', async () => {
+    let cancelReceived = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        // Keep reporting in-flight even *after* the cancel API succeeds —
+        // this is the SIGTERM-to-exit window where the daemon hasn't reaped
+        // the vela child yet.
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            profile: 'local',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        cancelReceived = true;
+        return new Response(JSON.stringify({ canceled: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
     });
-    await waitFor(() => {
-      expect(screen.getByText(/Codex CLI replied in 31 ms/)).toBeTruthy();
-    });
-    const testConnectionCalls = fetchMock.mock.calls.filter(
-      ([input]) => input.toString() === '/api/test/connection',
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
     );
-    expect(testConnectionCalls).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    const amrCard = screen.getByRole('button', { name: /^Open Design AMR\b/ }).closest('.agent-card') as HTMLElement;
+    expect(await screen.findByText('Signing in…')).toBeTruthy();
+
+    fireEvent.mouseEnter(amrCard);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(await screen.findByText('Canceled')).toBeTruthy();
+    expect(cancelReceived).toBe(true);
+
+    // Give the listener event handler — plus any rogue polling tick — a
+    // generous window to misfire. Under the buggy code path the pill would
+    // call /status again, see loginInFlight:true, setPending('login'), and
+    // restart polling, flipping the UI back to 'Signing in…'.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.queryByText('Signing in…')).toBeNull();
+
+    // Eventually the Canceled UI window times out and Authorize re-appears.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Authorize' })).toBeTruthy();
+    }, { timeout: 3000 });
+    // And still no bounce back to Signing in…
+    expect(screen.queryByText('Signing in…')).toBeNull();
+  });
+
+  it('reconciles late AMR browser completion to Signed in after local cancel', async () => {
+    let statusStage: 'pending' | 'signed-out' | 'signed-in' = 'pending';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        const body =
+          statusStage === 'pending'
+            ? {
+                loggedIn: false,
+                loginInFlight: true,
+                profile: 'local',
+                user: null,
+                configPath: '/Users/test/.amr/config.json',
+              }
+            : statusStage === 'signed-in'
+              ? {
+                  loggedIn: true,
+                  loginInFlight: false,
+                  profile: 'local',
+                  user: { id: 'user-1', email: 'late@example.com' },
+                  configPath: '/Users/test/.amr/config.json',
+                }
+              : {
+                  loggedIn: false,
+                  loginInFlight: false,
+                  profile: 'local',
+                  user: null,
+                  configPath: '/Users/test/.amr/config.json',
+                };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        statusStage = 'signed-out';
+        return new Response(JSON.stringify({ canceled: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    const amrCard = screen.getByRole('button', { name: /^Open Design AMR\b/ }).closest('.agent-card') as HTMLElement;
+    expect(await screen.findByText('Signing in…')).toBeTruthy();
+
+    fireEvent.mouseEnter(amrCard);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByText('Canceled')).toBeTruthy();
+
+    statusStage = 'signed-in';
+    window.dispatchEvent(
+      new CustomEvent('od:amr-login-status-change', {
+        detail: { reason: 'status-changed' },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    });
+    expect(screen.getByText('late@example.com')).toBeTruthy();
+  });
+
+  it('renders the signed-in AMR account state inside Settings without leaking vela branding', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'local',
+            user: {
+              id: 'user-1',
+              email: 'signed-in@example.com',
+              name: 'Signed In User',
+            },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.getByText('signed-in@example.com')).toBeTruthy();
+    expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
+    expect(screen.queryByText(/^vela$/i)).toBeNull();
+  });
+
+  it('renders env-backed AMR login inside Settings without fabricating account details', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'local',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(screen.queryByText(/@/i)).toBeNull();
+    expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
+  });
+
+  it('does not keep a stale signed-in AMR state after a later Settings reopen reads loggedOut', async () => {
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        statusCalls += 1;
+        return new Response(
+          JSON.stringify(
+            statusCalls === 1
+              ? {
+                  loggedIn: true,
+                  profile: 'local',
+                  user: { id: 'user-1', email: 'signed-in@example.com' },
+                  configPath: '/Users/test/.amr/config.json',
+                }
+              : {
+                  loggedIn: false,
+                  profile: 'local',
+                  user: null,
+                  configPath: '/Users/test/.amr/config.json',
+                },
+          ),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
+    first.unmount();
+
+    const second = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();
+    second.unmount();
+  });
+
+  it('keeps AMR selected in Settings after local logout instead of silently switching agents', async () => {
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        statusCalls += 1;
+        return new Response(
+          JSON.stringify({
+            loggedIn: statusCalls === 1,
+            profile: 'local',
+            user: statusCalls === 1 ? { id: 'user-1', email: 'signed-in@example.com' } : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/logout' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Design AMR\b/ })).toBeTruthy();
+    expect(
+      onPersist.mock.calls.some(
+        ([nextConfig]) =>
+          typeof nextConfig === 'object' &&
+          nextConfig !== null &&
+          'agentId' in (nextConfig as Record<string, unknown>) &&
+          (nextConfig as Record<string, unknown>).agentId !== 'amr',
+      ),
+    ).toBe(false);
   });
 });
 
