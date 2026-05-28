@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { relative, resolve } from 'node:path';
 import {
   assert, chmodSync, claude, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
@@ -440,6 +441,40 @@ fsTest(
       rmSync(dataDir, { recursive: true, force: true });
       rmSync(emptyPath, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_SANDBOX_MODE resolves relative OD_DATA_DIR before fallback toolchain discovery',
+  () => {
+    const projectRoot = resolve(process.cwd(), '../..');
+    const parent = mkdtempSync(join(tmpdir(), 'od-agents-relative-data-parent-'));
+    const dataDir = join(parent, 'data');
+    const sandboxBin = join(dataDir, 'sandbox', 'agent-home', '.local', 'bin');
+    const emptyPath = mkdtempSync(join(tmpdir(), 'od-agents-empty-path-'));
+    try {
+      return withEnvSnapshot(
+        ['PATH', 'OD_AGENT_HOME', 'OD_DATA_DIR', 'OD_SANDBOX_MODE', 'NPM_CONFIG_PREFIX'],
+        () => {
+          mkdirSync(sandboxBin, { recursive: true });
+          const geminiPath = join(sandboxBin, 'gemini');
+          writeFileSync(geminiPath, '');
+          chmodSync(geminiPath, 0o755);
+
+          delete process.env.OD_AGENT_HOME;
+          delete process.env.NPM_CONFIG_PREFIX;
+          process.env.OD_DATA_DIR = relative(projectRoot, dataDir);
+          process.env.OD_SANDBOX_MODE = '1';
+          process.env.PATH = emptyPath;
+
+          const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
+          assert.equal(resolved, geminiPath);
+        },
+      );
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+      rmSync(emptyPath, { recursive: true, force: true });
     }
   },
 );
