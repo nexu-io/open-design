@@ -570,6 +570,7 @@ export const zhTW: Dict = {
   'integrations.skillsLoadFailed': '無法載入技能。請確認本機 daemon 正在執行，然後再試一次。',
   'integrations.skillsNoResults': '沒有符合的技能。',
   'integrations.skillsNoFilterResults': '沒有符合這些篩選條件的技能。',
+  'integrations.skillsListEmpty': '選取一個技能列以查看詳細資訊。',
   'integrations.skillsTreeEmpty': '選取一個技能節點以查看詳細資訊。',
   'integrations.skillsTreeGuideMode': '模式',
   'integrations.skillsTreeGuideScenario': '場景',

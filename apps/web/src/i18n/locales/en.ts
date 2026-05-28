@@ -630,6 +630,7 @@ export const en: Dict = {
   'integrations.skillsLoadFailed': 'Could not load skills. Make sure the local daemon is running, then try again.',
   'integrations.skillsNoResults': 'No skills match your search.',
   'integrations.skillsNoFilterResults': 'No skills match these filters.',
+  'integrations.skillsListEmpty': 'Select a skill row to inspect it.',
   'integrations.skillsTreeEmpty': 'Select a skill node to inspect it.',
   'integrations.skillsTreeGuideMode': 'MODE',
   'integrations.skillsTreeGuideScenario': 'SCENE',

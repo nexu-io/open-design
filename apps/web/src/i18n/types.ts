@@ -941,6 +941,7 @@ export interface Dict {
   'integrations.skillsLoadFailed': string;
   'integrations.skillsNoResults': string;
   'integrations.skillsNoFilterResults': string;
+  'integrations.skillsListEmpty': string;
   'integrations.skillsTreeEmpty': string;
   'integrations.skillsTreeGuideMode': string;
   'integrations.skillsTreeGuideScenario': string;

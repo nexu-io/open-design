@@ -97,6 +97,8 @@ describe('IntegrationsView skills tree', () => {
     expect(screen.getByRole('button', { name: 'List view' }).getAttribute('class')).toContain('is-active');
     expect(screen.queryByTestId('integrations-skill-node-dashboard')).toBeNull();
     expect(screen.queryByTestId('integrations-skill-detail')).toBeNull();
+    expect(screen.getByText('Select a skill row to inspect it.')).toBeTruthy();
+    expect(screen.queryByText('Select a skill node to inspect it.')).toBeNull();
 
     fireEvent.click(screen.getByTestId('integrations-skill-list-row-pitch-deck'));
 

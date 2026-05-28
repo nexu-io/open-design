@@ -513,7 +513,7 @@ function SkillListView({
           );
         })}
       </div>
-      <SkillTreeInfoPanel skill={selectedTreeSkill} emptyLabel={t('integrations.skillsTreeEmpty')} />
+      <SkillTreeInfoPanel skill={selectedTreeSkill} emptyLabel={t('integrations.skillsListEmpty')} />
     </div>
   );
 }

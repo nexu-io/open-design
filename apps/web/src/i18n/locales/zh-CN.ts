@@ -630,6 +630,7 @@ export const zhCN: Dict = {
   'integrations.skillsLoadFailed': '无法加载技能。请确认本地 daemon 正在运行，然后重试。',
   'integrations.skillsNoResults': '没有匹配的技能。',
   'integrations.skillsNoFilterResults': '没有匹配这些筛选条件的技能。',
+  'integrations.skillsListEmpty': '选择一个技能行查看详情。',
   'integrations.skillsTreeEmpty': '选择一个技能节点查看详情。',
   'integrations.skillsTreeGuideMode': '模式',
   'integrations.skillsTreeGuideScenario': '场景',
