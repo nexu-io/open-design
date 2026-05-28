@@ -71,7 +71,7 @@ describe('IntegrationsView skills tree', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders skills as a mode/scenario tree by default and shows node metadata', async () => {
+  it('renders skills as a read-only list view by default and shows row metadata', async () => {
     renderSkillsIntegration([
       skill({
         id: 'dashboard',
@@ -92,19 +92,13 @@ describe('IntegrationsView skills tree', () => {
       }),
     ]);
 
-    const tree = await screen.findByText('Prototype');
-    expect(tree).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Skill tree' }).getAttribute('class')).toContain('is-active');
-    expect(screen.queryByTestId('integrations-skill-list-row-dashboard')).toBeNull();
-    expect(screen.getByText('Operation')).toBeTruthy();
-    expect(screen.getByText('Deck')).toBeTruthy();
+    expect(await screen.findByTestId('integrations-skill-list-row-dashboard')).toBeTruthy();
+    expect(screen.getByTestId('integrations-skill-list-row-pitch-deck')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'List view' }).getAttribute('class')).toContain('is-active');
+    expect(screen.queryByTestId('integrations-skill-node-dashboard')).toBeNull();
     expect(screen.queryByTestId('integrations-skill-detail')).toBeNull();
-    expect(screen.getByText('Select a skill node to inspect it.')).toBeTruthy();
-    expect(screen.getByText('Operation').closest('g')?.getAttribute('class')).toContain('is-branch');
-    expect(screen.getByText('Operation').closest('g')?.getAttribute('role')).toBeNull();
-    expect(screen.getByTestId('integrations-skill-node-pitch-deck').getAttribute('class')).toContain('is-interactive');
 
-    fireEvent.click(screen.getByTestId('integrations-skill-node-pitch-deck'));
+    fireEvent.click(screen.getByTestId('integrations-skill-list-row-pitch-deck'));
 
     const detail = await screen.findByTestId('integrations-skill-detail');
     expect(within(detail).getByText('Pitch Deck')).toBeTruthy();
@@ -112,7 +106,7 @@ describe('IntegrationsView skills tree', () => {
     expect(within(detail).getByText('Optional')).toBeTruthy();
   });
 
-  it('switches to a read-only list view and reuses the detail panel', async () => {
+  it('switches to the mode/scenario tree view and reuses the detail panel', async () => {
     renderSkillsIntegration([
       skill({
         id: 'dashboard',
@@ -133,15 +127,20 @@ describe('IntegrationsView skills tree', () => {
       }),
     ]);
 
-    await screen.findByTestId('integrations-skill-node-dashboard');
+    await screen.findByTestId('integrations-skill-list-row-dashboard');
 
-    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skill tree' }));
 
-    expect(screen.getByTestId('integrations-skill-list-row-dashboard')).toBeTruthy();
-    expect(screen.getByTestId('integrations-skill-list-row-pitch-deck')).toBeTruthy();
-    expect(screen.queryByTestId('integrations-skill-node-dashboard')).toBeNull();
+    expect(screen.getByText('Prototype')).toBeTruthy();
+    expect(screen.getByText('Operation')).toBeTruthy();
+    expect(screen.getByText('Deck')).toBeTruthy();
+    expect(screen.queryByTestId('integrations-skill-list-row-dashboard')).toBeNull();
+    expect(screen.getByText('Select a skill node to inspect it.')).toBeTruthy();
+    expect(screen.getByText('Operation').closest('g')?.getAttribute('class')).toContain('is-branch');
+    expect(screen.getByText('Operation').closest('g')?.getAttribute('role')).toBeNull();
+    expect(screen.getByTestId('integrations-skill-node-pitch-deck').getAttribute('class')).toContain('is-interactive');
 
-    fireEvent.click(screen.getByTestId('integrations-skill-list-row-pitch-deck'));
+    fireEvent.click(screen.getByTestId('integrations-skill-node-pitch-deck'));
 
     const detail = await screen.findByTestId('integrations-skill-detail');
     expect(within(detail).getByText('Pitch Deck')).toBeTruthy();
@@ -176,9 +175,8 @@ describe('IntegrationsView skills tree', () => {
       }),
     ]);
 
-    await screen.findByTestId('integrations-skill-node-dashboard');
+    await screen.findByTestId('integrations-skill-list-row-dashboard');
 
-    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
     fireEvent.change(screen.getByLabelText('Mode'), { target: { value: 'prototype' } });
     fireEvent.change(screen.getByLabelText('Scenario'), { target: { value: 'operation' } });
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'operations' } });
@@ -197,6 +195,9 @@ describe('IntegrationsView skills tree', () => {
       skill({ id: 'dashboard', name: 'Dashboard', scenario: 'operation', platform: 'desktop' }),
       skill({ id: 'poster', name: 'Poster', scenario: 'marketing', platform: 'mobile' }),
     ]);
+
+    await screen.findByTestId('integrations-skill-list-row-dashboard');
+    fireEvent.click(screen.getByRole('button', { name: 'Skill tree' }));
 
     await screen.findByTestId('integrations-skill-node-dashboard');
     fireEvent.click(screen.getByTestId('integrations-skill-node-dashboard'));
@@ -226,7 +227,7 @@ describe('IntegrationsView skills tree', () => {
       skill({ id: 'poster', name: 'Poster', scenario: 'marketing', platform: 'mobile' }),
     ]);
 
-    await screen.findByTestId('integrations-skill-node-dashboard');
+    await screen.findByTestId('integrations-skill-list-row-dashboard');
 
     fireEvent.change(screen.getByLabelText('Platform'), {
       target: { value: 'desktop' },
@@ -253,6 +254,9 @@ describe('IntegrationsView skills tree', () => {
     renderSkillsIntegration([
       skill({ id: 'dashboard', name: 'Dashboard', scenario: 'operation', platform: 'desktop' }),
     ], { locale: 'zh-CN' });
+
+    await screen.findByTestId('integrations-skill-list-row-dashboard');
+    fireEvent.click(screen.getByRole('button', { name: '技能树' }));
 
     await screen.findByTestId('integrations-skill-node-dashboard');
 

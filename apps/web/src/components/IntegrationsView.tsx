@@ -180,7 +180,7 @@ function SkillsCatalogTreePanel() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState<SkillCatalogViewMode>('tree');
+  const [viewMode, setViewMode] = useState<SkillCatalogViewMode>('list');
   const [filters, setFilters] = useState<SkillCatalogFilters>(DEFAULT_SKILL_CATALOG_FILTERS);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
 
