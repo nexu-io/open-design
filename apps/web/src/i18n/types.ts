@@ -2047,7 +2047,7 @@ export interface Dict {
   'fileViewer.exportImageFailed': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
-  'fileViewer.exportStarted': string,
+  'fileViewer.exportStarted': string;
   'fileViewer.saveAsTemplate': string;
   'fileViewer.savingTemplate': string;
   'fileViewer.savedTemplate': string;

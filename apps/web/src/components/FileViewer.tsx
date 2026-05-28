@@ -3723,16 +3723,17 @@ function HtmlViewer({
         { requestId },
       );
     };
+    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'markdown']);
     try {
       const out = fn();
       if (out && typeof (out as Promise<unknown>).then === 'function') {
         (out as Promise<unknown>).then(
-          () => { finish('success'); setExportToast(t('fileViewer.exportStarted')); },
+          () => { finish('success'); if (toastFormats.has(format)) setExportToast(t('fileViewer.exportStarted')); },
           (err) => finish('failed', err instanceof Error ? err.name : 'UNKNOWN'),
         );
       } else {
         finish('success');
-        setExportToast(t('fileViewer.exportStarted'));
+        if (toastFormats.has(format)) setExportToast(t('fileViewer.exportStarted'));
       }
     } catch (err) {
       finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
