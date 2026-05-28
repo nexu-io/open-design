@@ -56,7 +56,7 @@ export interface CreateMcpKeyResponse {
   key: string;
   label: string;
   createdAt: number;
-  shellEnvFile?: string;
+  shellEnvFile: string | null;
 }
 
 /** Response from GET /api/mcp-keys/:id */

@@ -177,14 +177,14 @@ export async function listMcpKeys(
 export async function revealMcpKey(
   dataDir: string,
   id: string,
-): Promise<{ key: string } | null> {
+): Promise<{ key: string; label: string; createdAt: number } | null> {
   const keys = await readStore(dataDir);
   const entry = keys.find((k) => k.id === id);
   if (!entry) return null;
   const encKey = await loadEncKey(dataDir);
   try {
     const rawKey = decrypt(entry.encryptedKey, entry.iv, entry.authTag, encKey);
-    return { key: rawKey };
+    return { key: rawKey, label: entry.label, createdAt: entry.createdAt };
   } catch {
     throw new Error('Failed to decrypt MCP key — encryption key may have changed');
   }

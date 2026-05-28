@@ -5344,14 +5344,10 @@ export async function startServer({
       return;
     }
     const { bindHost, port, allowedHosts } = req.body ?? {};
-    const validHosts = ['127.0.0.1', '0.0.0.0', '::1', 'localhost'];
+    const validHosts = ['127.0.0.1', '0.0.0.0', '::1', '::', 'localhost'];
     const host = typeof bindHost === 'string' ? bindHost : '127.0.0.1';
-    const isValidIp = (h: string) => {
-      const parts = h.split('.').map(Number);
-      return parts.length === 4 && parts.every((p) => Number.isInteger(p) && p >= 0 && p <= 255);
-    };
-    if (!validHosts.includes(host) && !isValidIp(host)) {
-      res.status(400).json({ error: 'INVALID_HOST', reason: 'bindHost must be a valid IPv4 address' });
+    if (!validHosts.includes(host) && !net.isIP(host)) {
+      res.status(400).json({ error: 'INVALID_HOST', reason: 'bindHost must be a valid IP address' });
       return;
     }
     if (port !== undefined && typeof port !== 'number') {
