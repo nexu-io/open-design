@@ -523,6 +523,65 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('honors mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        conversationId,
+        message: 'plan an image without using OD media',
+        skillId: 'imagegen',
+        mediaExecution: {
+          mode: 'disabled',
+          allowedSurfaces: ['image'],
+        },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as {
+      runs: Array<{ mediaExecution?: { mode?: string; allowedSurfaces?: string[] } }>;
+    };
+    expect(runsBody.runs).toHaveLength(1);
+    expect(runsBody.runs[0]?.mediaExecution).toMatchObject({
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    });
+  });
+
+  it('rejects invalid mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'opencode',
+        conversationId,
+        message: 'generate an image',
+        mediaExecution: { mode: 'provider-router' },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(body).toContain('mediaExecution.mode');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as { runs: unknown[] };
+    expect(runsBody.runs).toEqual([]);
+  });
+
   it('propagates ad-hoc skill critique policy into the chat resolver', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for user skill critique-policy tests');
@@ -1554,6 +1613,43 @@ describe('chat prompt helpers', () => {
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
+  });
+
+  it('omits the Codex final imagegen override when run media policy blocks execution', () => {
+    const metadata = {
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+      imageAspect: '1:1',
+    };
+    const mediaExecution = {
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    };
+    const generatedImagesDir = resolveCodexGeneratedImagesDir(
+      'codex',
+      metadata,
+      { CODEX_HOME: '/tmp/custom-codex-home' },
+      '/home/tester',
+      mediaExecution,
+    );
+    const otherwiseGrantedDir = resolve('/tmp/custom-codex-home/generated_images');
+    const override = resolveGrantedCodexImagegenOverride({
+      agentId: 'codex',
+      metadata,
+      codexGeneratedImagesDir: otherwiseGrantedDir,
+      extraAllowedDirs: [otherwiseGrantedDir],
+      mediaExecution,
+    });
+    const prompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt: 'daemon media policy prompt',
+      runtimeToolPrompt: 'runtime tools',
+      clientSystemPrompt: 'client instructions',
+      finalPromptOverride: override,
+    });
+
+    expect(generatedImagesDir).toBeNull();
+    expect(override).toBeNull();
+    expect(prompt).not.toContain('## Codex built-in imagegen override');
   });
 
   it('defaults enabled research without an explicit query to the current message', () => {
