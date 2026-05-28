@@ -12,9 +12,13 @@ Parameters:
     Default: ''
   DockerImage:
     Type: String
-    Default: 'vanjayak/open-design:latest'
+    MinLength: 1
+    Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
+    AllowedPattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]{1,2})$'    
+    ConstraintDescription: 'Must be a valid IPv4 CIDR range (e.g., 192.168.1.1/32).'
+    MinLength: 1
     Description: 'REQUIRED: The CIDR block allowed to access the ALB (e.g., your VPN or office IP. Must end in /32 for a single IP).'
   ProxyPort:
     Type: Number
@@ -29,6 +33,7 @@ Parameters:
   ApiToken:
     Type: String
     NoEcho: true
+    MinLength: 1
     Description: 'REQUIRED: The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager.'
   VpcCidr:
     Type: String
@@ -77,6 +82,10 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref AcmCertificateArn, '']]
         AssertDescription: 'You must provide an AcmCertificateArn when specifying a CustomDomainName.'
+  PreventPublicExposure:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AllowedSourceIp, '0.0.0.0/0']]
+        AssertDescription: 'Public exposure (0.0.0.0/0) is strictly forbidden by this baseline. Please provide a specific private IP or VPN CIDR block.'
 
 Resources:
   # NETWORKING (VPC, Subnets, NAT)

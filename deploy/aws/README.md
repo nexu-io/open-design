@@ -31,7 +31,7 @@ When deploying the CloudFormation stack, you can customize the following paramet
 | :--- | :--- | :--- |
 | `AllowedSourceIp` | **(Required)** The CIDR block allowed to access the Load Balancer (e.g., your office VPN IP). Must end in `/32` for a single IP. | *None* |
 | `ApiToken` | **(Required)** The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager. |  |
-| `DockerImage` | The Open Design Docker image to deploy. | `vanjayak/open-design:latest` |
+| `DockerImage` | **(Required)** The full repository URI and tag for the Open Design Docker image. You must provide an explicit image as the public Docker Hub baseline is currently unmaintained. | *None* |
 | `VpcCidr` | The CIDR block for the VPC. | `10.42.0.0/16` |
 | `PublicSubnet1Cidr` | The CIDR block for Public Subnet 1 (AZ1). | `10.42.1.0/24` |
 | `PublicSubnet2Cidr` | The CIDR block for Public Subnet 2 (AZ2). | `10.42.3.0/24` |
