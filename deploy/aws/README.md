@@ -6,7 +6,7 @@ This directory contains an AWS CloudFormation template (`template.yaml`) to depl
 
 The template provisions a robust, highly-available, and secure architecture for Open Design:
 
-*   **Networking:** A new Virtual Private Cloud (VPC) spanning two Availability Zones, with both Public and Private subnets. A NAT Gateway allows outbound internet access.
+*   **Networking:** A new Virtual Private Cloud (VPC) spanning two Availability Zones, with both Public and Private subnets. Two independent NAT Gateways (one in each AZ) provide highly available outbound internet access.
 *   **Load Balancing:** An internet-facing Application Load Balancer (ALB) routes incoming traffic. It optionally supports HTTPS if a custom domain and ACM certificate are provided.
 *   **Compute:** AWS ECS running on serverless Fargate instances in the private subnets. The task definition includes:
     *   The **Open Design** app container.
@@ -37,8 +37,7 @@ When deploying the CloudFormation stack, you can customize the following paramet
 | `PublicSubnet2Cidr` | The CIDR block for Public Subnet 2 (AZ2). | `10.42.3.0/24` |
 | `PrivateSubnetCidr` | The CIDR block for the Private Subnet. | `10.42.2.0/24` |
 | `PrivateSubnet2Cidr` | The CIDR block for Private Subnet 2 (AZ2). | `10.42.4.0/24` |
-| `FargateCpu` | Fargate task CPU units (1024 = 1 vCPU). Allowed values: 256, 512, 1024, 2048, 4096. | `512` |
-| `FargateMemory` | Fargate task memory in MiB. | `1024` |
+| `TaskSize` | The compute size for the Open Design application. Allowed values: `small` (256 CPU, 1024 MiB), `medium` (512 CPU, 2048 MiB), `large` (1024 CPU, 4096 MiB). | `small` |
 | `CustomDomainName` | *(Optional)* Your custom domain name (e.g., `design.yourcompany.com`). If blank, the default ALB DNS name is used over HTTP. | *None* |
 | `AcmCertificateArn` | *(Optional)* The ARN of your AWS Certificate Manager (ACM) certificate. **Required** if `CustomDomainName` is provided. | *None* |
 | `ProxyPort` | The dynamic port used by the Nginx proxy and exposed to the Load Balancer. Must be >= 1024 (unprivileged container). | `8080` |

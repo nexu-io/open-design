@@ -50,15 +50,23 @@ Parameters:
     Type: String
     Default: '10.42.4.0/24'
     Description: 'The CIDR block for Private Subnet 2 (AZ2)'
-  FargateCpu:
+  TaskSize:
     Type: String
-    Default: '512'
-    AllowedValues: ['256', '512', '1024', '2048', '4096']
-    Description: 'Fargate task CPU units (1024 = 1 vCPU)'
-  FargateMemory:
-    Type: String
-    Default: '1024'
-    Description: 'Fargate task memory in MiB'
+    Default: small
+    AllowedValues: [small, medium, large]
+    Description: 'The compute size for the Open Design application.'
+
+Mappings:
+  TaskSizes:
+    small:
+      Cpu: '256'
+      Memory: '1024'
+    medium:
+      Cpu: '512'
+      Memory: '2048'
+    large:
+      Cpu: '1024'
+      Memory: '4096'
 
 Conditions:
   UseCustomDomain: !Not [!Equals [!Ref CustomDomainName, '']]
@@ -133,6 +141,16 @@ Resources:
       AllocationId: !GetAtt NatGatewayEIP.AllocationId
       SubnetId: !Ref PublicSubnet
 
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -166,11 +184,22 @@ Resources:
       SubnetId: !Ref PrivateSubnet
       RouteTableId: !Ref PrivateRouteTable
 
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
   PrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnet2
-      RouteTableId: !Ref PrivateRouteTable
+      RouteTableId: !Ref PrivateRouteTable2
 
   # SECURITY GROUPS
   AlbSecurityGroup:
@@ -266,7 +295,7 @@ Resources:
       Port: !Ref ProxyPort
       Protocol: HTTP
       TargetType: ip
-      HealthCheckPath: /nginx-health
+      HealthCheckPath: /api/health
 
   Listener:
       Type: AWS::ElasticLoadBalancingV2::Listener
@@ -361,8 +390,8 @@ Resources:
       RequiresCompatibilities:
         - FARGATE
       NetworkMode: awsvpc
-      Cpu: !Ref FargateCpu
-      Memory: !Ref FargateMemory
+      Cpu: !FindInMap [TaskSizes, !Ref TaskSize, Cpu]
+      Memory: !FindInMap [TaskSizes, !Ref TaskSize, Memory]
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
       TaskRoleArn: !GetAtt TaskRole.Arn
       RuntimePlatform:
@@ -424,11 +453,6 @@ Resources:
               server {
                   listen ${PROXY_PORT};
                   
-                  location /nginx-health {
-                      return 200 "healthy\n";
-                      add_header Content-Type text/plain;
-                  }
-                  
                   location / {
                       proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
                       proxy_set_header Host $host;
@@ -456,7 +480,7 @@ Resources:
                   }
               }
               EOF
-              envsubst '$$PROXY_PORT $$OD_BIND_HOST $$OD_WEB_PORT $$PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
+              envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
               exec nginx -g "daemon off;"
           LogConfiguration:
             LogDriver: awslogs
