@@ -1132,6 +1132,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function removeStaged(p: string) {
       setStaged((s) => s.filter((a) => a.path !== p));
       setStagedVisualComments((current) => current.filter((attachment) => attachment.screenshotPath !== p));
+      setDraft((current) => stripInlineMentionToken(current, p));
     }
 
     function removeCommentAttachment(id: string) {
@@ -2709,6 +2710,14 @@ function MentionPopover({
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripInlineMentionToken(text: string, label: string): string {
+  const token = inlineMentionToken(label);
+  return text.replace(
+    new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+    '$1',
+  );
 }
 
 function loadComposerDraft(key?: string): string | null {
