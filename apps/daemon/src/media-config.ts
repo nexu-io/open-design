@@ -41,6 +41,7 @@ import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
 import { expandHomePrefix } from './home-expansion.js';
 import { resolveXAIBearer } from './xai-credentials.js';
+import { isSandboxModeEnabled } from './sandbox-mode.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
@@ -291,6 +292,7 @@ function apiKeyFromCodexAuth(data: unknown): string {
 }
 
 async function resolveOpenAIAuthFileCredential(): Promise<OAuthCredential | null> {
+  if (isSandboxModeEnabled(process.env)) return null;
   const home = os.homedir();
   const codexAuth = await readJsonIfPresent(
     path.join(home, '.codex', 'auth.json'),
@@ -317,6 +319,8 @@ async function resolveXAIOAuthCredential(
       source: `oauth-xai-${odBearer.source}`,
     };
   }
+
+  if (isSandboxModeEnabled(process.env)) return null;
 
   // 2. Borrow the xAI OAuth token Hermes wrote to ~/.hermes/auth.json
   //    when the user ran `hermes auth add xai-oauth`. A user who has already authorized

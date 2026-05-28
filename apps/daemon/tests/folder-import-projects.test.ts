@@ -6,6 +6,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { detectEntryFile, listFiles, resolveProjectDir } from '../src/projects.js';
 
+function withSandboxMode<T>(run: () => T): T {
+  const previous = process.env.OD_SANDBOX_MODE;
+  process.env.OD_SANDBOX_MODE = '1';
+  try {
+    return run();
+  } finally {
+    if (previous == null) delete process.env.OD_SANDBOX_MODE;
+    else process.env.OD_SANDBOX_MODE = previous;
+  }
+}
+
 describe('resolveProjectDir', () => {
   const projectsRoot = '/var/od/projects';
   const projectId = 'proj-abc';
@@ -49,6 +60,21 @@ describe('resolveProjectDir', () => {
         baseDir: '/Users/me/site',
       }),
     ).not.toThrow();
+  });
+
+  it('ignores metadata.baseDir when sandbox mode is enabled', () => {
+    withSandboxMode(() => {
+      const baseDir = '/Users/me/projects/site';
+      expect(
+        resolveProjectDir(projectsRoot, projectId, { kind: 'prototype', baseDir }),
+      ).toBe(path.join(projectsRoot, projectId));
+      expect(() =>
+        resolveProjectDir(projectsRoot, '../escape', {
+          kind: 'prototype',
+          baseDir,
+        }),
+      ).toThrowError();
+    });
   });
 });
 

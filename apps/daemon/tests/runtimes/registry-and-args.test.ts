@@ -102,6 +102,33 @@ test('local agent profiles skip explicit unknown baseAgent without falling back'
   }
 });
 
+test('sandbox mode ignores implicit local agent profiles but keeps explicit config', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-sandbox-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG', 'OD_SANDBOX_MODE'], async () => {
+      const config = join(dir, 'agents.local.json');
+      writeFileSync(
+        config,
+        JSON.stringify({
+          agents: [{ id: 'explicit-wrapper', bin: 'explicit-wrapper' }],
+        }),
+      );
+
+      process.env.OD_SANDBOX_MODE = '1';
+      delete process.env.OD_AGENT_PROFILES_CONFIG;
+      assert.deepEqual(readLocalAgentProfileDefs(), []);
+
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+      assert.deepEqual(
+        readLocalAgentProfileDefs().map((profile) => profile.id),
+        ['explicit-wrapper'],
+      );
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
   process.env.OD_CODEX_DISABLE_PLUGINS = '1';
 
