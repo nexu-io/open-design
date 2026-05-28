@@ -713,9 +713,19 @@ function buildProjectExportManifestResponse({
     note(file.name, 'artifact-manifest');
 
     const artifactSupporting = new Set<string>();
-    const addManifestRef = (ref: unknown, reason: string) => {
-      const normalized = normalizeManifestProjectRef(ref, file.name);
-      if (!normalized || !filesByName.has(normalized)) return;
+    const addManifestRef = (
+      ref: unknown,
+      reason: string,
+      options: { preferProjectRoot?: boolean } = {},
+    ) => {
+      const candidates = options.preferProjectRoot
+        ? [
+            normalizeManifestProjectRootRef(ref),
+            normalizeManifestProjectRef(ref, file.name),
+          ]
+        : [normalizeManifestProjectRef(ref, file.name)];
+      const normalized = candidates.find((candidate) => candidate && filesByName.has(candidate));
+      if (!normalized) return;
       if (normalized === file.name) return;
       supportingNames.add(normalized);
       artifactSupporting.add(normalized);
@@ -723,7 +733,7 @@ function buildProjectExportManifestResponse({
     };
     addManifestRef(manifest.entry, 'artifact-entry');
     if (typeof manifest.primary === 'string') {
-      addManifestRef(manifest.primary, 'artifact-primary');
+      addManifestRef(manifest.primary, 'artifact-primary', { preferProjectRoot: true });
     }
     if (Array.isArray(manifest.supportingFiles)) {
       for (const ref of manifest.supportingFiles) {
@@ -785,16 +795,24 @@ function chooseExportManifestEntryFile(
     ? project.metadata.entryFile
     : null;
   if (metadataEntry && filesByName.has(metadataEntry)) return metadataEntry;
-  const primary = files.find((file) => {
+  for (const file of files) {
     const manifest = file.artifactManifest;
-    if (!manifest || typeof manifest !== 'object') return false;
-    return manifest.primary === true || manifest.primary === file.name;
-  });
-  if (primary?.name) return primary.name;
+    if (!manifest || typeof manifest !== 'object') continue;
+    if (manifest.primary === true) return file.name;
+    if (typeof manifest.primary !== 'string') continue;
+    const rootPrimary = normalizeManifestProjectRootRef(manifest.primary);
+    if (rootPrimary && filesByName.has(rootPrimary)) return rootPrimary;
+    const ownerRelativePrimary = normalizeManifestProjectRef(manifest.primary, file.name);
+    if (ownerRelativePrimary && filesByName.has(ownerRelativePrimary)) return ownerRelativePrimary;
+  }
   return files.find((file) => /(^|\/)index\.html?$/i.test(file.name))?.name
     ?? files.find((file) => file.kind === 'html')?.name
     ?? files[0]?.name
     ?? null;
+}
+
+function normalizeManifestProjectRootRef(ref: unknown): string | null {
+  return normalizeManifestProjectRef(ref, '');
 }
 
 function normalizeManifestProjectRef(ref: unknown, ownerFile: string): string | null {

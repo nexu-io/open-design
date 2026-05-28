@@ -25,7 +25,9 @@ describe('project export manifest route', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  async function createProject(): Promise<string> {
+  async function createProject(
+    metadata: Record<string, unknown> = { kind: 'prototype', entryFile: 'index.html' },
+  ): Promise<string> {
     const id = `export-manifest-${randomUUID()}`;
     const response = await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
@@ -33,7 +35,7 @@ describe('project export manifest route', () => {
       body: JSON.stringify({
         id,
         name: 'Export manifest project',
-        metadata: { kind: 'prototype', entryFile: 'index.html' },
+        metadata,
       }),
     });
     expect(response.ok).toBe(true);
@@ -113,6 +115,40 @@ describe('project export manifest route', () => {
       },
     ]);
     expect(body.files.some((file) => file.name.endsWith('.artifact.json'))).toBe(false);
+  });
+
+  it('uses artifact primary strings as project-relative entry refs', async () => {
+    const projectId = await createProject({ kind: 'prototype' });
+    await writeFile(projectId, {
+      name: 'reviewed.html',
+      content: '<!doctype html><main>reviewed</main>',
+    });
+    await writeFile(projectId, {
+      name: 'preview/wrapper.html',
+      content: '<!doctype html><iframe src="../reviewed.html"></iframe>',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Review wrapper',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        primary: 'reviewed.html',
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/export/manifest`);
+    expect(response.ok).toBe(true);
+    const body = await response.json() as {
+      entryFile: string;
+      files: Array<{ name: string; role: string; reasons: string[] }>;
+    };
+
+    expect(body.entryFile).toBe('reviewed.html');
+    expect(body.files.find((file) => file.name === 'reviewed.html')).toMatchObject({
+      role: 'entry',
+      reasons: expect.arrayContaining(['artifact-primary', 'project-entry-file']),
+    });
   });
 
   it('rejects invalid project ids before listing files', async () => {
