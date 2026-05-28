@@ -100,5 +100,6 @@ export * from './scaffold.js';
 export * from './gc.js';
 export * from './resolve-snapshot.js';
 export * from './snapshots.js';
+export * from './skill-candidates.js';
 export * from './trust.js';
 export * from './until.js';

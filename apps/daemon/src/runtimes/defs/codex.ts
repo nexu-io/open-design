@@ -44,6 +44,16 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
   return out.length > 1 ? out : null;
 }
 
+export function codexNeedsDangerFullAccessSandbox(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (platform === 'win32') return true;
+  // WSL reports `linux` but Codex still hits the Windows read-only
+  // workspace-write sandbox path when launched from there (#2834).
+  return Boolean(env.WSL_DISTRO_NAME?.trim());
+}
+
 export const codexAgentDef = {
     id: 'codex',
     name: 'Codex CLI',
@@ -98,8 +108,8 @@ export const codexAgentDef = {
       // back to a coarse policy that rejects any shell. macOS (Seatbelt)
       // and Linux (Landlock+seccomp) keep workspace-write because their
       // sandbox enforcement permits shell while restricting writes.
-      const isWindows = process.platform === 'win32';
-      const args = isWindows
+      const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
+      const args = needsDangerFullAccess
         ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
         : [
             'exec',
@@ -110,6 +120,9 @@ export const codexAgentDef = {
             '-c',
             'sandbox_workspace_write.network_access=true',
           ];
+      // Newer Codex builds honor permissions config over legacy sandbox
+      // flags; without this, Windows/WSL launches can stay read-only (#2834).
+      args.push('-c', 'default_permissions=":workspace"');
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }

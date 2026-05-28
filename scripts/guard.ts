@@ -79,6 +79,14 @@ const residualAllowedExactPaths = new Set([
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",
+  // AMR (vela) verifier: ad-hoc dev runner that imports the daemon's compiled
+  // `dist/acp.js` and drives a real `vela agent run` against a live model.
+  // Kept as .mjs so it can be invoked directly via Node without any transform.
+  "apps/daemon/scripts/verify-amr-real-vela.mjs",
+  // Fake `vela agent run --runtime opencode` ACP stdio stub used by the AMR
+  // integration tests. The Vitest test spawns it via `child_process.spawn`,
+  // which needs a directly-executable file (shebang + .mjs).
+  "apps/daemon/tests/fixtures/fake-vela.mjs",
   "tools/dev/bin/tools-dev.mjs",
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",

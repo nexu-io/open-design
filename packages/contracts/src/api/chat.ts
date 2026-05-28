@@ -3,10 +3,12 @@ import type {
   PreviewCommentMember,
   PreviewCommentPosition,
   PreviewCommentSelectionKind,
+  PreviewAnnotationStyle,
   PreviewVisualMarkKind,
 } from './comments';
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
+import type { MediaExecutionPolicy } from './media.js';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
@@ -37,6 +39,12 @@ export interface ChatRequest {
   locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  /**
+   * Run-scoped media execution policy. Omitted means current Open Design
+   * behavior: media generation is enabled and OD may execute its configured
+   * local providers.
+   */
+  mediaExecution?: MediaExecutionPolicy;
   /**
    * Optional analytics context for the v2 run_created / run_finished
    * events. The daemon never trusts these for behavior — they only
@@ -183,6 +191,8 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  /** Present on daemon run status responses that know the effective run policy. */
+  mediaExecution?: MediaExecutionPolicy;
 }
 
 export interface ChatRunListResponse {
@@ -211,6 +221,7 @@ export interface ChatCommentAttachment {
   currentText: string;
   pagePosition: PreviewCommentPosition;
   htmlHint: string;
+  style?: PreviewAnnotationStyle;
   selectionKind?: ChatCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
@@ -221,7 +232,10 @@ export interface ChatCommentAttachment {
 }
 
 export type PersistedAgentEvent =
-  | { kind: 'status'; label: string; detail?: string }
+  // `code` carries the structured API error code for `label: 'error'`
+  // status events (e.g. AGENT_AUTH_REQUIRED, RATE_LIMITED). Clients use it to
+  // decide error-specific affordances such as the hosted-AMR nudge.
+  | { kind: 'status'; label: string; detail?: string; code?: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; text: string }
   | {
@@ -244,6 +258,14 @@ export type PersistedAgentEvent =
     }
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      kind: 'plugin_candidate';
+      candidateId: string;
+      title: string;
+      description?: string;
+      confidence?: number;
+      draftPath?: string | null;
+    }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
   | { kind: 'raw'; line: string };
 

@@ -9,10 +9,14 @@ import {
   createCommandInvocation,
   createPackageManagerInvocation,
   createProcessStampArgs,
+  mergeProxyAwareEnv,
   matchesStampedProcess,
+  parseMacosScutilProxyOutput,
+  parseWindowsInternetSettingsProxyOutput,
   pathContains,
   readProcessStampFromCommand,
   removePathBestEffort,
+  resolveSystemProxyEnv,
   wellKnownUserToolchainBins,
   type ProcessStampContract,
 } from "../src/index.js";
@@ -146,6 +150,314 @@ describe("generic filesystem primitives", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("system proxy env resolution", () => {
+  it("enables Node env proxy support when merging user proxy variables", () => {
+    const env = mergeProxyAwareEnv("darwin", {
+      http_proxy: "http://user-proxy:7890",
+    });
+
+    expect(env).toMatchObject({
+      HTTP_PROXY: "http://user-proxy:7890",
+      NODE_USE_ENV_PROXY: "1",
+      http_proxy: "http://user-proxy:7890",
+    });
+  });
+
+  it("preserves an explicit NODE_USE_ENV_PROXY value when merging user proxy variables", () => {
+    const env = mergeProxyAwareEnv("darwin", {
+      HTTPS_PROXY: "http://user-proxy:7891",
+      NODE_USE_ENV_PROXY: "0",
+    });
+
+    expect(env.HTTPS_PROXY).toBe("http://user-proxy:7891");
+    expect(env.NODE_USE_ENV_PROXY).toBe("0");
+  });
+
+  it("parses macOS scutil output into standard proxy env vars", () => {
+    const env = parseMacosScutilProxyOutput(`
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *.local
+    1 : localhost
+  }
+  HTTPEnable : 1
+  HTTPPort : 7890
+  HTTPProxy : 127.0.0.1
+  HTTPSEnable : 1
+  HTTPSPort : 7891
+  HTTPSProxy : corp-proxy.internal
+  SOCKSEnable : 1
+  SOCKSPort : 1080
+  SOCKSProxy : 127.0.0.1
+}
+`);
+
+    expect(env).toMatchObject({
+      HTTP_PROXY: "http://127.0.0.1:7890",
+      HTTPS_PROXY: "http://corp-proxy.internal:7891",
+      ALL_PROXY: "socks5://127.0.0.1:1080",
+      NO_PROXY: ".local,localhost,127.0.0.1,[::1]",
+      NODE_USE_ENV_PROXY: "1",
+      http_proxy: "http://127.0.0.1:7890",
+      https_proxy: "http://corp-proxy.internal:7891",
+      all_proxy: "socks5://127.0.0.1:1080",
+      no_proxy: ".local,localhost,127.0.0.1,[::1]",
+    });
+  });
+
+  it("brackets IPv6 system proxy hosts before composing proxy URLs", () => {
+    const env = parseMacosScutilProxyOutput(`
+<dictionary> {
+  HTTPEnable : 1
+  HTTPPort : 7890
+  HTTPProxy : ::1
+  HTTPSEnable : 1
+  HTTPSPort : 7891
+  HTTPSProxy : 2001:db8::10
+  SOCKSEnable : 1
+  SOCKSPort : 1080
+  SOCKSProxy : fe80::1
+}
+`);
+
+    expect(env).toMatchObject({
+      HTTP_PROXY: "http://[::1]:7890",
+      HTTPS_PROXY: "http://[2001:db8::10]:7891",
+      ALL_PROXY: "socks5://[fe80::1]:1080",
+      http_proxy: "http://[::1]:7890",
+      https_proxy: "http://[2001:db8::10]:7891",
+      all_proxy: "socks5://[fe80::1]:1080",
+    });
+  });
+
+  it("parses Windows Internet Settings proxy registry values", () => {
+    const env = parseWindowsInternetSettingsProxyOutput({
+      proxyEnable: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+`,
+      proxyServer: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyServer    REG_SZ    http=10.0.0.2:8080;https=10.0.0.3:8443;socks=10.0.0.4:1080
+`,
+      proxyOverride: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyOverride    REG_SZ    localhost;<local>;*.corp
+`,
+    });
+
+    expect(env).toEqual({
+      HTTP_PROXY: "http://10.0.0.2:8080",
+      HTTPS_PROXY: "http://10.0.0.3:8443",
+      ALL_PROXY: "socks5://10.0.0.4:1080",
+      NO_PROXY: "localhost,<local>,127.0.0.1,[::1],.local,.corp",
+      NODE_USE_ENV_PROXY: "1",
+    });
+  });
+
+  it("brackets Windows IPv6 proxy hosts before composing proxy URLs", () => {
+    const segmented = parseWindowsInternetSettingsProxyOutput({
+      proxyEnable: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+`,
+      proxyServer: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyServer    REG_SZ    http=::1:8080;https=2001:db8::10:8443;socks=fe80::1:1080
+`,
+    });
+    const shared = parseWindowsInternetSettingsProxyOutput({
+      proxyEnable: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+`,
+      proxyServer: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyServer    REG_SZ    ::1:8080
+`,
+    });
+
+    expect(segmented).toMatchObject({
+      HTTP_PROXY: "http://[::1]:8080",
+      HTTPS_PROXY: "http://[2001:db8::10]:8443",
+      ALL_PROXY: "socks5://[fe80::1]:1080",
+    });
+    expect(shared).toMatchObject({
+      HTTP_PROXY: "http://[::1]:8080",
+      HTTPS_PROXY: "http://[::1]:8080",
+    });
+  });
+
+  it("normalizes bare IPv6 loopback bypass entries to bracketed form", () => {
+    const env = parseWindowsInternetSettingsProxyOutput({
+      proxyEnable: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+`,
+      proxyServer: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyServer    REG_SZ    http=10.0.0.2:8080
+`,
+      proxyOverride: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyOverride    REG_SZ    ::1;localhost
+`,
+    });
+
+    expect(env.NO_PROXY).toBe("[::1],localhost,127.0.0.1");
+  });
+
+  it("preserves a wildcard macOS bypass list", () => {
+    const env = parseMacosScutilProxyOutput(`
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *
+  }
+  HTTPEnable : 1
+  HTTPPort : 7890
+  HTTPProxy : 127.0.0.1
+}
+`);
+
+    expect(env.NO_PROXY).toBe("*");
+    expect(env.no_proxy).toBe("*");
+  });
+
+  it("preserves a wildcard macOS bypass list when other entries are present", () => {
+    const env = parseMacosScutilProxyOutput(`
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *
+    1 : <local>
+  }
+  HTTPEnable : 1
+  HTTPPort : 7890
+  HTTPProxy : 127.0.0.1
+}
+`);
+
+    expect(env.NO_PROXY).toBe("*");
+    expect(env.no_proxy).toBe("*");
+  });
+
+  it("adds <local> to the macOS bypass list when simple hostnames are excluded", () => {
+    const env = parseMacosScutilProxyOutput(`
+<dictionary> {
+  ExcludeSimpleHostnames : 1
+  HTTPEnable : 1
+  HTTPPort : 7890
+  HTTPProxy : 127.0.0.1
+}
+`);
+
+    expect(env.NO_PROXY).toBe("<local>,localhost,127.0.0.1,[::1],.local");
+    expect(env.no_proxy).toBe("<local>,localhost,127.0.0.1,[::1],.local");
+  });
+
+  it("preserves a wildcard Windows bypass list", () => {
+    const env = parseWindowsInternetSettingsProxyOutput({
+      proxyEnable: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+`,
+      proxyServer: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyServer    REG_SZ    http=10.0.0.2:8080
+`,
+      proxyOverride: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyOverride    REG_SZ    *
+`,
+    });
+
+    expect(env.NO_PROXY).toBe("*");
+  });
+
+  it("preserves a wildcard Windows bypass list when other entries are present", () => {
+    const env = parseWindowsInternetSettingsProxyOutput({
+      proxyEnable: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyEnable    REG_DWORD    0x1
+`,
+      proxyServer: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyServer    REG_SZ    http=10.0.0.2:8080
+`,
+      proxyOverride: `
+HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
+    ProxyOverride    REG_SZ    *;<local>
+`,
+    });
+
+    expect(env.NO_PROXY).toBe("*");
+  });
+
+  it("resolves macOS system proxy env through the command runner", () => {
+    const env = resolveSystemProxyEnv({
+      platform: "darwin",
+      runCommand(command, args) {
+        expect(command).toBe("scutil");
+        expect(args).toEqual(["--proxy"]);
+        return `
+<dictionary> {
+  HTTPEnable : 1
+  HTTPPort : 8888
+  HTTPProxy : 127.0.0.1
+}
+`;
+      },
+    });
+
+    expect(env.HTTP_PROXY).toBe("http://127.0.0.1:8888");
+    expect(env.NODE_USE_ENV_PROXY).toBe("1");
+  });
+
+  it("returns an empty object when the platform has no system proxy adapter", () => {
+    expect(resolveSystemProxyEnv({ platform: "linux" })).toEqual({});
+  });
+
+  it("does not cache system proxy resolution across calls", () => {
+    const values = [
+      "\n<dictionary> {\n  HTTPEnable : 1\n  HTTPPort : 8001\n  HTTPProxy : 127.0.0.1\n}\n",
+      "\n<dictionary> {\n  HTTPEnable : 1\n  HTTPPort : 8002\n  HTTPProxy : 127.0.0.1\n}\n",
+    ];
+    let callCount = 0;
+    const runCommand = () => values[callCount++] ?? values.at(-1) ?? "";
+
+    const first = resolveSystemProxyEnv({ platform: "darwin", runCommand });
+    const second = resolveSystemProxyEnv({ platform: "darwin", runCommand });
+
+    expect(first.HTTP_PROXY).toBe("http://127.0.0.1:8001");
+    expect(second.HTTP_PROXY).toBe("http://127.0.0.1:8002");
+    expect(callCount).toBe(2);
+  });
+
+  it("makes the last proxy env source win case-insensitively", () => {
+    const env = mergeProxyAwareEnv(
+      "linux",
+      { HTTPS_PROXY: "http://system:8443", https_proxy: "http://system:8443" },
+      { https_proxy: "http://user:9443" },
+    );
+
+    expect(env.HTTPS_PROXY).toBe("http://user:9443");
+    expect(env.https_proxy).toBe("http://user:9443");
+  });
+
+  it("makes lowercase proxy vars win within a single POSIX source", () => {
+    const env = mergeProxyAwareEnv("linux", {
+      http_proxy: "http://new:8080",
+      HTTP_PROXY: "http://old:8080",
+      HTTPS_PROXY: "http://older:8443",
+      https_proxy: "http://newer:8443",
+    });
+
+    expect(env.HTTP_PROXY).toBe("http://new:8080");
+    expect(env.http_proxy).toBe("http://new:8080");
+    expect(env.HTTPS_PROXY).toBe("http://newer:8443");
+    expect(env.https_proxy).toBe("http://newer:8443");
   });
 });
 

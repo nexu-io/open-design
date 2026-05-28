@@ -1016,7 +1016,15 @@ export interface AutomationsClickProps {
     | 'run_now'
     | 'open_artifact'
     | 'type_card'
-    | 'filter_tab';
+    | 'filter_tab'
+    | 'edit'
+    | 'pause'
+    | 'resume'
+    | 'delete'
+    | 'history'
+    | 'cancel'
+    | 'create'
+    | 'save';
   type_id?: 'orbit' | 'routines' | 'schedules' | 'live_artifacts';
   filter_id?: 'all' | 'scheduled' | 'running' | 'done';
 }
@@ -1076,6 +1084,20 @@ export interface PluginsSourcesTabClickProps {
   element: 'source_url_input' | 'add_source' | 'refresh' | 'remove';
   plugin_id?: string;
   plugin_type?: string;
+}
+
+export interface PluginDetailClickProps {
+  page_name: 'plugins';
+  area: 'plugin_detail';
+  element: 'back' | 'use_plugin';
+  plugin_id?: string;
+}
+
+export interface PluginLoopClickProps {
+  page_name: 'plugins';
+  area: 'plugin_loop';
+  element: 'clear_active' | 'submit' | 'card_details' | 'card_use';
+  plugin_id?: string;
 }
 
 // DESIGN SYSTEMS
@@ -1179,6 +1201,14 @@ export interface ChatPanelClickProps {
     | 'resources_popover_trigger';
 }
 
+// Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
+// `go_amr` is the link that opens https://open-design.ai/amr.
+export interface RunFailedToastClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'go_amr';
+}
+
 export interface ChatPanelResourcesPopoverClickProps {
   page_name: 'chat_panel';
   area: 'resources_popover';
@@ -1242,6 +1272,14 @@ export interface TweaksPopoverClickProps {
   artifact_kind?: TrackingArtifactKind;
   status_before: 'on' | 'off';
   status_after: 'on' | 'off';
+}
+
+export interface CommentPopoverClickProps {
+  page_name: 'artifact';
+  area: 'comment_popover';
+  element: 'save_comment' | 'send_to_chat' | 'add_note';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
 }
 
 export interface ArtifactHeaderClickProps {
@@ -1482,6 +1520,8 @@ export type UiClickProps =
   | PluginsTemplatesDropdownClickProps
   | PluginsAvailableTabClickProps
   | PluginsSourcesTabClickProps
+  | PluginDetailClickProps
+  | PluginLoopClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
@@ -1492,10 +1532,12 @@ export type UiClickProps =
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | RunFailedToastClickProps
   | ChatPanelResourcesPopoverClickProps
   | FileManagerClickProps
   | ArtifactToolbarClickProps
   | TweaksPopoverClickProps
+  | CommentPopoverClickProps
   | ArtifactHeaderClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
@@ -1540,6 +1582,21 @@ export interface DesignSystemsTemplatesModalSurfaceViewProps {
   templates_type?: string;
 }
 
+// Impression of the hosted-AMR nudge under a failed run's error toast. Fires
+// once per render of the toast for a non-AMR agent whose failure is a
+// model/auth/quota error (`error_code` carries the specific class).
+export interface RunFailedToastSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_failed_toast';
+  error_code: string;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id: string | null;
+}
+
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -1571,6 +1628,7 @@ export interface UpdatePromptSurfaceViewProps {
 }
 
 export type SurfaceViewProps =
+  | RunFailedToastSurfaceViewProps
   | HelpPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps

@@ -109,23 +109,28 @@ export async function importFolderProject(
 
 export async function importClaudeDesignZip(
   file: File,
-): Promise<{ project: Project; conversationId: string; entryFile: string } | null> {
-  try {
-    const form = new FormData();
-    form.append('file', file);
-    const resp = await fetch('/api/import/claude-design', {
-      method: 'POST',
-      body: form,
-    });
-    if (!resp.ok) return null;
-    return (await resp.json()) as {
-      project: Project;
-      conversationId: string;
-      entryFile: string;
-    };
-  } catch {
-    return null;
+): Promise<{ project: Project; conversationId: string; entryFile: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('/api/import/claude-design', {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) {
+    const payload = await resp.json().catch(() => null);
+    const message =
+      payload != null &&
+      typeof payload === 'object' &&
+      typeof (payload as { error?: unknown }).error === 'string'
+        ? (payload as { error: string }).error
+        : `Import failed (${resp.status})`;
+    throw new Error(message);
   }
+  return (await resp.json()) as {
+    project: Project;
+    conversationId: string;
+    entryFile: string;
+  };
 }
 
 // ---------- templates ----------

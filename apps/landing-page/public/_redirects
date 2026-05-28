@@ -21,3 +21,16 @@
 /zh-TW/*  /zh-tw/:splat  301
 /pt-BR/*  /pt-br/:splat  301
 /es-ES/*  /es/:splat     301
+
+# Legacy locales (`fa`, `hu`, `th`) live in the old `_lib/i18n.ts:LOCALES`
+# list but are not in the modern `LANDING_LOCALES` set the new
+# `/{locale}/plugins/...` short-code wrappers are built from. The legacy
+# catch-all (`pages/[locale]/[...path].astro`) used to render a
+# placeholder for `/<legacy>/plugins/...`; the catch-all dropped
+# `'plugins'` from its path list when the new wrappers shipped, so
+# those URLs would 404 without a redirect. Send them to the canonical
+# (English) `/plugins/...` until the legacy locale set is retired
+# entirely.
+/fa/plugins/*  /plugins/:splat  301
+/hu/plugins/*  /plugins/:splat  301
+/th/plugins/*  /plugins/:splat  301

@@ -16,7 +16,7 @@ import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
-import type { CreateInput } from './components/NewProjectPanel';
+import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
@@ -32,6 +32,7 @@ import {
   switchApiProtocolConfig,
   updateCurrentApiProtocolConfig,
   type SettingsSection,
+  type SettingsHighlight,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
@@ -193,6 +194,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
+  const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
   const [integrationInitialTab, setIntegrationInitialTab] = useState<IntegrationTab>('mcp');
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -607,6 +609,11 @@ export function App() {
     setDesignSystems(list);
   }, []);
 
+  const refreshSkills = useCallback(async () => {
+    const list = await fetchSkills();
+    setSkills(list);
+  }, []);
+
   const refreshTemplates = useCallback(async () => {
     const list = await listTemplates();
     setTemplates(list);
@@ -774,7 +781,7 @@ export function App() {
   );
 
   const handleChangeDefaultDesignSystem = useCallback(
-    (designSystemId: string) => {
+    (designSystemId: string | null) => {
       const next = { ...config, designSystemId };
       saveConfig(next);
       void syncConfigToDaemon(next);
@@ -982,18 +989,27 @@ export function App() {
     [],
   );
 
-  const handleImportClaudeDesign = useCallback(async (file: File) => {
-    const result = await importClaudeDesignZip(file);
-    if (!result) return;
-    setProjects((curr) => [
-      result.project,
-      ...curr.filter((p) => p.id !== result.project.id),
-    ]);
-    navigate({
-      kind: 'project',
-      projectId: result.project.id,
-      fileName: result.entryFile,
-    });
+  const handleImportClaudeDesign = useCallback(async (
+    file: File,
+  ): Promise<ImportClaudeDesignOutcome> => {
+    try {
+      const result = await importClaudeDesignZip(file);
+      setProjects((curr) => [
+        result.project,
+        ...curr.filter((p) => p.id !== result.project.id),
+      ]);
+      navigate({
+        kind: 'project',
+        projectId: result.project.id,
+        fileName: result.entryFile,
+      });
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : 'The ZIP could not be imported.',
+      };
+    }
   }, []);
 
   const handleImportFolder = useCallback(async (baseDir: string) => {
@@ -1146,7 +1162,10 @@ export function App() {
     };
   }, [route, activeProject, projects, daemonLive]);
 
-  const openSettings = useCallback((section: SettingsSection = 'execution') => {
+  const openSettings = useCallback((
+    section: SettingsSection = 'execution',
+    opts?: { highlight?: SettingsHighlight },
+  ) => {
     if (section === 'composio' || section === 'mcpClient' || section === 'integrations') {
       setIntegrationInitialTab(
         section === 'composio'
@@ -1160,8 +1179,16 @@ export function App() {
     }
     setSettingsWelcome(false);
     setSettingsInitialSection(section);
+    setSettingsHighlight(opts?.highlight ?? null);
     setSettingsOpen(true);
   }, []);
+
+  // Entry point from the failed-run AMR nudge: open Settings on the execution
+  // section and flag the AMR agent card for a one-shot scroll-into-view +
+  // highlight (and a sign-in coachmark when not yet authorized).
+  const openAmrSettings = useCallback(() => {
+    openSettings('execution', { highlight: 'amr' });
+  }, [openSettings]);
 
   const openPetSettings = useCallback(() => {
     setSettingsWelcome(false);
@@ -1365,6 +1392,7 @@ export function App() {
         onAgentModelChange={handleAgentModelChange}
         onRefreshAgents={refreshAgents}
         onOpenSettings={openSettings}
+        onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
         onAdoptPetInline={handleAdoptPet}
         onTogglePet={handleTogglePet}
@@ -1374,6 +1402,8 @@ export function App() {
         onTouchProject={handleTouchProject}
         onProjectChange={handleProjectChange}
         onProjectsRefresh={refreshProjects}
+        onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
+        onDesignSystemsRefresh={refreshDesignSystems}
       />
     );
   } else {
@@ -1479,10 +1509,12 @@ export function App() {
         <SettingsDialog
           initial={config}
           agents={agents}
+          agentsLoading={agentsLoading}
           daemonLive={daemonLive}
           appVersionInfo={appVersionInfo}
           welcome={settingsWelcome}
           initialSection={settingsInitialSection}
+          initialHighlight={settingsHighlight}
           composioConfigLoading={composioConfigLoading}
           onPersist={handleConfigPersist}
           onPersistComposioKey={handleConfigPersistComposioKey}
@@ -1500,8 +1532,10 @@ export function App() {
               setConfig(next);
             }
             setSettingsOpen(false);
+            setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
+          onSkillsRefresh={refreshSkills}
           daemonMediaProviders={daemonMediaProviders}
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}

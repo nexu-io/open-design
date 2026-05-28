@@ -33,13 +33,20 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'plugins'
+    /*
+     * `library` is kept as an alias for the dropdown trigger so older
+     * pages that still pass `active="library"` keep working. New pages
+     * should pass `active="plugins"`.
+     */
     | 'library'
     | 'skills'
     | 'systems'
     | 'templates'
     | 'craft'
     | 'blog'
-    | 'tutorials';
+    | 'tutorials'
+    | 'community';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -167,18 +174,17 @@ export function Header({
               </ul>
             </li>
             {/*
-              Library — catalog facets (Skills / Systems / Templates / Craft)
+              Plugins — catalog facets (Templates / Skills / Systems / Craft)
               collapsed under one parent. Each row keeps its count badge
               inside the panel and the trigger highlights when any of the
               four facet pages is active. Same CSS-only :hover /
-              :focus-within mechanic from Product. Hardcoded "Library" /
-              "Learn" labels until per-locale translations land — the
-              brand-name pattern.
+              :focus-within mechanic from Product.
             */}
             <li className='has-dropdown'>
               <a
-                href={href('/skills/')}
+                href={href('/plugins/')}
                 className={
+                  active === 'plugins' ||
                   active === 'library' ||
                   active === 'skills' ||
                   active === 'systems' ||
@@ -190,52 +196,44 @@ export function Header({
                 aria-haspopup='true'
                 aria-expanded='false'
               >
-                {headerCopy.nav.library}
+                {headerCopy.nav.plugins}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
               <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href={href('/skills/')}
-                    className={linkClass('skills')}
-                  >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.skills}
-                    </span>
-                  </a>
-                </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/systems/')}
-                    className={linkClass('systems')}
-                  >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.systems}
-                    </span>
-                  </a>
-                </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/templates/')}
+                    href={href('/plugins/templates/')}
                     className={linkClass('templates')}
                   >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.templates}
-                    </span>
+                    <span className='dropdown-name'>{headerCopy.nav.templates}</span>
                   </a>
                 </li>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href={href('/craft/')}
+                    href={href('/plugins/skills/')}
+                    className={linkClass('skills')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.skills}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/plugins/systems/')}
+                    className={linkClass('systems')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.systems}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/plugins/craft/')}
                     className={linkClass('craft')}
                   >
-                    <span className='dropdown-name'>
-                      {headerCopy.nav.craft}
-                    </span>
+                    <span className='dropdown-name'>{headerCopy.nav.craft}</span>
                   </a>
                 </li>
               </ul>
@@ -248,6 +246,23 @@ export function Header({
             <li>
               <a href={href('/blog/')} className={linkClass('blog')}>
                 {headerCopy.nav.blog}
+              </a>
+            </li>
+            {/*
+              Community is a static contributors / ambassadors page served
+              from `apps/landing-page/public/community/index.html` — Astro
+              copies `public/` verbatim, so this hits Cloudflare Pages as a
+              first-party route at `/community/`.
+
+              The href is the literal `/community/` rather than
+              `href('/community/')` because the page is a single non-
+              locale-aware destination — locale-prefixed variants like
+              `/zh/community/` would fall through to a 404 since the
+              `[locale]/[...path].astro` catch-all does not generate it.
+            */}
+            <li>
+              <a href='/community/' className={linkClass('community')}>
+                {headerCopy.nav.community}
               </a>
             </li>
             {/*

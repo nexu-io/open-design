@@ -39,8 +39,12 @@ function makeSkill(overrides: Partial<SkillSummary>): SkillSummary {
   };
 }
 
-function renderSkillsSection(skills: SkillSummary[]) {
+function renderSkillsSection(
+  skills: SkillSummary[],
+  options?: { onSkillsRefresh?: () => void | Promise<void> },
+) {
   const setCfg = vi.fn();
+  const onSkillsRefresh = options?.onSkillsRefresh;
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url === '/api/skills' && (!init || init.method === undefined)) {
@@ -48,6 +52,21 @@ function renderSkillsSection(skills: SkillSummary[]) {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
+    }
+    if (url === '/api/skills/import' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify({
+          skill: makeSkill({
+            id: 'new-skill',
+            name: 'New skill',
+            source: 'user',
+          }),
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
     }
     if (url.startsWith('/api/skills/') && init?.method === 'DELETE') {
       return new Response(JSON.stringify({ ok: true }), {
@@ -62,9 +81,10 @@ function renderSkillsSection(skills: SkillSummary[]) {
     <SkillsSection
       cfg={TEST_CONFIG}
       setCfg={setCfg}
+      onSkillsRefresh={onSkillsRefresh}
     />,
   );
-  return { fetchMock: globalThis.fetch as ReturnType<typeof vi.fn>, setCfg };
+  return { fetchMock: globalThis.fetch as ReturnType<typeof vi.fn>, setCfg, onSkillsRefresh };
 }
 
 describe('SkillsSection', () => {
@@ -154,5 +174,30 @@ describe('SkillsSection', () => {
 
     expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
     expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
+  });
+
+  it('refreshes app-level skills after creating a skill', async () => {
+    const onSkillsRefresh = vi.fn();
+    renderSkillsSection([], { onSkillsRefresh });
+
+    fireEvent.click(await screen.findByTestId('skills-new'));
+    const form = await screen.findByTestId('skills-create-form');
+    fireEvent.change(within(form).getByPlaceholderText('my-skill'), {
+      target: { value: 'New skill' },
+    });
+    fireEvent.change(within(form).getAllByRole('textbox').at(-1)!, {
+      target: { value: '# New skill\n\nDo the thing.' },
+    });
+    fireEvent.click(within(form).getByTestId('skills-save'));
+
+    await waitFor(() => {
+      expect(onSkillsRefresh).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([url, init]) =>
+          url.toString() === '/api/skills/import' && init?.method === 'POST',
+      ),
+    ).toBe(true);
   });
 });

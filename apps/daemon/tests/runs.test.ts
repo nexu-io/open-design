@@ -43,6 +43,23 @@ describe('chat run service shutdown', () => {
     ).toEqual([runB]);
   });
 
+  it('stores effective media execution policy on run status bodies', () => {
+    const runs = createRuns();
+    const defaultRun = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
+    const scopedRun = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-b',
+      mediaExecution: { mode: 'enabled', allowedSurfaces: ['image'] },
+    });
+
+    expect(runs.statusBody(defaultRun)).toMatchObject({
+      mediaExecution: { mode: 'enabled' },
+    });
+    expect(runs.statusBody(scopedRun)).toMatchObject({
+      mediaExecution: { mode: 'enabled', allowedSurfaces: ['image'] },
+    });
+  });
+
   it('cancels active runs and terminates their child process during daemon shutdown', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });

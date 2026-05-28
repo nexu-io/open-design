@@ -90,10 +90,30 @@ Tightly coupled with:
   upstream Markdown (e.g., `guizang-ppt`) doesn't break the build
   when an author uses a slightly different `od:` key.
 
-## Auto-deploy contract
+## Deploy contract (staging → manual production)
 
-`.github/workflows/landing-page-deploy.yml` runs on push to `main`
-when **any** of these change:
+Deploys are split across **two Cloudflare Pages projects** so a merge to
+`main` can never publish to the live site on its own:
+
+- Production project `open-design-landing` → `open-design.ai`.
+- Staging project `open-design-landing-staging` → `staging.open-design.ai`.
+
+The safety gate is project separation: only the manual production workflow
+ever names the production project.
+
+- `.github/workflows/landing-page-staging.yml` runs on push to `main` and
+  deploys to the **staging project** (`open-design-landing-staging`,
+  `staging.open-design.ai`).
+- `.github/workflows/landing-page-production.yml` is **manual**
+  (`workflow_dispatch`) and is the only workflow that names the production
+  project (`open-design-landing`, `open-design.ai`). Gate it with required
+  reviewers on the GitHub `production` environment.
+- `.github/workflows/landing-page-ci.yml` runs on PRs: it validates the build
+  and, for same-repo branches, deploys a per-PR preview into the staging
+  project (`--branch=pr-<number>` →
+  `pr-<number>.open-design-landing-staging.pages.dev`) and comments the URL.
+
+The staging workflow triggers when **any** of these change:
 
 - `apps/landing-page/**`
 - `design-templates/open-design-landing/**`
@@ -102,12 +122,12 @@ when **any** of these change:
 - `craft/**`
 - `templates/**`
 - `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`
-- the workflow file itself
+- the workflow files themselves
 
-A push that only edits a SKILL.md MUST trigger this workflow — if it
-doesn't, the `paths:` filter has drifted from the content-collection
-glob and the published site will fall behind silently. Treat that as
-a regression, not a feature.
+A push that only edits a SKILL.md MUST trigger the staging workflow — if it
+doesn't, the `paths:` filter has drifted from the content-collection glob and
+the staged site will fall behind silently. Treat that as a regression, not a
+feature.
 
 ## Common commands
 
