@@ -51,9 +51,10 @@ export function extractEffectivePeer(
 ): string {
   if (!isProxyTrusted()) return remoteAddress ?? '';
   if (!isLoopbackAddress(remoteAddress)) return remoteAddress ?? '';
-  // Fail closed: proxy is trusted but XFF is absent — we cannot determine
-  // the real client IP, so must not return the loopback remoteAddress.
-  if (!xForwardedFor) return '';
+  // No XFF header at all — direct connection (no proxy in the path).
+  if (xForwardedFor === undefined) return remoteAddress ?? '';
+  // XFF present but empty/garbage — proxy is there but didn't forward a
+  // real client IP. Fail closed so untrusted origins cannot slip through.
   const first = xForwardedFor.split(',')[0]?.trim();
   return first || '';
 }
@@ -87,8 +88,9 @@ export function isLocalManagementRequest(req: {
   if (!isLoopbackAddress(tcpPeer)) return false;
   if (!isProxyTrusted()) return true;
   const xff = req.headers['x-forwarded-for'];
-  // Fail closed: trusted proxy but no XFF — cannot verify real client is local.
-  if (!xff) return false;
+  // No XFF header at all — direct loopback connection, not proxied.
+  if (xff === undefined) return true;
+  // XFF present — verify the real client behind the proxy is also loopback.
   const first = String(xff).split(',')[0]?.trim();
   if (!first) return false;
   return isLoopbackAddress(first);
