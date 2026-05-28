@@ -626,7 +626,8 @@ export async function resolveProjectFilePath(projectsRoot, projectId, name, meta
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const st = await stat(file);
-  const rel = toProjectPath(path.relative(dir, file));
+  const rootReal = await realpath(dir).catch(() => dir);
+  const rel = toProjectPath(path.relative(rootReal, file));
   return {
     filePath: file,
     name: rel,
