@@ -16,7 +16,7 @@ Parameters:
     Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
-    AllowedPattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]{1,2})$'    
+    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/([0-2]?[0-9]|3[0-2])$'    
     ConstraintDescription: 'Must be a valid IPv4 CIDR range (e.g., 192.168.1.1/32).'
     MinLength: 1
     Description: 'REQUIRED: The CIDR block allowed to access the ALB (e.g., your VPN or office IP. Must end in /32 for a single IP).'

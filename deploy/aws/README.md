@@ -55,14 +55,14 @@ You can deploy this stack via the AWS Management Console or the AWS CLI.
 4.  Under **Specify template**, select **Upload a template file**, click **Choose file**, and select the `template.yaml` file from this directory.
 5.  Click **Next**.
 6.  Enter a **Stack name** (e.g., `open-design-stack`).
-7.  Fill in the **Parameters** according to your requirements. Note that `ApiToken` and `AllowedSourceIp` are required.
+7.  Fill in the **Parameters** according to your requirements. Note that `ApiToken`, `AllowedSourceIp`, and `DockerImage` are required.
 8.  Click **Next**. Configure any stack options if desired, then click **Next** again.
 9.  Scroll to the bottom of the review page, check the box that says **I acknowledge that AWS CloudFormation might create IAM resources**, and click **Submit**.
 
 ### Using AWS CLI
 
 1.  Open your terminal and navigate to this directory.
-2.  Run the `aws cloudformation deploy` command, passing in the required parameters:
+2.  Run the `aws cloudformation deploy` command, passing in the required parameters (`ApiToken`, `AllowedSourceIp`, and `DockerImage`):
 
 ```bash
 aws cloudformation deploy \
@@ -71,7 +71,8 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_IAM \
   --parameter-overrides \
     ApiToken="YOUR_SECURE_API_TOKEN" \
-    AllowedSourceIp="YOUR_IP_ADDRESS/32"
+    AllowedSourceIp="YOUR_IP_ADDRESS/32" \
+    DockerImage="your-registry/open-design:latest"
 ```
 
 *Note: If you want to use a custom domain with HTTPS, include the `CustomDomainName` and `AcmCertificateArn` parameters in the `--parameter-overrides` list.*
