@@ -1446,7 +1446,7 @@ export const zhCN: Dict = {
   'chat.queuedSave': '保存',
   'chat.queuedCancel': '取消',
   'chat.queuedEdit': '编辑',
-  'chat.queuedMore': '条更多',
+  'chat.queuedMore': '条待发送',
   'chat.queuedFollowUpFallback': '排队中的后续任务',
   'chat.send': '发送',
   'chat.stop': '停止',

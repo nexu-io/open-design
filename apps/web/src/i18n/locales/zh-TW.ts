@@ -1053,7 +1053,7 @@ export const zhTW: Dict = {
   'chat.queuedSave': '儲存',
   'chat.queuedCancel': '取消',
   'chat.queuedEdit': '編輯',
-  'chat.queuedMore': '個更多',
+  'chat.queuedMore': '個待傳送',
   'chat.queuedFollowUpFallback': '排隊中的後續任務',
   'chat.send': '傳送',
   'chat.stop': '停止',
