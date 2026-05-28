@@ -19,6 +19,7 @@ import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
+import { parseMediaExecutionPolicyInput } from './media-policy.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -220,9 +221,17 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const run = design.runs.create();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const mediaExecution = parseMediaExecutionPolicyInput(
+      (body as { mediaExecution?: unknown }).mediaExecution,
+    );
+    if (!mediaExecution.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
+    }
+    const runBody = { ...body, mediaExecution: mediaExecution.policy };
+    const run = design.runs.create(runBody);
     design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(req.body || {}, run));
+    design.runs.start(run, () => startChatRun(runBody, run));
   });
 
   // ---- Connection tests (single-shot JSON; no SSE) ------------------------

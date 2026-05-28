@@ -477,7 +477,8 @@ async function runMediaGenerate(rawArgs) {
 
   const daemonUrl = await cliDaemonUrl(flags);
   const projectId = flags.project || process.env.OD_PROJECT_ID;
-  if (!projectId) {
+  const token = process.env.OD_TOOL_TOKEN;
+  if (!projectId && !token) {
     console.error(
       'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
     );
@@ -511,12 +512,17 @@ async function runMediaGenerate(rawArgs) {
   if (flags['prompt-influence'] != null) body.promptInfluence = Number(flags['prompt-influence']);
   if (flags.loop === true) body.loop = true;
 
-  const url = `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
+  const url = token
+    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/generate`
+    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
   let resp;
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch (err) {
@@ -787,7 +793,7 @@ Common options:
                             it, and forwards it to the upstream API.
   --daemon-url <url>
 
-Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}.
+Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}
 
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
