@@ -632,6 +632,103 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('checks SenseAudio non-chat model availability without probing chat completions', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.senseaudio.cn/v1/models') {
+        return jsonResponse({
+          data: [
+            { id: 'doubao-1-5-pro-32k-250115' },
+            { id: 'senseaudio-image-2.0-260319' },
+          ],
+        });
+      }
+      return jsonResponse({ error: { message: 'unexpected endpoint' } }, { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'senseaudio-image-2.0-260319',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+    expect(body.detail).toContain('not chat-testable');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/chat/completions',
+      expect.anything(),
+    );
+  });
+
+  it('returns not_found_model when a SenseAudio non-chat model is absent from /models', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        expect(url).toBe('https://api.senseaudio.cn/v1/models');
+        return jsonResponse({
+          data: [{ id: 'senseaudio-image-1.0-260319' }],
+        });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'senseaudio-image-2.0-260319',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('not_found_model');
+    expect(body.detail).toContain('not reported by SenseAudio /models');
+  });
+
+  it('keeps SenseAudio chat models on the chat completions smoke test', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+        });
+      }
+      return jsonResponse({ error: { message: 'unexpected endpoint' } }, { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'doubao-1-5-pro-32k-250115',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/chat/completions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('maps a 404 to not_found_model', async () => {
     vi.stubGlobal(
       'fetch',
