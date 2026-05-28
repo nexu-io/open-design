@@ -77,8 +77,8 @@ describe('bearer middleware', () => {
     expect(resp.status).toBe(200);
   });
 
-  it('keeps health / version / daemon-status open without a bearer', async () => {
-    for (const path of ['/api/health', '/api/version', '/api/daemon/status']) {
+  it('keeps health / readiness / version / daemon-status open without a bearer', async () => {
+    for (const path of ['/api/health', '/api/ready', '/api/version', '/api/daemon/status']) {
       const resp = await fetch(`${baseUrl}${path}`);
       expect(resp.status).toBe(200);
     }
