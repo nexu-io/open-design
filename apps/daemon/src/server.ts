@@ -5430,7 +5430,21 @@ export async function startServer({
       return;
     }
     await refreshAuthEnabled();
+    // Clear stale sessions, then remint so the admin's browser can continue
+    // operating (e.g. rotating keys) without being logged out mid-flow.
     clearAllSessions();
+    if (authEnabledRef.value) {
+      const { token, cookieName } = createSession();
+      const sessionCookie = [
+        `${cookieName}=${token}`,
+        'HttpOnly',
+        'SameSite=Strict',
+        'Path=/',
+        `Max-Age=${24 * 60 * 60}`,
+      ];
+      if (isProxyTrusted()) sessionCookie.push('Secure');
+      res.setHeader('Set-Cookie', sessionCookie.join('; '));
+    }
     res.json({ ok: true });
   });
   });
@@ -5503,7 +5517,21 @@ export async function startServer({
     }
     bustInstallInfoCache();
     await refreshAuthEnabled();
+    // Clear stale sessions, then remint so the admin's browser can continue
+    // operating without being logged out mid-flow.
     clearAllSessions();
+    if (authEnabledRef.value) {
+      const { token, cookieName } = createSession();
+      const sessionCookie = [
+        `${cookieName}=${token}`,
+        'HttpOnly',
+        'SameSite=Strict',
+        'Path=/',
+        `Max-Age=${24 * 60 * 60}`,
+      ];
+      if (isProxyTrusted()) sessionCookie.push('Secure');
+      res.setHeader('Set-Cookie', sessionCookie.join('; '));
+    }
     try { await setShellEnvVar('OD_MCP_TOKEN', ''); } catch { /* best-effort */ }
     res.json({ ok: true });
   });
