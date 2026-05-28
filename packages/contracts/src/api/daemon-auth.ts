@@ -8,6 +8,7 @@
 
 export interface AuthKey {
   id: string;
+  keyPrefix: string;
   label: string;
   createdAt: number;
 }
@@ -42,7 +43,6 @@ export interface McpKeyEntry {
 /** Response from GET /api/mcp-keys */
 export interface ListMcpKeysResponse {
   keys: McpKeyEntry[];
-  shellEnvFile?: string;
 }
 
 /** Body for POST /api/mcp-keys */
@@ -59,9 +59,12 @@ export interface CreateMcpKeyResponse {
   shellEnvFile?: string;
 }
 
-/** Response from GET /api/mcp-keys/:id/reveal */
+/** Response from GET /api/mcp-keys/:id */
 export interface RevealMcpKeyResponse {
+  id: string;
   key: string;
+  label: string;
+  createdAt: number;
 }
 
 // ── /api/network-config ───────────────────────────────────────────────────────
@@ -75,5 +78,7 @@ export interface NetworkConfig {
 
 // ── /api/restart ─────────────────────────────────────────────────────────────
 
-/** Response from POST /api/restart (empty body — daemon exits immediately) */
-export type RestartResponse = Record<string, never>;
+/** Response from POST /api/restart */
+export interface RestartResponse {
+  ok: true;
+}

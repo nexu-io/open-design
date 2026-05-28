@@ -5402,7 +5402,20 @@ export async function startServer({
     const { label } = req.body ?? {};
     const entry = await generateKey(RUNTIME_DATA_DIR, typeof label === 'string' ? label : '');
     await refreshAuthEnabled();
+    // Clear stale sessions first, then mint a fresh one so the caller's browser
+    // can continue the bootstrap flow (e.g. follow-up PUT /api/network-config)
+    // without hitting a 401 immediately after auth becomes active.
     clearAllSessions();
+    const { token, cookieName } = createSession();
+    const sessionCookie = [
+      `${cookieName}=${token}`,
+      'HttpOnly',
+      'SameSite=Strict',
+      'Path=/',
+      `Max-Age=${24 * 60 * 60}`,
+    ];
+    if (isProxyTrusted()) sessionCookie.push('Secure');
+    res.setHeader('Set-Cookie', sessionCookie.join('; '));
     res.json(entry);
   });
 
@@ -5442,7 +5455,19 @@ export async function startServer({
     const entry = await generateMcpKey(RUNTIME_DATA_DIR, typeof label === 'string' ? label : '');
     bustInstallInfoCache();
     await refreshAuthEnabled();
+    // Clear stale sessions first, then mint a fresh one so the caller's browser
+    // can continue the bootstrap flow after auth becomes active.
     clearAllSessions();
+    const { token, cookieName } = createSession();
+    const sessionCookie = [
+      `${cookieName}=${token}`,
+      'HttpOnly',
+      'SameSite=Strict',
+      'Path=/',
+      `Max-Age=${24 * 60 * 60}`,
+    ];
+    if (isProxyTrusted()) sessionCookie.push('Secure');
+    res.setHeader('Set-Cookie', sessionCookie.join('; '));
     let shellEnvFile: string | null = null;
     try {
       const result = await setShellEnvVar('OD_MCP_TOKEN', entry.key);
