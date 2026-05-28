@@ -82,6 +82,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
   let server: http.Server;
   let baseUrl: string;
   const projectsToClean: string[] = [];
+  const tempDirs: string[] = [];
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -106,6 +107,9 @@ describe('spawn writes external MCP config for Claude Code', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ servers: [] }),
     }).catch(() => {});
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   async function createProject(): Promise<{ id: string; dir: string }> {
@@ -124,6 +128,39 @@ describe('spawn writes external MCP config for Claude Code', () => {
       ? join(process.env.OD_DATA_DIR, 'projects')
       : join(process.cwd(), '.od', 'projects');
     return { id, dir: join(projectsBase, id) };
+  }
+
+  async function importFolderProject(): Promise<{ id: string; dir: string; externalDir: string }> {
+    const externalDir = await fsp.mkdtemp(join(tmpdir(), 'od-mcp-import-'));
+    tempDirs.push(externalDir);
+    await fsp.writeFile(join(externalDir, 'index.html'), '<!doctype html>');
+    const r = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseDir: externalDir }),
+    });
+    expect(r.ok).toBe(true);
+    const body = (await r.json()) as { project: { id: string } };
+    projectsToClean.push(body.project.id);
+    const projectsBase = process.env.OD_DATA_DIR
+      ? join(process.env.OD_DATA_DIR, 'projects')
+      : join(process.cwd(), '.od', 'projects');
+    return {
+      id: body.project.id,
+      dir: join(projectsBase, body.project.id),
+      externalDir,
+    };
+  }
+
+  async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.env.OD_SANDBOX_MODE;
+    process.env.OD_SANDBOX_MODE = '1';
+    try {
+      return await run();
+    } finally {
+      if (previous == null) delete process.env.OD_SANDBOX_MODE;
+      else process.env.OD_SANDBOX_MODE = previous;
+    }
   }
 
   it('writes .mcp.json into the per-project dir, then removes it when servers are cleared', async () => {
@@ -194,6 +231,53 @@ describe('spawn writes external MCP config for Claude Code', () => {
       await waitForRunStatus(baseUrl, runId2);
 
       expect(existsSync(target)).toBe(false);
+    });
+  }, 30_000);
+
+  it('keeps sandbox runs for imported-folder projects in the managed project dir', async () => {
+    await withFakeClaude(async () => {
+      const putRes = await fetch(`${baseUrl}/api/mcp/servers`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          servers: [
+            {
+              id: 'sandbox-run',
+              transport: 'sse',
+              enabled: true,
+              url: 'https://mcp.example.test',
+            },
+          ],
+        }),
+      });
+      expect(putRes.ok).toBe(true);
+
+      const { id, dir, externalDir } = await importFolderProject();
+
+      await withSandboxMode(async () => {
+        const chatRes = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            projectId: id,
+            message: 'hello sandbox mcp',
+          }),
+        });
+        expect(chatRes.status).toBe(202);
+        const { runId } = (await chatRes.json()) as { runId: string };
+        const status = await waitForRunStatus(baseUrl, runId);
+        expect(status.status).toBe('succeeded');
+      });
+
+      const managedTarget = join(dir, '.mcp.json');
+      expect(existsSync(managedTarget)).toBe(true);
+      expect(existsSync(join(externalDir, '.mcp.json'))).toBe(false);
+      const written = JSON.parse(await fsp.readFile(managedTarget, 'utf8'));
+      expect(written.mcpServers['sandbox-run']).toMatchObject({
+        type: 'sse',
+        url: 'https://mcp.example.test/',
+      });
     });
   }, 30_000);
 

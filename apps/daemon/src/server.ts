@@ -10776,8 +10776,8 @@ export async function startServer({
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
     // agent then runs in whatever inherited dir, which still lets API
     // mode work but loses file-tool addressability.
-    // For git-linked projects (metadata.baseDir), use that folder directly
-    // so the agent writes back to the user's original source tree.
+    // Project directory resolution lives in projects.ts so sandbox mode can
+    // consistently reject imported-folder metadata that has no managed copy.
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
