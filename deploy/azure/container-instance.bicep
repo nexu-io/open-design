@@ -6,7 +6,7 @@ param location string = resourceGroup().location
 @description('Container group name.')
 param containerGroupName string = 'open-design'
 
-@description('DNS label for the public Azure Container Instances endpoint. Must be unique in the selected region.')
+@description('DNS label for the Azure Container Instances upstream endpoint. Must be unique in the selected region.')
 param dnsNameLabel string = toLower('open-design-${uniqueString(resourceGroup().id, location)}')
 
 @description('Open Design container image.')
@@ -16,7 +16,7 @@ param image string = 'docker.io/vanjayak/open-design:latest'
 @description('Required Open Design API token. Generate with: openssl rand -hex 32')
 param odApiToken string
 
-@description('Comma-separated browser origins allowed to call the daemon API when placed behind a custom domain or reverse proxy.')
+@description('Comma-separated browser-visible origins allowed by the daemon. Set this to the authenticated reverse proxy origin, for example https://od.example.com.')
 param allowedOrigins string = ''
 
 @description('Node.js heap cap inside the container.')
@@ -170,7 +170,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
   }
 }
 
-output fqdn string = containerGroup.properties.ipAddress.fqdn
-output url string = 'http://${containerGroup.properties.ipAddress.fqdn}:${appPort}/'
+output daemonFqdn string = containerGroup.properties.ipAddress.fqdn
+output proxyUpstreamUrl string = 'http://${containerGroup.properties.ipAddress.fqdn}:${appPort}'
 output storageAccountName string = storageAccount.name
 output fileShareName string = dataShare.name
