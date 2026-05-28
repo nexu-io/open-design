@@ -194,6 +194,7 @@ const RECOVERABLE_EXIT_CODES = {
   'plugin-requires-daemon':   71,
   'snapshot-stale':           72,
   'genui-surface-awaiting':   73,
+  'daemon-protocol-error':    74,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -5094,7 +5095,7 @@ async function runSkillsTree(args) {
   const data = await resp.json().catch(() => null);
   if (!data || !Array.isArray(data.skills)) {
     return exitWithStructuredError({
-      code: 'daemon-not-running',
+      code: 'daemon-protocol-error',
       message: 'Malformed /api/skills response: expected { skills: SkillSummary[] }',
       data: { endpoint: '/api/skills' },
     });

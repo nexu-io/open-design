@@ -127,12 +127,12 @@ describe('od skills CLI', () => {
           throw new Error('skills tree command unexpectedly succeeded');
         } catch (error: unknown) {
           const failed = error as { code?: number; stderr?: string; stdout?: string };
-          expect(failed.code).toBe(64);
+          expect(failed.code).toBe(74);
           expect(failed.stdout ?? '').toBe('');
           const envelope = JSON.parse(failed.stderr ?? '{}') as {
             error?: { code?: string; message?: string; data?: { endpoint?: string } };
           };
-          expect(envelope.error?.code).toBe('daemon-not-running');
+          expect(envelope.error?.code).toBe('daemon-protocol-error');
           expect(envelope.error?.message).toContain('Malformed /api/skills response');
           expect(envelope.error?.data?.endpoint).toBe('/api/skills');
         }
