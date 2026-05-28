@@ -1231,6 +1231,8 @@ export const uk: Dict = {
   'fileViewer.deployProviderFailed': 'Розгортання на {provider} не вдалося. Перевірте налаштування й спробуйте ще раз.',
   'fileViewer.deployResultLabel': 'URL розгортання',
   'fileViewer.deployLinkReady': 'Готово',
+  'fileViewer.deploySuccessToast': 'Розгортання успішно завантажено',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Публічне посилання очікує',
   'fileViewer.deployLinkDelayed': 'Сайт розгорнуто. Провайдер ще готує публічне посилання.',
   'fileViewer.deployLinkFailed': 'Не вдалося налаштувати власний домен',

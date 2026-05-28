@@ -1230,6 +1230,8 @@ export const ru: Dict = {
   'fileViewer.deployProviderFailed': 'Развёртывание на {provider} не удалось. Проверьте настройки и попробуйте снова.',
   'fileViewer.deployResultLabel': 'URL развёрнутого сайта',
   'fileViewer.deployLinkReady': 'Готово',
+  'fileViewer.deploySuccessToast': 'Развёртывание успешно загружено',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Публичная ссылка готовится',
   'fileViewer.deployLinkDelayed': 'Сайт развёрнут. Провайдер всё ещё готовит публичную ссылку.',
   'fileViewer.deployLinkFailed': 'Пользовательский домен не настроен',

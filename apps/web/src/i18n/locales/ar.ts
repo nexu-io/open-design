@@ -1189,6 +1189,8 @@ export const ar: Dict = {
   'fileViewer.deployProviderFailed': 'فشل النشر إلى {provider}. تحقق من الإعدادات وحاول مرة أخرى.',
   'fileViewer.deployResultLabel': 'رابط النشر',
   'fileViewer.deployLinkReady': 'جاهز',
+  'fileViewer.deploySuccessToast': 'تم رفع النشر بنجاح',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'الرابط العام معلق',
   'fileViewer.deployLinkDelayed': 'تم نشر الموقع، لكن الرابط العام ما زال قيد التحضير.',
   'fileViewer.deployLinkFailed': 'فشل النطاق المخصص',

@@ -1176,6 +1176,8 @@ export const tr: Dict = {
   'fileViewer.deployProviderFailed': '{provider} yayını başarısız oldu. Ayarları kontrol edip yeniden deneyin.',
   'fileViewer.deployResultLabel': 'Yayınlanmış URL',
   'fileViewer.deployLinkReady': 'Hazır',
+  'fileViewer.deploySuccessToast': 'Yayın başarıyla yüklendi',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Herkese açık link bekleniyor',
   'fileViewer.deployLinkDelayed': 'Site yayınlandı. Sağlayıcı herkese açık bağlantıyı hâlâ hazırlıyor.',
   'fileViewer.deployLinkFailed': 'Özel alan adı başarısız',

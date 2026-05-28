@@ -1400,6 +1400,8 @@ export const zhTW: Dict = {
   'fileViewer.deployProviderFailed': '{provider} 部署失敗。請檢查設定後重試。',
   'fileViewer.deployResultLabel': '部署連結',
   'fileViewer.deployLinkReady': '已就緒',
+  'fileViewer.deploySuccessToast': '部署已成功上傳',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': '公開連結準備中',
   'fileViewer.deployLinkDelayed': '站點已部署，平台仍在準備公開連結。',
   'fileViewer.deployLinkFailed': '自訂網域失敗',

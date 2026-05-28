@@ -1077,6 +1077,8 @@ export const de: Dict = {
   'fileViewer.deployProviderFailed': '{provider}-Deployment fehlgeschlagen. Prüfe die Einstellungen und versuche es erneut.',
   'fileViewer.deployResultLabel': 'Deployment-URL',
   'fileViewer.deployLinkReady': 'Bereit',
+  'fileViewer.deploySuccessToast': 'Deployment erfolgreich hochgeladen',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Öffentlicher Link ausstehend',
   'fileViewer.deployLinkDelayed': 'Die Seite wurde deployt. Der Anbieter bereitet den öffentlichen Link noch vor.',
   'fileViewer.deployLinkFailed': 'Benutzerdefinierte Domain fehlgeschlagen',

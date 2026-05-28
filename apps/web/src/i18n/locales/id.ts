@@ -1339,6 +1339,8 @@ export const id: Dict = {
   'fileViewer.deployFailed': 'Deploy gagal.',
   'fileViewer.deployResultLabel': 'Hasil deploy',
   'fileViewer.deployLinkReady': 'Siap',
+  'fileViewer.deploySuccessToast': 'Deploy berhasil diunggah',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Link deploy sedang disiapkan',
   'fileViewer.deployLinkDelayed': 'Link publik belum siap. Coba lagi sebentar lagi.',
   'fileViewer.deployLinkFailed': 'Domain kustom gagal',

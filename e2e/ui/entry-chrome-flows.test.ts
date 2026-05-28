@@ -721,7 +721,9 @@ test('home starters html details modal shows metadata links, supports copy query
   await expect(shareMenu).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Copy install command/i })).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Copy plugin ID/i })).toBeVisible();
-  await expect(shareMenu.getByRole('menuitem', { name: /Copy README badge/i })).toHaveCount(0);
+  // Bundled plugins now have a public open-design.ai detail page, so the
+  // README badge (which links to it) is offered.
+  await expect(shareMenu.getByRole('menuitem', { name: /Copy README badge/i })).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Open source on GitHub/i })).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Open homepage/i })).toBeVisible();
   await expect(shareMenu.getByRole('menuitem', { name: /Open in marketplace/i })).toBeVisible();

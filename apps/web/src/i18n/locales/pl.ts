@@ -1189,6 +1189,8 @@ export const pl: Dict = {
   'fileViewer.deployProviderFailed': 'Wdrożenie na {provider} nie powiodło się. Sprawdź ustawienia i spróbuj ponownie.',
   'fileViewer.deployResultLabel': 'Wdrożony URL',
   'fileViewer.deployLinkReady': 'Gotowe',
+  'fileViewer.deploySuccessToast': 'Wdrożenie przesłane pomyślnie',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Oczekiwanie na link publiczny',
   'fileViewer.deployLinkDelayed': 'Strona została wdrożona. Dostawca wciąż przygotowuje publiczny link.',
   'fileViewer.deployLinkFailed': 'Domena niestandardowa nie powiodła się',

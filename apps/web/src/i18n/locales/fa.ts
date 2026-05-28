@@ -1349,6 +1349,8 @@ export const fa: Dict = {
   'fileViewer.deployProviderFailed': 'استقرار روی {provider} ناموفق بود. تنظیمات را بررسی و دوباره تلاش کنید.',
   'fileViewer.deployResultLabel': 'URL مستقرشده',
   'fileViewer.deployLinkReady': 'آماده',
+  'fileViewer.deploySuccessToast': 'استقرار با موفقیت آپلود شد',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'لینک عمومی در انتظار است',
   'fileViewer.deployLinkDelayed': 'سایت مستقر شده است. ارائه‌دهنده هنوز لینک عمومی را آماده می‌کند.',
   'fileViewer.deployLinkFailed': 'دامنه سفارشی ناموفق بود',

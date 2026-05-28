@@ -1841,6 +1841,8 @@ export const zhCN: Dict = {
   'fileViewer.deployProviderFailed': '{provider} 部署失败。请检查设置后重试。',
   'fileViewer.deployResultLabel': '部署链接',
   'fileViewer.deployLinkReady': '已就绪',
+  'fileViewer.deploySuccessToast': '部署已成功上传',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': '公开链接准备中',
   'fileViewer.deployLinkDelayed': '站点已经部署，平台仍在准备公开链接。',
   'fileViewer.deployLinkFailed': '自定义域名失败',

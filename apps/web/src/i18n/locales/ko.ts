@@ -1189,6 +1189,8 @@ export const ko: Dict = {
   'fileViewer.deployProviderFailed': '{provider} 배포에 실패했습니다. 설정을 확인하고 다시 시도해 주세요.',
   'fileViewer.deployResultLabel': '배포된 URL',
   'fileViewer.deployLinkReady': '준비됨',
+  'fileViewer.deploySuccessToast': '배포가 정상적으로 업로드되었습니다',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': '공개 링크 보류 중',
   'fileViewer.deployLinkDelayed': '사이트가 배포되었습니다. 플랫폼에서 공개 링크를 아직 준비 중입니다.',
   'fileViewer.deployLinkFailed': '사용자 지정 도메인 실패',

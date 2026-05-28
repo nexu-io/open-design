@@ -1230,6 +1230,8 @@ export const ptBR: Dict = {
   'fileViewer.deployProviderFailed': 'A implantação em {provider} falhou. Verifique as configurações e tente novamente.',
   'fileViewer.deployResultLabel': 'URL implantada',
   'fileViewer.deployLinkReady': 'Pronto',
+  'fileViewer.deploySuccessToast': 'Implantação enviada com sucesso',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Link público pendente',
   'fileViewer.deployLinkDelayed': 'Seu site foi implantado. O provedor ainda está preparando o link público.',
   'fileViewer.deployLinkFailed': 'Falha no domínio personalizado',

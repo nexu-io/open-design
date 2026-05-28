@@ -1153,6 +1153,8 @@ export const th: Dict = {
   'fileViewer.deployProviderFailed': 'โฮสต์ไม่ติดสำหรับตัวผู้ดำเนินการ {provider} เช็คการควบคุมดูอีกรอบก่อนเถอะ',
   'fileViewer.deployResultLabel': 'ที่อยู่แบบ URL ซึ่งอัพลง',
   'fileViewer.deployLinkReady': 'ลุยได้ทันที',
+  'fileViewer.deploySuccessToast': 'อัปโหลดการ Deploy สำเร็จแล้ว',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'เตรียมออกสู่หน้าผู้คนข้างนอก',
   'fileViewer.deployLinkDelayed': 'ตัวเว็บนั้นเข้าใช้งานได้แต่ความพร้อมยังถูกแช่ไว้บ้างอยู่',
   'fileViewer.deployLinkFailed': 'โดเมนส่วนตัวที่พยายามมีอยู่ดันไม่เชื่อมกัน',

@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from 'react-dom';
 import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
@@ -2258,7 +2259,7 @@ function StagedAttachments({
           );
         })}
       </div>
-      {preview && previewUrl ? (
+      {preview && previewUrl ? createPortal(
         <div
           className="staged-preview-modal"
           role="dialog"
@@ -2283,7 +2284,8 @@ function StagedAttachments({
             </div>
             <img src={previewUrl} alt={preview.name} />
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </>
   );

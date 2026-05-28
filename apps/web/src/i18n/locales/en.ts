@@ -1874,6 +1874,8 @@ export const en: Dict = {
   'fileViewer.deployProviderFailed': '{provider} deploy failed. Check settings and try again.',
   'fileViewer.deployResultLabel': 'Deployed URL',
   'fileViewer.deployLinkReady': 'Ready',
+  'fileViewer.deploySuccessToast': 'Deployment uploaded successfully',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Public link pending',
   'fileViewer.deployLinkDelayed': 'Your site is deployed. The public link is still being prepared.',
   'fileViewer.deployLinkFailed': 'Custom domain failed',

@@ -77,7 +77,7 @@ jobs:
         uses: actions/cache@v5.0.5
         with:
           path: apps/landing-page/public/previews
-          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
           restore-keys: |
             landing-page-previews-${{ runner.os }}-
 
@@ -100,6 +100,11 @@ jobs:
       # exits non-zero so we don't silently ship a deploy with zero
       # thumbnails to production.
       - name: Generate skill + template previews
+        # Exact previews-cache hit ⇒ public/previews already holds the correct
+        # thumbnails, skip the slow Playwright render. A restore-keys partial
+        # hit keeps cache-hit false, so we still regenerate — no stale-thumbnail
+        # drift.
+        if: steps.previews-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @open-design/landing-page previews
 
       - name: Build landing page

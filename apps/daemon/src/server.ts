@@ -20,6 +20,7 @@ import {
 import {
   composeSystemPrompt,
   renderCodexImagegenOverride,
+  resolveCodexImagegenModelId,
   resolveExclusiveSurface,
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
@@ -83,6 +84,7 @@ import { installFromTarget, uninstallById, sanitizeRepoName } from './library-in
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
+import { parseMediaExecutionPolicyInput } from './media-policy.js';
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
@@ -536,7 +538,9 @@ export function resolveCodexGeneratedImagesDir(
   metadata,
   env = process.env,
   homeDir = os.homedir(),
+  mediaExecution: any = undefined,
 ) {
+  if (!shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution)) return null;
   if (!shouldRenderCodexImagegenOverride(agentId, metadata)) return null;
   const rawCodexHome =
     typeof env?.CODEX_HOME === 'string' && env.CODEX_HOME.trim().length > 0
@@ -751,12 +755,17 @@ export function resolveGrantedCodexImagegenOverride({
   metadata,
   codexGeneratedImagesDir,
   extraAllowedDirs = [],
+  mediaExecution,
 }: {
   agentId?: string | null;
   metadata?: unknown;
   codexGeneratedImagesDir?: string | null;
   extraAllowedDirs?: string[];
+  mediaExecution?: unknown;
 }): string | null {
+  if (!shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution)) {
+    return null;
+  }
   if (
     typeof codexGeneratedImagesDir !== 'string' ||
     codexGeneratedImagesDir.length === 0 ||
@@ -766,6 +775,28 @@ export function resolveGrantedCodexImagegenOverride({
     return null;
   }
   return renderCodexImagegenOverride(agentId, metadata);
+}
+
+function shouldAllowCodexImagegenForMediaPolicy(metadata, mediaExecution) {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode !== 'enabled') return false;
+  if (
+    Array.isArray(mediaExecution?.allowedSurfaces) &&
+    mediaExecution.allowedSurfaces.length > 0 &&
+    !mediaExecution.allowedSurfaces.includes('image')
+  ) {
+    return false;
+  }
+  const model = resolveCodexImagegenModelId(metadata);
+  if (
+    model &&
+    Array.isArray(mediaExecution?.allowedModels) &&
+    mediaExecution.allowedModels.length > 0 &&
+    !mediaExecution.allowedModels.includes(model)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function normalizeCommentAttachments(input) {
@@ -1534,6 +1565,10 @@ export function createAgentRuntimeEnv(
     OD_DAEMON_URL: daemonUrl,
     OD_NODE_BIN: nodeBin,
   };
+  const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
+  if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
+    env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
+  }
 
   // Ensure the node binary directory is on PATH so agent sub-processes —
   // in particular npm .cmd shims on Windows that run `"node" script.js` —
@@ -5418,9 +5453,11 @@ export async function startServer({
 
   registerMediaRoutes(app, {
     db,
+    design,
     http: httpDeps,
     paths: pathDeps,
     ids: idDeps,
+    auth: authDeps,
     media: mediaDeps,
     appConfig: appConfigDeps,
     orbit: orbitDeps,
@@ -5731,16 +5768,6 @@ export async function startServer({
   app.delete('/api/templates/:id', (req, res) => {
     deleteTemplate(db, req.params.id);
     res.json({ ok: true });
-  });
-
-  app.get('/api/agents', async (_req, res) => {
-    try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
-      const list = await detectAgents(config.agentCliEnv ?? {});
-      res.json({ agents: list });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
   });
 
   // AMR (vela) login integration — see `apps/daemon/src/integrations/vela.ts`.
@@ -9759,6 +9786,7 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     defaultMediaModels,
+    mediaExecution,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -10227,6 +10255,7 @@ export async function startServer({
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       locale: typeof locale === 'string' ? locale : undefined,
+      mediaExecution,
       streamFormat,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
@@ -10600,6 +10629,7 @@ export async function startServer({
         streamFormat: def?.streamFormat ?? 'plain',
         locale,
         connectedExternalMcp,
+        mediaExecution: run?.mediaExecution,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -10664,6 +10694,9 @@ export async function startServer({
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
+      process.env,
+      os.homedir(),
+      run?.mediaExecution,
     );
     if (codexGeneratedImagesDir) {
       codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
@@ -10685,6 +10718,7 @@ export async function startServer({
       metadata: projectRecord?.metadata,
       codexGeneratedImagesDir,
       extraAllowedDirs,
+      mediaExecution: run?.mediaExecution,
     });
     const researchCommandContract = resolveResearchCommandContract(
       research,
@@ -12206,6 +12240,10 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
+    const mediaExecution = parseMediaExecutionPolicyInput(req.body?.mediaExecution);
+    if (!mediaExecution.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
+    }
     // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
     // before the run is created. The resolver returns null when the body
     // does not mention a plugin (legacy runs unchanged), an error envelope
@@ -12265,7 +12303,7 @@ export async function startServer({
         resolvedSnapshot = resolved;
       }
     }
-    const meta = { ...(req.body || {}) };
+    const meta = { ...(req.body || {}), mediaExecution: mediaExecution.policy };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
       if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
@@ -12672,9 +12710,14 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const run = design.runs.create();
+    const mediaExecution = parseMediaExecutionPolicyInput(req.body?.mediaExecution);
+    if (!mediaExecution.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
+    }
+    const meta = { ...(req.body || {}), mediaExecution: mediaExecution.policy };
+    const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(req.body || {}, run));
+    design.runs.start(run, () => startChatRun(meta, run));
   });
 
   // Each routine fire resolves an agent, prepares project/conversation state,

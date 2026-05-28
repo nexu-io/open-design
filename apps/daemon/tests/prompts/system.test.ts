@@ -389,6 +389,19 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('- `github`\n');
       expect(prompt).not.toContain('- `github` (github)');
     });
+
+    it('keeps external MCP tools visible when OD-owned media execution is disabled', () => {
+      const prompt = composeSystemPrompt({
+        connectedExternalMcp: [{ id: 'external-media', label: 'External media' }],
+        metadata: { kind: 'image' },
+        mediaExecution: { mode: 'disabled' },
+      });
+
+      expect(prompt).toContain('## External MCP servers — already authenticated');
+      expect(prompt).toContain('`external-media`');
+      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).not.toContain('## Media generation contract');
+    });
   });
 
   // The daemon experiment for compiling a brand's design system from prose

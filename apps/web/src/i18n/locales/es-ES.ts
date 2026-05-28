@@ -1078,6 +1078,8 @@ export const esES: Dict = {
   'fileViewer.deployProviderFailed': 'El despliegue en {provider} falló. Revisa la configuración e inténtalo de nuevo.',
   'fileViewer.deployResultLabel': 'URL desplegada',
   'fileViewer.deployLinkReady': 'Listo',
+  'fileViewer.deploySuccessToast': 'Despliegue subido correctamente',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Enlace público pendiente',
   'fileViewer.deployLinkDelayed': 'El sitio se ha desplegado. El proveedor aún está preparando el enlace público.',
   'fileViewer.deployLinkFailed': 'Falló el dominio personalizado',

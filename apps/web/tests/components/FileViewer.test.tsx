@@ -1233,6 +1233,12 @@ describe('FileViewer SVG artifacts', () => {
     expect(pagesDevLabel.closest('.deploy-result-block')).toBe(customDomainLabel.closest('.deploy-result-block'));
     expect(screen.getByText('https://demo-pages.pages.dev')).toBeTruthy();
     expect(screen.getByText('https://demo.example.com')).toBeTruthy();
+    const deployToast = document.querySelector('.od-toast');
+    expect(deployToast?.className).toContain('tone-success');
+    expect(deployToast?.className).toContain('placement-top');
+    expect(deployToast?.textContent).toContain('Deployment uploaded successfully');
+    expect(deployToast?.textContent).toContain('Cloudflare Pages');
+    expect(deployToast?.textContent).toContain('https://demo-pages.pages.dev');
     expect(deployBody).toMatchObject({
       fileName: 'index.html',
       providerId: 'cloudflare-pages',

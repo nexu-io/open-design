@@ -23,6 +23,7 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
 } from '../media-models.js';
+import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 function fmtList(ids: string[]): string {
   return ids.map((id) => `\`${id}\``).join(', ');
@@ -33,6 +34,67 @@ const VIDEO_IDS = fmtList(VIDEO_MODELS.map((m) => m.id));
 const AUDIO_MUSIC_IDS = fmtList(AUDIO_MODELS_BY_KIND.music.map((m) => m.id));
 const AUDIO_SPEECH_IDS = fmtList(AUDIO_MODELS_BY_KIND.speech.map((m) => m.id));
 const AUDIO_SFX_IDS = fmtList(AUDIO_MODELS_BY_KIND.sfx.map((m) => m.id));
+
+export function renderMediaGenerationContract(
+  mediaExecution?: MediaExecutionPolicy | undefined,
+): string {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode === 'enabled') {
+    return renderEnabledMediaGenerationContract(mediaExecution);
+  }
+  const scope = renderMediaPolicyScope(mediaExecution);
+  if (mode === 'disabled') {
+    return `
+---
+
+## Media generation policy (load-bearing — overrides softer wording above)
+
+Open Design-owned media execution is **disabled for this run**. Do not call
+\`"$OD_NODE_BIN" "$OD_BIN" media generate\`, Codex built-in imagegen, OD media
+provider APIs, local renderers, or ad-hoc scripts that create media bytes on
+OD's behalf.
+
+External MCP media tools, when explicitly configured for this run, are outside
+this OD-owned media policy. If no such external tool is available and the user
+asks for media, describe the intended creative brief, prompt, surface, model
+preference, references, and output filename in chat, then stop. Do not claim a
+file was generated and do not emit an \`<artifact>\` block for media.
+${scope}`;
+  }
+  return renderEnabledMediaGenerationContract(mediaExecution);
+}
+
+function renderEnabledMediaGenerationContract(
+  mediaExecution?: MediaExecutionPolicy | undefined,
+): string {
+  const scope = renderMediaPolicyScope(mediaExecution);
+  if (!scope) return MEDIA_GENERATION_CONTRACT;
+  return MEDIA_GENERATION_CONTRACT.replace(
+    '\n### Allowed model IDs (per surface)',
+    `
+### Active media policy scope
+
+The dispatcher will reject surfaces or models outside this run's active
+allowlist. Treat this allowlist as narrower than the full catalogue below;
+select only from it.
+${scope}
+
+### Allowed model IDs (per surface)`,
+  );
+}
+
+function renderMediaPolicyScope(
+  mediaExecution?: MediaExecutionPolicy | undefined,
+): string {
+  const lines: string[] = [];
+  if (Array.isArray(mediaExecution?.allowedSurfaces) && mediaExecution.allowedSurfaces.length > 0) {
+    lines.push(`Allowed surfaces for this run: ${fmtList(mediaExecution.allowedSurfaces as MediaSurface[])}.`);
+  }
+  if (Array.isArray(mediaExecution?.allowedModels) && mediaExecution.allowedModels.length > 0) {
+    lines.push(`Allowed models for this run: ${fmtList(mediaExecution.allowedModels)}.`);
+  }
+  return lines.length > 0 ? `\n\n${lines.join('\n')}` : '';
+}
 
 export const MEDIA_GENERATION_CONTRACT = `
 ---

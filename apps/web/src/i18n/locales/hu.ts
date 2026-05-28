@@ -1189,6 +1189,8 @@ export const hu: Dict = {
   'fileViewer.deployProviderFailed': 'A {provider} telepítés sikertelen. Ellenőrizd a beállításokat, és próbáld újra.',
   'fileViewer.deployResultLabel': 'Telepített URL',
   'fileViewer.deployLinkReady': 'Kész',
+  'fileViewer.deploySuccessToast': 'A telepítés sikeresen feltöltve',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Nyilvános link várólistán',
   'fileViewer.deployLinkDelayed': 'A webhely telepítve van. A szolgáltató még készíti a nyilvános linket.',
   'fileViewer.deployLinkFailed': 'Az egyéni domain sikertelen',

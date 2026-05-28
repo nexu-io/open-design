@@ -1796,6 +1796,8 @@ export const fr: Dict = {
   'fileViewer.deployProviderFailed': 'Échec du déploiement {provider}. Vérifiez les réglages et réessayez.',
   'fileViewer.deployResultLabel': 'URL déployée',
   'fileViewer.deployLinkReady': 'Prêt',
+  'fileViewer.deploySuccessToast': 'Déploiement téléversé avec succès',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Lien public en attente',
   'fileViewer.deployLinkDelayed': 'Le site est déployé. Le fournisseur prépare encore le lien public.',
   'fileViewer.deployLinkFailed': 'Le domaine personnalisé a échoué',

@@ -1095,6 +1095,8 @@ export const it: Dict = {
   'fileViewer.deployProviderFailed': 'Distribuzione {provider} fallita. Controlla le impostazioni e riprova.',
   'fileViewer.deployResultLabel': 'URL distribuito',
   'fileViewer.deployLinkReady': 'Pronto',
+  'fileViewer.deploySuccessToast': 'Distribuzione caricata correttamente',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': 'Link pubblico in attesa',
   'fileViewer.deployLinkDelayed': 'Il sito è distribuito. Il provider sta ancora preparando il link pubblico.',
   'fileViewer.deployLinkFailed': 'Il dominio personalizzato è fallito',

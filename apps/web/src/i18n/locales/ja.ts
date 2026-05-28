@@ -1076,6 +1076,8 @@ export const ja: Dict = {
   'fileViewer.deployProviderFailed': '{provider} のデプロイに失敗しました。設定を確認して再試行してください。',
   'fileViewer.deployResultLabel': 'デプロイ URL',
   'fileViewer.deployLinkReady': '準備完了',
+  'fileViewer.deploySuccessToast': 'デプロイを正常にアップロードしました',
+  'fileViewer.deploySuccessToastDetails': '{provider} · {url}',
   'fileViewer.deployLinkPreparingLabel': '公開リンク準備中',
   'fileViewer.deployLinkDelayed': 'サイトはデプロイされました。プロバイダーが公開リンクを準備中です。',
   'fileViewer.deployLinkFailed': 'カスタムドメインに失敗しました',
