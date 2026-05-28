@@ -919,8 +919,11 @@ export const pl: Dict = {
   'preview.errorTitle': 'Nie udało się załadować tego przykładu.',
   'preview.errorBody': 'Nie udało się pobrać kodu HTML przykładu. Upewnij się, że Open Design jest uruchomiony, i spróbuj ponownie.',
   'preview.retry': 'Spróbuj ponownie',
-  'preview.unavailableTitle': 'Brak dołączonego podglądu dla tej umiejętności.',
-  'preview.unavailableBody': 'Ta umiejętność tworzy {kind} wynik — uruchom prompt w czacie, aby go wygenerować.',
+  'preview.unavailableTitle': 'Brak dołączonego podglądu dla {noun}.',
+  'preview.unavailableBody': 'Uruchom prompt w czacie, aby wygenerować {kind} wynik.',
+  'preview.nounSkill': 'tej umiejętności',
+  'preview.nounPlugin': 'tego pluginu',
+  'preview.nounTemplate': 'tego szablonu',
   'preview.showSidebar': 'Pokaż {label}',
   'preview.hideSidebar': 'Ukryj {label}',
 

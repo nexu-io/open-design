@@ -941,8 +941,11 @@ export const fa: Dict = {
   'preview.errorTitle': 'بارگیری این نمونه ممکن نشد.',
   'preview.errorBody': 'دریافت HTML نمونه با خطا مواجه شد. مطمئن شوید Open Design در حال اجراست و دوباره تلاش کنید.',
   'preview.retry': 'تلاش دوباره',
-  'preview.unavailableTitle': 'برای این مهارت پیش‌نمایش همراهی وجود ندارد.',
-  'preview.unavailableBody': 'این مهارت خروجی {kind} تولید می‌کند — برای ساخت یکی، پرامپت را در گفتگو اجرا کنید.',
+  'preview.unavailableTitle': 'برای {noun} پیش‌نمایش همراهی وجود ندارد.',
+  'preview.unavailableBody': 'برای ساخت خروجی {kind}، پرامپت را در گفتگو اجرا کنید.',
+  'preview.nounSkill': 'این مهارت',
+  'preview.nounPlugin': 'این افزونه',
+  'preview.nounTemplate': 'این الگو',
   'preview.showSidebar': 'نمایش {label}',
   'preview.hideSidebar': 'پنهان کردن {label}',
 

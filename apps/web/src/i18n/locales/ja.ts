@@ -806,8 +806,11 @@ export const ja: Dict = {
   'preview.errorTitle': 'この例を読み込めませんでした。',
   'preview.errorBody': '例の HTML を取得できませんでした。Open Design が起動していることを確認して再試行してください。',
   'preview.retry': '再試行',
-  'preview.unavailableTitle': 'このスキルにはプレビューが同梱されていません。',
-  'preview.unavailableBody': 'このスキルは {kind} 出力を生成します — チャットでプロンプトを実行して生成してください。',
+  'preview.unavailableTitle': '{noun}にはプレビューが同梱されていません。',
+  'preview.unavailableBody': 'チャットでプロンプトを実行して {kind} 出力を生成してください。',
+  'preview.nounSkill': 'このスキル',
+  'preview.nounPlugin': 'このプラグイン',
+  'preview.nounTemplate': 'このテンプレート',
   'preview.showSidebar': '{label} を表示',
   'preview.hideSidebar': '{label} を非表示',
 

@@ -1523,8 +1523,11 @@ export const en: Dict = {
   'preview.errorTitle': 'Couldn\'t load this example.',
   'preview.errorBody': 'The example HTML failed to fetch. Make sure Open Design is running and try again.',
   'preview.retry': 'Retry',
-  'preview.unavailableTitle': 'No shipped preview for this skill.',
-  'preview.unavailableBody': 'This skill produces {kind} output — run the prompt in chat to generate one.',
+  'preview.unavailableTitle': 'No shipped preview for {noun}.',
+  'preview.unavailableBody': 'Run the prompt in chat to generate {kind} output.',
+  'preview.nounSkill': 'this skill',
+  'preview.nounPlugin': 'this plugin',
+  'preview.nounTemplate': 'this template',
   'preview.showSidebar': 'Show {label}',
   'preview.hideSidebar': 'Hide {label}',
 

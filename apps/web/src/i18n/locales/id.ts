@@ -1030,8 +1030,11 @@ export const id: Dict = {
   'preview.errorTitle': 'Tidak dapat memuat contoh ini.',
   'preview.errorBody': 'Pengambilan HTML contoh gagal. Pastikan Open Design berjalan, lalu coba lagi.',
   'preview.retry': 'Coba lagi',
-  'preview.unavailableTitle': 'Tidak ada pratinjau bawaan untuk skill ini.',
-  'preview.unavailableBody': 'Skill ini menghasilkan keluaran {kind} — jalankan prompt di chat untuk membuatnya.',
+  'preview.unavailableTitle': 'Tidak ada pratinjau bawaan untuk {noun}.',
+  'preview.unavailableBody': 'Jalankan prompt di chat untuk membuat keluaran {kind}.',
+  'preview.nounSkill': 'skill ini',
+  'preview.nounPlugin': 'plugin ini',
+  'preview.nounTemplate': 'templat ini',
   'preview.showSidebar': 'Tampilkan {label}',
   'preview.hideSidebar': 'Sembunyikan {label}',
 

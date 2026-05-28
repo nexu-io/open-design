@@ -834,8 +834,11 @@ export const it: Dict = {
   'preview.errorTitle': 'Impossibile caricare questo esempio.',
   'preview.errorBody': 'Il caricamento dell\'HTML dell\'esempio è fallito. Verifica che Open Design sia in esecuzione e riprova.',
   'preview.retry': 'Riprova',
-  'preview.unavailableTitle': 'Nessuna anteprima fornita per questa competenza.',
-  'preview.unavailableBody': 'Questa competenza produce un risultato {kind} — esegui il prompt nella chat per generarne uno.',
+  'preview.unavailableTitle': 'Nessuna anteprima fornita per {noun}.',
+  'preview.unavailableBody': 'Esegui il prompt nella chat per generare un risultato {kind}.',
+  'preview.nounSkill': 'questa competenza',
+  'preview.nounPlugin': 'questo plugin',
+  'preview.nounTemplate': 'questo modello',
   'preview.showSidebar': 'Mostra {label}',
   'preview.hideSidebar': 'Nascondi {label}',
 

@@ -919,8 +919,11 @@ export const ko: Dict = {
   'preview.errorTitle': '이 예제를 불러오지 못했습니다.',
   'preview.errorBody': '예제 HTML을 가져오지 못했습니다. Open Design이 실행 중인지 확인하고 다시 시도하세요.',
   'preview.retry': '다시 시도',
-  'preview.unavailableTitle': '이 스킬에는 함께 제공되는 미리보기가 없습니다.',
-  'preview.unavailableBody': '이 스킬은 {kind} 출력을 생성합니다 — 채팅에서 프롬프트를 실행해 생성하세요.',
+  'preview.unavailableTitle': '{noun}에는 함께 제공되는 미리보기가 없습니다.',
+  'preview.unavailableBody': '채팅에서 프롬프트를 실행해 {kind} 출력을 생성하세요.',
+  'preview.nounSkill': '이 스킬',
+  'preview.nounPlugin': '이 플러그인',
+  'preview.nounTemplate': '이 템플릿',
   'preview.showSidebar': '{label} 표시',
   'preview.hideSidebar': '{label} 숨기기',
 

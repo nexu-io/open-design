@@ -908,8 +908,11 @@ export const tr: Dict = {
   'preview.errorTitle': 'Bu örnek yüklenemedi.',
   'preview.errorBody': 'Örnek HTML\'i alınamadı. Open Design\'ın çalıştığından emin olup tekrar deneyin.',
   'preview.retry': 'Tekrar dene',
-  'preview.unavailableTitle': 'Bu yetenek için birlikte gelen bir önizleme yok.',
-  'preview.unavailableBody': 'Bu yetenek {kind} çıktısı üretir — bir tane oluşturmak için sohbette istemini çalıştırın.',
+  'preview.unavailableTitle': '{noun} için birlikte gelen bir önizleme yok.',
+  'preview.unavailableBody': 'Sohbette istemini çalıştırarak {kind} çıktısı üretin.',
+  'preview.nounSkill': 'bu yetenek',
+  'preview.nounPlugin': 'bu eklenti',
+  'preview.nounTemplate': 'bu şablon',
   'preview.showSidebar': '{label} göster',
   'preview.hideSidebar': '{label} gizle',
 

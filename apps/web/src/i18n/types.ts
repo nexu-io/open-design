@@ -1832,13 +1832,23 @@ export interface Dict {
   'preview.errorTitle': string;
   'preview.errorBody': string;
   'preview.retry': string;
-  // Friendly placeholder copy for skills whose `od.preview.type` is not
-  // `html` — they ship no fetchable example artifact, so the loading /
-  // error states are misleading. Issue #897.
+  // Friendly placeholder copy for surfaces whose `od.preview.type` is
+  // not `html`, or whose manifest declares a preview entry that doesn't
+  // ship on disk — they have no fetchable example artifact, so the
+  // loading / error states are misleading. Issues #897, #2840, #3216.
+  // Body uses the `{kind}` placeholder (raw `od.preview.type` token,
+  // e.g. "markdown" or "image"); both keys use the `{noun}` placeholder
+  // so the same wording reads correctly on skills, plugins, and design
+  // templates (filled from one of the `preview.noun.*` keys below).
   'preview.unavailableTitle': string;
-  // Body copy uses the `{kind}` placeholder (raw `od.preview.type`
-  // token, e.g. "markdown" or "image") so each kind reads naturally.
   'preview.unavailableBody': string;
+  // Noun variants so the unavailable placeholder reads with the right
+  // word for each surface — Skills tab vs. Community/Plugins vs. deck
+  // design-templates. Keep these short, capitalised by the host
+  // language's conventions, and translatable in every locale.
+  'preview.nounSkill': string;
+  'preview.nounPlugin': string;
+  'preview.nounTemplate': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 

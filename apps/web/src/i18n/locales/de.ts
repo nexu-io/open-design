@@ -807,8 +807,11 @@ export const de: Dict = {
   'preview.errorTitle': 'Beispiel konnte nicht geladen werden.',
   'preview.errorBody': 'Das Beispiel-HTML konnte nicht abgerufen werden. Stelle sicher, dass Open Design läuft, und versuche es erneut.',
   'preview.retry': 'Erneut versuchen',
-  'preview.unavailableTitle': 'Für diesen Skill ist keine Vorschau verfügbar.',
-  'preview.unavailableBody': 'Dieser Skill erzeugt {kind}-Output — führe den Prompt im Chat aus, um etwas zu erzeugen.',
+  'preview.unavailableTitle': 'Für {noun} ist keine Vorschau verfügbar.',
+  'preview.unavailableBody': 'Führe den Prompt im Chat aus, um {kind}-Output zu erzeugen.',
+  'preview.nounSkill': 'diesen Skill',
+  'preview.nounPlugin': 'dieses Plugin',
+  'preview.nounTemplate': 'diese Vorlage',
   'preview.showSidebar': '{label} einblenden',
   'preview.hideSidebar': '{label} ausblenden',
 

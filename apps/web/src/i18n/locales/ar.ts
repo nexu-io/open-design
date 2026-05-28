@@ -919,8 +919,11 @@ export const ar: Dict = {
   'preview.errorTitle': 'تعذّر تحميل هذا المثال.',
   'preview.errorBody': 'فشل جلب HTML الخاص بالمثال. تأكد من تشغيل Open Design ثم أعد المحاولة.',
   'preview.retry': 'إعادة المحاولة',
-  'preview.unavailableTitle': 'لا توجد معاينة مرفقة لهذه المهارة.',
-  'preview.unavailableBody': 'هذه المهارة تنتج مخرجات {kind} — شغّل الأمر في المحادثة لإنشاء واحدة.',
+  'preview.unavailableTitle': 'لا توجد معاينة مرفقة لـ{noun}.',
+  'preview.unavailableBody': 'شغّل الأمر في المحادثة لإنشاء مخرجات {kind}.',
+  'preview.nounSkill': 'هذه المهارة',
+  'preview.nounPlugin': 'هذه الإضافة',
+  'preview.nounTemplate': 'هذا القالب',
   'preview.showSidebar': 'إظهار {label}',
   'preview.hideSidebar': 'إخفاء {label}',
 

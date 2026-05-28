@@ -1114,8 +1114,11 @@ export const zhTW: Dict = {
   'preview.errorTitle': '無法載入此範例。',
   'preview.errorBody': '範例 HTML 載入失敗。請確認 Open Design 正在執行後重試。',
   'preview.retry': '重試',
-  'preview.unavailableTitle': '此技能尚未附帶預覽範例。',
-  'preview.unavailableBody': '此技能用於產生 {kind} 產物 — 請在對話中執行此 Prompt 來產生。',
+  'preview.unavailableTitle': '{noun}尚未附帶預覽範例。',
+  'preview.unavailableBody': '請在對話中執行此 Prompt 來產生 {kind} 產物。',
+  'preview.nounSkill': '此技能',
+  'preview.nounPlugin': '此外掛',
+  'preview.nounTemplate': '此範本',
   'preview.showSidebar': '展開{label}',
   'preview.hideSidebar': '收合{label}',
 

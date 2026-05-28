@@ -941,8 +941,11 @@ export const uk: Dict = {
   'preview.errorTitle': 'Не вдалося завантажити цей приклад.',
   'preview.errorBody': 'Не вдалося отримати HTML прикладу. Переконайтеся, що Open Design запущено, і повторіть спробу.',
   'preview.retry': 'Повторити',
-  'preview.unavailableTitle': 'Для цієї навички немає вбудованого попереднього перегляду.',
-  'preview.unavailableBody': 'Ця навичка створює {kind}-вивід — запустіть підказку в чаті, щоб його згенерувати.',
+  'preview.unavailableTitle': 'Для {noun} немає вбудованого попереднього перегляду.',
+  'preview.unavailableBody': 'Запустіть підказку в чаті, щоб згенерувати {kind}-вивід.',
+  'preview.nounSkill': 'цієї навички',
+  'preview.nounPlugin': 'цього плагіна',
+  'preview.nounTemplate': 'цього шаблону',
   'preview.showSidebar': 'Показати {label}',
   'preview.hideSidebar': 'Приховати {label}',
 

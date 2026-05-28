@@ -940,8 +940,11 @@ export const ru: Dict = {
   'preview.errorTitle': 'Не удалось загрузить этот пример.',
   'preview.errorBody': 'Не удалось получить HTML примера. Убедитесь, что Open Design запущен, и повторите попытку.',
   'preview.retry': 'Повторить',
-  'preview.unavailableTitle': 'Для этого навыка нет встроенного предпросмотра.',
-  'preview.unavailableBody': 'Этот навык создаёт {kind}-вывод — запустите запрос в чате, чтобы сгенерировать его.',
+  'preview.unavailableTitle': 'Для {noun} нет встроенного предпросмотра.',
+  'preview.unavailableBody': 'Запустите запрос в чате, чтобы сгенерировать {kind}-вывод.',
+  'preview.nounSkill': 'этого навыка',
+  'preview.nounPlugin': 'этого плагина',
+  'preview.nounTemplate': 'этого шаблона',
   'preview.showSidebar': 'Показать {label}',
   'preview.hideSidebar': 'Скрыть {label}',
 

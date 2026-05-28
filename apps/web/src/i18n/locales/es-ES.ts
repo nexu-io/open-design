@@ -808,8 +808,11 @@ export const esES: Dict = {
   'preview.errorTitle': 'No se pudo cargar este ejemplo.',
   'preview.errorBody': 'No se pudo obtener el HTML del ejemplo. Asegúrate de que Open Design esté en ejecución e inténtalo de nuevo.',
   'preview.retry': 'Reintentar',
-  'preview.unavailableTitle': 'No hay vista previa incluida para esta skill.',
-  'preview.unavailableBody': 'Esta skill genera un resultado {kind} — ejecuta el prompt en el chat para crear uno.',
+  'preview.unavailableTitle': 'No hay vista previa incluida para {noun}.',
+  'preview.unavailableBody': 'Ejecuta el prompt en el chat para generar un resultado {kind}.',
+  'preview.nounSkill': 'esta skill',
+  'preview.nounPlugin': 'este plugin',
+  'preview.nounTemplate': 'esta plantilla',
   'preview.showSidebar': 'Mostrar {label}',
   'preview.hideSidebar': 'Ocultar {label}',
 
