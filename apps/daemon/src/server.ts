@@ -354,6 +354,7 @@ import {
   assertSandboxProjectRootAvailable,
   detectEntryFile,
   ensureProject,
+  isRunTouchedProjectFile,
   isSafeId,
   listFiles,
   mimeFor,
@@ -12752,7 +12753,7 @@ export async function startServer({
               try {
                 const filePath = path.join(dir, f.name);
                 const st = await fs.promises.stat(filePath);
-                if (st.mtimeMs < runStartTimeMs) continue;
+                if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
                 await reconcileHtmlArtifactManifest(
                   PROJECTS_DIR,
                   run.projectId,

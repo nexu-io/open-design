@@ -32,9 +32,15 @@ const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
+export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
 export const projectFileRenameTestHooks = {
   beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
 };
+
+export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
+  if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
+  return fileMtimeMs + RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS >= runStartTimeMs;
+}
 
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
