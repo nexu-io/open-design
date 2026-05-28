@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface AgentModelOption {
   id: string;
   label: string;
@@ -138,6 +140,52 @@ export interface SkillDetail extends SkillSummary {
 
 export interface SkillsResponse {
   skills: SkillSummary[];
+}
+
+export const SkillSummarySchema: z.ZodType<SkillSummary> = z.object({
+  id: z.string(),
+  name: z.string(),
+  displayName: z.record(z.string()).optional(),
+  description: z.string(),
+  descriptionI18n: z.record(z.string()).optional(),
+  triggers: z.array(z.string()),
+  mode: z.enum([
+    'prototype',
+    'deck',
+    'template',
+    'design-system',
+    'image',
+    'video',
+    'audio',
+  ]),
+  surface: z.enum(['web', 'image', 'video', 'audio']).optional(),
+  platform: z.enum(['desktop', 'mobile']).nullable().optional(),
+  scenario: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  source: z.enum(['built-in', 'user']).optional(),
+  previewType: z.string(),
+  designSystemRequired: z.boolean(),
+  defaultFor: z.array(z.string()),
+  upstream: z.string().nullable(),
+  featured: z.number().nullable().optional(),
+  fidelity: z.enum(['wireframe', 'high-fidelity']).nullable().optional(),
+  speakerNotes: z.boolean().nullable().optional(),
+  animations: z.boolean().nullable().optional(),
+  craftRequires: z.array(z.string()).optional(),
+  hasBody: z.boolean(),
+  examplePrompt: z.string(),
+  examplePromptI18n: z.record(z.string()).optional(),
+  aggregatesExamples: z.boolean(),
+}).passthrough() as z.ZodType<SkillSummary>;
+
+export const SkillSummaryArraySchema = z.array(SkillSummarySchema);
+
+export function parseSkillSummaries(value: unknown): SkillSummary[] {
+  return SkillSummaryArraySchema.parse(value);
+}
+
+export function isSkillSummaries(value: unknown): value is SkillSummary[] {
+  return SkillSummaryArraySchema.safeParse(value).success;
 }
 
 export interface SkillCatalogTreeSkill {

@@ -13,6 +13,7 @@ import type {
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
 } from '@open-design/contracts';
+import { parseSkillSummaries } from '@open-design/contracts';
 import type {
   AgentInfo,
   AppVersionInfo,
@@ -107,12 +108,12 @@ export async function fetchSkills(options?: { throwOnError?: boolean }): Promise
       if (options?.throwOnError) throw new Error(`skills ${resp.status}`);
       return [];
     }
-    const json = (await resp.json()) as { skills?: SkillSummary[] };
+    const json = await resp.json() as { skills?: unknown };
     if (!Array.isArray(json.skills)) {
       if (options?.throwOnError) throw new Error('skills response malformed');
       return [];
     }
-    return json.skills;
+    return parseSkillSummaries(json.skills);
   } catch (err) {
     if (options?.throwOnError) throw err;
     return [];

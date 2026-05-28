@@ -252,6 +252,21 @@ describe('IntegrationsView skills tree', () => {
     expect(screen.queryByText('No skills match these filters.')).toBeNull();
   });
 
+  it('shows a load failure when skills payload contains malformed entries', async () => {
+    renderSkillsIntegration([], {
+      skillsBody: {
+        skills: [
+          skill({ id: 'dashboard', name: 'Dashboard' }),
+          { id: 'broken', mode: 'prototype' },
+        ],
+      },
+    });
+
+    expect(await screen.findByText('Could not load skills. Make sure the local daemon is running, then try again.')).toBeTruthy();
+    expect(screen.queryByText('No skills match these filters.')).toBeNull();
+    expect(screen.queryByTestId('integrations-skill-list-row-dashboard')).toBeNull();
+  });
+
   it('localizes tree guide and legend labels', async () => {
     renderSkillsIntegration([
       skill({ id: 'dashboard', name: 'Dashboard', scenario: 'operation', platform: 'desktop' }),

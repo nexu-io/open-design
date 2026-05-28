@@ -39,11 +39,18 @@ describe('od skills CLI', () => {
             {
               id: 'dashboard',
               name: 'Dashboard',
+              description: 'A dashboard skill.',
+              triggers: [],
               mode: 'prototype',
               scenario: 'operation',
               platform: 'desktop',
               previewType: 'html',
               designSystemRequired: true,
+              defaultFor: [],
+              upstream: null,
+              hasBody: true,
+              examplePrompt: 'Build a dashboard.',
+              aggregatesExamples: false,
             },
           ],
         }));
@@ -104,6 +111,67 @@ describe('od skills CLI', () => {
       (_req, res) => {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
+      },
+      async (baseUrl) => {
+        try {
+          await execFileAsync(
+            process.execPath,
+            [
+              '--import',
+              'tsx',
+              cliEntry,
+              'skills',
+              'tree',
+              '--json',
+              '--daemon-url',
+              baseUrl,
+            ],
+            {
+              cwd: daemonRoot,
+              env: process.env,
+            },
+          );
+          throw new Error('skills tree command unexpectedly succeeded');
+        } catch (error: unknown) {
+          const failed = error as { code?: number; stderr?: string; stdout?: string };
+          expect(failed.code).toBe(74);
+          expect(failed.stdout ?? '').toBe('');
+          const envelope = JSON.parse(failed.stderr ?? '{}') as {
+            error?: { code?: string; message?: string; data?: { endpoint?: string } };
+          };
+          expect(envelope.error?.code).toBe('daemon-protocol-error');
+          expect(envelope.error?.message).toContain('Malformed /api/skills response');
+          expect(envelope.error?.data?.endpoint).toBe('/api/skills');
+        }
+      },
+    );
+  });
+
+  it('rejects malformed skill elements in skills tree responses', async () => {
+    await withSkillsServer(
+      (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          skills: [
+            {
+              id: 'dashboard',
+              name: 'Dashboard',
+              description: 'A dashboard skill.',
+              triggers: [],
+              mode: 'prototype',
+              scenario: 'operation',
+              platform: 'desktop',
+              previewType: 'html',
+              designSystemRequired: true,
+              defaultFor: [],
+              upstream: null,
+              hasBody: true,
+              examplePrompt: 'Build a dashboard.',
+              aggregatesExamples: false,
+            },
+            { id: 'broken', mode: 'prototype' },
+          ],
+        }));
       },
       async (baseUrl) => {
         try {

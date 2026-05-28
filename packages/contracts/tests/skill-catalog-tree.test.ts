@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSkillCatalogTree,
+  parseSkillSummaries,
   type SkillSummary,
 } from '../src/api/registry.js';
 
@@ -109,5 +110,23 @@ describe('buildSkillCatalogTree', () => {
       source: 'built-in',
     });
     expect(leaf?.skill).toBe(source);
+  });
+});
+
+describe('parseSkillSummaries', () => {
+  it('accepts valid skill summary arrays', () => {
+    const summaries = parseSkillSummaries([
+      skill({ id: 'dashboard', name: 'Dashboard' }),
+    ]);
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.id).toBe('dashboard');
+  });
+
+  it('rejects malformed skill summary array elements', () => {
+    expect(() => parseSkillSummaries([
+      skill({ id: 'dashboard', name: 'Dashboard' }),
+      { id: 'broken', mode: 'prototype' },
+    ])).toThrow();
   });
 });

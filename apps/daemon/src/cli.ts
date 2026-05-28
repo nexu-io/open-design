@@ -11,7 +11,7 @@ import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
-import { buildSkillCatalogTree } from '@open-design/contracts';
+import { buildSkillCatalogTree, parseSkillSummaries } from '@open-design/contracts';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 
@@ -5433,14 +5433,20 @@ async function runSkillsTree(args) {
   const resp = await fetch(`${base}/api/skills`);
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json().catch(() => null);
-  if (!data || !Array.isArray(data.skills)) {
+  let skills;
+  try {
+    skills = data && Array.isArray(data.skills) ? parseSkillSummaries(data.skills) : null;
+  } catch {
+    skills = null;
+  }
+  if (!skills) {
     return exitWithStructuredError({
       code: 'daemon-protocol-error',
       message: 'Malformed /api/skills response: expected { skills: SkillSummary[] }',
       data: { endpoint: '/api/skills' },
     });
   }
-  const tree = buildSkillCatalogTree(data.skills);
+  const tree = buildSkillCatalogTree(skills);
   if (flags.json) return process.stdout.write(JSON.stringify(tree, null, 2) + '\n');
   console.log(`Skills tree (${tree.total})`);
   for (const mode of tree.modes) {
