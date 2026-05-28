@@ -357,6 +357,73 @@ describe('spawn writes external MCP config for Claude Code', () => {
     }
   }, 30_000);
 
+  it('binds conversation-less runs to the seeded project conversation', async () => {
+    await withFakeClaude(async () => {
+      const { id, conversationId } = await createProject();
+      const recentConvRes = await fetch(`${baseUrl}/api/projects/${id}/conversations`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'Recently active' }),
+      });
+      expect(recentConvRes.ok).toBe(true);
+      const recentConvBody = (await recentConvRes.json()) as {
+        conversation: { id: string };
+      };
+      const recentConversationId = recentConvBody.conversation.id;
+      await fetch(`${baseUrl}/api/projects/${id}/conversations/${recentConversationId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Recently active',
+          updatedAt: Date.now() + 60_000,
+        }),
+      });
+
+      const chatRes = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: id,
+          message: 'headless fallback prompt',
+        }),
+      });
+      expect(chatRes.status).toBe(202);
+      const { runId, conversationId: resolvedConversationId } = (await chatRes.json()) as {
+        runId: string;
+        conversationId: string;
+      };
+      expect(resolvedConversationId).toBe(conversationId);
+      const status = await waitForRunStatus(baseUrl, runId);
+      expect(status.status).toBe('succeeded');
+
+      const defaultMessagesRes = await fetch(
+        `${baseUrl}/api/projects/${id}/conversations/${conversationId}/messages`,
+      );
+      expect(defaultMessagesRes.ok).toBe(true);
+      const defaultMessages = (await defaultMessagesRes.json()) as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      expect(defaultMessages.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: 'headless fallback prompt',
+          }),
+        ]),
+      );
+
+      const recentMessagesRes = await fetch(
+        `${baseUrl}/api/projects/${id}/conversations/${recentConversationId}/messages`,
+      );
+      expect(recentMessagesRes.ok).toBe(true);
+      const recentMessages = (await recentMessagesRes.json()) as {
+        messages: Array<{ content: string }>;
+      };
+      expect(recentMessages.messages.some((msg) => msg.content === 'headless fallback prompt')).toBe(false);
+    });
+  }, 30_000);
+
   it('injects run-scoped MCP servers without saving them to the persistent registry', async () => {
     await withFakeClaude(async () => {
       const { id, dir } = await createProject();
