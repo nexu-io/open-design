@@ -161,7 +161,8 @@ export function isToolsDevPortConflict(error: unknown): boolean {
   const text = error instanceof Error
     ? `${error.message}\n${error.stack ?? ''}`
     : String(error);
-  return text.includes('EADDRINUSE');
+  return text.includes('EADDRINUSE') ||
+    (text.includes('is already running in namespace') && text.includes('stop it or choose another namespace'));
 }
 
 async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T> {
