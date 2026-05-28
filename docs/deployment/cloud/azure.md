@@ -89,6 +89,13 @@ server {
     proxy_set_header Authorization "Bearer <OD_API_TOKEN>";
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+    gzip off;
     proxy_pass http://open_design_aci;
   }
 
@@ -100,7 +107,7 @@ server {
 }
 ```
 
-Replace `<aci-fqdn>` with `ACI_FQDN`, replace `<OD_API_TOKEN>` with the same secret passed to the Bicep deployment, and keep `BROWSER_ORIGIN` equal to the origin served by the proxy. After the proxy is configured, open `BROWSER_ORIGIN` in your browser.
+Replace `<aci-fqdn>` with `ACI_FQDN`, replace `<OD_API_TOKEN>` with the same secret passed to the Bicep deployment, and keep `BROWSER_ORIGIN` equal to the origin served by the proxy. Keep the `/api/` buffering, gzip, HTTP/1.1, and timeout directives in place so streamed generation responses are not cut off by nginx. After the proxy is configured, open `BROWSER_ORIGIN` in your browser.
 
 ## Optional Parameters
 
