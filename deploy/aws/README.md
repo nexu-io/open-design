@@ -4,11 +4,11 @@ This directory contains an AWS CloudFormation template (`template.yaml`) to depl
 
 ## Architecture Overview
 
-The template provisions a robust, highly-available, and secure architecture for Open Design:
+The template provisions a robust, fault-tolerant, and secure architecture for Open Design:
 
 *   **Networking:** A new Virtual Private Cloud (VPC) spanning two Availability Zones, with both Public and Private subnets. Two independent NAT Gateways (one in each AZ) provide highly available outbound internet access.
 *   **Load Balancing:** An internet-facing Application Load Balancer (ALB) routes incoming traffic. It optionally supports HTTPS if a custom domain and ACM certificate are provided.
-*   **Compute:** AWS ECS running on serverless Fargate instances in the private subnets. The task definition includes:
+*   **Compute:** AWS ECS running on serverless Fargate instances in the private subnets. To protect the file-based SQLite database from concurrent network write corruption, the service hard-codes a single-instance baseline (DesiredCount: 1). However, it leverages the multi-AZ networking primitives for Active-Passive fault tolerance: if a task or zone fails, ECS automatically reschedules the container in the healthy AZ. The task definition includes:
     *   The **Open Design** app container.
     *   An **Nginx Auth Proxy** sidecar container that securely attaches the Open Design API Token to incoming `/api/` requests.
 *   **Storage:** Amazon Elastic File System (EFS) is mounted to the Fargate containers to durably store the Open Design `.od` SQLite database and file artifacts. It is configured with deletion protection (`Retain`) to prevent accidental data loss.

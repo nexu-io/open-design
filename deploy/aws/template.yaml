@@ -16,8 +16,8 @@ Parameters:
     Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
-    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/([0-2]?[0-9]|3[0-2])$'    
-    ConstraintDescription: 'Must be a valid IPv4 CIDR range (e.g., 192.168.1.1/32).'
+    AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'    
+    ConstraintDescription: 'Must be a valid IPv4 CIDR range with a subnet mask between /16 and /32 (e.g., 192.168.1.0/24 or 10.0.0.1/32).'
     MinLength: 1
     Description: 'REQUIRED: The CIDR block allowed to access the ALB (e.g., your VPN or office IP. Must end in /32 for a single IP).'
   ProxyPort:
@@ -82,10 +82,7 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref AcmCertificateArn, '']]
         AssertDescription: 'You must provide an AcmCertificateArn when specifying a CustomDomainName.'
-  PreventPublicExposure:
-    Assertions:
-      - Assert: !Not [!Equals [!Ref AllowedSourceIp, '0.0.0.0/0']]
-        AssertDescription: 'Public exposure (0.0.0.0/0) is strictly forbidden by this baseline. Please provide a specific private IP or VPN CIDR block.'
+
 
 Resources:
   # NETWORKING (VPC, Subnets, NAT)
