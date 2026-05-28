@@ -116,8 +116,18 @@ export interface ChatAnalyticsHints {
   designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
 }
 
+export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
+  /**
+   * Omitted means enabled for this run. The daemon normalizes run-scoped
+   * inputs through the same sanitizer as persisted MCP config, but callers
+   * should not need to send persisted-settings boilerplate for disposable
+   * tool bundles.
+   */
+  enabled?: boolean;
+}
+
 export interface RunScopedToolBundle {
-  mcpServers?: McpServerConfig[];
+  mcpServers?: RunScopedMcpServerConfig[];
 }
 
 export interface RunScopedToolBundleSummary {
