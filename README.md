@@ -129,9 +129,9 @@ Linux AppImage packaging is available through the optional release lane and is c
 
 ## Skills
 
-**132 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**137 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
-Two **modes** anchor the interactive catalog: **`prototype`** (32 skills — anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (9 skills — horizontal-swipe presentations with deck-framework chrome). The catalog also ships `image`, `video`, `audio`, `template`, `design-system`, and `utility` modes for media generation, catalog updaters, and post-export audit helpers. The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+Two **modes** anchor the interactive catalog: **`prototype`** (anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (horizontal-swipe presentations with deck-framework chrome). The catalog also ships `image`, `video`, `audio`, `template`, `design-system`, and `utility` modes for media generation, catalog updaters, and post-export audit helpers. The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
 ### Showcase examples
 
@@ -260,7 +260,7 @@ What you compose at send time isn't "system + user". It's:
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
   + active DESIGN.md   (150 systems available)
-  + active SKILL.md    (132 skills available)
+  + active SKILL.md    (137 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -408,7 +408,7 @@ For desktop/background startup, fixed-port restarts, and media generation dispat
 The first load:
 
 1. Detects which agent CLIs you have on `PATH` and picks one automatically.
-2. Loads 132 skills + 150 design systems.
+2. Loads 137 skills + 150 design systems.
 3. Pops the welcome dialog so you can paste an Anthropic key (only needed for the BYOK fallback path).
 4. **Auto-creates `./.od/`** — the local runtime folder for the SQLite project DB, per-project artifacts, and saved renders. There is no `od init` step; the daemon `mkdir`s everything it needs on boot.
 
@@ -709,7 +709,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 132 SKILL.md skill bundles (32 prototype + 9 deck + image / video / audio / template / design-system / utility)
+├── skills/                        ← 137 SKILL.md skill bundles (prototype, deck, image, video, audio, template, design-system, utility)
 │   ├── web-prototype/             ← default for prototype mode
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -895,7 +895,7 @@ The chat / artifact loop gets the spotlight, but a handful of less-visible capab
 
 - **Claude Design ZIP import.** Drop an export from claude.ai onto the welcome dialog. `POST /api/import/claude-design` extracts it into a real `.od/projects/<id>/`, opens the entry file as a tab, and stages a continue-where-Anthropic-left-off prompt for your local agent. No re-prompting, no "ask the model to re-create what we just had". ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
 - **Multi-provider BYOK proxy.** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` takes `{ baseUrl, apiKey, model, messages }`, builds the provider-specific upstream request, normalizes SSE chunks into `delta/end/error`, and allows loopback local LLM providers while rejecting non-loopback private, link-local, CGNAT, multicast, reserved, and redirect targets to head off SSRF. OpenAI-compatible covers OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter, Ollama, LM Studio, and self-hosted vLLM; Azure OpenAI adds deployment URL + `api-version`; Google uses Gemini `:streamGenerateContent`.
-- **User-saved templates.** Once you like a render, `POST /api/templates` snapshots the HTML + metadata into the SQLite `templates` table. The next project picks it from a "your templates" row in the picker — same surface as the shipped 132, but yours.
+- **User-saved templates.** Once you like a render, `POST /api/templates` snapshots the HTML + metadata into the SQLite `templates` table. The next project picks it from a "your templates" row in the picker — same surface as the shipped 137, but yours.
 - **Tab persistence.** Every project remembers its open files and active tab in the `tabs` table. Reopen the project tomorrow and the workspace looks exactly the way you left it.
 - **Artifact lint API.** `POST /api/artifacts/lint` runs structural checks on a generated artifact (broken `<artifact>` framing, missing required side files, stale palette tokens) and returns findings the agent can read back into its next turn. The five-dim self-critique uses this to ground its score in real evidence, not vibes.
 - **Sidecar protocol + desktop automation.** Daemon, web, and desktop processes carry typed five-field stamps (`app · mode · namespace · ipc · source`) and expose a JSON-RPC IPC channel at `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` drives that channel, so headless E2E works against a real Electron shell without bespoke harnesses ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
@@ -994,7 +994,7 @@ Long-form provenance write-up — what we take from each, what we deliberately d
 
 - [x] Daemon + agent detection (16 CLI adapters) + skill registry + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 132 skills + 150 design systems + 5 visual directions + 5 device frames
+- [x] 137 skills + 150 design systems + 5 visual directions + 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) with SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)
