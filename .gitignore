@@ -66,7 +66,6 @@ docs/superpowers/
 .direnv/
 .envrc
 # Local secrets (PostHog keys, BYOK creds for local testing, etc.)
-.env
 .env.local
 .env.*.local
 # Local design assistant context
