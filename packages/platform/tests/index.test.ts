@@ -826,6 +826,36 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes the default mise shims dir so mise-installed CLIs (pi, kimi, etc.) are visible to GUI daemons", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-mise-shims-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".local", "share", "mise", "shims"));
+      // Legacy location too
+      expect(dirs).toContain(join(home, ".mise", "shims"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("respects $MISE_DATA_DIR for the shims location (custom mise root)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-mise-data-"));
+    const customMise = mkdtempSync(join(tmpdir(), "wkutb-custom-mise-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { MISE_DATA_DIR: customMise },
+        includeSystemBins: false,
+      });
+      expect(dirs).toContain(join(customMise, "shims"));
+      // Should not contain the default when override is present
+      expect(dirs).not.toContain(join(home, ".local", "share", "mise", "shims"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customMise, { recursive: true, force: true });
+    }
+  });
+
   it("does not append a prefix entry when neither env var is set", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-noprefix-"));
     try {
