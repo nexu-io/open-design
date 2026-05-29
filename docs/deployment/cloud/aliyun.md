@@ -127,11 +127,21 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
+
+    # Forward the bearer token to the daemon. The Compose stack always
+    # generates an OD_API_TOKEN and binds the daemon to 0.0.0.0 inside
+    # the container, so every /api/* call coming through Nginx must
+    # carry Authorization: Bearer <token>. Only /api/health,
+    # /api/version, and /api/daemon/status are exempt. The loopback
+    # short-circuit in the daemon checks the TCP peer address, not the
+    # X-Forwarded-For header, so reverse-proxy traffic never gets the
+    # localhost bypass.
+    proxy_set_header Authorization "Bearer <OD_API_TOKEN from deploy/.env>";
   }
 }
 ```
 
-Set `OPEN_DESIGN_ALLOWED_ORIGINS` in `deploy/.env` to the public URL so CORS clears the proxy.
+Set `OPEN_DESIGN_ALLOWED_ORIGINS` in `deploy/.env` to the public URL so CORS clears the proxy. The `OD_API_TOKEN` referenced in the Nginx block above is generated automatically by `deploy/scripts/install.sh` and written into `deploy/.env`; copy that value (or wire `proxy_set_header Authorization` to read it from a secrets manager) so the proxy authenticates on every request.
 
 ## Path B — Deploy to ACK
 
@@ -272,7 +282,7 @@ See [`docs/install-guide.md`](../../install-guide.md) for the full topology and 
 | HTTP/HTTPS to your domain is blocked | Domain not ICP-filed for a mainland region | Complete ICP filing, or move to a non-mainland region (HK/SG) |
 | `aliyun ecs RunInstances` fails with "Real-name authentication required" | Account not 实名认证 | Complete real-name verification in the account console |
 | ACK pods stuck in `ImagePullBackOff` from a private ACR repo | Cluster lacks pull credentials for the namespace | Create an `aliyun-acr-credential-helper` secret or use the cluster's ACR plugin |
-| 200 from `/api/health` but UI fails to load | CORS rejecting the proxied origin | Set `OPEN_DESIGN_ALLOWED_ORIGINS` (Compose / `deploy/.env`) or `OD_ALLOWED_ORIGINS` (direct container / ACK) to the public URL |
+| 200 from `/api/health` but UI fails to load | CORS rejecting the proxied origin, **or** the reverse proxy not forwarding the bearer token (Compose always generates `OD_API_TOKEN`; only `/api/health`, `/api/version`, `/api/daemon/status` skip auth) | Set `OPEN_DESIGN_ALLOWED_ORIGINS` (Compose / `deploy/.env`) or `OD_ALLOWED_ORIGINS` (direct container / ACK) to the public URL, **and** add `proxy_set_header Authorization "Bearer <OD_API_TOKEN>"` to the Nginx / SLB upstream config |
 | ACK Pod stuck in `NotReady`, readiness probe fails | Daemon defaulting to `OD_BIND_HOST=127.0.0.1` so the kubelet can't reach it | Set `OD_BIND_HOST=0.0.0.0` and `OD_API_TOKEN` in the Pod env (the daemon refuses non-loopback binds without a token) |
 | SLB health check fails | SLB hits `7456` but security group blocks intra-VPC | Allow the SLB backend CIDR on `7456/tcp` in the security group |
 
