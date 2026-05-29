@@ -14,7 +14,7 @@ import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
-import { streamMessage, usesAnthropicProxy } from '../providers/anthropic';
+import { streamMessage } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
   fetchVelaLoginStatus,
@@ -74,6 +74,7 @@ import {
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
+  usesAnthropicProxy,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';

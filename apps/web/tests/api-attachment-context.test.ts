@@ -80,21 +80,43 @@ describe('historyWithApiAttachmentContext', () => {
   });
 
   it('omits image attachment metadata when the provider sends native image blocks', async () => {
-    const history = await historyWithApiAttachmentContext(
-      [
-        userMessage('msg-1', 'Describe this image', [
-          { path: 'hero.png', name: 'hero.png', kind: 'image' },
-        ]),
-      ],
-      'msg-1',
-      'project-1',
-      [projectFile('hero.png', 'image')],
-      { omitNativeImageAttachments: true },
-    );
+    for (const path of ['hero.png', 'hero.jpg', 'hero.jpeg', 'hero.gif', 'hero.webp']) {
+      const history = await historyWithApiAttachmentContext(
+        [
+          userMessage('msg-1', 'Describe this image', [
+            { path, name: path, kind: 'image' },
+          ]),
+        ],
+        'msg-1',
+        'project-1',
+        [projectFile(path, 'image')],
+        { omitNativeImageAttachments: true },
+      );
 
+      expect(history[0]?.content).toBe('Describe this image');
+    }
     expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
     expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
-    expect(history[0]?.content).toBe('Describe this image');
+  });
+
+  it('keeps unsupported image metadata when native image blocks cannot carry them', async () => {
+    for (const path of ['hero.avif', 'hero.bmp']) {
+      const history = await historyWithApiAttachmentContext(
+        [
+          userMessage('msg-1', 'Describe this image', [
+            { path, name: path, kind: 'image' },
+          ]),
+        ],
+        'msg-1',
+        'project-1',
+        [projectFile(path, 'image')],
+        { omitNativeImageAttachments: true },
+      );
+
+      expect(history[0]?.content).toContain('<attached-project-files>');
+      expect(history[0]?.content).toContain(`path: ${path}`);
+      expect(history[0]?.content).toContain('Content preview unavailable');
+    }
   });
 
   it('uses filename inference when the project file list has not refreshed yet', async () => {

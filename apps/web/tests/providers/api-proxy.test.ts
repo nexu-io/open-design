@@ -140,6 +140,40 @@ describe('buildProxyMessages', () => {
       projectId: 'project-1',
     });
   });
+
+  it('keeps a text fallback when a supported Anthropic image cannot be read', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        headers: { get: () => null },
+        arrayBuffer: async () => new ArrayBuffer(0),
+      }),
+    );
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/anthropic/stream',
+      [
+        userMessage('Describe the attached image', [
+          { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      { projectId: 'project-1' },
+    );
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe the attached image' },
+          {
+            type: 'text',
+            text: 'Attached image could not be sent as native image content: path: references/logo.png | name: logo.png',
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 function userMessage(

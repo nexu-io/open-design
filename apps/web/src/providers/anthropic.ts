@@ -17,6 +17,7 @@ import { streamMessageGoogle } from './google-compatible';
 import { streamMessageOllama } from './ollama-compatible';
 import { isOpenAICompatible, streamMessageOpenAI } from './openai-compatible';
 import { streamMessageSenseAudio } from './senseaudio-compatible';
+import { usesAnthropicProxy } from '../utils/apiProtocol';
 
 // Re-export for convenience
 export { isOpenAICompatible } from './openai-compatible';
@@ -33,22 +34,6 @@ export function makeClient(cfg: AppConfig): Anthropic {
     baseURL: cfg.baseUrl || undefined,
     dangerouslyAllowBrowser: true,
   });
-}
-
-export function usesAnthropicProxy(cfg: AppConfig): boolean {
-  if (
-    cfg.apiProtocol === 'azure' ||
-    cfg.apiProtocol === 'ollama' ||
-    cfg.apiProtocol === 'google' ||
-    cfg.apiProtocol === 'senseaudio' ||
-    cfg.apiProtocol === 'openai'
-  ) {
-    return false;
-  }
-  if (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl)) {
-    return false;
-  }
-  return Boolean(cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com');
 }
 
 export async function streamMessage(

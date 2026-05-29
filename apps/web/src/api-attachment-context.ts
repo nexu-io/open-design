@@ -60,7 +60,11 @@ async function buildApiAttachmentContext(
   let remaining = MAX_API_ATTACHMENT_TOTAL_CHARS;
   const blocks: string[] = [];
   for (const attachment of attachments) {
-    if (options.omitNativeImageAttachments && attachment.kind === 'image') {
+    const file =
+      byPath.get(attachment.path) ??
+      byName.get(attachment.path) ??
+      byName.get(attachment.name);
+    if (options.omitNativeImageAttachments && canSendNativeAnthropicImage(attachment, file)) {
       continue;
     }
     if (remaining <= 0) {
@@ -70,10 +74,6 @@ async function buildApiAttachmentContext(
       break;
     }
 
-    const file =
-      byPath.get(attachment.path) ??
-      byName.get(attachment.path) ??
-      byName.get(attachment.name);
     const block = await renderApiAttachmentBlock(projectId, attachment, file, remaining);
     if (!block) continue;
     blocks.push(block.text);
@@ -143,6 +143,21 @@ async function renderApiAttachmentBlock(
 
   const text = lines.join('\n');
   return { text, charsUsed: text.length };
+}
+
+function canSendNativeAnthropicImage(
+  attachment: ChatAttachment,
+  file: ProjectFile | undefined,
+): boolean {
+  const path = file?.path ?? file?.name ?? attachment.path;
+  const kind = file?.kind ?? inferProjectFileKind(path);
+  if (kind !== 'image') return false;
+  return isAnthropicSupportedImagePath(path);
+}
+
+function isAnthropicSupportedImagePath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return /\.(jpe?g|png|gif|webp)$/.test(lower);
 }
 
 function canReadRawText(kind: ProjectFileKind, path: string): boolean {

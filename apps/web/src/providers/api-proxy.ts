@@ -157,7 +157,14 @@ async function buildAnthropicMessageContent(
 
   for (const attachment of imageAttachments) {
     const block = await readAnthropicImageBlock(projectId, attachment.path);
-    if (block) blocks.push(block);
+    if (block) {
+      blocks.push(block);
+    } else if (isAnthropicSupportedImagePath(attachment.path)) {
+      blocks.push({
+        type: 'text',
+        text: `Attached image could not be sent as native image content: path: ${attachment.path} | name: ${attachment.name}`,
+      });
+    }
   }
 
   return blocks.length > 0 ? blocks : message.content;
@@ -210,6 +217,11 @@ function supportedAnthropicImageMediaType(
   if (lower.endsWith('.gif')) return 'image/gif';
   if (lower.endsWith('.webp')) return 'image/webp';
   return null;
+}
+
+function isAnthropicSupportedImagePath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return /\.(jpe?g|png|gif|webp)$/.test(lower);
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
