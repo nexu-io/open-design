@@ -209,6 +209,41 @@ test('mmd route loader supports explicit file override and safe fallback on bad 
   }
 });
 
+test('mmd launch env expands tilde in explicit file overrides', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-mmd-routes-tilde-'));
+  try {
+    const routesDir = join(dir, '.config', 'mms');
+    const routesFile = join(routesDir, 'model-routes.json');
+    mkdirSync(routesDir, { recursive: true });
+    writeFileSync(
+      routesFile,
+      JSON.stringify({
+        routes: {
+          'claude-sonnet-mmd': {
+            primary: {
+              anthropic_base_url: 'https://mmd.example.test/v1',
+              api_key: 'sk-mmd-secret',
+            },
+          },
+        },
+      }),
+    );
+
+    const env = {
+      HOME: dir,
+      MMD_MODEL_ROUTES_FILE: '~/.config/mms/model-routes.json',
+    };
+
+    assert.equal(resolveMmdRoutesFile(env), routesFile);
+    assert.deepEqual(await loadMmdRouteLaunchEnv(env, 'claude-sonnet-mmd'), {
+      ANTHROPIC_BASE_URL: 'https://mmd.example.test/v1',
+      ANTHROPIC_AUTH_TOKEN: 'sk-mmd-secret',
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('claude runtime fetchModels surfaces mmd route models to the picker', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-claude-mmd-models-'));
   try {

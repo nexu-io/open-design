@@ -23,9 +23,18 @@ function resolveHome(env: RuntimeEnv): string | null {
   return stringEnv(env, 'HOME') ?? homedir() ?? null;
 }
 
+function expandRoutesFileOverride(raw: string, env: RuntimeEnv): string | null {
+  if (raw === '~') return resolveHome(env);
+  if (raw.startsWith('~/') || raw.startsWith('~\\')) {
+    const home = resolveHome(env);
+    return home ? join(home, raw.slice(2)) : null;
+  }
+  return raw;
+}
+
 export function resolveMmdRoutesFile(env: RuntimeEnv): string | null {
   const override = stringEnv(env, MMD_MODEL_ROUTES_FILE_ENV);
-  if (override) return override;
+  if (override) return expandRoutesFileOverride(override, env);
 
   const home = resolveHome(env);
   if (!home) return null;

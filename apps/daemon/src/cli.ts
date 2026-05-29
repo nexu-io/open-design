@@ -4371,12 +4371,12 @@ async function readRunMessageFromFlags(flags, fallback = null) {
   return fallback;
 }
 
-async function postJsonToDaemon(base, route, body) {
+async function postJsonToDaemon(base, route, body, headers = {}) {
   let resp;
   try {
     resp = await fetch(`${base}${route}`, {
       method:  'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body:    JSON.stringify(body),
     });
   } catch (err) {
@@ -4397,6 +4397,15 @@ async function postJsonToDaemon(base, route, body) {
     process.exit(1);
   }
   return data;
+}
+
+async function postImportFolderToDaemon(base, body, baseDir) {
+  const headers = {};
+  const importToken = await mintCliImportToken(baseDir);
+  if (importToken != null) {
+    headers['x-od-desktop-import-token'] = importToken;
+  }
+  return postJsonToDaemon(base, '/api/import/folder', body, headers);
 }
 
 async function runProject(args) {
@@ -4558,7 +4567,7 @@ Common options:
         skillId:        flags.skill ?? null,
         designSystemId: flags['design-system'] ?? null,
       };
-      const data = await postJsonToDaemon(base, '/api/import/folder', body);
+      const data = await postImportFolderToDaemon(base, body, folderPath);
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] imported ${data.project?.id ?? '-'} from ${folderPath} (conversation ${data.conversationId ?? '-'})`);
       return;
@@ -4704,14 +4713,14 @@ Common options:
 
       if (!projectId) {
         const folderPath = await resolveFolderPathForCli(flags.path ?? flags.dir);
-        imported = await postJsonToDaemon(base, '/api/import/folder', {
+        imported = await postImportFolderToDaemon(base, {
           baseDir:        folderPath,
           name:           typeof flags.name === 'string' && flags.name.length > 0
             ? flags.name
             : await basenameForCli(folderPath),
           skillId,
           designSystemId,
-        });
+        }, folderPath);
         projectId = imported.project?.id;
         conversationId = conversationId ?? imported.conversationId;
         if (!projectId) {
