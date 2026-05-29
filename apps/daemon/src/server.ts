@@ -11516,13 +11516,36 @@ export async function startServer({
         scheduleForcedChildShutdown();
         return;
       }
-      const message =
-        `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
-        'The model or CLI likely hung while generating. ' +
-        `Phase details: spawned agent ${userFacingAgentLabel(agentId, resolvedBin)}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
-        `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
-        'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
-      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
+      // OpenCode retries a 429 usage-limit silently and emits nothing on
+      // stdout/stderr, so the watchdog is the first signal we get. The real
+      // reason is recorded only in OpenCode's own session log — recover it
+      // and surface it HERE, before finish() tears down the live SSE
+      // clients, so a viewer sees "usage limit reached" instead of the
+      // generic stall message. Bound to this run via `since` so a stale or
+      // concurrent session's error can't be misattributed. See issue #982.
+      let stallPayload = null;
+      if (agentId === 'opencode') {
+        const logFailure = readOpenCodeServiceFailure(spawnedAgentEnv, {
+          since: run.createdAt,
+        });
+        if (logFailure) {
+          stallPayload = createSseErrorPayload(
+            logFailure.code,
+            logFailure.message,
+            { retryable: true },
+          );
+        }
+      }
+      if (!stallPayload) {
+        const message =
+          `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
+          'The model or CLI likely hung while generating. ' +
+          `Phase details: spawned agent ${userFacingAgentLabel(agentId, resolvedBin)}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
+          `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
+          'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
+        stallPayload = createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true });
+      }
+      send('error', stallPayload);
       design.runs.finish(run, 'failed', 1, null);
       if (acpSession?.abort) {
         acpSession.abort();
@@ -12468,7 +12491,7 @@ export async function startServer({
           // See issue #982.
           const openCodeFailure =
             def.id === 'opencode'
-              ? readOpenCodeServiceFailure(spawnedAgentEnv)
+              ? readOpenCodeServiceFailure(spawnedAgentEnv, { since: run.createdAt })
               : null;
           if (openCodeFailure) {
             send('error', createSseErrorPayload(

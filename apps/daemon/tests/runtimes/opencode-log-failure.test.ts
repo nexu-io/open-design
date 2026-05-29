@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -103,11 +103,32 @@ describe('readLatestOpenCodeLogTail', () => {
   it('returns only the tail when the file exceeds maxBytes', () => {
     const dir = fresh();
     writeFileSync(path.join(dir, 'a.log'), 'X'.repeat(100) + 'TAIL');
-    expect(readLatestOpenCodeLogTail(dir, 4)).toBe('TAIL');
+    expect(readLatestOpenCodeLogTail(dir, { maxBytes: 4 })).toBe('TAIL');
   });
 
   it('returns null when the log dir does not exist', () => {
     expect(readLatestOpenCodeLogTail(path.join(fresh(), 'missing'))).toBeNull();
+  });
+
+  it('skips a log last written before `since` (binds to the current run)', () => {
+    const dir = fresh();
+    const stale = path.join(dir, '2026-05-29T080000.log');
+    writeFileSync(stale, 'STALE');
+    const runStart = Date.now();
+    // Backdate the file to before the run started → it belongs to an
+    // earlier session and must not be read for this run.
+    const before = new Date(runStart - 60_000);
+    utimesSync(stale, before, before);
+    expect(readLatestOpenCodeLogTail(dir, { since: runStart })).toBeNull();
+  });
+
+  it('returns a log written at/after `since`', () => {
+    const dir = fresh();
+    const current = path.join(dir, '2026-05-29T100000.log');
+    writeFileSync(current, 'CURRENT');
+    expect(readLatestOpenCodeLogTail(dir, { since: Date.now() - 5_000 })).toBe(
+      'CURRENT',
+    );
   });
 });
 
@@ -125,5 +146,19 @@ describe('readOpenCodeServiceFailure (end to end from env)', () => {
 
   it('returns null when env carries no usable home', () => {
     expect(readOpenCodeServiceFailure({})).toBeNull();
+  });
+
+  it('does not attribute a stale session error to the current run (since gate)', () => {
+    const home = fresh();
+    const logDir = path.join(home, '.local', 'share', 'opencode', 'log');
+    mkdirSync(logDir, { recursive: true });
+    const stale = path.join(logDir, '2026-05-29T080000.log');
+    writeFileSync(stale, USAGE_LIMIT_LINE);
+    const runStart = Date.now();
+    const before = new Date(runStart - 60_000);
+    utimesSync(stale, before, before);
+    expect(
+      readOpenCodeServiceFailure({ HOME: home }, { since: runStart }),
+    ).toBeNull();
   });
 });

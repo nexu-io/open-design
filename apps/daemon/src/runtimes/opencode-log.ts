@@ -6,7 +6,7 @@
 // module recovers that signal so the chat UI can show "usage limit reached"
 // instead of a bare timeout. OpenCode-specific by design; see issue #982.
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { classifyAgentServiceFailure, type AgentServiceFailureCode } from './auth.js';
 
@@ -31,16 +31,20 @@ export function resolveOpenCodeLogDir(
 }
 
 // Read the tail of OpenCode's most recent session log. Filenames are
-// `<ISO-like-timestamp>.log`, so a lexicographic sort orders them by recency
-// without a stat() per file. The 2 MB tail comfortably holds the final error
-// frame even though OpenCode embeds the entire request body (system prompt +
-// tool schemas) in each `service=llm` line. Synchronous on purpose: the only
-// caller is the (non-async) run close handler, and it runs once per failed
+// `<ISO-like-timestamp>.log`, so a lexicographic sort orders them by recency.
+// `since` (when provided) binds the lookup to the current run: a file last
+// written before the run started can only belong to an earlier session, so
+// it is skipped rather than risk surfacing a stale provider error for this
+// run. The 2 MB tail comfortably holds the final error frame even though
+// OpenCode embeds the entire request body (system prompt + tool schemas) in
+// each `service=llm` line. Synchronous on purpose: the only callers are the
+// (non-async) run close handler and the inactivity watchdog, once per failed
 // OpenCode run. Returns null on any fs error (no dir yet, perms).
 export function readLatestOpenCodeLogTail(
   logDir: string,
-  maxBytes = 2_000_000,
+  options: { maxBytes?: number; since?: number } = {},
 ): string | null {
+  const { maxBytes = 2_000_000, since } = options;
   let names: string[];
   try {
     names = readdirSync(logDir).filter((name) => name.endsWith('.log'));
@@ -48,14 +52,24 @@ export function readLatestOpenCodeLogTail(
     return null;
   }
   if (names.length === 0) return null;
-  names.sort();
-  const newest = names[names.length - 1]!;
-  try {
-    const buf = readFileSync(path.join(logDir, newest), 'utf8');
-    return buf.length > maxBytes ? buf.slice(-maxBytes) : buf;
-  } catch {
-    return null;
+  names.sort().reverse(); // newest filename first
+  for (const name of names) {
+    const full = path.join(logDir, name);
+    if (since != null) {
+      try {
+        if (statSync(full).mtimeMs < since) continue;
+      } catch {
+        continue;
+      }
+    }
+    try {
+      const buf = readFileSync(full, 'utf8');
+      return buf.length > maxBytes ? buf.slice(-maxBytes) : buf;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 // Only treat a `"message":"…"` value as the failure reason when it reads
@@ -137,14 +151,16 @@ export function extractOpenCodeServiceFailure(
   return { code, message: message || defaultMessageForCode(code), statusCode };
 }
 
-// Convenience for the run close handler: resolve the log dir from the
-// spawned agent's env, read the newest log tail, and classify it.
+// Convenience for the run close handler / inactivity watchdog: resolve the
+// log dir from the spawned agent's env, read the newest log tail (bound to
+// the current run via `since`), and classify it.
 export function readOpenCodeServiceFailure(
   env: Record<string, string | undefined>,
+  options: { since?: number } = {},
 ): OpenCodeServiceFailure | null {
   const logDir = resolveOpenCodeLogDir(env);
   if (!logDir) return null;
-  const tail = readLatestOpenCodeLogTail(logDir);
+  const tail = readLatestOpenCodeLogTail(logDir, options);
   if (!tail) return null;
   return extractOpenCodeServiceFailure(tail);
 }
