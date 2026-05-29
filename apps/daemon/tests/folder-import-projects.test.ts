@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  assertSandboxProjectRootAvailable,
   detectEntryFile,
   listFiles,
   resolveProjectDir,
@@ -67,15 +68,19 @@ describe('resolveProjectDir', () => {
     ).not.toThrow();
   });
 
-  it('rejects metadata.baseDir when sandbox mode is enabled', () => {
+  it('routes metadata.baseDir to the managed root but leaves a run-start guard in sandbox mode', () => {
     withSandboxMode(() => {
       const baseDir = '/Users/me/projects/site';
-      expect(() =>
+      expect(
         resolveProjectDir(projectsRoot, projectId, { kind: 'prototype', baseDir }),
-      ).toThrowError(SandboxImportedProjectError);
+      ).toBe(path.join(projectsRoot, projectId));
       expect(() =>
-        resolveProjectDir(projectsRoot, '../escape', { kind: 'prototype', baseDir }),
+        assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
       ).toThrowError(SandboxImportedProjectError);
+      expect(() => resolveProjectDir(projectsRoot, '../escape', {
+        kind: 'prototype',
+        baseDir,
+      })).toThrowError();
     });
   });
 });

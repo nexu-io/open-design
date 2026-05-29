@@ -344,6 +344,7 @@ import {
   buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
+  assertSandboxProjectRootAvailable,
   detectEntryFile,
   ensureProject,
   isSafeId,
@@ -10774,6 +10775,7 @@ export async function startServer({
       try {
         const chatProject = getProject(db, projectId);
         const chatMeta = chatProject?.metadata;
+        assertSandboxProjectRootAvailable(chatMeta);
         cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
         existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
       } catch (err) {

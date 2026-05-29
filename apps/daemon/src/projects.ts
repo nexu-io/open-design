@@ -57,7 +57,7 @@ function hasExternalProjectRoot(metadata?) {
   return path.isAbsolute(path.normalize(metadata.baseDir));
 }
 
-function assertSandboxProjectRootAvailable(metadata?) {
+export function assertSandboxProjectRootAvailable(metadata?) {
   if (isSandboxModeEnabled(process.env) && hasExternalProjectRoot(metadata)) {
     throw new SandboxImportedProjectError();
   }
@@ -72,7 +72,6 @@ function usesExternalProjectRoot(metadata?) {
 // (metadata.baseDir set), this is the user's own folder. Otherwise falls
 // back to the standard computed path under projectsRoot.
 export function resolveProjectDir(projectsRoot, projectId, metadata?) {
-  assertSandboxProjectRootAvailable(metadata);
   if (usesExternalProjectRoot(metadata)) {
     return path.normalize(metadata.baseDir);
   }
