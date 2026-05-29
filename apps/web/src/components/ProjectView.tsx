@@ -168,6 +168,7 @@ import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
+import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import {
   buildFinalizeCredentialsMissingToast,
   buildFinalizeRequest,
@@ -2762,6 +2763,7 @@ export function ProjectView({
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           research: meta?.research,
+          mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           locale,

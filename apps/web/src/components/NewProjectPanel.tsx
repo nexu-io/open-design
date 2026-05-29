@@ -23,6 +23,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
+import { isMediaProviderPickerReady } from '../media/provider-readiness';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -2482,6 +2483,7 @@ function MediaModelCards({
     for (const model of models) {
       const provider = findProvider(model.provider);
       const providerId = provider?.id ?? model.provider;
+      if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
       const configured =
         provider?.credentialsRequired === false ||
@@ -2512,6 +2514,12 @@ function MediaModelCards({
     }
     return null;
   }, [groups, value]);
+  const firstAvailableModelId = groups[0]?.models[0]?.id ?? null;
+
+  useEffect(() => {
+    if (selected || !firstAvailableModelId) return;
+    onChange(firstAvailableModelId);
+  }, [firstAvailableModelId, onChange, selected]);
 
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();

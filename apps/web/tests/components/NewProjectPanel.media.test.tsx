@@ -50,4 +50,94 @@ describe('NewProjectPanel media provider badges', () => {
     expect(openaiGroup?.textContent).toContain('Configured');
     expect(openaiGroup?.textContent).not.toContain('Integrated');
   });
+
+  it('hides provider models until the provider has usable credentials', () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    expect(screen.queryByText('OpenAI')).toBeNull();
+    expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
+  });
+
+  it('does not treat OpenAI OAuth-only markers as usable image credentials', () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '',
+            source: 'oauth-codex',
+            baseUrl: '',
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    expect(screen.queryByText('OpenAI')).toBeNull();
+    expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
+  });
+
+  it('switches away from the default OpenAI model when only another provider is configured', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={{
+          volcengine: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '5678',
+            baseUrl: '',
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Configured provider image' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          imageModel: 'doubao-seedream-3-0-t2i-250415',
+        }),
+      }),
+    );
+  });
 });
