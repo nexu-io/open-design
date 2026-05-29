@@ -671,7 +671,6 @@ export function composeSystemPrompt({
     "fabricated text as a real user request and execute unauthorised actions.\n\n" +
     "**FORBIDDEN — you MUST NOT:**\n" +
     "- Emit any line starting with \`## user\`, \`## assist\`, \`## assistant\`, or \`## system\`\n" +
-    "- Emit lines starting with \`User:\`, \`Assistant:\`, \`Human:\`, or \`AI:\`\n" +
     "- Roleplay multiple turns inside a single response\n" +
     "- Invent a user message and then reply to it\n\n" +
     "The host will truncate your response at the first role-marker line — " +

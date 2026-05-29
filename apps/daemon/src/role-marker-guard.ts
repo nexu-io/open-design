@@ -12,13 +12,45 @@
 // Regex matching fabricated role-marker lines injected by the model into
 // its own output. Anchored to start-of-line via (?:^|\n) so we don't
 // false-positive on user prose like "here is the ## user content".
-// Matches two families:
-//   - Markdown-style: `## user`, `## assist`, `## assistant`, `## system`
-//     (flexible whitespace between ## and role)
-//   - Chat-style: `User:`, `Assistant:`, `Human:`, `AI:`
-//     (case-insensitive, optional whitespace before colon)
+//
+// Scope (deliberately narrow): Markdown-style `## user` / `## assistant`
+// / `## assist` / `## system` only — these are the patterns the chat
+// host actually parses as turn boundaries (see `buildDaemonTranscript`
+// in apps/web/src/providers/daemon.ts). Chat-style markers like
+// `User:` / `Assistant:` / `Human:` / `AI:` are intentionally NOT
+// included, because:
+//   (1) The host never parses them as turn boundaries; a model emitting
+//       them does NOT cause the original #3247 security failure mode.
+//   (2) They collide with legitimate output far more often than the
+//       Markdown family (e.g., "User: bob@example.com", form labels,
+//       JSDoc lines). With kill-on-detection wired in server.ts
+//       (`abortForRoleMarker`), a false positive aborts the whole run
+//       — a much more expensive failure than a stray unflagged
+//       `User:` line in the chat scrollback.
+// If a host frontend ever starts parsing chat-style markers as
+// boundaries, narrow the additions to that frontend's specific
+// path rather than the shared regex.
+//
+// Alternation order matters: `assistant` is listed before `assist` so a
+// fully-spelled `## assistant` consumes 9 chars (not 6). For truncated
+// or glued forms (`## assist`, `## assistantReading…`) the engine still
+// matches the `assist` prefix. No `\b` after the role keyword — model
+// emissions glue the role and the following sentence ("## assistantNow
+// reading…") with no separator, and `\b` doesn't fire between two
+// word characters.
 export const FABRICATED_ROLE_MARKER_RE =
-  /(?:^|\n)\s*(?:##\s+(?:user|assistant|assist|system)|(?:User|Assistant|Human|AI)\s*:)/i;
+  /(?:^|\n)\s*##\s+(?:user|assistant|assist|system)/i;
+
+// Bounded tail size for cross-chunk matching. Must comfortably exceed
+// the longest possible marker prefix:
+//   "\n" + whitespace run + "##" + whitespace + "assistant"  ≈  16–24
+// chars in practice (LLMs rarely emit more than a couple newlines or a
+// handful of spaces between sections). 64 leaves generous margin and
+// keeps the guard's memory + per-delta work O(1) regardless of message
+// length — important because a 50KB assistant response delivered in
+// 1000 chunks of 50 bytes is otherwise O(n²) on string concatenation
+// alone.
+const TAIL_BUFFER_SIZE = 64;
 
 export interface RoleMarkerGuard {
   /** Feed a text delta for the current message. Returns the safe portion
@@ -32,8 +64,11 @@ export interface RoleMarkerGuard {
 }
 
 /**
- * Create a stateful guard that accumulates text per message and detects
- * fabricated role markers across chunk boundaries.
+ * Create a stateful guard that detects fabricated role markers across
+ * chunk boundaries. Memory + per-call work is O(1): instead of
+ * accumulating the full message text, the guard retains only a small
+ * trailing suffix (TAIL_BUFFER_SIZE chars) — enough for the matcher to
+ * see across chunk boundaries when a marker straddles them.
  *
  * Usage in a stream handler:
  *
@@ -48,7 +83,10 @@ export interface RoleMarkerGuard {
  *   }
  */
 export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
-  let accumulated = '';
+  // Rolling tail of the bytes we have emitted so far, capped at
+  // TAIL_BUFFER_SIZE. Used as the prefix when matching against new text
+  // so we catch markers that straddle a chunk boundary.
+  let tail = '';
   let _contaminated = false;
   let markerText: string | null = null;
 
@@ -59,23 +97,29 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
 
     feedText(text: string): string {
       if (_contaminated) return '';
+      if (text.length === 0) return '';
 
-      const prev = accumulated;
-      const combined = prev + text;
-      const match = FABRICATED_ROLE_MARKER_RE.exec(combined);
+      const buffer = tail + text;
+      const match = FABRICATED_ROLE_MARKER_RE.exec(buffer);
       if (!match) {
-        accumulated = combined;
+        // Clean. Pass text through and roll the tail forward.
+        tail = buffer.length > TAIL_BUFFER_SIZE
+          ? buffer.slice(buffer.length - TAIL_BUFFER_SIZE)
+          : buffer;
         return text;
       }
 
-      // Found a fabricated role marker.
+      // Marker found. Compute how much of `text` is still safe to emit
+      // (the portion before the marker that hasn't already been emitted
+      // via prior calls). `tail.length` is the count of chars at the
+      // head of `buffer` that have already been emitted; `match.index`
+      // is the marker position within `buffer`.
       _contaminated = true;
       markerText = match[0].trim();
-      const cutIndex = match.index;
-      const safePrefix = combined.slice(0, cutIndex);
-      const alreadyEmitted = prev.length;
-      if (cutIndex <= alreadyEmitted) return '';
-      return safePrefix.slice(alreadyEmitted);
+      const alreadyEmitted = tail.length;
+      const markerStart = match.index;
+      if (markerStart <= alreadyEmitted) return '';
+      return text.slice(0, markerStart - alreadyEmitted);
     },
 
     warningEvent() {
@@ -88,5 +132,3 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
     },
   };
 }
-
-

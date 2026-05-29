@@ -5,7 +5,7 @@ import {
 } from '../src/role-marker-guard.js';
 
 describe('FABRICATED_ROLE_MARKER_RE', () => {
-  // ── Markdown-style markers ────────────────────────────────────────
+  // ── Markdown-style markers (in scope) ─────────────────────────────
 
   it('matches ## user at start of text', () => {
     expect(FABRICATED_ROLE_MARKER_RE.test('## user\nfabricated')).toBe(true);
@@ -35,38 +35,12 @@ describe('FABRICATED_ROLE_MARKER_RE', () => {
     expect(FABRICATED_ROLE_MARKER_RE.test('text\n##\tuser\nfabricated')).toBe(true);
   });
 
-  // ── Chat-style markers ────────────────────────────────────────────
-
-  it('matches User: after a newline', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('OK\nUser: hello')).toBe(true);
+  it('matches ## assistantReading (glued — no separator after role)', () => {
+    expect(FABRICATED_ROLE_MARKER_RE.test('text\n## assistantReading the file')).toBe(true);
   });
 
-  it('matches Assistant:', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\nAssistant: sure')).toBe(true);
-  });
-
-  it('matches Human:', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\nHuman: what now?')).toBe(true);
-  });
-
-  it('matches AI:', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\nAI: processing')).toBe(true);
-  });
-
-  it('matches user: (lowercase, case-insensitive flag)', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\nuser: hello')).toBe(true);
-  });
-
-  it('matches ASSISTANT: (uppercase)', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\nASSISTANT: done')).toBe(true);
-  });
-
-  it('matches User  : with extra whitespace before colon', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\nUser  : hello')).toBe(true);
-  });
-
-  it('matches user: at very start of text', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('user: hello')).toBe(true);
+  it('matches ## USER (uppercase, case-insensitive)', () => {
+    expect(FABRICATED_ROLE_MARKER_RE.test('text\n## USER\nfabricated')).toBe(true);
   });
 
   // ── Leading whitespace tolerance ───────────────────────────────────
@@ -75,18 +49,32 @@ describe('FABRICATED_ROLE_MARKER_RE', () => {
     expect(FABRICATED_ROLE_MARKER_RE.test('text\n  ## user\nfabricated')).toBe(true);
   });
 
-  it('matches when line has leading spaces before User:', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('text\n  User: hello')).toBe(true);
+  // ── Chat-style markers (deliberately out of scope) ─────────────────
+  // These are documented as intentionally excluded — see docblock in
+  // role-marker-guard.ts. The host doesn't parse them as turn boundaries
+  // and they collide with legitimate output too often to be paired with
+  // kill-on-detection.
+
+  it('does NOT match User: marker (chat-style out of scope)', () => {
+    expect(FABRICATED_ROLE_MARKER_RE.test('OK\nUser: hello')).toBe(false);
+  });
+
+  it('does NOT match Assistant: marker', () => {
+    expect(FABRICATED_ROLE_MARKER_RE.test('text\nAssistant: sure')).toBe(false);
+  });
+
+  it('does NOT match Human: marker', () => {
+    expect(FABRICATED_ROLE_MARKER_RE.test('text\nHuman: what now?')).toBe(false);
+  });
+
+  it('does NOT match AI: marker', () => {
+    expect(FABRICATED_ROLE_MARKER_RE.test('text\nAI: processing')).toBe(false);
   });
 
   // ── Negative cases ────────────────────────────────────────────────
 
   it('does NOT match ## user in the middle of a line (no preceding newline)', () => {
     expect(FABRICATED_ROLE_MARKER_RE.test('here is the ## user content')).toBe(false);
-  });
-
-  it('does NOT match User: in the middle of a line', () => {
-    expect(FABRICATED_ROLE_MARKER_RE.test('tell User: something')).toBe(false);
   });
 
   it('does NOT match plain text without markers', () => {
@@ -99,6 +87,14 @@ describe('FABRICATED_ROLE_MARKER_RE', () => {
 
   it('does NOT match ## usability (different word, no match in alternation)', () => {
     expect(FABRICATED_ROLE_MARKER_RE.test('## usability improvements')).toBe(false);
+  });
+
+  it('does NOT match common legitimate "User: bob@example.com"-style content', () => {
+    expect(
+      FABRICATED_ROLE_MARKER_RE.test(
+        'Here is the contact:\nUser: bob@example.com\nRole: admin',
+      ),
+    ).toBe(false);
   });
 });
 
@@ -157,55 +153,27 @@ describe('createRoleMarkerGuard', () => {
     expect(guard.warningEvent()!.marker).toBe('##   user');
   });
 
-  // ── Chat-style detection ──────────────────────────────────────────
-
-  it('detects User: marker', () => {
+  it('detects glued ## assistantReading via assist-prefix alternation', () => {
     const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nUser: hello');
+    const result = guard.feedText('Done.\n## assistantReading the file...');
+    expect(result).toBe('Done.');
     expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('User:');
   });
 
-  it('detects Assistant:', () => {
+  // ── Chat-style is NOT detected (intentional, see docblock) ────────
+
+  it('does NOT detect User: marker (out of scope)', () => {
     const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nAssistant: ok');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('Assistant:');
+    const result = guard.feedText('text\nUser: hello');
+    expect(result).toBe('text\nUser: hello');
+    expect(guard.contaminated).toBe(false);
   });
 
-  it('detects Human:', () => {
+  it('does NOT detect Assistant: marker (out of scope)', () => {
     const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nHuman: hi');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('Human:');
-  });
-
-  it('detects AI:', () => {
-    const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nAI: result');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('AI:');
-  });
-
-  it('detects user: (lowercase, case-insensitive)', () => {
-    const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nuser: hello');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('user:');
-  });
-
-  it('detects USER: (uppercase)', () => {
-    const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nUSER: hello');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('USER:');
-  });
-
-  it('detects User  : with whitespace before colon', () => {
-    const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('text\nUser  : hello');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('User  :');
+    const result = guard.feedText('text\nAssistant: sure');
+    expect(result).toBe('text\nAssistant: sure');
+    expect(guard.contaminated).toBe(false);
   });
 
   // ── Cross-chunk detection ─────────────────────────────────────────
@@ -234,17 +202,6 @@ describe('createRoleMarkerGuard', () => {
     expect(guard.warningEvent()!.marker).toBe('## user');
   });
 
-  it('handles chat-style marker split across chunks (User + :)', () => {
-    const guard = createRoleMarkerGuard('msg-1');
-    guard.feedText('OK\nUser');
-    expect(guard.contaminated).toBe(false);
-
-    const r2 = guard.feedText(': hello');
-    expect(r2).toBe('');
-    expect(guard.contaminated).toBe(true);
-    expect(guard.warningEvent()!.marker).toBe('User:');
-  });
-
   it('returns safe portion when marker is mid-chunk', () => {
     const guard = createRoleMarkerGuard('msg-1');
     guard.feedText('Prefix. ');
@@ -257,6 +214,49 @@ describe('createRoleMarkerGuard', () => {
     const guard = createRoleMarkerGuard('msg-1');
     expect(guard.feedText('## user\nfabricated')).toBe('');
     expect(guard.contaminated).toBe(true);
+  });
+
+  // ── Bounded tail / O(1) memory behaviour ──────────────────────────
+
+  it('detects a marker after a long stream of clean text (bounded tail still catches it)', () => {
+    const guard = createRoleMarkerGuard('msg-long');
+    // Feed 10 KB of clean text in small chunks to ensure the rolling tail
+    // is well past its initial size before the marker arrives.
+    const chunk = 'lorem ipsum dolor sit amet, consectetur adipiscing. ';
+    let totalEmitted = 0;
+    for (let i = 0; i < 200; i++) {
+      const out = guard.feedText(chunk);
+      expect(out).toBe(chunk);
+      totalEmitted += out.length;
+    }
+    expect(guard.contaminated).toBe(false);
+    expect(totalEmitted).toBe(chunk.length * 200);
+
+    // Then introduce a marker. The guard must still detect it across the
+    // last-clean-byte / first-marker-byte boundary.
+    const out = guard.feedText('done.\n## user\nfabricated');
+    expect(out).toBe('done.');
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## user');
+  });
+
+  it('detects a marker straddling a chunk boundary after many prior chunks', () => {
+    const guard = createRoleMarkerGuard('msg-straddle');
+    // Long clean preamble in many small chunks.
+    for (let i = 0; i < 100; i++) {
+      guard.feedText('clean. ');
+    }
+    expect(guard.contaminated).toBe(false);
+
+    // Marker straddles the next chunk pair.
+    const r1 = guard.feedText('end of preamble.\n## us');
+    expect(r1).toBe('end of preamble.\n## us');
+    expect(guard.contaminated).toBe(false);
+
+    const r2 = guard.feedText('er\nfabricated');
+    expect(r2).toBe('');
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## user');
   });
 
   // ── Post-contamination ────────────────────────────────────────────
@@ -288,16 +288,6 @@ describe('createRoleMarkerGuard', () => {
     });
   });
 
-  it('warningEvent returns correct shape for User:', () => {
-    const guard = createRoleMarkerGuard('msg-7');
-    guard.feedText('User: hello');
-    expect(guard.warningEvent()).toEqual({
-      type: 'fabricated_role_marker',
-      marker: 'User:',
-      messageId: 'msg-7',
-    });
-  });
-
   // ── Edge cases ────────────────────────────────────────────────────
 
   it('handles empty string input', () => {
@@ -319,17 +309,17 @@ describe('createRoleMarkerGuard', () => {
     expect(guard2.warningEvent()!.messageId).toBe('msg-2');
   });
 
-  it('does not false-positive on inline role mentions', () => {
-    const guard = createRoleMarkerGuard('msg-1');
-    const result = guard.feedText('The User: class has a method...');
-    expect(result).toBe('The User: class has a method...');
-    expect(guard.contaminated).toBe(false);
-  });
-
   it('does not false-positive on ## in the middle of prose', () => {
     const guard = createRoleMarkerGuard('msg-1');
     const result = guard.feedText('I used ## user as a tag name in code.');
     expect(result).toBe('I used ## user as a tag name in code.');
+    expect(guard.contaminated).toBe(false);
+  });
+
+  it('does not false-positive on legitimate "User: bob@example.com"-style content', () => {
+    const guard = createRoleMarkerGuard('msg-1');
+    const result = guard.feedText('Contact info:\nUser: bob@example.com\nRole: admin');
+    expect(result).toBe('Contact info:\nUser: bob@example.com\nRole: admin');
     expect(guard.contaminated).toBe(false);
   });
 });
