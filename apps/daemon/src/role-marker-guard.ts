@@ -41,6 +41,20 @@
 export const FABRICATED_ROLE_MARKER_RE =
   /(?:^|\n)\s*##\s+(?:user|assistant|assist|system)/i;
 
+// Internal-only variant used after the first chunk has been processed.
+// Drops the `^` alternative: once `tail` is a rolling slice of
+// mid-stream text, `^` no longer represents the genuine message start
+// — applying it would let the regex anchor at an arbitrary cut point
+// inside legitimate prose ("…take a look at the ## user content…"
+// fed char-by-char would eventually slide a tail window onto leading
+// whitespace + `## user` and false-positive). Only `\n`-preceded
+// markers are real role boundaries on subsequent chunks; the preceding
+// newline is retained inside the 64-char tail so genuine markers
+// straddling a chunk boundary are still caught.
+// (See PR #3303 review r3324060995.)
+const NEWLINE_ANCHORED_ROLE_MARKER_RE =
+  /\n\s*##\s+(?:user|assistant|assist|system)/i;
+
 // Bounded tail size for cross-chunk matching. Must comfortably exceed
 // the longest possible marker prefix:
 //   "\n" + whitespace run + "##" + whitespace + "assistant"  ≈  16–24
@@ -87,6 +101,13 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
   // TAIL_BUFFER_SIZE. Used as the prefix when matching against new text
   // so we catch markers that straddle a chunk boundary.
   let tail = '';
+  // Tracks whether we have processed a non-empty feed yet. On the very
+  // first non-empty chunk, `^` in the canonical regex is a legitimate
+  // anchor — that position really IS the message start. On every
+  // subsequent chunk, `tail` is a mid-stream slice and `^` no longer
+  // anchors at the real message start; we switch to the newline-only
+  // variant so a sliding window cannot manufacture a match from prose.
+  let firstChunk = true;
   let _contaminated = false;
   let markerText: string | null = null;
 
@@ -100,9 +121,16 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
       if (text.length === 0) return '';
 
       const buffer = tail + text;
-      const match = FABRICATED_ROLE_MARKER_RE.exec(buffer);
+      const re = firstChunk
+        ? FABRICATED_ROLE_MARKER_RE
+        : NEWLINE_ANCHORED_ROLE_MARKER_RE;
+      const match = re.exec(buffer);
+
       if (!match) {
-        // Clean. Pass text through and roll the tail forward.
+        // Clean. Pass text through, roll the tail forward, and mark
+        // the first chunk consumed so subsequent calls use the
+        // newline-only variant.
+        firstChunk = false;
         tail = buffer.length > TAIL_BUFFER_SIZE
           ? buffer.slice(buffer.length - TAIL_BUFFER_SIZE)
           : buffer;

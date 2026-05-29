@@ -259,6 +259,58 @@ describe('createRoleMarkerGuard', () => {
     expect(guard.warningEvent()!.marker).toBe('## user');
   });
 
+  // ── Streaming-anchor regression (PR #3303 review r3324060995) ─────
+  // The bounded-tail refactor must not let `^` in the canonical regex
+  // anchor at an arbitrary mid-stream cut point. When `tail` is a
+  // slice, only `\n`-preceded markers are real role boundaries; an
+  // `^`-anchored match on a sliced buffer is an artifact of the
+  // window, not the model's emission.
+
+  it('does not contaminate when mid-line `## user` is streamed char-by-char (no preceding newline)', () => {
+    const guard = createRoleMarkerGuard('msg-stream');
+    const fullText = '...take a look at the ## user content section of the docs...';
+    for (const ch of fullText) {
+      guard.feedText(ch);
+    }
+    expect(guard.contaminated).toBe(false);
+    expect(guard.warningEvent()).toBeNull();
+  });
+
+  it('does not contaminate when space-preceded `## user` is streamed char-by-char (no preceding newline)', () => {
+    const guard = createRoleMarkerGuard('msg-stream-2');
+    // Long preamble (>64 chars) to guarantee `tail` becomes a slice,
+    // then a space + `## user` mid-line. The `^` alternative would
+    // false-positive on the sliced window; only a real `\n` should.
+    const fullText =
+      'lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do ' +
+      'eiusmod tempor ## user incididunt ut labore et dolore magna aliqua.';
+    for (const ch of fullText) {
+      guard.feedText(ch);
+    }
+    expect(guard.contaminated).toBe(false);
+  });
+
+  it('still contaminates when a real \\n-preceded `## user` is streamed char-by-char', () => {
+    const guard = createRoleMarkerGuard('msg-stream-3');
+    // Same preamble length as above, but with a real newline before the
+    // marker. Must contaminate even though tail has rolled forward.
+    const fullText =
+      'lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do ' +
+      'eiusmod tempor\n## user incididunt';
+    for (const ch of fullText) {
+      guard.feedText(ch);
+    }
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## user');
+  });
+
+  it('contaminates when `## user` is the very first chunk (^ legitimate at message start)', () => {
+    const guard = createRoleMarkerGuard('msg-stream-4');
+    expect(guard.feedText('## user fabricated')).toBe('');
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## user');
+  });
+
   // ── Post-contamination ────────────────────────────────────────────
 
   it('silently drops text after contamination', () => {
