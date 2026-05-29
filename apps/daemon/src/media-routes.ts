@@ -220,16 +220,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   };
   app.get('/api/media/models', async (_req, res) => {
     let imageModels = IMAGE_MODELS;
-    try {
-      const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
-      imageModels = withConfiguredCustomImageModels(
-        IMAGE_MODELS,
-        mediaConfig.providers['custom-image']?.model,
-        mediaConfig.providers['custom-image']?.profiles,
-      );
-    } catch {
-      imageModels = IMAGE_MODELS;
-    }
+    const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
+    imageModels = withConfiguredCustomImageModels(
+      IMAGE_MODELS,
+      mediaConfig.providers['custom-image']?.model,
+      mediaConfig.providers['custom-image']?.profiles,
+    );
 
     res.json({
       providers: MEDIA_PROVIDERS,

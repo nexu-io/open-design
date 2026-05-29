@@ -341,6 +341,74 @@ describe('Google Vertex media generation', () => {
       output: 'vertex-disabled.png',
     })).rejects.toThrow(/Google Vertex is not configured/);
   });
+
+  it('reports a broken service_account_key_file instead of the generic not-configured message', async () => {
+    const brokenKeyPath = path.join(root, 'broken-key.json');
+    await writeFile(brokenKeyPath, 'NOT VALID JSON {{{', 'utf8');
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'service_account',
+      project_id: PROJECT_ID,
+      service_account_key_file: brokenKeyPath,
+    });
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with service account error.',
+      output: 'vertex-broken-key.png',
+    })).rejects.toThrow(/service account JSON is invalid/);
+  });
+
+  it('reports a missing service_account_key_file instead of the generic not-configured message', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'service_account',
+      project_id: PROJECT_ID,
+      service_account_key_file: '/nonexistent/path/key.json',
+    });
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with missing key.',
+      output: 'vertex-missing-key.png',
+    })).rejects.toThrow(/service account key file not found/);
+  });
+
+  it('reports missing project_id when service_account is configured but project_id is absent', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'service_account',
+      // No project_id
+      service_account_json: JSON.stringify({ client_email: 'a@b.iam', private_key: 'key' }),
+    });
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GCLOUD_PROJECT;
+    delete process.env.GCP_PROJECT;
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with project id error.',
+      output: 'vertex-no-project.png',
+    })).rejects.toThrow(/project id is missing/);
+  });
 });
 
 function jsonResponse(body: unknown): Response {

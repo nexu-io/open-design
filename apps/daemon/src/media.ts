@@ -1977,8 +1977,21 @@ const GOOGLE_VERTEX_DEFAULT_CONFIG_FILE = 'google-vertex-config.json';
 async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   const config = await readGoogleVertexMediaConfig();
   if (!(await googleVertexConfigReady(config))) {
+    // Surface the specific reason the config is incomplete instead of a
+    // generic "not configured" message — helps users diagnose setup issues.
+    if (!config.enabled) {
+      throw new Error(
+        'Google Vertex is not configured — set OD_GOOGLE_VERTEX_CONFIG or configure ~/.config/open-design/google-vertex-config.json with enabled=true',
+      );
+    }
+    if (!(await resolveGoogleVertexProjectId(config))) {
+      throw new Error(
+        'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
+      );
+    }
+    // auth_mode=service_account but no key provided
     throw new Error(
-      'Google Vertex is not configured — set OD_GOOGLE_VERTEX_CONFIG or configure ~/.config/open-design/google-vertex-config.json with auth_mode=adc',
+      'Google Vertex service account credentials are missing — set service_account_json or service_account_key_file in the config',
     );
   }
   const auth = await googleVertexAuth(config);
@@ -2330,8 +2343,17 @@ async function googleVertexServiceAccountAccessToken(
 }
 
 async function googleVertexServiceAccountKey(config: GoogleVertexConfig): Promise<GoogleServiceAccountKey> {
-  const raw = config.service_account_json
-    ?? (config.service_account_key_file ? await readFile(config.service_account_key_file, 'utf8') : '');
+  let raw = config.service_account_json;
+  if (!raw && config.service_account_key_file) {
+    try {
+      raw = await readFile(config.service_account_key_file, 'utf8');
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') {
+        throw new Error(`Google Vertex service account key file not found: ${config.service_account_key_file}`);
+      }
+      throw new Error(`Google Vertex service account key file could not be read: ${err?.message ?? err}`);
+    }
+  }
   if (!raw) throw new Error('Google Vertex service account JSON is missing');
   let parsed: unknown;
   try {
