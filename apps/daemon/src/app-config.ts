@@ -168,6 +168,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['qwen', new Set(['QWEN_BIN'])],
   ['trae-cli', new Set(['TRAE_CLI_BIN'])],
   ['vibe', new Set(['VIBE_BIN'])],
+  ['openclaw', new Set(['OD_OPENCLAW_SESSION'])],
 ]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {

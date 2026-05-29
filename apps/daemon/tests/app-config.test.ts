@@ -326,6 +326,10 @@ describe('app-config', () => {
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
+          openclaw: {
+            OD_OPENCLAW_SESSION: '  agent:designs:hero  ',
+            SOME_RANDOM_KEY: 'should-not-persist',
+          },
           gemini: {
             GEMINI_API_KEY: 'should-not-persist',
           },
@@ -346,6 +350,7 @@ describe('app-config', () => {
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+        openclaw: { OD_OPENCLAW_SESSION: 'agent:designs:hero' },
       });
     });
 

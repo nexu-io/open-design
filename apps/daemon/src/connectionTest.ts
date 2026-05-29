@@ -1835,7 +1835,10 @@ async function testAgentConnectionInternal(
         [],
         [],
         { model: input.model ?? null, reasoning: input.reasoning ?? null },
-        { cwd: tempDir },
+        {
+          cwd: tempDir,
+          env: { ...process.env, ...configuredAgentEnv },
+        },
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

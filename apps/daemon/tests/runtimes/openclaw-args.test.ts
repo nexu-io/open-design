@@ -166,3 +166,32 @@ test('openclaw buildArgs skips --model when default is selected', () => {
     '`--model default` would route to a literal model id; must be elided',
   );
 });
+
+// PR #2556 review (@mrcfps): connectionTest.ts also calls buildArgs —
+// verify that it honours runtimeContext.env the same way server.ts does,
+// so "Test connection" targets the user-configured session rather than
+// falling back to process.env / agent:main:main.
+test('openclaw buildArgs honours runtimeContext.env in connection-test shape (cwd + env)', () => {
+  withEnvSnapshot(['OD_OPENCLAW_SESSION'], () => {
+    // Simulate connectionTest.ts passing merged env — the same shape
+    // the fix now threads through.
+    process.env.OD_OPENCLAW_SESSION = 'agent:host:stale';
+
+    const args = openclaw.buildArgs(
+      '',
+      [],
+      [],
+      { model: null, reasoning: null },
+      {
+        cwd: '/tmp/od-connection-test',
+        env: { OD_OPENCLAW_SESSION: 'agent:conntest:override' },
+      },
+    );
+
+    assert.equal(
+      sessionArgOf(args),
+      'agent:conntest:override',
+      'connection-test buildArgs must prefer runtimeContext.env over process.env',
+    );
+  });
+});
