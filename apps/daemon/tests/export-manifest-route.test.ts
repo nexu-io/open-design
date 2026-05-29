@@ -176,6 +176,44 @@ describe('project export manifest route', () => {
     });
   });
 
+  it('uses artifact entry strings as project-relative entry refs without primary hints', async () => {
+    const projectId = await createProject({ kind: 'prototype' });
+    await writeFile(projectId, {
+      name: 'index.html',
+      content: '<!doctype html><main>fallback</main>',
+    });
+    await writeFile(projectId, {
+      name: 'reviewed.html',
+      content: '<!doctype html><main>reviewed</main>',
+    });
+    await writeFile(projectId, {
+      name: 'preview/wrapper.html',
+      content: '<!doctype html><iframe src="../reviewed.html"></iframe>',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Review wrapper',
+        entry: 'reviewed.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/export/manifest`);
+    expect(response.ok).toBe(true);
+    const body = await response.json() as {
+      entryFile: string;
+      files: Array<{ name: string; role: string; reasons: string[] }>;
+    };
+
+    expect(body.entryFile).toBe('reviewed.html');
+    expect(body.files.find((file) => file.name === 'reviewed.html')).toMatchObject({
+      role: 'entry',
+      reasons: expect.arrayContaining(['artifact-entry', 'project-entry-file']),
+    });
+  });
+
   it('rejects invalid project ids before listing files', async () => {
     const response = await fetch(`${baseUrl}/api/projects/bad:id/export/manifest`);
     expect(response.status).toBe(400);

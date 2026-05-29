@@ -731,7 +731,7 @@ function buildProjectExportManifestResponse({
       artifactSupporting.add(normalized);
       note(normalized, reason);
     };
-    addManifestRef(manifest.entry, 'artifact-entry');
+    addManifestRef(manifest.entry, 'artifact-entry', { preferProjectRoot: true });
     if (typeof manifest.primary === 'string') {
       addManifestRef(manifest.primary, 'artifact-primary', { preferProjectRoot: true });
     }
@@ -798,12 +798,18 @@ function chooseExportManifestEntryFile(
   for (const file of files) {
     const manifest = file.artifactManifest;
     if (!manifest || typeof manifest !== 'object') continue;
+    if (isInferredArtifactManifest(manifest)) continue;
     if (manifest.primary === true) return file.name;
-    if (typeof manifest.primary !== 'string') continue;
-    const rootPrimary = normalizeManifestProjectRootRef(manifest.primary);
-    if (rootPrimary && filesByName.has(rootPrimary)) return rootPrimary;
-    const ownerRelativePrimary = normalizeManifestProjectRef(manifest.primary, file.name);
-    if (ownerRelativePrimary && filesByName.has(ownerRelativePrimary)) return ownerRelativePrimary;
+    if (typeof manifest.primary === 'string') {
+      const rootPrimary = normalizeManifestProjectRootRef(manifest.primary);
+      if (rootPrimary && filesByName.has(rootPrimary)) return rootPrimary;
+      const ownerRelativePrimary = normalizeManifestProjectRef(manifest.primary, file.name);
+      if (ownerRelativePrimary && filesByName.has(ownerRelativePrimary)) return ownerRelativePrimary;
+    }
+    const rootEntry = normalizeManifestProjectRootRef(manifest.entry);
+    if (rootEntry && filesByName.has(rootEntry)) return rootEntry;
+    const ownerRelativeEntry = normalizeManifestProjectRef(manifest.entry, file.name);
+    if (ownerRelativeEntry && filesByName.has(ownerRelativeEntry)) return ownerRelativeEntry;
   }
   return files.find((file) => /(^|\/)index\.html?$/i.test(file.name))?.name
     ?? files.find((file) => file.kind === 'html')?.name
