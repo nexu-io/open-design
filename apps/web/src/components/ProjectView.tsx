@@ -17,6 +17,7 @@ import { useI18n } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
+  fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
   reattachDaemonRun,
@@ -146,6 +147,7 @@ import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
 } from './Theater';
+import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
@@ -165,6 +167,12 @@ import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
+import { effectiveAgentModelChoice } from './agentModelSelection';
+import {
+  buildFinalizeCredentialsMissingToast,
+  buildFinalizeRequest,
+} from '../lib/resolve-finalize-request';
+
 
 type ProjectChatSendMeta = ChatSendMeta & {
   retryOfAssistantId?: string;
@@ -208,6 +216,7 @@ interface Props {
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: (section?: SettingsSection) => void;
+  onOpenAmrSettings?: () => void;
   onOpenMcpSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
@@ -490,6 +499,7 @@ export function ProjectView({
   onAgentModelChange,
   onRefreshAgents,
   onOpenSettings,
+  onOpenAmrSettings,
   onOpenMcpSettings,
   onAdoptPetInline,
   onTogglePet,
@@ -504,6 +514,7 @@ export function ProjectView({
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
+  const iframeKeepAlivePool = useIframeKeepAlivePool();
   // P0 page_view page_name=chat_panel — fire once per project mount.
   // ProjectView outlives conversation switches (ChatPane is keyed by
   // activeConversationId so it remounts when the user switches chats,
@@ -1270,6 +1281,7 @@ export function ProjectView({
   );
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
+      iframeKeepAlivePool.evictProject(project.id);
       coalescedFileChangedRefresh();
       return;
     }
@@ -1318,8 +1330,45 @@ export function ProjectView({
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
-  }, [onProjectsRefresh, refreshLiveArtifacts, project.id, coalescedFileChangedRefresh]);
+  }, [coalescedFileChangedRefresh, iframeKeepAlivePool, onProjectsRefresh, refreshLiveArtifacts, project.id]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
+
+  const activePromptContextSignature = useMemo(() => {
+    const skill = project.skillId
+      ? (skills.find((s) => s.id === project.skillId) ??
+        designTemplates.find((s) => s.id === project.skillId))
+      : null;
+    const designSystem = project.designSystemId
+      ? designSystems.find((d) => d.id === project.designSystemId)
+      : null;
+    return JSON.stringify({
+      designSystem: designSystem
+        ? {
+            id: designSystem.id,
+            title: designSystem.title,
+            category: designSystem.category,
+            summary: designSystem.summary,
+            source: designSystem.source ?? null,
+          }
+        : null,
+      skill: skill
+        ? {
+            id: skill.id,
+            name: skill.name,
+            description: skill.description,
+            mode: skill.mode,
+            source: skill.source ?? null,
+            upstream: skill.upstream,
+          }
+        : null,
+    });
+  }, [designSystems, designTemplates, project.designSystemId, project.skillId, skills]);
+  const previousPromptContextSignatureRef = useRef(activePromptContextSignature);
+  useEffect(() => {
+    if (previousPromptContextSignatureRef.current === activePromptContextSignature) return;
+    previousPromptContextSignatureRef.current = activePromptContextSignature;
+    iframeKeepAlivePool.evictProject(project.id, { includeActive: true });
+  }, [activePromptContextSignature, iframeKeepAlivePool, project.id]);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
@@ -1668,12 +1717,15 @@ export function ProjectView({
     [updateMessageById, activeConversationId, project.id],
   );
 
+  // `code` is the structured API error code (e.g. AGENT_AUTH_REQUIRED); it
+  // rides along on the error status event so AssistantMessage can render the
+  // hosted-AMR nudge for model/auth/quota failures on non-AMR agents.
   const appendAssistantErrorEvent = useCallback(
-    (messageId: string, message: string) => {
+    (messageId: string, message: string, code?: string) => {
       if (!message) return;
       updateMessageById(
         messageId,
-        (prev) => appendErrorStatusEvent(prev, message),
+        (prev) => appendErrorStatusEvent(prev, message, code),
         true,
       );
     },
@@ -2069,14 +2121,19 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: (err) => {
+              const errorCode = (err as Error & { code?: string }).code;
               textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
               setError(err.message);
-              appendAssistantErrorEvent(message.id, err.message);
+              appendAssistantErrorEvent(message.id, err.message, errorCode);
               updateMessageById(
                 message.id,
-                (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
+                (prev) => ({
+                  ...prev,
+                  runStatus: 'failed',
+                  endedAt: prev.endedAt ?? Date.now(),
+                }),
                 true,
               );
               completedReattachRunsRef.current.add(runId);
@@ -2252,6 +2309,10 @@ export function ProjectView({
         config.mode === 'daemon' && config.agentId
           ? config.agentModels?.[config.agentId]
           : undefined;
+      const effectiveSelectedAgentChoice = effectiveAgentModelChoice(
+        selectedAgent,
+        selectedAgentChoice,
+      );
       const assistantAgentId =
         config.mode === 'daemon'
           ? config.agentId ?? undefined
@@ -2261,7 +2322,7 @@ export function ProjectView({
           ? agentModelDisplayName(
               config.agentId,
               selectedAgent?.name,
-              selectedAgentChoice?.model,
+              effectiveSelectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const preTurnFileNames = projectFiles.map((f) => f.name);
@@ -2621,11 +2682,12 @@ export function ProjectView({
         },
         onError: (err: Error) => {
           const endedAt = Date.now();
+          const errorCode = (err as Error & { code?: string }).code;
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
           setError(err.message);
-          appendAssistantErrorEvent(assistantId, err.message);
+          appendAssistantErrorEvent(assistantId, err.message, errorCode);
           updateAssistant((prev) => ({
             ...prev,
             endedAt,
@@ -2653,7 +2715,7 @@ export function ProjectView({
           handlers.onError(new Error('Pick a local agent first (top bar).'));
           return;
         }
-        const choice = selectedAgentChoice;
+        const choice = effectiveSelectedAgentChoice;
         // v2 analytics: when the active project is a DS workspace
         // (created by `prepareCreatedDesignSystemProject`, identifiable
         // by `metadata.importedFrom === 'design-system'`), every run
@@ -2912,6 +2974,73 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
+  // "Switch to AMR & retry" from the failed-run card: switch the run to AMR,
+  // open Settings on the AMR controls so the user can sign in / authorize /
+  // top up, and arm an auto-retry that fires once AMR is selected AND signed
+  // in (see the effect below).
+  const [pendingAmrRetry, setPendingAmrRetry] = useState<ChatMessage | null>(null);
+  const handleSwitchToAmrAndRetry = useCallback(
+    (failedAssistant: ChatMessage) => {
+      if (currentConversationActionDisabled) return;
+      onModeChange('daemon');
+      onAgentChange('amr');
+      onOpenAmrSettings?.();
+      setPendingAmrRetry(failedAssistant);
+    },
+    [currentConversationActionDisabled, onModeChange, onAgentChange, onOpenAmrSettings],
+  );
+  // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
+  // so the auth banner offers a one-click "Sign in via terminal"
+  // button that POSTs to the daemon. The daemon opens a system
+  // Terminal running `agy` (osascript / x-terminal-emulator /
+  // `cmd /c start`); the user finishes Google sign-in there and then
+  // clicks Retry to redo the chat run. We don't auto-retry because
+  // the OAuth completion happens externally with no reliable signal
+  // back to the chat — the secondary Retry button on the same banner
+  // covers the manual case.
+  const handleLaunchAntigravityOauth = useCallback(async () => {
+    try {
+      const { launchAntigravityOauth } = await import('../providers/daemon');
+      const result = await launchAntigravityOauth();
+      if (!result.ok) {
+        // Surface the daemon-side reason so the user knows whether
+        // the spawn failed because of missing osascript / unsupported
+        // platform / etc. instead of silently swallowing it.
+        console.warn('[antigravity] oauth-launch failed:', result.error);
+      }
+    } catch (err) {
+      console.warn('[antigravity] oauth-launch threw:', err);
+    }
+  }, []);
+  // Poll the AMR login status while a retry is armed, rather than only reacting
+  // to the AmrLoginPill's status event — the user may close Settings (which
+  // unmounts the pill and stops its polling) before finishing sign-in in the
+  // browser. Polling here keeps working regardless of the pill's lifecycle.
+  // Fires once AMR is the selected agent AND the account is signed in.
+  useEffect(() => {
+    if (!pendingAmrRetry) return;
+    let cancelled = false;
+    const tryRetry = async () => {
+      if (cancelled) return;
+      if (!(config.mode === 'daemon' && config.agentId === 'amr')) return;
+      const status = await fetchVelaLoginStatus().catch(() => null);
+      if (cancelled || status?.loggedIn !== true) return;
+      setPendingAmrRetry(null);
+      handleRetry(pendingAmrRetry);
+    };
+    void tryRetry();
+    const interval = setInterval(() => void tryRetry(), 2000);
+    // Give up after a few minutes so we never poll forever.
+    const stop = setTimeout(() => {
+      if (!cancelled) setPendingAmrRetry(null);
+    }, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [pendingAmrRetry, config.mode, config.agentId, handleRetry]);
+
   useEffect(() => {
     if (!autoAuditRepairSeed) return;
     if (!activeConversationId) return;
@@ -2968,12 +3097,16 @@ export function ProjectView({
     config.mode === 'daemon' && config.agentId
       ? config.agentModels?.[config.agentId]
       : undefined;
+  const effectiveSelectedPluginActionChoice = effectiveAgentModelChoice(
+    selectedPluginActionAgent,
+    selectedPluginActionChoice,
+  );
   const pluginWorkflowAgentName =
     config.mode === 'daemon'
       ? agentModelDisplayName(
           config.agentId,
           selectedPluginActionAgent?.name,
-          selectedPluginActionChoice?.model,
+          effectiveSelectedPluginActionChoice?.model,
         )
       : apiProtocolModelLabel(config.apiProtocol, config.model);
 
@@ -3916,17 +4049,12 @@ export function ProjectView({
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
   const handleFinalize = useCallback(() => {
-    const protocol = config.apiProtocol ?? 'anthropic';
-    void finalize.trigger({
-      protocol,
-      apiKey: config.apiKey,
-      baseUrl: config.baseUrl,
-      model: config.model,
-      maxTokens: effectiveMaxTokens(config),
-      ...(protocol === 'azure' && config.apiVersion?.trim()
-        ? { apiVersion: config.apiVersion.trim() }
-        : {}),
-    }).then((result) => {
+    const request = buildFinalizeRequest(config);
+    if (!request) {
+      setProjectActionsToast(buildFinalizeCredentialsMissingToast(config));
+      return;
+    }
+    void finalize.trigger(request).then((result) => {
       if (result) void designMdState.refresh();
     });
   }, [finalize, config, designMdState]);
@@ -4144,6 +4272,12 @@ export function ProjectView({
         onBack={onBack}
         backLabel={t('project.backToProjects')}
         fileActionsBefore={(
+          <div
+            className="app-chrome-file-actions-before workspace-tabs-file-actions"
+            data-app-chrome-file-actions="true"
+          />
+        )}
+        actions={(
           <>
             <button
               type="button"
@@ -4171,14 +4305,7 @@ export function ProjectView({
               onRefreshAgents={onRefreshAgents}
               onBack={onBack}
             />
-            <div
-              className="app-chrome-file-actions-before workspace-tabs-file-actions"
-              data-app-chrome-file-actions="true"
-            />
           </>
-        )}
-        actions={(
-          null
         )}
       >
         <div className="app-project-title">
@@ -4360,6 +4487,9 @@ export function ProjectView({
               onDeleteConversation={handleDeleteConversation}
               onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
+              onOpenAmrSettings={onOpenAmrSettings}
+              onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
+              onLaunchAntigravityOauth={handleLaunchAntigravityOauth}
               onOpenMcpSettings={onOpenMcpSettings}
               connectRepoNeeded={connectRepoNeeded}
               githubConnected={githubConnected}

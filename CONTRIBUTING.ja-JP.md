@@ -36,7 +36,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # 必要に応じて web パッケージをビルド
 ```
 
-Node `~24` と pnpm `10.33.x` が必要です。`nvm` / `fnm` はオプション。使用する場合は `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。macOS、Linux、WSL2 が主要プラットフォームです。Windows ネイティブでも動作するはずですが、主要ターゲットではありません — 動作しない場合は issue を作成してください。
+Node `~24` と pnpm `10.33.x` が必要です。`nvm` / `fnm` はオプション。使用する場合は `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。macOS、Linux、WSL2 が主要プラットフォームです。Windows ネイティブもサポートされています — 一般的なセットアップ時の落とし穴については [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) を参照してください。
 
 OD 自体の開発に agent CLI は `PATH` 上に不要です — daemon は「no agents found」と表示し、**Anthropic API · BYOK** パスにフォールバックします。このパスが最も高速な開発ループです。
 
@@ -213,6 +213,7 @@ design-systems/your-brand/
 
 - **PR 1 つにつき 1 つの関心事。** Skill の追加 + パーサーのリファクタリング + 依存関係のバンプは 3 つの PR です。
 - **タイトルは命令形 + スコープ。** `add dating-web skill`、`fix daemon SSE backpressure when CLI hangs`、`docs: clarify .od layout`。
+- **PR テンプレートを使用する。** [`.github/pull_request_template.md`](.github/pull_request_template.md) の各セクション（Why、What users will see、Surface area、Screenshots（UI の場合）、Bug fix verification（バグ修正の場合）、Validation）をすべて埋めてください。空欄のセクションには "please fill in" のコメントが付きます。
 - **本文は「なぜ」を説明。** 「何をするか」は通常 diff から明らかです。「なぜこれが必要か」はほとんどの場合そうではありません。
 - **issue がある場合は参照。** ない場合で、PR が自明でないなら、先に issue を作成して変更が求められていることを合意してから時間を費やしてください。
 - **レビュー中にスカッシュしない。** fixup をプッシュしてください。マージ時にスカッシュします。

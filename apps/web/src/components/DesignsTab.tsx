@@ -552,29 +552,31 @@ export function DesignsTab({
 			</div>
 			{filtered.length === 0 ? (
 				<div className="tab-empty">
-					<div className="tab-empty__message">
-						{projects.length === 0
-							? t("designs.emptyNoProjects")
-							: t("designs.emptyNoMatch")}
-					</div>
-					{projects.length === 0 && onNewProject ? (
-						<div className="tab-empty__actions">
-							<button
-								type="button"
-								className="primary"
-								onClick={() => {
-									trackProjectsListControlsClick(analytics.track, {
-										page_name: "projects",
-										area: "list_controls",
-										element: "create_project",
-									});
-									onNewProject();
-								}}
-							>
-								{t("entry.navNewProject")}
-							</button>
+					{projects.length === 0 ? (
+						<div className="designs-empty-state">
+							<h2 className="designs-empty-title">
+								{t("designs.emptyNoProjects")}
+							</h2>
+							{onNewProject ? (
+								<button
+									type="button"
+									className="primary designs-empty-cta"
+									onClick={() => {
+										trackProjectsListControlsClick(analytics.track, {
+											page_name: "projects",
+											area: "list_controls",
+											element: "create_project",
+										});
+										onNewProject();
+									}}
+								>
+									<span>{t("entry.navNewProject")}</span>
+								</button>
+							) : null}
 						</div>
-					) : null}
+					) : (
+						t("designs.emptyNoMatch")
+					)}
 				</div>
 			) : view === "grid" ? (
 				<div className="design-grid">

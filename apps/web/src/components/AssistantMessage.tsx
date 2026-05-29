@@ -20,7 +20,10 @@ import {
   trackFeedbackSubmitResult,
 } from "../analytics/events";
 import {
+  feedbackAgentProviderIdToTracking,
+  modelIdForTracking,
   normalizeCustomReason,
+  type TrackingFeedbackProviderId,
   type TrackingFeedbackReasonCode,
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
@@ -104,6 +107,177 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
   );
 }
 
+type SkillPluginCandidateBlock = Extract<Block, { kind: "plugin-candidate" }>;
+
+function SkillPluginCandidateCard({
+  block,
+  projectId,
+  onDismissed,
+  onRequestOpenFile,
+}: {
+  block: SkillPluginCandidateBlock;
+  projectId: string | null;
+  onDismissed: (candidateId: string) => void;
+  onRequestOpenFile?: (name: string) => void;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState<null | "draft" | "publish" | "contribute" | "dismiss">(null);
+  const [notice, setNotice] = useState<ActionNotice | null>(null);
+  const disabled = !projectId || busy !== null;
+  const description =
+    block.description === "Reusable skill material detected from a repository link." ||
+    block.description === "This repo looks like it could work as a plugin."
+      ? t("skillPluginCandidate.repoDescription")
+      : block.description || t("skillPluginCandidate.repoDescription");
+
+  async function post(path: string, body: Record<string, unknown> = {}) {
+    const resp = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const message =
+        data?.message ??
+        (typeof data?.error === "string" ? data.error : data?.error?.message) ??
+        resp.statusText;
+      throw new Error(message || "Plugin candidate action failed.");
+    }
+    return data;
+  }
+
+  async function createDraft() {
+    if (!projectId) return;
+    setBusy("draft");
+    setNotice(null);
+    try {
+      const data = await post(
+        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/draft`,
+      );
+      const draftPath = String(data?.draftPath ?? "");
+      if (data?.validation?.ok === false) {
+        setNotice({ message: "Draft created with validation issues." });
+      } else if (draftPath) {
+        const install = await post(
+          `/api/projects/${encodeURIComponent(projectId)}/plugins/install-folder`,
+          { path: draftPath },
+        );
+        if (install?.ok === false) {
+          setNotice({ message: install?.message ?? "Plugin draft created, but install failed." });
+        } else {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("open-design:plugins-changed"));
+          }
+          setNotice({ message: install?.message ?? "Plugin draft created and added to My plugins." });
+        }
+      } else {
+        setNotice({ message: "Plugin draft created." });
+      }
+      if (draftPath && onRequestOpenFile) onRequestOpenFile(`${draftPath}/open-design.json`);
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function share(action: "publish-github" | "contribute-open-design") {
+    if (!projectId) return;
+    setBusy(action === "publish-github" ? "publish" : "contribute");
+    setNotice(null);
+    try {
+      const data = await post(
+        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/share-tasks`,
+        { action },
+      );
+      setNotice({
+        message:
+          action === "publish-github"
+            ? `GitHub publish task started for ${data?.path ?? "the draft"}.`
+            : `Open Design contribution task started for ${data?.path ?? "the draft"}.`,
+      });
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function dismiss() {
+    if (!projectId) return;
+    setBusy("dismiss");
+    try {
+      await post(
+        `/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(block.candidateId)}/dismiss`,
+      );
+      onDismissed(block.candidateId);
+    } catch (err) {
+      setNotice({ message: err instanceof Error ? err.message : String(err) });
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="plugin-action-panel" data-testid={`skill-plugin-candidate-${block.candidateId}`}>
+      <div className="plugin-action-card">
+        <div className="plugin-action-card__body">
+          <div className="plugin-action-card__title">
+            <Icon name="sparkles" size={14} />
+            <span>{block.title}</span>
+          </div>
+          <p className="plugin-action-card__description">
+            {description}
+          </p>
+          <div className="plugin-action-card__actions">
+            <button
+              type="button"
+              className="plugin-action-button plugin-action-button--primary"
+              disabled={disabled}
+              onClick={() => void createDraft()}
+            >
+              <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
+              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
+            </button>
+            <button
+              type="button"
+              className="plugin-action-button"
+              disabled={disabled}
+              onClick={() => void share("contribute-open-design")}
+            >
+              <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
+              <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
+            </button>
+            <button
+              type="button"
+              className="plugin-action-button"
+              disabled={disabled}
+              onClick={() => void share("publish-github")}
+            >
+              <Icon name={busy === "publish" ? "spinner" : "github"} size={13} />
+              <span>{busy === "publish" ? "Starting..." : t("skillPluginCandidate.publishRepo")}</span>
+            </button>
+            <button
+              type="button"
+              className="plugin-action-button"
+              disabled={disabled}
+              onClick={() => void dismiss()}
+            >
+              <Icon name={busy === "dismiss" ? "spinner" : "close"} size={13} />
+              <span>{t("skillPluginCandidate.dismiss")}</span>
+            </button>
+          </div>
+          {notice ? (
+            <div className="plugin-action-card__notice" role="status">
+              <ActionNoticeView notice={notice} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   message: ChatMessage;
   streaming: boolean;
@@ -126,6 +300,10 @@ interface Props {
   // interactivity on this so older forms render as a locked "answered"
   // capsule instead of being re-submittable.
   isLast?: boolean;
+  // Assistant message id whose run-failure error is rendered as ChatPane's
+  // top-level error card; that message's per-message error pill is suppressed
+  // to avoid duplication. Other messages keep their error pill.
+  errorCardOwnerId?: string | null;
   // The user message that immediately follows this assistant turn (if
   // any). Used to detect that a form was already answered so we can
   // render its locked state with the user's picks visible.
@@ -161,6 +339,7 @@ export function AssistantMessage({
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
   isLast,
+  errorCardOwnerId = null,
   nextUserContent,
   onSubmitForm,
   onContinueRemainingTasks,
@@ -179,7 +358,9 @@ export function AssistantMessage({
   // above the composer, so we strip any TodoWrite tool-groups out of the
   // per-message flow to avoid the same task list rendering twice.
   const blocks = stripTodoToolGroups(
-    suppressAskUserQuestionFallbackText(buildBlocks(events)),
+    suppressDuplicateQuestionForms(
+      suppressAskUserQuestionFallbackText(buildBlocks(events)),
+    ),
   );
   const fileOps = useMemo(() => deriveFileOps(events), [events]);
   const produced = message.producedFiles ?? [];
@@ -299,6 +480,9 @@ export function AssistantMessage({
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
     () => new Set()
   );
+  const [dismissedCandidateIds, setDismissedCandidateIds] = useState<Set<string>>(
+    () => new Set()
+  );
   // Route interactive tool answers (currently AskUserQuestion) back to the
   // still-open stream-json child via the daemon. We resolve to `true` on
   // success so the card can flip into its answered state; on `false` (run
@@ -376,8 +560,33 @@ export function AssistantMessage({
               />
             );
           }
-          if (b.kind === "status")
+          if (b.kind === "plugin-candidate") {
+            if (dismissedCandidateIds.has(b.candidateId)) return null;
+            return (
+              <SkillPluginCandidateCard
+                key={i}
+                block={b}
+                projectId={projectId}
+                onDismissed={(candidateId) =>
+                  setDismissedCandidateIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(candidateId);
+                    return next;
+                  })
+                }
+                onRequestOpenFile={onRequestOpenFile}
+              />
+            );
+          }
+          if (b.kind === "status") {
+            // Suppress this message's gray error pill ONLY when ChatPane is
+            // rendering the top-level error card for it (the last failed run).
+            // Other failed turns — older history, or once a follow-up makes
+            // this no longer the last assistant message — keep their pill so
+            // the error detail still survives reload / history review.
+            if (b.label === "error" && message.id === errorCardOwnerId) return null;
             return <StatusPill key={i} label={b.label} detail={b.detail} />;
+          }
           return null;
         })}
         {!streaming && displayedProduced.length > 0 && projectId ? (
@@ -438,6 +647,8 @@ export function AssistantMessage({
                 conversationId={conversationId}
                 runId={message.runId ?? null}
                 assistantMessageId={message.id}
+                modelId={modelIdForTracking(assistantFeedbackModelId(message))}
+                agentProviderId={feedbackAgentProviderIdToTracking(message.agentId)}
                 producedFileCount={displayedProduced.length}
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
@@ -561,6 +772,16 @@ function assistantModelDetail(message: ChatMessage): string | null {
   return detail;
 }
 
+function assistantFeedbackModelId(message: ChatMessage): string | null {
+  const detail = assistantModelDetail(message);
+  if (detail) return detail;
+  const displayName = message.agentName?.trim();
+  if (!displayName) return null;
+  const parts = displayName.split(" · ");
+  const model = parts.length > 1 ? parts[parts.length - 1]?.trim() : "";
+  return model || null;
+}
+
 function appendRoleModel(label: string, model: string | null): string {
   if (!model || label.includes(" · ")) return label;
   return `${label} · ${model}`;
@@ -637,6 +858,8 @@ function AssistantFeedback({
   conversationId,
   runId,
   assistantMessageId,
+  modelId,
+  agentProviderId,
   producedFileCount,
 }: {
   feedback: ChatMessage["feedback"];
@@ -648,6 +871,8 @@ function AssistantFeedback({
   conversationId: string | null;
   runId: string | null;
   assistantMessageId: string;
+  modelId: string;
+  agentProviderId: TrackingFeedbackProviderId;
   producedFileCount: number;
 }) {
   const t = useT();
@@ -702,6 +927,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
       });
     }
@@ -713,6 +940,8 @@ function AssistantFeedback({
     conversationId,
     assistantMessageId,
     runId,
+    agentProviderId,
+    modelId,
   ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
@@ -736,6 +965,8 @@ function AssistantFeedback({
       conversation_id: conversationId,
       assistant_message_id: assistantMessageId,
       run_id: runId ?? "",
+      agent_provider_id: agentProviderId,
+      model_id: modelId,
       rating,
       rating_before: ratingBefore,
       has_produced_files: producedFileCount > 0,
@@ -755,6 +986,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: ratingAfter,
         rating_before: ratingBefore,
         has_produced_files: producedFileCount > 0,
@@ -794,6 +1027,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -818,6 +1053,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -841,6 +1078,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         reason: reasons,
         reason_count: reasons.length,
@@ -1629,9 +1868,50 @@ function StatusPill({
   return (
     <div className="status-pill">
       <span className="status-label">{label}</span>
-      {detail ? <span className="status-detail">{detail}</span> : null}
+      {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
     </div>
   );
+}
+
+function renderStatusDetail(detail: string): ReactNode {
+  const segments: ReactNode[] = [];
+  const urlRe = /(https?:\/\/[^\s)<>"}\]]+)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = urlRe.exec(detail))) {
+    if (match.index > lastIndex) {
+      segments.push(detail.slice(lastIndex, match.index));
+    }
+    const [href, suffix] = splitStatusDetailUrlPunctuation(match[1]!);
+    segments.push(
+      <a
+        key={`url-${key++}`}
+        className="md-link md-link-bare"
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        {href}
+      </a>,
+    );
+    if (suffix) segments.push(suffix);
+    lastIndex = urlRe.lastIndex;
+  }
+
+  if (lastIndex < detail.length) {
+    segments.push(detail.slice(lastIndex));
+  }
+
+  return <>{segments}</>;
+}
+
+function splitStatusDetailUrlPunctuation(url: string): [string, string] {
+  const match = /([.,!?;:，。！？；：、'"」』】》〉）}\]]+)$/.exec(url);
+  if (!match?.[1]) return [url, ''];
+  const trimmed = url.slice(0, -match[1].length);
+  return trimmed ? [trimmed, match[1]] : [url, ''];
 }
 
 interface ToolItem {
@@ -1877,6 +2157,14 @@ type Block =
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string }
   | { kind: "tool-group"; items: ToolItem[] }
+  | {
+      kind: "plugin-candidate";
+      candidateId: string;
+      title: string;
+      description?: string | undefined;
+      confidence?: number | undefined;
+      draftPath?: string | null | undefined;
+    }
   | { kind: "status"; label: string; detail?: string | undefined };
 
 /**
@@ -1893,6 +2181,31 @@ function stripTodoToolGroups(blocks: Block[]): Block[] {
   return blocks.filter((block) => {
     if (block.kind !== "tool-group") return true;
     return !block.items.every((it) => isTodoWriteToolName(it.use.name));
+  });
+}
+
+// The prompt asks for one discovery form and then a stop, but LLMs can still
+// emit a tailored discovery form followed by the default Quick brief in the
+// same assistant turn. Keep the first form for each id and drop later repeats.
+function suppressDuplicateQuestionForms(blocks: Block[]): Block[] {
+  const seenFormIds = new Set<string>();
+  return blocks.map((block) => {
+    if (block.kind !== "text") return block;
+    const segments = splitOnQuestionForms(block.text);
+    let changed = false;
+    const nextText = segments
+      .map((segment) => {
+        if (segment.kind === "text") return segment.text;
+        const formKey = segment.form.id.trim().toLowerCase();
+        if (seenFormIds.has(formKey)) {
+          changed = true;
+          return "";
+        }
+        seenFormIds.add(formKey);
+        return segment.raw;
+      })
+      .join("");
+    return changed ? { ...block, text: nextText } : block;
   });
 }
 
@@ -1961,6 +2274,17 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
     if (ev.kind === "tool_result") continue;
+    if (ev.kind === "plugin_candidate") {
+      out.push({
+        kind: "plugin-candidate",
+        candidateId: ev.candidateId,
+        title: ev.title,
+        description: ev.description,
+        confidence: ev.confidence,
+        draftPath: ev.draftPath,
+      });
+      continue;
+    }
     if (ev.kind === "status") {
       if (
         ev.label === "streaming" ||

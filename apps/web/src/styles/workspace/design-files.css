@@ -64,7 +64,8 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 .df-controls-row .df-actions button {
   background: transparent;

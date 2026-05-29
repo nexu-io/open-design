@@ -295,9 +295,48 @@
       var KEY      = 'od-deck-pos';
       var active   = 0;
 
+      function scrollContainers() {
+        return [document.scrollingElement, document.documentElement, document.body]
+          .filter(Boolean)
+          .filter(function (el, idx, arr) { return arr.indexOf(el) === idx; });
+      }
+      function overflowX(el) {
+        if (!el) return 0;
+        return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+      }
+      function scrollLeftOf(el) {
+        if (!el) return 0;
+        try { return Number(el.scrollLeft) || 0; } catch (_) { return 0; }
+      }
+      function activeScrollLeft() {
+        var candidates = scrollContainers();
+        var best = 0;
+        for (var i = 0; i < candidates.length; i++) {
+          var left = scrollLeftOf(candidates[i]);
+          if (Math.abs(left) > Math.abs(best)) best = left;
+        }
+        return best;
+      }
       function scroller() {
-        if (document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
-        return document.scrollingElement || document.documentElement;
+        var candidates = scrollContainers();
+        var best = candidates[0] || document.documentElement;
+        var bestScore = -1;
+        for (var i = 0; i < candidates.length; i++) {
+          var el = candidates[i];
+          var score = overflowX(el) + Math.abs(scrollLeftOf(el)) * 2;
+          if (score > bestScore) {
+            best = el;
+            bestScore = score;
+          }
+        }
+        return best;
+      }
+      function scrollToLeft(left, behavior) {
+        var candidates = scrollContainers();
+        for (var i = 0; i < candidates.length; i++) {
+          try { candidates[i].scrollLeft = left; } catch (_) {}
+          try { candidates[i].scrollTo({ left: left, behavior: behavior || 'smooth' }); } catch (_) {}
+        }
       }
       function setActive(i) {
         active = i;
@@ -308,13 +347,14 @@
       function go(i) {
         var next = Math.max(0, Math.min(slides.length - 1, i));
         setActive(next);
-        scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+        scrollToLeft(next * window.innerWidth, 'smooth');
       }
       function syncFromScroll() {
-        var i = Math.round(scroller().scrollLeft / window.innerWidth);
+        var i = Math.round(activeScrollLeft() / window.innerWidth);
         if (i !== active && i >= 0 && i < slides.length) setActive(i);
       }
       function onKey(e) {
+        if (e.defaultPrevented) return;
         var t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
         if      (e.key === 'ArrowRight' || e.key === ' '       || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
@@ -342,7 +382,7 @@
         var saved = parseInt(localStorage.getItem(KEY) || '0', 10);
         if (!isNaN(saved) && saved >= 0 && saved < slides.length) {
           setActive(saved);
-          scroller().scrollTo({ left: saved * window.innerWidth, behavior: 'instant' });
+          scrollToLeft(saved * window.innerWidth, 'instant');
         } else {
           setActive(0);
         }

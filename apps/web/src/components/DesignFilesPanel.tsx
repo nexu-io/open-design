@@ -3,7 +3,8 @@ import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { projectFileUrl } from '../providers/registry';
+import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import { buildSrcdoc } from '../runtime/srcdoc';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
 import {
   createFileSystemReadError,
@@ -1498,7 +1499,7 @@ function DfPreview({
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
-          <iframe title={file.name} src={url} sandbox="allow-scripts" />
+          <HtmlPreviewThumbnail projectId={projectId} file={file} />
         ) : file.kind === 'video' ? (
           <video
             src={`${url}?v=${Math.round(file.mtime)}`}
@@ -1559,6 +1560,46 @@ function DfPreview({
       </div>
     </aside>
   );
+}
+
+function HtmlPreviewThumbnail({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: ProjectFile;
+}) {
+  const url = projectFileUrl(projectId, file.name);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`${url}?v=${Math.round(file.mtime)}`)
+      .then((response) => (response.ok ? response.text() : null))
+      .then((html) => {
+        if (cancelled || html === null) return;
+        setSrcDoc(buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) }));
+      })
+      .catch(() => {
+        if (!cancelled) setSrcDoc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.mtime, file.name, projectId, url]);
+
+  return (
+    <iframe
+      title={file.name}
+      src={srcDoc ? undefined : url}
+      srcDoc={srcDoc ?? undefined}
+      sandbox="allow-scripts allow-downloads"
+    />
+  );
+}
+
+function baseDirForFile(name: string): string {
+  const index = name.lastIndexOf('/');
+  return index >= 0 ? name.slice(0, index + 1) : '';
 }
 
 function kindSortPriority(kind: ProjectFileKind): number {

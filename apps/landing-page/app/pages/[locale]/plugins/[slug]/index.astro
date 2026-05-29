@@ -1,0 +1,19 @@
+---
+import DetailPage, {
+  getStaticPaths as getDetailStaticPaths,
+} from '../../../plugins/[slug]/index.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../../i18n';
+
+export async function getStaticPaths() {
+  const basePaths = await getDetailStaticPaths();
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).flatMap(
+    (locale) =>
+      basePaths.map((p) => ({
+        params: { ...p.params, locale: locale.code },
+        props: p.props,
+      })),
+  );
+}
+---
+
+<DetailPage {...Astro.props} />

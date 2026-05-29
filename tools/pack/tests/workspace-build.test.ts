@@ -84,6 +84,7 @@ function createConfig(root: string, cacheRoot: string): ToolPackConfig {
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
+    requireVelaCli: false,
     roots: {
       cacheRoot,
       output: {

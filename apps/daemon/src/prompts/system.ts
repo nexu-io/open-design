@@ -32,10 +32,11 @@
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
+import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
 const ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX = 'ElevenLabs voice list could not be loaded';
@@ -371,6 +372,9 @@ export interface ComposeInput {
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
+  // Run-scoped media policy. Defaults to enabled when omitted so existing
+  // local OD behavior keeps the same media prompt contract.
+  mediaExecution?: MediaExecutionPolicy | undefined;
 }
 
 export function composeSystemPrompt({
@@ -405,6 +409,7 @@ export function composeSystemPrompt({
   locale,
   userInstructions,
   projectInstructions,
+  mediaExecution,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -557,7 +562,13 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = renderMetadataBlock(
+    metadata,
+    template,
+    audioVoiceOptions,
+    audioVoiceOptionsError,
+    mediaExecution,
+  );
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -602,10 +613,10 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'video'
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
-    parts.push(MEDIA_GENERATION_CONTRACT);
+    parts.push(renderMediaGenerationContract(mediaExecution));
   }
 
-  if (includeCodexImagegenOverride) {
+  if (includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
     const codexImagegenOverride = renderCodexImagegenOverride(
       agentId,
       metadata,
@@ -757,6 +768,31 @@ export function shouldRenderCodexImagegenOverride(
   );
 }
 
+function shouldAllowCodexImagegenOverride(
+  metadata: ProjectMetadata | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): boolean {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode !== 'enabled') return false;
+  if (
+    Array.isArray(mediaExecution?.allowedSurfaces) &&
+    mediaExecution.allowedSurfaces.length > 0 &&
+    !mediaExecution.allowedSurfaces.includes('image')
+  ) {
+    return false;
+  }
+  const model = resolveCodexImagegenModelId(metadata);
+  if (
+    model &&
+    Array.isArray(mediaExecution?.allowedModels) &&
+    mediaExecution.allowedModels.length > 0 &&
+    !mediaExecution.allowedModels.includes(model)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function renderCodexImagegenOverride(
   agentId: string | null | undefined,
   metadata: ProjectMetadata | undefined,
@@ -813,6 +849,7 @@ function renderMetadataBlock(
   template: ProjectTemplate | undefined,
   audioVoiceOptions: AudioVoiceOption[] | undefined,
   audioVoiceOptionsError: string | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
 ): string {
   if (!metadata) return '';
   const lines: string[] = [];
@@ -921,9 +958,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'image',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`',
+      mediaExecution,
+    ));
   }
   if (metadata.kind === 'video') {
     lines.push(
@@ -943,9 +982,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'video',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
+      mediaExecution,
+    ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
@@ -995,9 +1036,11 @@ function renderMetadataBlock(
       );
     }
     lines.push('');
-    lines.push(
-      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'audio',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
+      mediaExecution,
+    ));
   }
 
   if (metadata.inspirationDesignSystemIds && metadata.inspirationDesignSystemIds.length > 0) {
@@ -1138,6 +1181,19 @@ function renderMetadataBlock(
   }
 
   return lines.join('\n');
+}
+
+function renderMediaMetadataAction(
+  surface: MediaSurface,
+  command: string,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): string {
+  const article = surface === 'audio' ? 'an' : 'a';
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode === 'disabled') {
+    return `This is ${article} **${surface}** project, but Open Design-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+  }
+  return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }
 
 function shouldRenderElevenLabsVoiceOptions(

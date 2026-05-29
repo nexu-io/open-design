@@ -1,7 +1,38 @@
 import { expect, test } from '@playwright/test';
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
+
+const DESIGN_SYSTEMS = [
+  {
+    id: 'nexu-soft-tech',
+    title: 'Nexu Soft Tech',
+    category: 'Product',
+    summary: 'Warm utility system for product interfaces.',
+    swatches: ['#F7F4EE', '#D6CBBF', '#1F2937', '#D97757'],
+  },
+  {
+    id: 'editorial-noir',
+    title: 'Editorial Noir',
+    category: 'Editorial',
+    summary: 'High-contrast editorial system with expressive type.',
+    swatches: ['#111111', '#F6EFE6', '#C44536', '#F2C14E'],
+  },
+  {
+    id: 'data-mist',
+    title: 'Data Mist',
+    category: 'Analytics',
+    summary: 'Calm dashboard system for dense data products.',
+    swatches: ['#EAF4F4', '#5EAAA8', '#05668D', '#0B132B'],
+  },
+];
+
+const TAB_SKILLS = [
+  skillSummary('prototype-skill', 'Prototype Skill', 'prototype', 'web', ['prototype']),
+  skillSummary('live-artifact', 'live-artifact', 'prototype', 'web', []),
+  skillSummary('deck-skill', 'Deck Skill', 'deck', 'web', ['deck']),
+  skillSummary('image-skill', 'Image Skill', 'image', 'image', ['image']),
+];
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -22,6 +53,10 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 
   await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
     await route.fulfill({
       json: {
         config: {
@@ -52,6 +87,129 @@ test.beforeEach(async ({ page }) => {
       },
     });
   });
+});
+
+test('new project tabs switch visible form sections and preserve drafts', async ({ page }) => {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({ json: { skills: TAB_SKILLS } });
+  });
+  await page.route('**/api/connectors', async (route) => {
+    await route.fulfill({ json: { connectors: [] } });
+  });
+  await page.route('**/api/connectors/status', async (route) => {
+    await route.fulfill({ json: { statuses: {} } });
+  });
+
+  await page.goto('/');
+  await openNewProjectPanel(page);
+  await expect(page.getByTestId('new-project-tab-prototype')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.newproj-title')).toContainText('New prototype');
+  await expect(page.getByTestId('design-system-trigger')).toBeVisible();
+  await expect(page.getByText('Fidelity', { exact: true })).toBeVisible();
+  await page.getByTestId('new-project-name').fill('Prototype draft survives');
+
+  await page.getByTestId('new-project-tab-live-artifact').click();
+  await expect(page.getByTestId('new-project-tab-live-artifact')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.newproj-title')).toContainText('New live artifact');
+  await expect(page.locator('.newproj-title')).toContainText('Beta');
+  await expect(page.getByTestId('design-system-picker')).toHaveCount(0);
+  await expect(page.getByTestId('new-project-connectors')).toBeVisible();
+  await expect(page.getByTestId('create-project')).toContainText('Create live artifact');
+
+  await page.getByTestId('new-project-tab-deck').click();
+  await expect(page.getByTestId('new-project-tab-deck')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.newproj-title')).toContainText('New slide deck');
+  await expect(page.getByTestId('design-system-trigger')).toBeVisible();
+  await expect(page.getByText('Use speaker notes')).toBeVisible();
+  await expect(page.getByTestId('new-project-connectors')).toHaveCount(0);
+
+  await page.getByTestId('new-project-tab-prototype').click();
+  await expect(page.getByTestId('new-project-tab-prototype')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.newproj-title')).toContainText('New prototype');
+  await expect(page.getByTestId('new-project-name')).toHaveValue('Prototype draft survives');
+
+  // Playwright auto-scrolls the tab into view; the consolidated media flow
+  // keeps image/video/audio as inner segmented surfaces.
+  await page.getByTestId('new-project-tab-media').click();
+  await expect(page.getByTestId('new-project-tab-media')).toHaveAttribute('aria-selected', 'true');
+  await page.getByTestId('new-project-media-surface-image').click();
+  await expect(page.getByTestId('new-project-media-surface-image')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.newproj-title')).toContainText('New image');
+  await expect(page.getByTestId('design-system-picker')).toHaveCount(0);
+  await expect(page.getByText('Model', { exact: true })).toBeVisible();
+  await expect(page.getByText('Aspect', { exact: true })).toBeVisible();
+});
+
+test('design system multi-select stores primary and inspiration metadata', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await openNewProjectPanel(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill('Design system multi select metadata');
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
+
+  await page.getByTestId('design-system-trigger').click();
+  const multiTab = page.getByRole('tab', { name: /multi/i });
+  await multiTab.click();
+  await expect(multiTab).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('option', { name: /Editorial Noir/i }).click();
+  await page.getByRole('option', { name: /Data Mist/i }).click();
+
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
+  await expect(page.getByTestId('design-system-trigger')).toContainText('+2');
+  await page.getByTestId('design-system-trigger').click();
+  await expect(page.locator('.ds-picker-popover')).toHaveCount(0);
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBe('nexu-soft-tech');
+  expect(body.metadata?.inspirationDesignSystemIds).toEqual([
+    'editorial-noir',
+    'data-mist',
+  ]);
+});
+
+test('design system picker searches and switches the single selected system', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await openNewProjectPanel(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill('Design system single switch flow');
+  await expect(page.getByTestId('design-system-trigger')).toBeVisible();
+
+  await page.getByTestId('design-system-trigger').click();
+  await page.getByTestId('design-system-search').fill('mist');
+  await expect(page.getByRole('option', { name: /Data Mist/i })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Nexu Soft Tech/i })).toHaveCount(0);
+  await page.getByRole('option', { name: /Data Mist/i }).click();
+
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Data Mist');
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Analytics');
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBe('data-mist');
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
 test('project title rename persists after reload and ignores blank titles', async ({ page }) => {
@@ -215,6 +373,65 @@ test('home designs search filters projects and recovers from no results', async 
   );
 });
 
+test('projects sub tabs switch between Recent and Your designs ordering', async ({ page }) => {
+  const now = Date.now();
+  const projects = [
+    makeProjectsTabProject({
+      id: 'proj-alpha',
+      name: 'Sort Alpha',
+      createdAt: now - 3 * 60_000,
+      updatedAt: now - 1 * 60_000,
+    }),
+    makeProjectsTabProject({
+      id: 'proj-beta',
+      name: 'Sort Beta',
+      createdAt: now - 1 * 60_000,
+      updatedAt: now - 3 * 60_000,
+    }),
+    makeProjectsTabProject({
+      id: 'proj-gamma',
+      name: 'Sort Gamma',
+      createdAt: now - 2 * 60_000,
+      updatedAt: now - 2 * 60_000,
+    }),
+  ];
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/live-artifacts?projectId=*', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+
+  await page.goto('/projects');
+  await expectDesignsView(page);
+
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(0)).toContainText(
+    'Sort Alpha',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(1)).toContainText(
+    'Sort Gamma',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(2)).toContainText(
+    'Sort Beta',
+  );
+
+  await page.getByRole('button', { name: 'Your designs' }).click();
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(0)).toContainText(
+    'Sort Beta',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(1)).toContainText(
+    'Sort Gamma',
+  );
+  await expect(page.locator('.design-grid .design-card .design-card-name').nth(2)).toContainText(
+    'Sort Alpha',
+  );
+});
+
 test('projects grid card rename updates the card title and persists after reload', async ({ page }) => {
   const originalName = `Projects rename flow ${Date.now()}`;
   const renamedName = `${originalName} renamed`;
@@ -310,7 +527,7 @@ test('projects kanban cards open projects and support delete cancel and confirm'
   await expect(kanbanCard).toBeVisible();
 
   await kanbanCard.click();
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(/conversations/[^/]+)?$`));
   await expect(page.getByTestId('project-title')).toContainText(projectName);
   const openedProject = await fetchCurrentProject(page);
   expect(openedProject.name).toBe(projectName);
@@ -589,6 +806,30 @@ test('projects page shows live artifact cards, supports search, and opens the li
   await expect(page.getByTestId('project-title')).toContainText('Orbit Daily Digest');
 });
 
+test('change pet opens pet settings and updates the custom companion draft', async ({ page }) => {
+  await seedAdoptedPet(page);
+  await page.route('**/api/codex-pets', async (route) => {
+    await route.fulfill({ json: { pets: [], rootDir: '' } });
+  });
+
+  await page.goto('/');
+  const dialog = await openEntrySettingsDialog(page, /^Pets\b/);
+  await expect(dialog.getByRole('heading', { level: 2, name: 'Pets' })).toBeVisible();
+
+  await dialog.getByRole('tab', { name: 'Custom' }).click();
+  const customPanel = dialog.locator('.pet-custom');
+  await expect(customPanel).toBeVisible();
+
+  await customPanel.getByLabel('Name').fill('QA Turtle');
+  await customPanel.getByLabel('Glyph').fill('🐢');
+  await customPanel.getByLabel('Greeting').fill('Shell yeah, tests are green.');
+  await expect(customPanel.getByText('QA Turtle')).toBeVisible();
+  await expect(customPanel.getByText('Shell yeah, tests are green.')).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 async function createProject(
   page: Page,
   projectName: string,
@@ -601,7 +842,7 @@ async function createProject(
 }
 
 async function openNewProjectPanel(page: Page) {
-  if (await page.getByTestId('new-project-panel').isVisible().catch(() => false)) return;
+  if (await page.getByTestId('new-project-panel').isVisible()) return;
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
@@ -613,6 +854,23 @@ async function expectDesignsView(page: Page) {
   }
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.locator('.design-grid, .design-kanban-board')).toBeVisible();
+}
+
+async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
+  const settingsButton = page.getByRole('button', { name: /open settings/i });
+  await settingsButton.click();
+  let settingsDialog = page.getByRole('dialog');
+  if (!(await settingsDialog.isVisible().catch(() => false))) {
+    const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+    await expect(settingsMenu).toBeVisible();
+    await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+    settingsDialog = page.getByRole('dialog');
+  }
+  await expect(settingsDialog).toBeVisible();
+  if (sectionName) {
+    await settingsDialog.getByRole('button', { name: sectionName }).click();
+  }
+  return settingsDialog;
 }
 
 async function expectWorkspaceReady(page: Page) {
@@ -678,6 +936,36 @@ function homeDesignCard(page: Page, name: string): Locator {
   });
 }
 
+async function seedAdoptedPet(page: Page) {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        agentId: 'mock',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: true,
+        agentModels: {},
+        pet: {
+          adopted: true,
+          enabled: true,
+          petId: 'custom',
+          custom: {
+            name: 'Original Buddy',
+            glyph: '🦄',
+            accent: '#c96442',
+            greeting: 'Ready to pair.',
+          },
+        },
+      }),
+    );
+  }, STORAGE_KEY);
+}
+
 async function fetchCurrentProject(page: Page) {
   const { projectId } = getProjectContextFromUrl(page);
   return fetchProjectById(page, projectId);
@@ -713,6 +1001,11 @@ async function listProjectFiles(page: Page, projectId: string) {
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { files: Array<{ name: string }> };
   return body.files;
+}
+
+function isCreateProjectRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
 function getProjectContextFromUrl(page: Page) {
@@ -754,5 +1047,34 @@ function makeProjectsTabProject({
     customInstructions: null,
     metadata,
     status,
+  };
+}
+
+function skillSummary(
+  id: string,
+  name: string,
+  mode: 'prototype' | 'deck' | 'image',
+  surface: 'web' | 'image',
+  defaultFor: string[],
+) {
+  return {
+    id,
+    name,
+    description: `${name} for tab switching coverage.`,
+    triggers: [],
+    mode,
+    surface,
+    platform: 'desktop',
+    scenario: 'qa',
+    previewType: 'html',
+    designSystemRequired: mode !== 'image',
+    defaultFor,
+    upstream: null,
+    featured: null,
+    fidelity: null,
+    speakerNotes: null,
+    animations: null,
+    hasBody: true,
+    examplePrompt: '',
   };
 }

@@ -42,9 +42,18 @@ tsconfig.tsbuildinfo
 .cursor/
 .agents/
 .opencode/
-.claude/
+.claude/*
+# Exception: od-contribute skill ships with the repo so the OD app can mount it
+# for non-coder contributors. Personal Claude state (sessions, settings, etc.) stays ignored.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/od-contribute/
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/od-contribute.md
 .codex/
 .deepseek/
+.antigravitycli/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/

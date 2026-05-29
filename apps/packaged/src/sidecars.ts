@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir, open, type FileHandle } from "node:fs/promises";
+import { access, mkdir, open, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -23,6 +23,8 @@ import {
 } from "@open-design/sidecar";
 import {
   createProcessStampArgs,
+  mergeProxyAwareEnv,
+  resolveSystemProxyEnv,
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
@@ -39,11 +41,13 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "LANG",
   "LC_ALL",
   "LOGNAME",
+  "ALL_PROXY",
   "NODE_USE_ENV_PROXY",
   "NO_PROXY",
   "TMPDIR",
   "USER",
   "VP_HOME",
+  "all_proxy",
   "http_proxy",
   "https_proxy",
   "no_proxy",
@@ -93,6 +97,43 @@ function resolveSidecarEntry(packageName: string, exportName: string): string {
 
 function logPathFor(paths: PackagedNamespacePaths, app: AppKey): string {
   return join(paths.logsRoot, app, "latest.log");
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function resolvePackagedElectronNodeCommand(
+  execPath = process.execPath,
+  platform = process.platform,
+): Promise<string> {
+  if (platform !== "darwin") return execPath;
+
+  const executableName = execPath.split("/").pop();
+  if (executableName == null || executableName.length === 0) return execPath;
+
+  const marker = "/Contents/MacOS/";
+  const markerIndex = execPath.lastIndexOf(marker);
+  if (markerIndex === -1) return execPath;
+
+  const appPath = execPath.slice(0, markerIndex);
+  const helperName = `${executableName} Helper`;
+  const helperPath = join(
+    appPath,
+    "Contents",
+    "Frameworks",
+    `${helperName}.app`,
+    "Contents",
+    "MacOS",
+    helperName,
+  );
+
+  return (await pathExists(helperPath)) ? helperPath : execPath;
 }
 
 async function openLog(path: string): Promise<FileHandle> {
@@ -211,14 +252,18 @@ export function resolvePackagedPathEnv(basePath = process.env.PATH ?? ""): strin
 export function resolvePackagedChildBaseEnv(
   env: NodeJS.ProcessEnv = process.env,
   includeProviderSecrets = false,
+  systemProxyEnv: NodeJS.ProcessEnv = resolveSystemProxyEnv(),
+  includeSystemProxyEnv = true,
 ): NodeJS.ProcessEnv {
-  const baseEnv: NodeJS.ProcessEnv = {};
+  const forwardedEnv: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(env)) {
     if (value != null && value.length > 0 && shouldForwardPackagedChildEnv(key, includeProviderSecrets)) {
-      baseEnv[key] = value;
+      forwardedEnv[key] = value;
     }
   }
-  return baseEnv;
+  return includeSystemProxyEnv
+    ? mergeProxyAwareEnv(process.platform, systemProxyEnv, forwardedEnv)
+    : mergeProxyAwareEnv(process.platform, forwardedEnv);
 }
 
 function createPackagedDaemonManagedPathEnv(
@@ -233,6 +278,7 @@ function createPackagedDaemonManagedPathEnv(
 
 export type PackagedDaemonSpawnEnvOptions = {
   appVersion: string | null;
+  amrProfile?: string | null;
   daemonCliEntry: string | null;
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
@@ -276,6 +322,9 @@ export function buildPackagedDaemonSpawnEnv(
     // fallback, but packaged runtime must not rely on path inference from
     // Electron userData, bundle names, or ports.
     ...createPackagedDaemonManagedPathEnv(paths),
+    ...(options.amrProfile == null || options.amrProfile.length === 0
+      ? {}
+      : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
@@ -328,7 +377,12 @@ async function spawnSidecarChild(options: {
     base: options.paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     extraEnv: {
-      ...resolvePackagedChildBaseEnv(process.env, options.app === APP_KEYS.DAEMON),
+      ...resolvePackagedChildBaseEnv(
+        process.env,
+        options.app === APP_KEYS.DAEMON,
+        resolveSystemProxyEnv(),
+        options.app !== APP_KEYS.DAEMON,
+      ),
       ...options.env,
       NODE_ENV: "production",
       PATH: resolvePackagedPathEnv(),
@@ -336,7 +390,7 @@ async function spawnSidecarChild(options: {
     },
     stamp,
   });
-  const command = options.nodeCommand ?? process.execPath;
+  const command = options.nodeCommand ?? (await resolvePackagedElectronNodeCommand());
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
@@ -375,6 +429,7 @@ export async function startPackagedSidecars(
   paths: PackagedNamespacePaths,
   options: {
     appVersion: string | null;
+    amrProfile: string | null;
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
     nodeCommand: string | null;
@@ -414,6 +469,7 @@ export async function startPackagedSidecars(
       entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
       env: buildPackagedDaemonSpawnEnv(paths, {
         appVersion: options.appVersion,
+        amrProfile: options.amrProfile,
         daemonCliEntry: options.daemonCliEntry,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
         requireDesktopAuth: options.requireDesktopAuth,

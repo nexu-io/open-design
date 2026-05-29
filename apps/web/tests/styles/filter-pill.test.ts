@@ -72,7 +72,7 @@ describe('filter pill hover contrast', () => {
     };
     const hover = cssBlock('button.filter-pill:hover:not(:disabled)');
     const activeHover = cssBlock('button.filter-pill.active:hover:not(:disabled)');
-    const countHover = cssBlock('button.filter-pill:hover:not(:disabled) .filter-pill-count, .filter-pill.active .filter-pill-count');
+    const countHover = cssBlock('button.filter-pill:hover:not(:disabled) .filter-pill-count,\n.filter-pill.active .filter-pill-count');
 
     for (const block of [hover, activeHover]) {
       expect(ruleValue(block, 'background')).toBe('var(--bg-muted)');

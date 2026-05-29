@@ -1345,7 +1345,7 @@
 
 .memory-records-section .library-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 30px);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 58px;
@@ -1392,6 +1392,21 @@
   -webkit-line-clamp: 1;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.memory-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  justify-self: end;
+}
+
+.memory-tree-child-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .memory-records-section .library-card-expand,
@@ -2211,6 +2226,15 @@
   .memory-connector-state {
     grid-column: 2;
     width: fit-content;
+  }
+
+  .memory-records-section .library-card,
+  .memory-tree-child-row {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-card-actions {
+    width: 100%;
   }
 }
 

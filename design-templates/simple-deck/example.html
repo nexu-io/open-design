@@ -96,25 +96,54 @@
     // Detect the real scroller — when body has `display: flex` + `overflow-x: auto`
     // the scroller can be body OR documentElement depending on the host (in
     // particular, the OD srcdoc iframe). Pick whichever actually overflows.
+    function scrollContainers() {
+      return [document.scrollingElement, document.documentElement, document.body]
+        .filter(Boolean)
+        .filter((el, idx, arr) => arr.indexOf(el) === idx);
+    }
+    function overflowX(el) {
+      if (!el) return 0;
+      return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+    }
+    function scrollLeftOf(el) {
+      if (!el) return 0;
+      try { return Number(el.scrollLeft) || 0; } catch (_) { return 0; }
+    }
+    function activeScrollLeft() {
+      return scrollContainers().reduce((best, el) => {
+        const left = scrollLeftOf(el);
+        return Math.abs(left) > Math.abs(best) ? left : best;
+      }, 0);
+    }
     function scroller() {
-      if (document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
-      return document.scrollingElement || document.documentElement;
+      return scrollContainers().reduce((best, el) => {
+        const bestScore = overflowX(best) + Math.abs(scrollLeftOf(best)) * 2;
+        const score = overflowX(el) + Math.abs(scrollLeftOf(el)) * 2;
+        return score > bestScore ? el : best;
+      }, scrollContainers()[0] || document.documentElement);
+    }
+    function scrollToLeft(left, behavior) {
+      for (const el of scrollContainers()) {
+        try { el.scrollLeft = left; } catch (_) {}
+        try { el.scrollTo({ left, behavior: behavior || 'smooth' }); } catch (_) {}
+      }
     }
 
     function go(i) {
       const next = Math.max(0, Math.min(slides.length - 1, i));
       active = next;
       counter.textContent = (next + 1) + ' / ' + slides.length;
-      scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+      scrollToLeft(next * window.innerWidth, 'smooth');
     }
     function syncFromScroll() {
-      const i = Math.round(scroller().scrollLeft / window.innerWidth);
+      const i = Math.round(activeScrollLeft() / window.innerWidth);
       if (i !== active && i >= 0 && i < slides.length) {
         active = i;
         counter.textContent = (i + 1) + ' / ' + slides.length;
       }
     }
     function onKey(e) {
+      if (e.defaultPrevented) return;
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(active - 1); }

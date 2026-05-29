@@ -21,6 +21,12 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pluginDetailPath, pluginDetailSlug } from './plugin-slug';
+import {
+  DEFAULT_LOCALE,
+  getLocaleDefinition,
+  type LandingLocaleCode,
+} from '../i18n';
 
 const SOURCE_ROOTS = [
   // Build run from monorepo root.
@@ -35,6 +41,16 @@ function pluginsRoot(): string | null {
   return SOURCE_ROOTS.find((dir) => existsSync(dir)) ?? null;
 }
 
+const COMMUNITY_ROOTS = [
+  path.resolve(process.cwd(), 'plugins/community'),
+  path.resolve(process.cwd(), '../../plugins/community'),
+  path.resolve(fileURLToPath(new URL('../../../../plugins/community', import.meta.url))),
+] as const;
+
+function communityRoot(): string | null {
+  return COMMUNITY_ROOTS.find((dir) => existsSync(dir)) ?? null;
+}
+
 /** Buckets we walk under `plugins/_official/`. Order = display order. */
 export const BUNDLED_BUCKETS = [
   'examples',
@@ -47,17 +63,31 @@ export const BUNDLED_BUCKETS = [
 
 export type BundledBucket = (typeof BUNDLED_BUCKETS)[number];
 
+// Detail pages cover every locally-shipped plugin: the `_official` buckets
+// above PLUS the `community/` source folders. `community` is not a `_official`
+// bucket (no tier subdir), so it gets its own label/source handling.
+export type DetailBucket = BundledBucket | 'community';
+
 export interface BundledPluginRecord {
   /** Folder name, e.g. `3d-stone-staircase-evolution-infographic`. */
   slug: string;
   /** Manifest `name`, e.g. `image-template-3d-stone-staircase-evolution-infographic`. */
   manifestId: string;
-  /** Source bucket. */
-  bucket: BundledBucket;
-  /** Manifest `title`. */
+  /** Source bucket (or `community` for community-folder plugins). */
+  bucket: DetailBucket;
+  /** Manifest `title` (English baseline; pre-localization fallback). */
   title: string;
+  /**
+   * Manifest `title_i18n` map keyed by locale (long code, e.g. `zh-CN`,
+   * `zh-TW`, `pt-BR`, `ja`). Authors fill this opportunistically; consumers
+   * should resolve via {@link resolveBundledTitle} so the lookup chain
+   * (long code → short code → English fallback) stays consistent.
+   */
+  titleI18n?: Readonly<Record<string, string>>;
   /** Manifest `description`. */
   description: string;
+  /** Manifest `description_i18n` map. See {@link titleI18n} comment. */
+  descriptionI18n?: Readonly<Record<string, string>>;
   /** Manifest `tags`. */
   tags: ReadonlyArray<string>;
   /** Manifest `author.name`. */
@@ -91,7 +121,9 @@ export interface BundledPluginRecord {
    * the homepage.
    */
   previewEntryUrl?: string;
-  /** Detail page URL on this site (`/plugins/<manifest-id>/`). */
+  /** Single-segment detail slug (matches the catalog id's last segment). */
+  detailSlug: string;
+  /** Detail page URL on this site (`/plugins/<detail-slug>/`). */
   detailHref: string;
   /** GitHub source folder URL. */
   sourceUrl: string;
@@ -100,7 +132,9 @@ export interface BundledPluginRecord {
 interface BundledManifestRaw {
   name?: unknown;
   title?: unknown;
+  title_i18n?: unknown;
   description?: unknown;
+  description_i18n?: unknown;
   tags?: unknown;
   author?: { name?: unknown; url?: unknown };
   homepage?: unknown;
@@ -150,6 +184,66 @@ function asStringArray(v: unknown): ReadonlyArray<string> {
   return v.filter((x): x is string => typeof x === 'string');
 }
 
+/**
+ * Coerce a manifest's `title_i18n` / `description_i18n` payload to a plain
+ * `{ [locale]: string }` map. Anything that isn't a string-valued object is
+ * dropped — the schema permits one of two shapes (omitted or `Record<string,
+ * string>`) and we don't want a malformed manifest to poison the loader.
+ */
+function asLocaleMap(v: unknown): Readonly<Record<string, string>> | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.length > 0) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? Object.freeze(out) : undefined;
+}
+
+/**
+ * Resolve a localized field from a manifest's `title_i18n` /
+ * `description_i18n` map. Manifest authors store keys using the long codes
+ * preferred by the `LocalizedText` schema (`zh-CN`, `zh-TW`, `pt-BR`, `ja`),
+ * while landing pages thread the short `LandingLocaleCode` (`zh`, `zh-tw`,
+ * `pt-br`, `ja`). The lookup chain mirrors `resolveLocalizedText` from
+ * `packages/contracts/src/plugins/manifest.ts`: long code → short code →
+ * primary language tag → English → caller-supplied fallback.
+ */
+function resolveLocalized(
+  map: Readonly<Record<string, string>> | undefined,
+  fallback: string,
+  locale: LandingLocaleCode,
+): string {
+  if (!map) return fallback;
+  const def = getLocaleDefinition(locale);
+  const candidates = [
+    def?.htmlLang,
+    locale,
+    def?.htmlLang?.split('-')[0],
+    'en',
+  ].filter((c): c is string => Boolean(c));
+  for (const candidate of candidates) {
+    const value = map[candidate];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return fallback;
+}
+
+/** Resolve a bundled plugin's title for a given locale, falling back to English. */
+export function resolveBundledTitle(
+  record: BundledPluginRecord,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): string {
+  return resolveLocalized(record.titleI18n, record.title, locale);
+}
+
+/** Resolve a bundled plugin's description for a given locale. */
+export function resolveBundledDescription(
+  record: BundledPluginRecord,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): string {
+  return resolveLocalized(record.descriptionI18n, record.description, locale);
+}
+
 function REPO_FOR_BUCKET(bucket: BundledBucket): string {
   return `https://github.com/nexu-io/open-design/tree/main/plugins/_official/${bucket}`;
 }
@@ -184,12 +278,22 @@ function hasLocalPreview(manifestId: string): boolean {
   return cachedLocalPreviewSet.has(`${manifestId}.png`);
 }
 
-function loadOne(
-  root: string,
-  bucket: BundledBucket,
-  slug: string,
-): BundledPluginRecord | null {
-  const manifestPath = path.join(root, bucket, slug, 'open-design.json');
+function loadOne(opts: {
+  manifestPath: string;
+  slugDir: string;
+  slug: string;
+  bucket: DetailBucket;
+  sourceUrl: string;
+  /**
+   * Catalog-consistent id to derive the detail slug from. _official manifest
+   * names already match their catalog last segment, but community plugins
+   * carry a `community-` manifest name while the catalog/listing keys off the
+   * folder name. Passing `community/<folder>` here keeps the detail page, the
+   * list card, and the share link on one slug. Defaults to the manifest id.
+   */
+  routeId?: string;
+}): BundledPluginRecord | null {
+  const { manifestPath, slugDir, slug, bucket, sourceUrl, routeId } = opts;
   if (!existsSync(manifestPath)) return null;
   let raw: BundledManifestRaw;
   try {
@@ -199,8 +303,11 @@ function loadOne(
   }
 
   const manifestId = asString(raw.name) ?? slug;
+  const slugBasis = routeId ?? manifestId;
   const title = asString(raw.title) ?? manifestId;
+  const titleI18n = asLocaleMap(raw.title_i18n);
   const description = asString(raw.description) ?? '';
+  const descriptionI18n = asLocaleMap(raw.description_i18n);
 
   // Preference order:
   //   1. Manifest poster URL (R2/CDN, fastest, already bandwidth-paid).
@@ -220,7 +327,9 @@ function loadOne(
     manifestId,
     bucket,
     title,
+    titleI18n,
     description,
+    descriptionI18n,
     tags: asStringArray(raw.tags),
     authorName: asString(raw.author?.name),
     authorUrl: asString(raw.author?.url),
@@ -235,14 +344,11 @@ function loadOne(
     previewVideo: asString(raw.od?.preview?.video),
     previewEntryUrl:
       asString(raw.od?.preview?.type) === 'html'
-        ? entryRelativeUrl(
-            manifestId,
-            asString(raw.od?.preview?.entry),
-            path.join(root, bucket, slug),
-          )
+        ? entryRelativeUrl(manifestId, asString(raw.od?.preview?.entry), slugDir)
         : undefined,
-    detailHref: `/plugins/${manifestId}/`,
-    sourceUrl: `${REPO_FOR_BUCKET(bucket)}/${slug}`,
+    detailSlug: pluginDetailSlug(slugBasis),
+    detailHref: pluginDetailPath(slugBasis),
+    sourceUrl,
   };
 }
 
@@ -270,7 +376,13 @@ export function getBundledPlugins(): ReadonlyArray<BundledPluginRecord> {
       if (name.startsWith('_') || name.startsWith('.')) continue;
       const full = path.join(dir, name);
       if (!statSync(full).isDirectory()) continue;
-      const record = loadOne(root, bucket, name);
+      const record = loadOne({
+        manifestPath: path.join(root, bucket, name, 'open-design.json'),
+        slugDir: path.join(root, bucket, name),
+        slug: name,
+        bucket,
+        sourceUrl: `${REPO_FOR_BUCKET(bucket)}/${name}`,
+      });
       if (!record) continue;
       // Atoms are infrastructure plugins (`code-import`, `patch-edit`,
       // …) that the daemon needs but the in-app Plugins home filters
@@ -284,6 +396,64 @@ export function getBundledPlugins(): ReadonlyArray<BundledPluginRecord> {
   out.sort((a, b) => a.title.localeCompare(b.title));
   cachedAll = out;
   return cachedAll;
+}
+
+let cachedDetail: ReadonlyArray<BundledPluginRecord> | null = null;
+
+/**
+ * Every locally-shipped plugin that gets a detail page. Unlike
+ * `getBundledPlugins` (the in-app library view), this is the FULL set:
+ *   - all `_official/<bucket>/` plugins, atoms INCLUDED — they are
+ *     installable registry entries, so a shared link must resolve;
+ *   - every `plugins/community/<slug>/` folder (bucket = `community`).
+ * The route slug is the single-segment `pluginDetailSlug(manifestId)`;
+ * ids are globally unique on their last segment so there are no clashes.
+ */
+export function getDetailPlugins(): ReadonlyArray<BundledPluginRecord> {
+  if (cachedDetail) return cachedDetail;
+  const out: BundledPluginRecord[] = [];
+
+  const root = pluginsRoot();
+  if (root) {
+    for (const bucket of BUNDLED_BUCKETS) {
+      const dir = path.join(root, bucket);
+      if (!existsSync(dir)) continue;
+      for (const name of readdirSync(dir)) {
+        if (name.startsWith('_') || name.startsWith('.')) continue;
+        if (!statSync(path.join(dir, name)).isDirectory()) continue;
+        const record = loadOne({
+          manifestPath: path.join(dir, name, 'open-design.json'),
+          slugDir: path.join(dir, name),
+          slug: name,
+          bucket,
+          sourceUrl: `${REPO_FOR_BUCKET(bucket)}/${name}`,
+        });
+        if (record) out.push(record);
+      }
+    }
+  }
+
+  const community = communityRoot();
+  if (community) {
+    for (const name of readdirSync(community)) {
+      if (name.startsWith('_') || name.startsWith('.')) continue;
+      const dir = path.join(community, name);
+      if (!statSync(dir).isDirectory()) continue;
+      const record = loadOne({
+        manifestPath: path.join(dir, 'open-design.json'),
+        slugDir: dir,
+        slug: name,
+        bucket: 'community',
+        routeId: `community/${name}`,
+        sourceUrl: `https://github.com/nexu-io/open-design/tree/main/plugins/community/${name}`,
+      });
+      if (record) out.push(record);
+    }
+  }
+
+  out.sort((a, b) => a.title.localeCompare(b.title));
+  cachedDetail = out;
+  return cachedDetail;
 }
 
 export function getBundledPluginById(

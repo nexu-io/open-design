@@ -240,6 +240,10 @@ export interface BYOKToolContext {
    *  (e.g. 1 ms) to keep the suite fast without changing the polling
    *  semantics. */
   videoPollIntervalMs?: number;
+  /** Optional per-request init copied from the live chat turn. Used to
+   *  forward the current proxy dispatcher into every upstream/download
+   *  fetch the BYOK tool executor performs. */
+  requestInit?: Pick<RequestInit, 'dispatcher'>;
 }
 
 export interface ImageToolResult {
@@ -249,6 +253,16 @@ export interface ImageToolResult {
   /** Short human-readable failure reason. Stuffed into the `tool` role
    *  reply so the LLM can apologize / retry. */
   error?: string;
+}
+
+function withToolRequestInit(
+  ctx: BYOKToolContext,
+  init: RequestInit,
+): RequestInit {
+  return {
+    ...ctx.requestInit,
+    ...init,
+  };
 }
 
 export async function executeGenerateSpeech(
@@ -281,7 +295,7 @@ export async function executeGenerateSpeech(
     base_resp?: { status_code?: number; status_msg?: string };
   };
   try {
-    const resp = await fetch(appendSenseAudioApiPath(baseUrl, '/t2a_v2'), {
+    const resp = await fetch(appendSenseAudioApiPath(baseUrl, '/t2a_v2'), withToolRequestInit(ctx, {
       method: 'POST',
       redirect: 'error',
       headers: {
@@ -305,7 +319,7 @@ export async function executeGenerateSpeech(
           channel: 2,
         },
       }),
-    });
+    }));
     const respText = await resp.text();
     if (!resp.ok) {
       return { ok: false, error: `senseaudio speech ${resp.status}: ${respText.slice(0, 240)}` };
@@ -420,7 +434,7 @@ export async function executeGenerateImage(
   const trimmedBase = baseUrl.replace(/\/+$/, '');
   let imageUrl: string;
   try {
-    const resp = await fetch(`${trimmedBase}/v1/image/sync`, {
+    const resp = await fetch(`${trimmedBase}/v1/image/sync`, withToolRequestInit(ctx, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,
@@ -431,7 +445,7 @@ export async function executeGenerateImage(
         prompt,
         size,
       }),
-    });
+    }));
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       return {
@@ -469,7 +483,7 @@ export async function executeGenerateImage(
 
   let bytes: Buffer;
   try {
-    const imgResp = await fetch(imageUrl, { redirect: 'error' });
+    const imgResp = await fetch(imageUrl, withToolRequestInit(ctx, { redirect: 'error' }));
     if (!imgResp.ok) {
       return { ok: false, error: `image download ${imgResp.status}` };
     }
@@ -596,7 +610,7 @@ export async function executeGenerateVideo(
   // Step 1: POST /v1/video/create → task_id.
   let taskId: string;
   try {
-    const resp = await fetch(`${trimmedBase}/v1/video/create`, {
+    const resp = await fetch(`${trimmedBase}/v1/video/create`, withToolRequestInit(ctx, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,
@@ -610,7 +624,7 @@ export async function executeGenerateVideo(
         ratio,
         provider_specific: { generate_audio: generateAudio },
       }),
-    });
+    }));
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       return {
@@ -639,10 +653,10 @@ export async function executeGenerateVideo(
     try {
       statusResp = await fetch(
         `${trimmedBase}/v1/video/status?id=${encodeURIComponent(taskId)}`,
-        {
+        withToolRequestInit(ctx, {
           method: 'GET',
           headers: { authorization: `Bearer ${apiKey}` },
-        },
+        }),
       );
     } catch (err) {
       return {
@@ -702,7 +716,7 @@ export async function executeGenerateVideo(
 
   let bytes: Buffer;
   try {
-    const videoResp = await fetch(videoUrl, { redirect: 'error' });
+    const videoResp = await fetch(videoUrl, withToolRequestInit(ctx, { redirect: 'error' }));
     if (!videoResp.ok) {
       return { ok: false, error: `video download ${videoResp.status}` };
     }

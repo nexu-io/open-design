@@ -284,6 +284,11 @@
   font-size: 12px;
 }
 
+.plugins-view__filter span {
+  min-width: 32px;
+  text-align: center;
+}
+
 .plugins-view__filter select {
   min-height: 32px;
   min-width: 180px;
@@ -377,6 +382,7 @@
   justify-content: center;
   gap: 6px;
   min-height: 32px;
+  min-width: 48px;
   padding: 0 11px;
   border-radius: var(--radius-sm);
   font-size: 12px;

@@ -170,4 +170,27 @@ describe('AssistantMessage tool status', () => {
     expect(container.querySelector('.op-status-running')?.textContent).toBe('running…');
     expect(screen.queryByText('Done')).toBeNull();
   });
+
+  it('renders URLs in JSON-like status details without trailing structural characters', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={messageWithEvents([
+          {
+            kind: 'status',
+            label: 'publish repo',
+            detail: '{"url":"https://github.com/nexu-io/example-plugin","nameWithOwner":"nexu-io/example-plugin"}',
+          },
+        ])}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    const link = container.querySelector('.status-detail a.md-link');
+    expect(link?.getAttribute('href')).toBe('https://github.com/nexu-io/example-plugin');
+    expect(link?.textContent).toBe('https://github.com/nexu-io/example-plugin');
+    expect(container.querySelector('.status-detail')?.textContent).toContain('"}');
+  });
 });

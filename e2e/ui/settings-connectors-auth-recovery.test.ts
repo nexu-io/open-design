@@ -6,6 +6,19 @@ const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 test.describe.configure({ timeout: 30_000 });
 
+type ConnectorFixture = {
+  id: string;
+  name: string;
+  provider: 'composio';
+  category: string;
+  description: string;
+  status: 'available' | 'connected' | 'error';
+  accountLabel?: string;
+  lastError?: string;
+  auth: { provider: 'composio'; configured: true };
+  tools: readonly unknown[];
+};
+
 const CONNECTORS = [
   {
     id: 'github',
@@ -28,7 +41,7 @@ const CONNECTORS = [
     auth: { provider: 'composio', configured: true },
     tools: [],
   },
-] as const;
+] as const satisfies readonly ConnectorFixture[];
 
 function baseConfig(): Record<string, unknown> {
   return {
@@ -43,6 +56,11 @@ function baseConfig(): Record<string, unknown> {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    composio: {
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '1234',
+    },
     mediaProviders: {},
     agentModels: {},
     agentCliEnv: {},
@@ -110,13 +128,20 @@ async function openConnectorsSettings(
         },
       },
     }),
+    statusResponse = () => ({
+      github: pendingAuthorization
+        ? { status: 'error', accountLabel: undefined }
+        : { status: CONNECTORS[0]?.status ?? 'available', accountLabel: undefined },
+      slack: { status: 'connected', accountLabel: 'design-team' },
+    }),
     pendingAuthorization = null,
     blockPopup = false,
   }: {
-    connectors?: typeof CONNECTORS;
+    connectors?: readonly ConnectorFixture[];
     onPrepare?: () => Record<string, unknown>;
     onConnect?: () => { status: number; body: Record<string, unknown> };
     onCancel?: () => { status: number; body: Record<string, unknown> };
+    statusResponse?: () => Record<string, unknown>;
     pendingAuthorization?: Record<string, unknown> | null;
     blockPopup?: boolean;
   } = {},
@@ -180,16 +205,7 @@ async function openConnectorsSettings(
   });
 
   await page.route('**/api/connectors/status', async (route) => {
-    const statuses = Object.fromEntries(
-      connectors.map((connector) => [
-        connector.id,
-        {
-          status: connector.status,
-          accountLabel: 'accountLabel' in connector ? connector.accountLabel : undefined,
-        },
-      ]),
-    );
-    await route.fulfill({ json: { statuses } });
+    await route.fulfill({ json: { statuses: statusResponse() } });
   });
 
   await page.route('**/api/connectors/discovery*', async (route) => {
@@ -260,31 +276,38 @@ test.describe('Settings connectors auth recovery', () => {
       .toBe(true);
   });
 
-  test('settles a pending authorization into Disconnect when status polling reports the connector as connected', async ({ page }) => {
-    let statusRequests = 0;
-    const { dialog } = await openConnectorsSettings(page, {
-      pendingAuthorization: pendingAuthorizationStorage(),
-    });
 
-    await page.unroute('**/api/connectors/status');
-    await page.route('**/api/connectors/status', async (route) => {
-      statusRequests += 1;
-      const githubStatus =
-        statusRequests >= 2
-          ? { status: 'connected', accountLabel: 'octo-user' }
-          : { status: 'available', accountLabel: undefined };
-      await route.fulfill({
-        json: {
-          statuses: {
-            github: githubStatus,
-            slack: { status: 'connected', accountLabel: 'design-team' },
-          },
+  test('shows a continue-in-browser CTA for pending authorizations that include a redirect URL', async ({ page }) => {
+    const { dialog } = await openConnectorsSettings(page, {
+      pendingAuthorization: {
+        github: {
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          redirectUrl: 'https://example.com/oauth/github',
         },
-      });
+      },
     });
 
     const githubCard = connectorCard(dialog, 'github');
     await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await expect(githubCard.getByRole('button', { name: 'Continue in browser' })).toBeVisible();
+  });
+
+  test('settles a pending authorization into Disconnect when status polling reports the connector as connected', async ({ page }) => {
+    let statusRequests = 0;
+    const { dialog } = await openConnectorsSettings(page, {
+      pendingAuthorization: pendingAuthorizationStorage(),
+      statusResponse: () => {
+        statusRequests += 1;
+        return {
+          github: statusRequests >= 2
+            ? { status: 'connected', accountLabel: 'octo-user' }
+            : { status: 'error', accountLabel: undefined },
+          slack: { status: 'connected', accountLabel: 'design-team' },
+        };
+      },
+    });
+
+    const githubCard = connectorCard(dialog, 'github');
 
     await expect
       .poll(async () => statusRequests, { timeout: 5000 })
@@ -313,9 +336,10 @@ test.describe('Settings connectors auth recovery', () => {
     });
 
     const githubCard = connectorCard(dialog, 'github');
-    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    const cancelButton = githubCard.getByRole('button', { name: 'Cancel' });
+    await expect(cancelButton).toBeVisible();
 
-    await githubCard.getByRole('button', { name: 'Cancel' }).click();
+    await cancelButton.click();
 
     await expect(githubCard.getByRole('button', { name: 'Connect' })).toBeVisible();
     await expect(githubCard.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
@@ -324,6 +348,30 @@ test.describe('Settings connectors auth recovery', () => {
         page.evaluate(() => window.sessionStorage.getItem('od-connectors-authorization-pending')),
       )
       .toBe(null);
+  });
+
+
+  test('surfaces a connector error state when credentials have degraded', async ({ page }) => {
+    const githubConnector = CONNECTORS[0];
+    const slackConnector = CONNECTORS[1];
+    if (!githubConnector || !slackConnector) throw new Error('missing connector fixtures');
+    const degradedConnectors: ConnectorFixture[] = [
+      {
+        ...githubConnector,
+        status: 'error',
+        accountLabel: 'octo-user',
+        lastError: 'GitHub token expired. Reconnect to continue.',
+      },
+      slackConnector,
+    ];
+    const { dialog } = await openConnectorsSettings(page, {
+      connectors: degradedConnectors,
+    });
+
+    const githubCard = connectorCard(dialog, 'github');
+    await expect(githubCard).toHaveClass(/status-error/);
+    await expect(githubCard.locator('.connector-status-pill.status-error')).toBeVisible();
+    await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toHaveCount(0);
   });
 
 });

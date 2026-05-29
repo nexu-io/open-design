@@ -61,8 +61,10 @@ describe('executeGenerateImage', () => {
 
   it('calls /v1/image/sync, downloads the URL, persists bytes, and returns a daemon URL', async () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const dispatcher = { dispatch: vi.fn() } as unknown as NonNullable<RequestInit['dispatcher']>;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
+      expect(init?.dispatcher).toBe(dispatcher);
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         expect(init?.method).toBe('POST');
         expect(init?.headers).toMatchObject({
@@ -94,7 +96,7 @@ describe('executeGenerateImage', () => {
 
     const result = await executeGenerateImage(
       { prompt: 'a tabby cat playing with yarn' },
-      baseCtx(),
+      { ...baseCtx(), requestInit: { dispatcher } },
     );
 
     expect(result.ok).toBe(true);
@@ -402,9 +404,11 @@ describe('executeGenerateSpeech', () => {
 
   it('calls /v1/t2a_v2, persists mp3 bytes, and returns a daemon URL', async () => {
     const audioBytes = Buffer.from([0x49, 0x44, 0x33, 0x04]);
+    const dispatcher = { dispatch: vi.fn() } as unknown as NonNullable<RequestInit['dispatcher']>;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.senseaudio.cn/v1/t2a_v2');
       expect(init?.method).toBe('POST');
+      expect(init?.dispatcher).toBe(dispatcher);
       expect(init?.redirect).toBe('error');
       expect(init?.headers).toMatchObject({
         authorization: 'Bearer sa-byok-key',
@@ -445,6 +449,7 @@ describe('executeGenerateSpeech', () => {
         projectId: PROJECT_ID,
         upstreamApiKey: 'sa-byok-key',
         upstreamBaseUrl: 'https://api.senseaudio.cn',
+        requestInit: { dispatcher },
       },
     );
 
@@ -618,9 +623,11 @@ describe('executeGenerateVideo', () => {
 
   it('creates, polls until completed, downloads, and writes the mp4 into the project folder', async () => {
     const mp4Bytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+    const dispatcher = { dispatch: vi.fn() } as unknown as NonNullable<RequestInit['dispatcher']>;
     let pollCount = 0;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
+      expect(init?.dispatcher).toBe(dispatcher);
 
       if (url === 'https://api.senseaudio.cn/v1/video/create') {
         expect(init?.method).toBe('POST');
@@ -687,7 +694,7 @@ describe('executeGenerateVideo', () => {
         resolution: '1080p',
         generate_audio: true,
       },
-      baseCtx(),
+      { ...baseCtx(), requestInit: { dispatcher } },
     );
 
     expect(result.ok).toBe(true);

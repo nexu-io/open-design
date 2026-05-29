@@ -171,6 +171,48 @@ export function linkSnapshotToProject(db: SqliteDb, snapshotId: string, projectI
   ).run(snapshotId, projectId);
 }
 
+export function restoreProjectSnapshotLink(
+  db: SqliteDb,
+  projectId: string,
+  snapshotIdToDiscard: string,
+  previousSnapshotId: string | null | undefined,
+  discardedRunId?: string | null | undefined,
+): void {
+  const previous = typeof previousSnapshotId === 'string' && previousSnapshotId.length > 0
+    ? previousSnapshotId
+    : null;
+  db.prepare(
+    `UPDATE projects
+        SET applied_plugin_snapshot_id = ?
+      WHERE id = ?
+        AND applied_plugin_snapshot_id = ?`,
+  ).run(previous, projectId, snapshotIdToDiscard);
+  const expiry = unreferencedSnapshotExpiry();
+  if (typeof discardedRunId === 'string' && discardedRunId.length > 0) {
+    const result = db.prepare(
+      `UPDATE applied_plugin_snapshots
+          SET run_id = NULL,
+              expires_at = ?
+        WHERE id = ?
+          AND project_id = ?
+          AND run_id = ?`,
+    ).run(expiry, snapshotIdToDiscard, projectId, discardedRunId);
+    if (result.changes > 0) return;
+  }
+  db.prepare(
+    `UPDATE applied_plugin_snapshots
+        SET expires_at = ?
+      WHERE id = ?
+        AND run_id IS NULL
+        AND project_id = ?`,
+  ).run(expiry, snapshotIdToDiscard, projectId);
+}
+
+function unreferencedSnapshotExpiry(): number | null {
+  const days = readPluginEnvKnobs().snapshotUnreferencedTtlDays;
+  return days > 0 ? Date.now() + days * 24 * 60 * 60 * 1000 : null;
+}
+
 // Pin a snapshot to a conversation row. Same shape as
 // `linkSnapshotToProject` but mutates `conversations.applied_plugin_snapshot_id`.
 // Used when a plugin is applied inside an existing chat composer (§8.4).

@@ -5,6 +5,7 @@ import { resolveToolPackConfig } from "../src/config.js";
 const savedTelemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
 const savedPosthogKey = process.env.POSTHOG_KEY;
 const savedPosthogHost = process.env.POSTHOG_HOST;
+const savedAmrProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
 
 afterEach(() => {
   if (savedTelemetryRelayUrl == null) {
@@ -22,6 +23,41 @@ afterEach(() => {
   } else {
     process.env.POSTHOG_HOST = savedPosthogHost;
   }
+  if (savedAmrProfile == null) {
+    delete process.env.OPEN_DESIGN_AMR_PROFILE;
+  } else {
+    process.env.OPEN_DESIGN_AMR_PROFILE = savedAmrProfile;
+  }
+});
+
+describe("resolveToolPackConfig AMR profile", () => {
+  it("bakes OPEN_DESIGN_AMR_PROFILE into packaged config when set at build time", () => {
+    process.env.OPEN_DESIGN_AMR_PROFILE = "test";
+    const config = resolveToolPackConfig("mac", { namespace: "amr-profile-test" });
+    expect(config.amrProfile).toBe("test");
+  });
+
+  it("rejects unsupported AMR profiles before packaging", () => {
+    process.env.OPEN_DESIGN_AMR_PROFILE = "staging";
+    expect(() => resolveToolPackConfig("mac")).toThrow(
+      /OPEN_DESIGN_AMR_PROFILE must be prod, test, or local/,
+    );
+  });
+});
+
+describe("resolveToolPackConfig Vela CLI requirement", () => {
+  it("defaults to optional Vela CLI bundling", () => {
+    const config = resolveToolPackConfig("mac", { namespace: "vela-optional-test" });
+    expect(config.requireVelaCli).toBe(false);
+  });
+
+  it("reads --require-vela-cli from build options", () => {
+    const config = resolveToolPackConfig("mac", {
+      namespace: "vela-required-test",
+      requireVelaCli: true,
+    });
+    expect(config.requireVelaCli).toBe(true);
+  });
 });
 
 describe("resolveToolPackConfig win build target", () => {

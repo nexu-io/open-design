@@ -28,6 +28,11 @@ on:
       - design-systems/**
       - craft/**
       - templates/**
+      # Plugin marketplace — the registry JSON and bundled official plugin
+      # manifests are read at build time by plugin-registry.ts to render the
+      # /plugins catalogue. Merging a plugin PR MUST trigger a redeploy or the
+      # published catalogue silently falls behind.
+      - plugins/**
       # Workspace plumbing
       - package.json
       - pnpm-lock.yaml
@@ -81,7 +86,7 @@ jobs:
         uses: actions/cache@v5.0.5
         with:
           path: apps/landing-page/public/previews
-          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
           restore-keys: |
             landing-page-previews-${{ runner.os }}-
 
@@ -104,6 +109,14 @@ jobs:
       # exits non-zero so we don't silently ship a deploy with zero
       # thumbnails to production.
       - name: Generate skill + template previews
+        # Skip only on an EXACT previews-cache hit: the cache key hashes every
+        # rendering input, so an exact hit means public/previews already holds
+        # the correct thumbnails and regenerating is wasted work. A restore-keys
+        # partial hit leaves cache-hit unset (false), so we still regenerate
+        # then — no stale-thumbnail drift. This is what lets a plugins-only
+        # deploy skip the slowest step (Playwright screenshotting) while a
+        # skill/template change still re-renders.
+        if: steps.previews-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @open-design/landing-page previews
 
       # No PUBLIC_GA_MEASUREMENT_ID on staging: leaving it unset omits the

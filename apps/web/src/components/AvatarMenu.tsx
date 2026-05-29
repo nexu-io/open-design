@@ -22,6 +22,10 @@ interface Props {
   onBack?: () => void;
 }
 
+function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+}
+
 /**
  * Compact settings control at the right of the project header. Click opens a dropdown
  * with current execution mode, the agent picker (when in daemon mode), and
@@ -115,7 +119,15 @@ export function AvatarMenu({
               {config.mode === 'api'
                 ? safeHost(config.baseUrl)
                 : currentAgent
-                  ? `${currentAgent.name}${currentAgent.version ? ` · ${currentAgent.version}` : ''}${currentModelLabel && currentModelId !== 'default' ? ` · ${currentModelLabel}` : ''}`
+                  ? `${displayAgentName(currentAgent)}${
+                      currentAgent.id !== 'amr' && currentAgent.version
+                        ? ` · ${currentAgent.version}`
+                        : ''
+                    }${
+                      currentModelLabel && currentModelId !== 'default'
+                        ? ` · ${currentModelLabel}`
+                        : ''
+                    }`
                   : t('avatar.noAgentSelected')}
             </span>
           </div>
@@ -191,12 +203,12 @@ export function AvatarMenu({
                     }}
                   >
                     <AgentIcon id={a.id} size={18} />
-                    <span>{a.name}</span>
+                    <span>{displayAgentName(a)}</span>
                     {selected ? (
                       <span className="avatar-item-meta">
                         {t('avatar.metaSelected')}
                       </span>
-                    ) : a.version ? (
+                    ) : a.id !== 'amr' && a.version ? (
                       <span className="avatar-item-meta">{a.version}</span>
                     ) : null}
                     {selected ? (

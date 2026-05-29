@@ -16,7 +16,7 @@ import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
-import type { CreateInput } from './components/NewProjectPanel';
+import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
@@ -28,10 +28,15 @@ import {
   DesignSystemDetailView,
 } from './components/DesignSystemFlow';
 import {
+  IframeKeepAliveProvider,
+  useIframeKeepAlivePool,
+} from './components/IframeKeepAlivePool';
+import {
   SettingsDialog,
   switchApiProtocolConfig,
   updateCurrentApiProtocolConfig,
   type SettingsSection,
+  type SettingsHighlight,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
@@ -91,6 +96,7 @@ import type {
   DesignSystemSummary,
   Project,
   ProjectTemplate,
+  ProviderModelOption,
   PromptTemplateSummary,
   SkillSummary,
 } from './types';
@@ -171,7 +177,16 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
+  return (
+    <IframeKeepAliveProvider>
+      <AppInner />
+    </IframeKeepAliveProvider>
+  );
+}
+
+function AppInner() {
   const { t } = useI18n();
+  const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
@@ -193,6 +208,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
+  const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
   const [integrationInitialTab, setIntegrationInitialTab] = useState<IntegrationTab>('mcp');
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -217,6 +233,9 @@ export function App() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+  const [providerModelsCache, setProviderModelsCache] = useState<
+    Record<string, ProviderModelOption[]>
+  >({});
   const [daemonMediaProviders, setDaemonMediaProviders] = useState<
     AppConfig['mediaProviders'] | null
   >(null);
@@ -607,6 +626,11 @@ export function App() {
     setDesignSystems(list);
   }, []);
 
+  const refreshSkills = useCallback(async () => {
+    const list = await fetchSkills();
+    setSkills(list);
+  }, []);
+
   const refreshTemplates = useCallback(async () => {
     const list = await listTemplates();
     setTemplates(list);
@@ -982,18 +1006,27 @@ export function App() {
     [],
   );
 
-  const handleImportClaudeDesign = useCallback(async (file: File) => {
-    const result = await importClaudeDesignZip(file);
-    if (!result) return;
-    setProjects((curr) => [
-      result.project,
-      ...curr.filter((p) => p.id !== result.project.id),
-    ]);
-    navigate({
-      kind: 'project',
-      projectId: result.project.id,
-      fileName: result.entryFile,
-    });
+  const handleImportClaudeDesign = useCallback(async (
+    file: File,
+  ): Promise<ImportClaudeDesignOutcome> => {
+    try {
+      const result = await importClaudeDesignZip(file);
+      setProjects((curr) => [
+        result.project,
+        ...curr.filter((p) => p.id !== result.project.id),
+      ]);
+      navigate({
+        kind: 'project',
+        projectId: result.project.id,
+        fileName: result.entryFile,
+      });
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : 'The ZIP could not be imported.',
+      };
+    }
   }, []);
 
   const handleImportFolder = useCallback(async (baseDir: string) => {
@@ -1062,12 +1095,13 @@ export function App() {
   const handleDeleteProject = useCallback(async (id: string) => {
     const ok = await deleteProjectApi(id);
     if (!ok) return false;
+    iframeKeepAlivePool.evictProject(id, { includeActive: true });
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
       navigate({ kind: 'home', view: 'home' });
     }
     return true;
-  }, [route]);
+  }, [iframeKeepAlivePool, route]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
@@ -1104,8 +1138,70 @@ export function App() {
   }, [route]);
 
   const handleProjectChange = useCallback((updated: Project) => {
-    setProjects((curr) => curr.map((p) => (p.id === updated.id ? updated : p)));
-  }, []);
+    setProjects((curr) => {
+      const previous = curr.find((p) => p.id === updated.id);
+      if (
+        previous
+        && (
+          previous.skillId !== updated.skillId
+          || previous.designSystemId !== updated.designSystemId
+          || previous.customInstructions !== updated.customInstructions
+        )
+      ) {
+        iframeKeepAlivePool.evictProject(updated.id, { includeActive: true });
+      }
+      return curr.map((p) => (p.id === updated.id ? updated : p));
+    });
+  }, [iframeKeepAlivePool]);
+
+  // ProjectView's prompt-context signature derives from SkillSummary /
+  // DesignSystemSummary fields, so a body-only registry edit (same name,
+  // description, etc.) leaves every signature unchanged and the active
+  // preview keeps serving stale prompt context. Settings → Skills /
+  // Settings → Design Systems call back through these handlers after
+  // every successful mutation; we drop any pool entry whose project
+  // depends on the affected id — active or parked — so the next mount
+  // recomposes the system prompt with the new body. A ref tracks
+  // projects so the callback is stable across renders.
+  const projectsRef = useRef<Project[]>(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  const handleSkillsChanged = useCallback(
+    (affectedSkillId?: string) => {
+      void fetchSkills().then((list) => setSkills(list));
+      void fetchDesignTemplates().then((list) => setDesignTemplates(list));
+      iframeKeepAlivePool.evictMatching(
+        (entry) => {
+          const proj = projectsRef.current.find((p) => p.id === entry.projectId);
+          if (!proj) return false;
+          if (affectedSkillId) return proj.skillId === affectedSkillId;
+          return proj.skillId != null;
+        },
+        { includeActive: true },
+      );
+    },
+    [iframeKeepAlivePool],
+  );
+
+  const handleDesignSystemsChanged = useCallback(
+    (affectedDesignSystemId?: string) => {
+      void fetchDesignSystems().then((list) => setDesignSystems(list));
+      iframeKeepAlivePool.evictMatching(
+        (entry) => {
+          const proj = projectsRef.current.find((p) => p.id === entry.projectId);
+          if (!proj) return false;
+          if (affectedDesignSystemId) {
+            return proj.designSystemId === affectedDesignSystemId;
+          }
+          return proj.designSystemId != null;
+        },
+        { includeActive: true },
+      );
+    },
+    [iframeKeepAlivePool],
+  );
 
   const activeProject =
     route.kind === 'project'
@@ -1146,7 +1242,10 @@ export function App() {
     };
   }, [route, activeProject, projects, daemonLive]);
 
-  const openSettings = useCallback((section: SettingsSection = 'execution') => {
+  const openSettings = useCallback((
+    section: SettingsSection = 'execution',
+    opts?: { highlight?: SettingsHighlight },
+  ) => {
     if (section === 'composio' || section === 'mcpClient' || section === 'integrations') {
       setIntegrationInitialTab(
         section === 'composio'
@@ -1160,8 +1259,16 @@ export function App() {
     }
     setSettingsWelcome(false);
     setSettingsInitialSection(section);
+    setSettingsHighlight(opts?.highlight ?? null);
     setSettingsOpen(true);
   }, []);
+
+  // Entry point from the failed-run AMR nudge: open Settings on the execution
+  // section and flag the AMR agent card for a one-shot scroll-into-view +
+  // highlight (and a sign-in coachmark when not yet authorized).
+  const openAmrSettings = useCallback(() => {
+    openSettings('execution', { highlight: 'amr' });
+  }, [openSettings]);
 
   const openPetSettings = useCallback(() => {
     setSettingsWelcome(false);
@@ -1365,6 +1472,7 @@ export function App() {
         onAgentModelChange={handleAgentModelChange}
         onRefreshAgents={refreshAgents}
         onOpenSettings={openSettings}
+        onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
         onAdoptPetInline={handleAdoptPet}
         onTogglePet={handleTogglePet}
@@ -1391,6 +1499,8 @@ export function App() {
         defaultDesignSystemId={config.designSystemId}
         agents={agents}
         config={config}
+        providerModelsCache={providerModelsCache}
+        onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
         composioConfigLoading={composioConfigLoading}
         daemonLive={daemonLive}
@@ -1481,10 +1591,12 @@ export function App() {
         <SettingsDialog
           initial={config}
           agents={agents}
+          agentsLoading={agentsLoading}
           daemonLive={daemonLive}
           appVersionInfo={appVersionInfo}
           welcome={settingsWelcome}
           initialSection={settingsInitialSection}
+          initialHighlight={settingsHighlight}
           composioConfigLoading={composioConfigLoading}
           onPersist={handleConfigPersist}
           onPersistComposioKey={handleConfigPersistComposioKey}
@@ -1502,12 +1614,18 @@ export function App() {
               setConfig(next);
             }
             setSettingsOpen(false);
+            setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
+          onSkillsRefresh={refreshSkills}
           daemonMediaProviders={daemonMediaProviders}
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+          onSkillsChanged={handleSkillsChanged}
+          onDesignSystemsChanged={handleDesignSystemsChanged}
+          providerModelsCache={providerModelsCache}
+          onProviderModelsCacheChange={setProviderModelsCache}
         />
       ) : null}
       <MemoryToast onOpenMemory={() => openSettings('memory')} />

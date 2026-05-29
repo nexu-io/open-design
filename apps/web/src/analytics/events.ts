@@ -36,6 +36,8 @@ import type {
   PluginsTemplatesDropdownClickProps,
   PluginsAvailableTabClickProps,
   PluginsSourcesTabClickProps,
+  PluginDetailClickProps,
+  PluginLoopClickProps,
   DesignSystemsTopClickProps,
   DesignSystemsTemplateCardClickProps,
   DesignSystemsTemplatesModalClickProps,
@@ -46,10 +48,13 @@ import type {
   IntegrationsSkillsTabClickProps,
   IntegrationsUseEverywhereTabClickProps,
   ChatPanelClickProps,
+  RunFailedToastClickProps,
+  RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   FileManagerClickProps,
   ArtifactToolbarClickProps,
   TweaksPopoverClickProps,
+  CommentPopoverClickProps,
   ArtifactHeaderClickProps,
   PresentPopoverClickProps,
   ShareOptionPopoverClickProps,
@@ -155,6 +160,20 @@ export function trackAssistantFeedbackReasonPanelSurfaceView(
   props: AssistantFeedbackReasonPanelSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
+}
+
+export function trackRunFailedToastSurfaceView(
+  track: Track,
+  props: RunFailedToastSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackRunFailedToastGoAmrClick(
+  track: Track,
+  props: RunFailedToastClickProps,
+): void {
+  send(track, 'ui_click', props);
 }
 
 // ---- ui_click (home) -----------------------------------------------------
@@ -325,6 +344,20 @@ export function trackPluginsSourcesTabClick(
   send(track, 'ui_click', props);
 }
 
+export function trackPluginDetailClick(
+  track: Track,
+  props: PluginDetailClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackPluginLoopClick(
+  track: Track,
+  props: PluginLoopClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackDesignSystemsTopClick(
   track: Track,
   props: DesignSystemsTopClickProps,
@@ -423,6 +456,13 @@ export function trackArtifactToolbarClick(
 export function trackTweaksPopoverClick(
   track: Track,
   props: TweaksPopoverClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackCommentPopoverClick(
+  track: Track,
+  props: CommentPopoverClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

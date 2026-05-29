@@ -110,6 +110,47 @@ describe('OpenAI-compatible media providers', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('forwards requestInit.dispatcher through custom-image submit and asset fetches', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          baseUrl: 'https://images.example.test/v1',
+          model: 'acme-image-model',
+        },
+      },
+    });
+
+    const dispatcher = {} as NonNullable<RequestInit['dispatcher']>;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      if (String(input) === 'https://images.example.test/v1/images/generations') {
+        expect(init?.dispatcher).toBe(dispatcher);
+        return new Response(JSON.stringify({
+          data: [{ url: 'https://cdn.example.test/generated.png' }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      expect(init?.dispatcher).toBe(dispatcher);
+      return new Response(Buffer.from(PNG_BASE64, 'base64'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'custom-image',
+      prompt: 'A product render on white seamless paper',
+      output: 'custom-dispatcher.png',
+      requestInit: { dispatcher },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('routes matching OpenAI image catalog ids through the configured custom provider', async () => {
     await writeConfig({
       providers: {

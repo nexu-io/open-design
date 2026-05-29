@@ -27,11 +27,16 @@ import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
+import { AmrLoginPill } from './AmrLoginPill';
+import {
+  fetchVelaLoginStatus,
+  type VelaLoginStatus,
+} from '../providers/daemon';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
-  renderModelOptions,
+  SearchableModelSelect,
 } from './modelOptions';
 import {
   DEFAULT_NOTIFICATIONS,
@@ -140,13 +145,20 @@ export type SettingsSection =
   | 'library'
   | 'about';
 
+// One-shot focus hint when opening the dialog. `'amr'` scrolls the AMR agent
+// card into view on the execution section and plays a highlight (plus a
+// sign-in coachmark when the user has not authorized AMR yet).
+export type SettingsHighlight = 'amr' | null;
+
 interface Props {
   initial: AppConfig;
   agents: AgentInfo[];
+  agentsLoading?: boolean;
   daemonLive: boolean;
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   initialSection?: SettingsSection;
+  initialHighlight?: SettingsHighlight;
   /**
    * Persist the current draft. Invoked by the dialog's autosave loop on
    * every committed edit. Returns a promise that resolves once both
@@ -176,10 +188,24 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  /** Re-fetch functional skills into App state after Settings mutations. */
+  onSkillsRefresh?: () => Promise<void> | void;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  /**
+   * Notified by Settings → Skills after a successful skill registry
+   * mutation (create / edit / delete). App.tsx uses this to drop preview
+   * iframes whose project depends on the affected skill — body-only
+   * edits do not move SkillSummary fields, so ProjectView's signature
+   * path can miss them.
+   */
+  onSkillsChanged?: (affectedSkillId?: string) => void;
+  /** Same channel for design-system registry mutations. */
+  onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
 }
 
 export interface AgentRefreshOptions {
@@ -412,6 +438,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   deepseek: 'DeepSeek terminal UI',
   hermes: 'ACP agent CLI',
   'grok-build': 'xAI coding CLI',
+  reasonix: 'DeepSeek native coding CLI',
 };
 
 function cleanAgentVersionLabel(
@@ -424,6 +451,10 @@ function cleanAgentVersionLabel(
     .replace(new RegExp(`\\s*\\(${escapedName}\\)\\s*$`, 'i'), '')
     .replace(new RegExp(`\\s+${escapedName}\\s*$`, 'i'), '')
     .trim();
+}
+
+function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
 }
 
 export function mergeProviderModelOptions(
@@ -788,19 +819,26 @@ export function switchApiProtocolConfig(
 export function SettingsDialog({
   initial,
   agents,
+  agentsLoading = false,
   daemonLive,
   appVersionInfo,
   welcome,
   initialSection = 'execution',
+  initialHighlight = null,
   onPersist,
   onPersistComposioKey,
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
+  onSkillsRefresh,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
+  onSkillsChanged,
+  onDesignSystemsChanged,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -842,15 +880,50 @@ export function SettingsDialog({
   // (About) keeps the previous scrollTop, so the new section's header
   // can land out of view and the panel reads as half-loaded. Issue #634.
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
+  // AMR-card focus, driven by the failed-run nudge (`initialHighlight==='amr'`).
+  const amrCardRef = useRef<HTMLDivElement | null>(null);
+  // Card pulse: a brief attention flash that auto-clears after a few seconds.
+  const [amrHighlightActive, setAmrHighlightActive] = useState(false);
+  // Coachmark: persists (unlike the card pulse) until the real pointer reaches
+  // the authorize button — so it won't vanish while the user is still moving
+  // toward it.
+  const [amrCoachmarkArmed, setAmrCoachmarkArmed] = useState(false);
+  // The fake-cursor coachmark dismisses as soon as the real pointer reaches the
+  // authorize button — once the user has found it, the hint has done its job.
+  const [amrCoachmarkDismissed, setAmrCoachmarkDismissed] = useState(false);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
   const [agentTestState, setAgentTestState] = useState<TestState>({
     status: 'idle',
   });
+  const [amrCardStatus, setAmrCardStatus] = useState<VelaLoginStatus | null>(null);
+  const [amrCardStatusReady, setAmrCardStatusReady] = useState(false);
+  const [hoveredAgentCardId, setHoveredAgentCardId] = useState<string | null>(null);
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
   });
+
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent) {
+      setAmrCardStatus(null);
+      setAmrCardStatusReady(false);
+      setHoveredAgentCardId(null);
+      return;
+    }
+    let cancelled = false;
+    setAmrCardStatusReady(false);
+    void fetchVelaLoginStatus().then((next) => {
+      if (!cancelled) {
+        setAmrCardStatus(next);
+        setAmrCardStatusReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [agents]);
   const [byokPreconditionNotice, setByokPreconditionNotice] = useState<{
     action: ByokPreconditionAction;
     message: string;
@@ -876,9 +949,11 @@ export function SettingsDialog({
         initial.apiVersion ?? '',
       );
     });
-  const [providerModelsCache, setProviderModelsCache] = useState<
+  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
   >({});
+  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
+  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
   const agentTestAbortRef = useRef<AbortController | null>(null);
   const providerTestAbortRef = useRef<AbortController | null>(null);
   const providerModelsAbortRef = useRef<AbortController | null>(null);
@@ -890,7 +965,7 @@ export function SettingsDialog({
   const providerAutoTestKeyRef = useRef<string | null>(null);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const baseUrlInputRef = useRef<HTMLInputElement | null>(null);
-  const modelSelectRef = useRef<HTMLSelectElement | null>(null);
+  const modelSelectRef = useRef<HTMLButtonElement | null>(null);
   const customModelInputRef = useRef<HTMLInputElement | null>(null);
   const focusByokRequiredFieldAfterProtocolSwitchRef = useRef(false);
   const [apiModelCustomEditing, setApiModelCustomEditing] = useState(false);
@@ -945,13 +1020,34 @@ export function SettingsDialog({
     if (el) el.scrollTop = 0;
   }, [activeSection]);
 
-  // Tests pin a result against the unsaved draft. Once the user edits any
-  // field that feeds into the test, the result is no longer trustworthy —
-  // clear it so we don't show a stale "Connected" line next to fresh input.
-  // If a test is already running, leave the running state visible and let the
-  // stale result be ignored when it returns; the button stays disabled so a
-  // new smoke test cannot overlap the old one.
-  const agentChoiceForTest = cfg.agentModels?.[cfg.agentId ?? ''];
+  // One-shot AMR-card focus from the failed-run nudge: scroll the card into
+  // view (on the next frame, so it wins over the section's scrollTop reset
+  // above) and play a brief highlight + arm the sign-in coachmark. The
+  // coachmark only actually shows when the AMR card reports a signed-out state
+  // (`amrCardStatus?.loggedIn === false`). If the execution pane is in API mode
+  // the AMR card is absent and this no-ops.
+  useEffect(() => {
+    if (initialHighlight !== 'amr' || activeSection !== 'execution') return;
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      amrCardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setAmrCoachmarkDismissed(false);
+      setAmrHighlightActive(true);
+      setAmrCoachmarkArmed(true);
+    });
+    // Only the card pulse auto-clears; the coachmark persists until the pointer
+    // reaches the authorize button (or the user signs in).
+    const clear = setTimeout(() => {
+      if (!cancelled) setAmrHighlightActive(false);
+    }, 3200);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      clearTimeout(clear);
+    };
+  }, [initialHighlight, activeSection]);
+
   const selectedMemoryChatAgent =
     cfg.mode === 'daemon' && cfg.agentId
       ? agents.find((agent) => agent.id === cfg.agentId) ?? null
@@ -962,6 +1058,10 @@ export function SettingsDialog({
       ?? selectedMemoryChatAgent?.models?.[0]?.id
       ?? null
     : null;
+  const agentChoiceForTest =
+    cfg.mode === 'daemon' && cfg.agentId
+      ? cfg.agentModels?.[cfg.agentId]
+      : null;
   useEffect(() => {
     agentTestRevisionRef.current += 1;
     setAgentTestState((state) =>
@@ -1943,6 +2043,196 @@ export function SettingsDialog({
   const activeHeader = sectionHeader[activeSection];
   const installedAgents = agents.filter((a) => a.available);
   const unavailableAgents = agents.filter((a) => !a.available);
+  const initialAgentScanRunning = agentsLoading && agents.length === 0;
+  const agentModelOptionLabel = (
+    model: ProviderModelOption | undefined,
+    fallback: string,
+  ) => {
+    if (!model) return fallback;
+    const label = model.label?.trim();
+    const id = model.id.trim();
+    if (label && label !== id) {
+      return label.toLowerCase().includes(id.toLowerCase())
+        ? label
+        : `${label} (${id})`;
+    }
+    return label || id;
+  };
+  const agentModelSummary = (agent: AgentInfo) => {
+    if (!Array.isArray(agent.models) || agent.models.length === 0) return null;
+    const choice = cfg.agentModels?.[agent.id] ?? {};
+    const modelValue = choice.model ?? agent.models[0]?.id ?? '';
+    if (!modelValue) return t('settings.modelCustom');
+    return agentModelOptionLabel(
+      agent.models.find((m) => m.id === modelValue),
+      modelValue,
+    );
+  };
+  const renderAgentModelConfig = (selected: AgentInfo) => {
+    const hasModels =
+      Array.isArray(selected.models) && selected.models.length > 0;
+    const hasReasoning =
+      Array.isArray(selected.reasoningOptions) &&
+      selected.reasoningOptions.length > 0;
+    if (!hasModels && !hasReasoning) return null;
+    const choice = cfg.agentModels?.[selected.id] ?? {};
+    const knownModelIds = selected.models?.map((m) => m.id) ?? [];
+    // Adapters opt out via `supportsCustomModel: false` on their
+    // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
+    // upstream issue #35) or when free-text ids silently fail at spawn
+    // (AMR routes through ACP `session/set_model` and validates against
+    // a live catalog). Undefined === allow, matching today's UX.
+    const allowCustomModel = selected.supportsCustomModel !== false;
+    const configuredModel =
+      typeof choice.model === 'string' && choice.model
+        ? choice.model
+        : null;
+    const setChoice = (
+      next: { model?: string; reasoning?: string },
+    ) => {
+      setCfg((c) => {
+        const prev = c.agentModels?.[selected.id] ?? {};
+        return {
+          ...c,
+          agentModels: {
+            ...(c.agentModels ?? {}),
+            [selected.id]: { ...prev, ...next },
+          },
+        };
+      });
+    };
+    const modelValue =
+      selected.id === 'amr' &&
+      configuredModel &&
+      !knownModelIds.includes(configuredModel)
+        ? selected.models?.[0]?.id ?? ''
+        : configuredModel ?? selected.models?.[0]?.id ?? '';
+    const reasoningValue =
+      choice.reasoning ??
+      selected.reasoningOptions?.[0]?.id ?? '';
+    const customActive =
+      allowCustomModel &&
+      hasModels &&
+      shouldShowCustomModelInput(
+        modelValue,
+        knownModelIds,
+        agentCustomModelIds.has(selected.id),
+      );
+    const selectValue = customActive
+      ? CUSTOM_MODEL_SENTINEL
+      : modelValue;
+    const modelSource = selected.modelsSource ?? 'fallback';
+    const modelSourceLabel =
+      modelSource === 'live'
+        ? t('settings.modelSourceLive')
+        : t('settings.modelSourceFallback');
+    const modelSourceHint =
+      modelSource === 'live'
+        ? t('settings.modelPickerLiveHint')
+        : t('settings.modelPickerFallbackHint');
+    return (
+      <div className="agent-card-config">
+        {hasModels ? (
+          <>
+            <label className="field">
+              <span className="field-label">
+                {t('settings.modelPicker')}
+                <span
+                  className={`agent-model-source-badge ${modelSource}`}
+                  aria-hidden="true"
+                >
+                  {modelSourceLabel}
+                </span>
+              </span>
+              <div className="agent-model-select-wrap">
+                <SearchableModelSelect
+                  className="inline-switcher__select settings-model-select"
+                  value={selectValue}
+                  aria-label={t('settings.modelPicker')}
+                  searchPlaceholder={t('designs.searchPlaceholder')}
+                  searchInputTestId={`settings-agent-model-search-${selected.id}`}
+                  popoverTestId={`settings-agent-model-popover-${selected.id}`}
+                  models={selected.models!}
+                  onChange={(nextValue) => {
+                    if (nextValue === CUSTOM_MODEL_SENTINEL) {
+                      setAgentCustomModelIds((prev) => {
+                        const next = new Set(prev);
+                        next.add(selected.id);
+                        return next;
+                      });
+                      setChoice({ model: '' });
+                    } else {
+                      setAgentCustomModelIds((prev) => {
+                        if (!prev.has(selected.id)) return prev;
+                        const next = new Set(prev);
+                        next.delete(selected.id);
+                        return next;
+                      });
+                      setChoice({ model: nextValue });
+                    }
+                  }}
+                  additionalOptions={
+                    allowCustomModel
+                      ? [
+                          {
+                            value: CUSTOM_MODEL_SENTINEL,
+                            label: t('settings.modelCustom'),
+                          },
+                        ]
+                      : undefined
+                  }
+                />
+              </div>
+            </label>
+            <p className="hint agent-model-row-hint">
+              {modelSourceHint}
+            </p>
+          </>
+        ) : null}
+        {customActive ? (
+          <label className="field">
+            <span className="field-label">
+              {t('settings.modelCustomLabel')}
+            </span>
+            <input
+              type="text"
+              value={modelValue}
+              placeholder={t('settings.modelCustomPlaceholder')}
+              onChange={(e) =>
+                setChoice({ model: e.target.value.trim() })
+              }
+            />
+          </label>
+        ) : null}
+        {hasReasoning ? (
+          <label className="field">
+            <span className="field-label">
+              {t('settings.reasoningPicker')}
+            </span>
+            <div className="agent-model-select-wrap">
+              <select
+                value={reasoningValue}
+                onChange={(e) =>
+                  setChoice({ reasoning: e.target.value })
+                }
+              >
+                {selected.reasoningOptions!.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <Icon
+                name="chevron-down"
+                size={12}
+                className="agent-model-select-chevron"
+              />
+            </div>
+          </label>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -2284,7 +2574,23 @@ export function SettingsDialog({
                   <p className="hint">{t('settings.codeAgentHint')}</p>
                 </div>
               </div>
-              {agents.length === 0 ? (
+              {initialAgentScanRunning ? (
+                <div className="agent-scan-card" role="status" aria-live="polite">
+                  <div className="agent-scan-card__stage">
+                    <span className="agent-scan-card__ring" aria-hidden />
+                    <strong>{t('settings.rescanRunning')}</strong>
+                    <span>{t('settings.codeAgentHint')}</span>
+                    <div className="agent-scan-card__progress" aria-hidden>
+                      <span />
+                    </div>
+                  </div>
+                  <div className="agent-scan-card__rows" aria-hidden>
+                    <span><i /><b /><em /></span>
+                    <span><i /><b /><em /></span>
+                    <span><i /><b /><em /></span>
+                  </div>
+                </div>
+              ) : agents.length === 0 ? (
                 <div className="empty-card">
                   {t('settings.noAgentsDetected')}
                 </div>
@@ -2344,102 +2650,219 @@ export function SettingsDialog({
                     </div>
                     {installedAgents.length > 0 ? (
                       <div className="agent-grid agent-grid-installed">
-                        {installedAgents.flatMap((a) => {
+                        {installedAgents.map((a) => {
                           const active = cfg.agentId === a.id;
                           const running =
                             active && agentTestState.status === 'running';
+                          const isAmrAgent = a.id === 'amr';
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
-                          const versionLabel = cleanAgentVersionLabel(
-                            a.name,
-                            a.version,
-                          );
+                          const agentName = displayAgentName(a);
+                          const modelSummary = agentModelSummary(a);
+                          const amrBenefits = [
+                            t('settings.amrBenefitOfficial'),
+                            t('settings.amrBenefitLowerPrice'),
+                            t('settings.amrBenefitManyModels'),
+                          ];
+                          const versionLabel =
+                            isAmrAgent
+                              ? ''
+                              : cleanAgentVersionLabel(a.name, a.version);
+                          const metaLabel =
+                            a.authStatus === 'missing'
+                              ? t('settings.agentAuthRequired')
+                              : a.authStatus === 'unknown'
+                                ? t('settings.agentAuthUnknown')
+                                : versionLabel
+                                  ? versionLabel
+                                  : a.id === 'amr'
+                                    ? ''
+                                    : t('common.installed');
+                          const metaTitle =
+                            a.authStatus === 'missing' ||
+                            a.authStatus === 'unknown'
+                              ? (a.authMessage ?? a.path ?? '')
+                              : (a.path ?? '');
+                          const amrHighlighted = isAmrAgent && amrHighlightActive;
+                          const amrCardEmail =
+                            isAmrAgent && active && amrCardStatus?.loggedIn
+                              ? amrCardStatus.user?.email || t('settings.amrSignedIn')
+                              : '';
+                          const amrRevealPendingCancelAction =
+                            isAmrAgent &&
+                            active &&
+                            hoveredAgentCardId === a.id &&
+                            amrCardStatus?.loggedIn !== true &&
+                            amrCardStatus?.loginInFlight === true;
                           const cardEl = (
                             <div
                               key={a.id}
+                              ref={isAmrAgent ? amrCardRef : undefined}
                               className={
                                 'agent-card agent-card-installed' +
-                                (active ? ' active' : '')
+                                (active ? ' active' : '') +
+                                (amrHighlighted ? ' agent-card--amr-highlight' : '')
                               }
+                              onMouseEnter={() => {
+                                if (!isAmrAgent || !active) return;
+                                setHoveredAgentCardId(a.id);
+                              }}
+                              onMouseLeave={() => {
+                                if (hoveredAgentCardId !== a.id) return;
+                                setHoveredAgentCardId(null);
+                              }}
                             >
-                              <button
-                                type="button"
-                                className="agent-card-select"
-                                onClick={() => {
-                                  trackSettingsLocalCliClick(analytics.track, {
-                                    page_name: 'settings',
-                                    area: 'configure_execution_mode_local_cli',
-                                    element: 'cli_provider',
-                                    cli_provider_id: agentIdToTracking(a.id),
-                                    install_status: 'installed',
-                                  });
-                                  setCfg((c) => ({ ...c, agentId: a.id }));
-                                }}
-                                aria-pressed={active}
-                              >
-                                <AgentIcon id={a.id} size={32} />
-                                <div className="agent-card-body">
-                                  <div className="agent-card-name">
-                                    <span>{a.name}</span>
-                                    {description ? (
-                                      <>
-                                        <span
-                                          className="agent-card-name-divider"
-                                          aria-hidden="true"
-                                        >
-                                          ·
-                                        </span>
-                                        <span className="agent-card-tagline">
-                                          {description}
-                                        </span>
-                                      </>
-                                    ) : null}
-                                  </div>
-                                  <div className="agent-card-meta">
-                                    {a.authStatus === 'missing' ? (
-                                      <span title={a.authMessage ?? a.path ?? ''}>
-                                        {t('settings.agentAuthRequired')}
-                                      </span>
-                                    ) : a.authStatus === 'unknown' ? (
-                                      <span title={a.authMessage ?? a.path ?? ''}>
-                                        {t('settings.agentAuthUnknown')}
-                                      </span>
-                                    ) : versionLabel ? (
-                                      <span title={a.path ?? ''}>
-                                        {versionLabel}
-                                      </span>
-                                    ) : (
-                                      <span title={a.path ?? ''}>
-                                        {t('common.installed')}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </button>
-                              {active ? (
+                              <div className="agent-card-main">
                                 <button
                                   type="button"
-                                  className={
-                                    'ghost icon-btn settings-test-btn agent-card-test-btn' +
-                                    (running ? ' loading' : '')
-                                  }
-                                  onClick={() => void handleTestAgent()}
-                                  disabled={running}
-                                  title={t('settings.testTitle')}
-                                >
-                                  {running ? (
-                                    <>
-                                      <Icon
-                                        name="spinner"
-                                        size={13}
-                                        className="icon-spin"
-                                      />
-                                      <span>{t('settings.test')}</span>
-                                    </>
-                                  ) : (
-                                    t('settings.test')
-                                  )}
+                                  className="agent-card-select"
+                                  onClick={() => {
+                                    trackSettingsLocalCliClick(analytics.track, {
+                                      page_name: 'settings',
+                                      area: 'configure_execution_mode_local_cli',
+                                      element: 'cli_provider',
+                                      cli_provider_id: agentIdToTracking(a.id),
+                                      install_status: 'installed',
+                                    });
+                                    setCfg((c) => ({ ...c, agentId: a.id }));
+                                  }}
+                                  aria-pressed={active}
+                                  >
+                                    <AgentIcon id={a.id} size={32} />
+                                    <div className="agent-card-body">
+                                      <div
+                                        className={
+                                          'agent-card-name' +
+                                          (isAmrAgent
+                                            ? ' agent-card-name--amr'
+                                            : '')
+                                        }
+                                      >
+                                        <span className="agent-card-title">
+                                          {agentName}
+                                        </span>
+                                        {isAmrAgent ? (
+                                          <span
+                                            className="agent-card-benefits"
+                                            aria-hidden="true"
+                                          >
+                                            {amrBenefits.map((benefit) => (
+                                              <span
+                                                key={benefit}
+                                                className="agent-card-benefit"
+                                              >
+                                                {benefit}
+                                              </span>
+                                            ))}
+                                          </span>
+                                        ) : description ? (
+                                          <>
+                                            <span
+                                              className="agent-card-name-divider"
+                                              aria-hidden="true"
+                                            >
+                                              ·
+                                            </span>
+                                            <span className="agent-card-tagline">
+                                              {description}
+                                            </span>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                      {metaLabel ? (
+                                        <div className="agent-card-meta">
+                                          <span title={metaTitle}>
+                                            {metaLabel}
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {amrCardEmail ? (
+                                        <div className="agent-card-amr-email">
+                                          <span title={amrCardEmail}>
+                                            {amrCardEmail}
+                                          </span>
+                                        </div>
+                                      ) : null}
+                                      {!active && modelSummary ? (
+                                        <div className="agent-card-model-summary">
+                                          <span>{t('settings.modelPicker')}</span>
+                                          <strong>{modelSummary}</strong>
+                                        </div>
+                                      ) : null}
+                                  </div>
                                 </button>
-                              ) : null}
+                                {isAmrAgent ? (
+                                  active && amrCardStatusReady ? (
+                                    <span
+                                      className="amr-auth-anchor"
+                                      onMouseEnter={() => setAmrCoachmarkDismissed(true)}
+                                    >
+                                      {amrCoachmarkArmed &&
+                                      amrCardStatus?.loggedIn === false &&
+                                      !amrCoachmarkDismissed ? (
+                                        <span className="amr-coachmark" aria-hidden="true">
+                                          <span className="amr-coachmark__ring" />
+                                          <svg
+                                            className="amr-coachmark__cursor"
+                                            width="22"
+                                            height="22"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                          >
+                                            <path
+                                              d="M9.4 13V8a1.8 1.8 0 0 1 3.6 0v4.6c.35-.55 1-.95 1.75-.95.65 0 1.25.32 1.6.85.32-.5.9-.8 1.55-.8.8 0 1.5.5 1.78 1.2.35-.3.8-.5 1.3-.5 1.1 0 2 .9 2 2v3.05a5.6 5.6 0 0 1-5.6 5.6h-2.5a5 5 0 0 1-3.75-1.7l-4.2-4.75a1.85 1.85 0 0 1 2.65-2.6L9.4 16Z"
+                                              fill="#fff"
+                                              stroke="#1a1a1a"
+                                              strokeWidth="1.1"
+                                              strokeLinejoin="round"
+                                            />
+                                          </svg>
+                                        </span>
+                                      ) : null}
+                                      <AmrLoginPill
+                                        className="agent-card-amr-auth"
+                                        hideSignedOutStatus
+                                        hideSignedInStatus
+                                        initialStatus={amrCardStatus}
+                                        skipInitialRefresh
+                                        signInLabel={t('settings.amrAuthorize')}
+                                        revealPendingCancelAction={amrRevealPendingCancelAction}
+                                        onStatusChange={setAmrCardStatus}
+                                      />
+                                    </span>
+                                  ) : (
+                                    <div
+                                      className="agent-card-amr-auth agent-card-amr-auth--placeholder"
+                                      aria-hidden="true"
+                                    />
+                                  )
+                                ) : null}
+                                {active && !isAmrAgent ? (
+                                  <button
+                                    type="button"
+                                    className={
+                                      'ghost icon-btn settings-test-btn agent-card-test-btn' +
+                                      (running ? ' loading' : '')
+                                    }
+                                    onClick={() => void handleTestAgent()}
+                                    disabled={running}
+                                    title={t('settings.testTitle')}
+                                  >
+                                    {running ? (
+                                      <>
+                                        <Icon
+                                          name="spinner"
+                                          size={13}
+                                          className="icon-spin"
+                                        />
+                                        <span>{t('settings.test')}</span>
+                                      </>
+                                    ) : (
+                                      t('settings.test')
+                                    )}
+                                  </button>
+                                ) : null}
+                              </div>
+                              {active ? renderAgentModelConfig(a) : null}
                             </div>
                           );
                           if (active && agentTestState.status !== 'idle') {
@@ -2539,155 +2962,6 @@ export function SettingsDialog({
                       </div>
                     )}
                   </div>
-              {(() => {
-                const selected = agents.find(
-                  (a) => a.id === cfg.agentId && a.available,
-                );
-                if (!selected) return null;
-                const hasModels =
-                  Array.isArray(selected.models) && selected.models.length > 0;
-                const hasReasoning =
-                  Array.isArray(selected.reasoningOptions) &&
-                  selected.reasoningOptions.length > 0;
-                if (!hasModels && !hasReasoning) return null;
-                const choice = cfg.agentModels?.[selected.id] ?? {};
-                const setChoice = (
-                  next: { model?: string; reasoning?: string },
-                ) => {
-                  setCfg((c) => {
-                    const prev = c.agentModels?.[selected.id] ?? {};
-                    return {
-                      ...c,
-                      agentModels: {
-                        ...(c.agentModels ?? {}),
-                        [selected.id]: { ...prev, ...next },
-                      },
-                    };
-                  });
-                };
-                const modelValue =
-                  choice.model ?? selected.models?.[0]?.id ?? '';
-                const reasoningValue =
-                  choice.reasoning ??
-                  selected.reasoningOptions?.[0]?.id ?? '';
-                const customActive =
-                  hasModels &&
-                  shouldShowCustomModelInput(
-                    modelValue,
-                    selected.models!.map((m) => m.id),
-                    agentCustomModelIds.has(selected.id),
-                  );
-                const selectValue = customActive
-                  ? CUSTOM_MODEL_SENTINEL
-                  : modelValue;
-                const modelSource = selected.modelsSource ?? 'fallback';
-                const modelSourceLabel =
-                  modelSource === 'live'
-                    ? t('settings.modelSourceLive')
-                    : t('settings.modelSourceFallback');
-                const modelSourceHint =
-                  modelSource === 'live'
-                    ? t('settings.modelPickerLiveHint')
-                    : t('settings.modelPickerFallbackHint');
-                return (
-                  <div className="agent-model-row">
-                    <div className="agent-model-row-head">
-                      {t('settings.agentModelHead')} <strong>{selected.name}</strong>
-                    </div>
-                    {hasModels ? (
-                      <>
-                        <label className="field">
-                          <span className="field-label">
-                            {t('settings.modelPicker')}
-                            <span
-                              className={`agent-model-source-badge ${modelSource}`}
-                            >
-                              {modelSourceLabel}
-                            </span>
-                          </span>
-                          <div className="agent-model-select-wrap">
-                            <select
-                              value={selectValue}
-                              onChange={(e) => {
-                                if (e.target.value === CUSTOM_MODEL_SENTINEL) {
-                                  setAgentCustomModelIds((prev) => {
-                                    const next = new Set(prev);
-                                    next.add(selected.id);
-                                    return next;
-                                  });
-                                  setChoice({ model: '' });
-                                } else {
-                                  setAgentCustomModelIds((prev) => {
-                                    if (!prev.has(selected.id)) return prev;
-                                    const next = new Set(prev);
-                                    next.delete(selected.id);
-                                    return next;
-                                  });
-                                  setChoice({ model: e.target.value });
-                                }
-                              }}
-                            >
-                              {renderModelOptions(selected.models!)}
-                              <option value={CUSTOM_MODEL_SENTINEL}>
-                                {t('settings.modelCustom')}
-                              </option>
-                            </select>
-                            <Icon
-                              name="chevron-down"
-                              size={12}
-                              className="agent-model-select-chevron"
-                            />
-                          </div>
-                        </label>
-                        <p className="hint agent-model-row-hint">
-                          {modelSourceHint}
-                        </p>
-                      </>
-                    ) : null}
-                    {customActive ? (
-                      <label className="field">
-                        <span className="field-label">
-                          {t('settings.modelCustomLabel')}
-                        </span>
-                        <input
-                          type="text"
-                          value={modelValue}
-                          placeholder={t('settings.modelCustomPlaceholder')}
-                          onChange={(e) =>
-                            setChoice({ model: e.target.value.trim() })
-                          }
-                        />
-                      </label>
-                    ) : null}
-                    {hasReasoning ? (
-                      <label className="field">
-                        <span className="field-label">
-                          {t('settings.reasoningPicker')}
-                        </span>
-                        <div className="agent-model-select-wrap">
-                          <select
-                            value={reasoningValue}
-                            onChange={(e) =>
-                              setChoice({ reasoning: e.target.value })
-                            }
-                          >
-                            {selected.reasoningOptions!.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
-                          <Icon
-                            name="chevron-down"
-                            size={12}
-                            className="agent-model-select-chevron"
-                          />
-                        </div>
-                      </label>
-                    ) : null}
-                  </div>
-                );
-              })()}
                   {unavailableAgents.length > 0 ? (
                     <details
                       className="agent-install-collapse"
@@ -2706,7 +2980,8 @@ export function SettingsDialog({
                           const docsUrl = sanitizeHttpsUrl(a.docsUrl);
                           const hasLinks = Boolean(installUrl || docsUrl);
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
-                          const cardLabel = `${a.name} · ${t('common.notInstalled')}`;
+                          const agentName = displayAgentName(a);
+                          const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
                           return (
                             <div
                               key={a.id}
@@ -2716,7 +2991,7 @@ export function SettingsDialog({
                             >
                               <AgentIcon id={a.id} size={40} />
                               <div className="agent-card-body">
-                                <div className="agent-card-name">{a.name}</div>
+                                <div className="agent-card-name">{agentName}</div>
                                 {description ? (
                                   <div className="agent-card-description">
                                     {description}
@@ -2792,8 +3067,17 @@ export function SettingsDialog({
                 const hasModels =
                   Array.isArray(selected.models) && selected.models.length > 0;
                 const choice = cfg.agentModels?.[selected.id] ?? {};
+                const knownModelIds = selected.models?.map((m) => m.id) ?? [];
+                const configuredModel =
+                  typeof choice.model === 'string' && choice.model
+                    ? choice.model
+                    : null;
                 const modelValue =
-                  choice.model ?? selected.models?.[0]?.id ?? '';
+                  selected.id === 'amr' &&
+                  configuredModel &&
+                  !knownModelIds.includes(configuredModel)
+                    ? selected.models?.[0]?.id ?? ''
+                    : configuredModel ?? selected.models?.[0]?.id ?? '';
                 return (
                   <details className="agent-cli-env settings-memory-advanced">
                     <summary className="agent-cli-env-summary">
@@ -3096,13 +3380,21 @@ export function SettingsDialog({
                     *
                   </span>
                 </span>
-                <select
+                <SearchableModelSelect
                   ref={modelSelectRef}
+                  className="inline-switcher__select settings-model-select settings-model-select--byok"
                   aria-label={
                     apiProtocol === 'azure'
                       ? t('settings.azureDeploymentModel')
                       : t('settings.model')
                   }
+                  searchPlaceholder={t('designs.searchPlaceholder')}
+                  searchInputTestId="settings-byok-model-search"
+                  popoverTestId="settings-byok-model-popover"
+                  models={apiModelOptions.map((m) => ({
+                    id: m.id,
+                    label: apiModelOptionLabel(m),
+                  }))}
                   value={apiModelSelectValue}
                   onFocus={() => {
                     const byokProviderId = byokProtocolToTracking(apiProtocol);
@@ -3116,21 +3408,22 @@ export function SettingsDialog({
                       });
                     }
                   }}
-                  onChange={(e) => {
-                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                  onChange={(nextValue) => {
+                    if (nextValue === CUSTOM_MODEL_SENTINEL) {
                       setApiModelCustomEditing(true);
                       updateApiConfig({ model: '' });
                     } else {
                       setApiModelCustomEditing(false);
-                      updateApiConfig({ model: e.target.value });
+                      updateApiConfig({ model: nextValue });
                     }
                   }}
-                >
-                  {apiModelOptions.map((m) => (
-                    <option value={m.id} key={m.id}>{apiModelOptionLabel(m)}</option>
-                  ))}
-                  <option value={CUSTOM_MODEL_SENTINEL}>{t('settings.modelCustom')}</option>
-                </select>
+                  additionalOptions={[
+                    {
+                      value: CUSTOM_MODEL_SENTINEL,
+                      label: t('settings.modelCustom'),
+                    },
+                  ]}
+                />
                 {loadedAccountModelCount > 0 ? (
                   <span className="field-inline-status success" role="status">
                     {t('settings.modelsLoadedFromAccount', {
@@ -3355,11 +3648,20 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'skills' ? (
-            <SkillsSection cfg={cfg} setCfg={setCfg} />
+            <SkillsSection
+              cfg={cfg}
+              setCfg={setCfg}
+              onSkillsRefresh={onSkillsRefresh}
+              onSkillsChanged={onSkillsChanged}
+            />
           ) : null}
 
           {activeSection === 'designSystems' ? (
-            <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
+            <DesignSystemsSection
+              cfg={cfg}
+              setCfg={setCfg}
+              onDesignSystemsChanged={onDesignSystemsChanged}
+            />
           ) : null}
 
           {activeSection === 'instructions' ? (
@@ -4817,6 +5119,8 @@ function MediaProvidersSection({
   setCfg,
   mediaProvidersNotice,
   onReloadMediaProviders,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   pendingLocalProviderIds,
   onChange,
 }: {
@@ -4824,6 +5128,8 @@ function MediaProvidersSection({
   setCfg: Dispatch<SetStateAction<AppConfig>>;
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   pendingLocalProviderIds: ReadonlySet<string>;
   onChange: (providerId: string) => void;
 }) {
@@ -5329,6 +5635,118 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
 }`;
 }
 
+// One-click install toggle for Codex: queries the daemon for whether
+// `codex mcp get open-design` succeeds, and POSTs/DELETEs the install
+// endpoint to call `codex mcp add/remove` on the user's behalf. The
+// copy-snippet path still works for users who prefer to paste manually
+// or whose Codex CLI is not on PATH (button shows a disabled hint in
+// that case).
+function CodexInstallToggle(): JSX.Element | null {
+  const { t } = useI18n();
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/mcp/install/codex/status');
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as { available: boolean; installed: boolean };
+      setAvailable(Boolean(data.available));
+      setInstalled(Boolean(data.installed));
+    } catch {
+      // Daemon unreachable or endpoint missing — hide the toggle
+      // entirely rather than spook the user with a permanent error.
+      setAvailable(false);
+      setInstalled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const run = useCallback(
+    async (method: 'POST' | 'DELETE', successKey: 'settings.mcpCodexInstallSuccess' | 'settings.mcpCodexUninstallSuccess') => {
+      setBusy(true);
+      setMessage(null);
+      try {
+        const res = await fetch('/api/mcp/install/codex', { method });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+          throw new Error(body?.error?.message || `HTTP ${res.status}`);
+        }
+        setMessage({ kind: 'success', text: t(successKey) });
+        await refresh();
+      } catch (err) {
+        setMessage({
+          kind: 'error',
+          text: t('settings.mcpCodexInstallError', { error: err instanceof Error ? err.message : String(err) }),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh, t],
+  );
+
+  if (available === null) return null;
+
+  if (!available) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          disabled
+          style={{ padding: '6px 14px', fontSize: 13, opacity: 0.6 }}
+        >
+          {t('settings.mcpCodexOneClickInstall')}
+        </button>
+        <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--fg-2, #9aa0a6)' }}>
+          {t('settings.mcpCodexOneClickUnavailable')}
+        </span>
+      </div>
+    );
+  }
+
+  const label = installed
+    ? t('settings.mcpCodexOneClickUninstall')
+    : t('settings.mcpCodexOneClickInstall');
+  const onClick = () => {
+    if (installed) {
+      void run('DELETE', 'settings.mcpCodexUninstallSuccess');
+    } else {
+      void run('POST', 'settings.mcpCodexInstallSuccess');
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <button
+        type="button"
+        className={installed ? '' : 'primary'}
+        disabled={busy}
+        onClick={onClick}
+        style={{ padding: '6px 14px', fontSize: 13 }}
+      >
+        {busy ? t('settings.mcpCodexBusy') : label}
+      </button>
+      {message ? (
+        <span
+          style={{
+            marginLeft: 10,
+            fontSize: 12,
+            color: message.kind === 'error' ? 'var(--danger, #ff6b6b)' : 'var(--fg-2, #9aa0a6)',
+          }}
+        >
+          {message.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function IntegrationsSection() {
   const { t } = useI18n();
 
@@ -5599,6 +6017,8 @@ function IntegrationsSection() {
         {info ? (
           <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
         ) : null}
+
+        {client.id === 'codex' ? <CodexInstallToggle /> : null}
 
         {client.buildDeeplink && info ? (
           <div style={{ marginBottom: 12 }}>
