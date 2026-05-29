@@ -135,7 +135,12 @@ describe('spawn writes external MCP config for Claude Code', () => {
     return { id, dir: join(projectsBase, id), conversationId: body.conversationId };
   }
 
-  async function importFolderProject(): Promise<{ id: string; dir: string; externalDir: string }> {
+  async function importFolderProject(): Promise<{
+    id: string;
+    dir: string;
+    externalDir: string;
+    conversationId: string;
+  }> {
     const externalDir = await fsp.mkdtemp(join(tmpdir(), 'od-mcp-import-'));
     tempDirs.push(externalDir);
     await fsp.writeFile(join(externalDir, 'index.html'), '<!doctype html>');
@@ -145,7 +150,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
       body: JSON.stringify({ baseDir: externalDir }),
     });
     expect(r.ok).toBe(true);
-    const body = (await r.json()) as { project: { id: string } };
+    const body = (await r.json()) as { project: { id: string }; conversationId: string };
     projectsToClean.push(body.project.id);
     const projectsBase = process.env.OD_DATA_DIR
       ? join(process.env.OD_DATA_DIR, 'projects')
@@ -154,6 +159,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
       id: body.project.id,
       dir: join(projectsBase, body.project.id),
       externalDir,
+      conversationId: body.conversationId,
     };
   }
 
@@ -257,7 +263,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
       });
       expect(putRes.ok).toBe(true);
 
-      const { id, dir, externalDir } = await importFolderProject();
+      const { id, dir, externalDir, conversationId } = await importFolderProject();
 
       await withSandboxMode(async () => {
         const chatRes = await fetch(`${baseUrl}/api/runs`, {
@@ -269,17 +275,22 @@ describe('spawn writes external MCP config for Claude Code', () => {
             message: 'hello sandbox mcp',
           }),
         });
-        expect(chatRes.status).toBe(202);
-        const { runId } = (await chatRes.json()) as { runId: string };
-        const status = await waitForRunStatus(baseUrl, runId);
-        expect(status.status).toBe('failed');
-        expect(status.errorCode).toBe('BAD_REQUEST');
-        expect(status.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+        expect(chatRes.status).toBe(400);
+        const body = (await chatRes.json()) as { error?: { message?: string } };
+        expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
       });
 
       const managedTarget = join(dir, '.mcp.json');
       expect(existsSync(managedTarget)).toBe(false);
       expect(existsSync(join(externalDir, '.mcp.json'))).toBe(false);
+      const messagesRes = await fetch(
+        `${baseUrl}/api/projects/${id}/conversations/${conversationId}/messages`,
+      );
+      expect(messagesRes.ok).toBe(true);
+      const messagesBody = (await messagesRes.json()) as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      expect(messagesBody.messages.some((msg) => msg.content === 'hello sandbox mcp')).toBe(false);
     });
   }, 30_000);
 
