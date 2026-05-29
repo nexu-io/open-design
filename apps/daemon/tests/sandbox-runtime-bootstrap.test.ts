@@ -42,7 +42,8 @@ function withEnvSnapshot<T>(
 test('sandbox runtime registry ignores host-local agent profiles at module load', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'od-sandbox-registry-'));
   const dataDir = path.join(root, 'data');
-  const hostConfigDir = path.join(root, 'host-open-design');
+  const hostHome = path.join(root, 'host-home');
+  const hostConfigDir = path.join(hostHome, '.open-design');
   const hostConfig = path.join(hostConfigDir, 'agents.local.json');
   const sandboxConfigDir = path.join(
     dataDir,
@@ -79,9 +80,13 @@ test('sandbox runtime registry ignores host-local agent profiles at module load'
       async () => {
         process.env.OD_SANDBOX_MODE = '1';
         process.env.OD_DATA_DIR = dataDir;
-        process.env.OD_AGENT_PROFILES_CONFIG = hostConfig;
+        delete process.env.OD_AGENT_PROFILES_CONFIG;
 
         vi.resetModules();
+        vi.doMock('node:os', async () => ({
+          ...(await vi.importActual<typeof import('node:os')>('node:os')),
+          homedir: () => hostHome,
+        }));
         const { AGENT_DEFS } = await import('../src/runtimes/registry.js');
         const ids = AGENT_DEFS.map((def) => def.id);
 
@@ -90,6 +95,7 @@ test('sandbox runtime registry ignores host-local agent profiles at module load'
       },
     );
   } finally {
+    vi.doUnmock('node:os');
     vi.resetModules();
     rmSync(root, { recursive: true, force: true });
   }

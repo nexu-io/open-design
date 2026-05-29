@@ -20,16 +20,16 @@ const RUNTIME_PROJECT_ROOT = path.resolve(
 );
 
 function localAgentProfilesFile(): string {
+  const explicit = process.env.OD_AGENT_PROFILES_CONFIG;
+  if (typeof explicit === 'string' && explicit.trim()) {
+    return explicit.trim();
+  }
   const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
     process.env,
     RUNTIME_PROJECT_ROOT,
   );
   if (sandboxRuntime?.enabled) {
     return sandboxAgentProfilesConfigPath(sandboxRuntime);
-  }
-  const explicit = process.env.OD_AGENT_PROFILES_CONFIG;
-  if (typeof explicit === 'string' && explicit.trim()) {
-    return explicit.trim();
   }
   return path.join(homedir(), '.open-design', 'agents.local.json');
 }
