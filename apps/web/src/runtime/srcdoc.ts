@@ -1472,6 +1472,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = false;
+  var didManualNavigate = false;
   function slides(){
     // Structured selectors first so decorative .slide markup in non-deck
     // pages (icons, badges, code samples) is not counted as deck slides;
@@ -1552,7 +1553,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var sc = scroller();
     if (sc) {
       var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(sc.scrollLeft / w)));
+      return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
     }
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
@@ -1684,8 +1685,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    var sc = scroller();
-    if (sc && typeof sc.scrollTo === 'function') sc.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    var targets = scrollTargets();
+    for (var t = 0; t < targets.length; t++) {
+      if (typeof targets[t].scrollTo === 'function') targets[t].scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    }
     setTimeout(report, 380);
   }
   function targetFor(action, list){
@@ -1704,6 +1707,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       scrollGo(target);
       return;
     }
+    // For CSS transform-track decks that don't use active classes or scroll
+    // state, directly update the container transform. Falls through to
+    // keyboard dispatch when no transform track is found (GSAP decks).
+    if (transformGo(target)) return;
     // Always dispatch keyboard events for sequential navigation so that
     // JS-driven decks (GSAP timelines, class-toggle with keyboard listeners)
     // can run their own animation logic. setActive is intentionally NOT used
@@ -1770,6 +1777,9 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   }
   function restoreInitialSlide(){
     if (didRestoreInitialSlide) { report(); return; }
+    // Skip restoring if the host already sent a navigation command before the
+    // 200ms post-load timeout fired — the deck is already where it needs to be.
+    if (didManualNavigate) { didRestoreInitialSlide = true; report(); return; }
     var list = slides();
     if (!list.length) return;
     didRestoreInitialSlide = true;
@@ -1778,6 +1788,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:slide') return;
+    didManualNavigate = true;
     if (data.action === 'go' && typeof data.index === 'number') gotoIndex(data.index);
     else go(data.action);
   });
