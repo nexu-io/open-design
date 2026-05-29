@@ -47,12 +47,6 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   // duplicate.
   const textStreamed = new Set<string>();
 
-  // Track whether we have emitted any text or thinking via streaming deltas
-  // for the current message. This makes the final `assistant` wrapper safe
-  // even when the wrapper arrives without a usable `id` (the previous guard
-  // would fall back to `false` and cause duplication).
-  let hasStreamedContentThisMessage = false;
-
   function blockKey(index: unknown): string {
     return `${currentMessageId ?? 'anon'}:${index}`;
   }
@@ -118,7 +112,7 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     if (obj.type === 'assistant' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
       currentMessageId = typeof obj.message.id === 'string' ? obj.message.id : currentMessageId;
       const msgId = typeof obj.message.id === 'string' ? obj.message.id : null;
-      const alreadyStreamed = msgId ? textStreamed.has(msgId) : hasStreamedContentThisMessage;
+      const alreadyStreamed = msgId ? textStreamed.has(msgId) : false;
       // Per-turn `stop_reason` is emitted as `turn_end` AFTER the content
       // blocks have been processed (see below). When `--include-partial-
       // messages` is unsupported, tool_use events surface only from the
@@ -166,7 +160,6 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       if (stopReason) {
         onEvent({ type: 'turn_end', stopReason });
       }
-      hasStreamedContentThisMessage = false;
       return;
     }
 
@@ -195,7 +188,6 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
         durationMs: obj.duration_ms ?? null,
         stopReason: obj.stop_reason ?? null,
       });
-      hasStreamedContentThisMessage = false;
       return;
     }
   }
@@ -203,7 +195,6 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   function handleStreamEvent(ev: Record<string, unknown>) {
     if (ev.type === 'message_start') {
       currentMessageId = isRecord(ev.message) && typeof ev.message.id === 'string' ? ev.message.id : null;
-      hasStreamedContentThisMessage = false;
       if (typeof ev.ttft_ms === 'number') {
         onEvent({ type: 'status', label: 'streaming', ttftMs: ev.ttft_ms });
       }
@@ -226,13 +217,11 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
 
       if (delta.type === 'text_delta' && typeof delta.text === 'string') {
         if (currentMessageId) textStreamed.add(currentMessageId);
-        hasStreamedContentThisMessage = true;
         onEvent({ type: 'text_delta', delta: delta.text });
         return;
       }
       if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
         if (currentMessageId) textStreamed.add(currentMessageId);
-        hasStreamedContentThisMessage = true;
         onEvent({ type: 'thinking_delta', delta: delta.thinking });
         return;
       }
