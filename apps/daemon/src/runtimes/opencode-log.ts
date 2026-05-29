@@ -35,7 +35,11 @@ export function resolveOpenCodeLogDir(
 // `since` (when provided) binds the lookup to the current run: a file last
 // written before the run started can only belong to an earlier session, so
 // it is skipped rather than risk surfacing a stale provider error for this
-// run. The 2 MB tail comfortably holds the final error frame even though
+// run. (This does not disambiguate two OpenCode runs writing into the same
+// HOME concurrently — OpenCode only emits its session id on the stdout
+// stream, which is empty in the silent-stall case, so mtime is the only
+// run-binding signal available here.) The 2 MB tail comfortably holds the
+// final error frame even though
 // OpenCode embeds the entire request body (system prompt + tool schemas) in
 // each `service=llm` line. Synchronous on purpose: the only callers are the
 // (non-async) run close handler and the inactivity watchdog, once per failed
