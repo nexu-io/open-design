@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { resolveProjectRelativePath } from './home-expansion.js';
+
 export const SANDBOX_MODE_ENV = 'OD_SANDBOX_MODE';
 
 export interface SandboxRuntimeRoots {
@@ -64,6 +66,31 @@ export function resolveSandboxRuntimeConfig(
   };
 }
 
+export function resolveSandboxRuntimeConfigFromEnv(
+  env: Record<string, string | undefined>,
+  projectRoot: string,
+): SandboxRuntimeConfig | null {
+  if (!isSandboxModeEnabled(env)) return null;
+  const rawDataDir = env.OD_DATA_DIR?.trim();
+  if (!rawDataDir) {
+    throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+  }
+  return resolveSandboxRuntimeConfig(
+    true,
+    resolveProjectRelativePath(rawDataDir, projectRoot),
+  );
+}
+
+export function sandboxAgentProfilesConfigPath(
+  config: SandboxRuntimeConfig,
+): string {
+  return path.join(
+    config.roots.agentHomeDir,
+    '.open-design',
+    'agents.local.json',
+  );
+}
+
 export function ensureSandboxRuntimeDirs(config: SandboxRuntimeConfig): void {
   if (!config.enabled) return;
   for (const dir of new Set(Object.values(config.roots))) {
@@ -99,6 +126,7 @@ export function applySandboxRuntimeEnv(
   env.CODEX_HOME = codexHome;
   env.CLAUDE_CONFIG_DIR = claudeConfigDir;
   env.OPENCODE_TEST_HOME = opencodeHome;
+  env.OD_AGENT_PROFILES_CONFIG = sandboxAgentProfilesConfigPath(config);
   env.NPM_CONFIG_USERCONFIG = npmUserConfig;
   env.npm_config_userconfig = npmUserConfig;
 

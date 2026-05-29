@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+import {
+  resolveSandboxRuntimeConfigFromEnv,
+  sandboxAgentProfilesConfigPath,
+} from '../sandbox-mode.js';
 import { DEFAULT_MODEL_OPTION, sanitizeCustomModel } from './models.js';
 import type {
   RuntimeAgentDef,
@@ -9,7 +14,19 @@ import type {
   RuntimeModelOption,
 } from './types.js';
 
+const RUNTIME_PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
+
 function localAgentProfilesFile(): string {
+  const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
+    process.env,
+    RUNTIME_PROJECT_ROOT,
+  );
+  if (sandboxRuntime?.enabled) {
+    return sandboxAgentProfilesConfigPath(sandboxRuntime);
+  }
   const explicit = process.env.OD_AGENT_PROFILES_CONFIG;
   if (typeof explicit === 'string' && explicit.trim()) {
     return explicit.trim();

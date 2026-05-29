@@ -408,6 +408,41 @@ fsTest(
 );
 
 fsTest(
+  'OD_SANDBOX_MODE derives agent-home isolation from OD_DATA_DIR during detection',
+  () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'od-agents-sandbox-data-'));
+    const realPrefix = mkdtempSync(join(tmpdir(), 'od-agents-real-prefix-'));
+    const realPrefixBin = join(realPrefix, 'bin');
+    try {
+      return withEnvSnapshot(
+        ['OD_SANDBOX_MODE', 'OD_DATA_DIR', 'OD_AGENT_HOME', 'PATH', 'NPM_CONFIG_PREFIX'],
+        () => {
+          mkdirSync(realPrefixBin, { recursive: true });
+          writeFileSync(join(realPrefixBin, 'gemini'), '');
+          chmodSync(join(realPrefixBin, 'gemini'), 0o755);
+
+          process.env.OD_SANDBOX_MODE = '1';
+          process.env.OD_DATA_DIR = dataDir;
+          delete process.env.OD_AGENT_HOME;
+          process.env.PATH = '/usr/bin:/bin';
+          process.env.NPM_CONFIG_PREFIX = realPrefix;
+
+          const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
+          assert.equal(
+            resolved,
+            null,
+            `sandbox mode must not see the real $NPM_CONFIG_PREFIX bin; got ${resolved}`,
+          );
+        },
+      );
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+      rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
   'OD_AGENT_HOME isolates resolution from $VP_HOME leakage',
   () => {
     const sandbox = mkdtempSync(join(tmpdir(), 'od-agents-vp-sandbox-'));
