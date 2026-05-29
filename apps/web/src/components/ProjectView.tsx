@@ -14,7 +14,7 @@ import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
-import { streamMessage } from '../providers/anthropic';
+import { streamMessage, usesAnthropicProxy } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
   fetchVelaLoginStatus,
@@ -2859,6 +2859,7 @@ export function ProjectView({
           userMsg.id,
           project.id,
           projectFiles,
+          { omitNativeImageAttachments: usesAnthropicProxy(config) },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         let accumulatedAssistantText = '';

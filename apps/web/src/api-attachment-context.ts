@@ -19,17 +19,22 @@ const API_ATTACHMENT_PREVIEW_KINDS = new Set<ProjectFileKind>([
 const MAX_API_ATTACHMENT_CHARS = 24_000;
 const MAX_API_ATTACHMENT_TOTAL_CHARS = 64_000;
 
+export interface ApiAttachmentContextOptions {
+  omitNativeImageAttachments?: boolean;
+}
+
 export async function historyWithApiAttachmentContext(
   history: ChatMessage[],
   messageId: string,
   projectId: string,
   projectFiles: ProjectFile[],
+  options: ApiAttachmentContextOptions = {},
 ): Promise<ChatMessage[]> {
   const current = history.find((message) => message.id === messageId && message.role === 'user');
   const attachments = current?.attachments ?? [];
   if (!current || attachments.length === 0) return history;
 
-  const context = await buildApiAttachmentContext(projectId, attachments, projectFiles);
+  const context = await buildApiAttachmentContext(projectId, attachments, projectFiles, options);
   if (!context) return history;
 
   return history.map((message) =>
@@ -43,6 +48,7 @@ async function buildApiAttachmentContext(
   projectId: string,
   attachments: ChatAttachment[],
   projectFiles: ProjectFile[],
+  options: ApiAttachmentContextOptions,
 ): Promise<string> {
   const byPath = new Map<string, ProjectFile>();
   const byName = new Map<string, ProjectFile>();
@@ -54,6 +60,9 @@ async function buildApiAttachmentContext(
   let remaining = MAX_API_ATTACHMENT_TOTAL_CHARS;
   const blocks: string[] = [];
   for (const attachment of attachments) {
+    if (options.omitNativeImageAttachments && attachment.kind === 'image') {
+      continue;
+    }
     if (remaining <= 0) {
       blocks.push(
         '[Open Design omitted remaining attached files because the attachment context budget was exhausted.]',

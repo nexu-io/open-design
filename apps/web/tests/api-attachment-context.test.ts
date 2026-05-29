@@ -79,6 +79,24 @@ describe('historyWithApiAttachmentContext', () => {
     expect(history[0]?.content).toContain('Content preview unavailable');
   });
 
+  it('omits image attachment metadata when the provider sends native image blocks', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Describe this image', [
+          { path: 'hero.png', name: 'hero.png', kind: 'image' },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('hero.png', 'image')],
+      { omitNativeImageAttachments: true },
+    );
+
+    expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
+    expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
+    expect(history[0]?.content).toBe('Describe this image');
+  });
+
   it('uses filename inference when the project file list has not refreshed yet', async () => {
     mockedFetchProjectFilePreview.mockResolvedValue({
       kind: 'pdf',

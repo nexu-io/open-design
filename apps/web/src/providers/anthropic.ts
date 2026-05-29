@@ -35,6 +35,22 @@ export function makeClient(cfg: AppConfig): Anthropic {
   });
 }
 
+export function usesAnthropicProxy(cfg: AppConfig): boolean {
+  if (
+    cfg.apiProtocol === 'azure' ||
+    cfg.apiProtocol === 'ollama' ||
+    cfg.apiProtocol === 'google' ||
+    cfg.apiProtocol === 'senseaudio' ||
+    cfg.apiProtocol === 'openai'
+  ) {
+    return false;
+  }
+  if (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl)) {
+    return false;
+  }
+  return Boolean(cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com');
+}
+
 export async function streamMessage(
   cfg: AppConfig,
   system: string,
@@ -66,7 +82,7 @@ export async function streamMessage(
     return streamMessageOpenAI(cfg, system, history, signal, handlers);
   }
 
-  if (cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com') {
+  if (usesAnthropicProxy(cfg)) {
     return streamMessageAnthropicProxy(cfg, system, history, signal, handlers, context);
   }
 
