@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { createAuthMiddleware, type AuthMiddlewareOptions } from '../src/auth-middleware.js';
 import crypto from 'node:crypto';
 
@@ -44,7 +44,7 @@ function defaultOptions(overrides: Partial<AuthMiddlewareOptions> = {}): AuthMid
   const base: AuthMiddlewareOptions = {
     enabledRef: { value: true },
     networkExposed: true,
-    isLocalPeer: (ip: string) => ip === '127.0.0.1' || ip === '::1',
+    isLocalPeer: (ip?: string) => ip === '127.0.0.1' || ip === '::1',
     resolveHashes: async () => [makeHash('od_testkey123')],
     verifyKey: (candidate: string, hashes: string[]) => hashes.includes(makeHash(candidate)),
     resolveSession: () => false,
@@ -213,5 +213,45 @@ describe('auth-middleware', () => {
     let validCalled = false;
     await middleware(mockReq({ remoteAddress: '192.168.1.100', authorization: 'Bearer od_testkey123' }), validRes, () => { validCalled = true; });
     expect(validCalled).toBe(true);
+  });
+});
+
+describe('auth-middleware: degraded mode with OD_TRUST_PROXY and no XFF', () => {
+  const PREVIOUS = process.env.OD_TRUST_PROXY;
+  afterEach(() => {
+    if (PREVIOUS === undefined) delete process.env.OD_TRUST_PROXY;
+    else process.env.OD_TRUST_PROXY = PREVIOUS;
+  });
+
+  it('allows direct localhost when proxy trust is on but no XFF (bootstrap)', async () => {
+    process.env.OD_TRUST_PROXY = '1';
+    // No keys configured, network-exposed, direct localhost request.
+    // effectivePeerFromReq would return '' (fail-closed), but degraded
+    // mode checks TCP peer directly so the admin can bootstrap the first key.
+    const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
+    const req = mockReq({ remoteAddress: '127.0.0.1' });
+    const res = mockRes();
+    let called = false;
+    await middleware(req, res, () => { called = true; });
+    expect(called).toBe(true);
+  });
+
+  it('still blocks remote in degraded mode with proxy trust on', async () => {
+    process.env.OD_TRUST_PROXY = '1';
+    const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
+    const req = mockReq({ remoteAddress: '203.0.113.5' });
+    const res = mockRes();
+    await middleware(req, res, () => {});
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('allows IPv6 loopback bootstrap with proxy trust on', async () => {
+    process.env.OD_TRUST_PROXY = 'nginx';
+    const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
+    const req = mockReq({ remoteAddress: '::1' });
+    const res = mockRes();
+    let called = false;
+    await middleware(req, res, () => { called = true; });
+    expect(called).toBe(true);
   });
 });

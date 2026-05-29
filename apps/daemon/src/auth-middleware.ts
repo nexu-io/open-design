@@ -4,7 +4,7 @@ import { effectivePeerFromReq } from "./proxy-trust.js";
 export interface AuthMiddlewareOptions {
   enabledRef: { value: boolean };
   networkExposed: boolean;
-  isLocalPeer: (ip: string) => boolean;
+  isLocalPeer: (ip: string | undefined) => boolean;
   resolveHashes: () => Promise<string[]>;
   verifyKey: (candidate: string, hashes: string[]) => boolean;
   resolveSession: (token: string) => boolean;
@@ -49,9 +49,12 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
     if (isPublicPath(req.path, req.method)) return next();
 
     // No keys configured — allow localhost, block everyone else.
+    // Use the TCP peer directly (not effectivePeer) so the admin can
+    // bootstrap the first key via http://127.0.0.1:<port> even when
+    // OD_TRUST_PROXY is enabled without X-Forwarded-For.
     if (!options.enabledRef.value) {
-      const ip = effectivePeerFromReq(req);
-      if (options.isLocalPeer(ip)) return next();
+      const tcpPeer = req.socket?.remoteAddress;
+      if (options.isLocalPeer(tcpPeer)) return next();
       return rejectRequest(req, res, "No API keys configured — access from localhost only");
     }
 

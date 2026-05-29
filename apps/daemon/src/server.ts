@@ -4690,8 +4690,11 @@ export async function startServer({
       // by auth middleware — render an explanatory page instead of redirecting
       // to / (which would bounce back to /login, creating an infinite loop).
       if (networkExposed) {
-        const ip = effectivePeerFromReq(req);
-        if (!isLoopbackAddress(ip)) {
+        // Check TCP peer directly (not effectivePeer) so a direct
+        // localhost browser can bootstrap keys even when OD_TRUST_PROXY
+        // is enabled without X-Forwarded-For.
+        const tcpPeer = req.socket?.remoteAddress;
+        if (!isLoopbackAddress(tcpPeer)) {
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.setHeader('Cache-Control', 'no-store');
           res.send(renderLoginPage('No API keys configured. Access is limited to localhost only. Ask the administrator to run `od auth key generate`.', undefined, false));
