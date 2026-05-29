@@ -408,6 +408,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         patch.designSystemId = designSystemValidation.id;
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
+        const skillValidation = await validateProjectSkillId(patch.skillId);
+        if (!skillValidation.ok) {
+          return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+        }
+        patch.skillId = skillValidation.id;
+      }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');

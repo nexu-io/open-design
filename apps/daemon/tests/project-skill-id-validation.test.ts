@@ -55,4 +55,31 @@ describe('project skillId validation', () => {
       expect(getResp.status).toBe(404);
     });
   });
+
+  async function patchProject(id: string, patch: Record<string, unknown>) {
+    return fetch(`${baseUrl}/api/projects/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+  }
+
+  describe('PATCH /api/projects/:id', () => {
+    it('rejects unknown skillId with 400 SKILL_NOT_FOUND', async () => {
+      const id = uniqueId('p');
+      const created = await createProject({ id, name: 'Patch target' });
+      expect(created.status).toBe(200);
+      projectsToClean.push(id);
+
+      const resp = await patchProject(id, { skillId: 'still-not-a-real-skill' });
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('SKILL_NOT_FOUND');
+
+      // skillId on the row stays unchanged (null since create).
+      const get = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+      const getBody = (await get.json()) as { project: { skillId: string | null } };
+      expect(getBody.project.skillId).toBeNull();
+    });
+  });
 });
