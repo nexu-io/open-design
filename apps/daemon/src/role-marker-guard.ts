@@ -95,6 +95,34 @@ export const FABRICATED_ROLE_MARKER_RE =
 const NEWLINE_ANCHORED_ROLE_MARKER_RE =
   /\n[ \t]*##[ \t]+(?:user|assistant|assist|system)(?=[^a-z])/;
 
+// Pending-marker variants used in the no-match branch to detect a
+// COMPLETE-but-unconfirmed marker prefix at the end of the buffer.
+// Drop the `(?=[^a-z])` lookahead and anchor with `$` instead — the
+// lookahead's whole purpose is to require a non-lowercase character
+// AFTER the role keyword, which by definition can't be present when
+// the chunk boundary fell exactly between the role keyword and its
+// next byte. If one of these matches, the role keyword IS at the end
+// of the current buffer; we withhold it and revisit on the next
+// feed, where one of three things will happen:
+//   (1) The next char is non-lowercase → main regex matches →
+//       contaminated → withheld bytes dropped.
+//   (2) The next char is lowercase (e.g. `## userl…`) → main regex
+//       no longer matches the role keyword → withheld bytes are
+//       confirmed safe and emitted alongside the new chunk.
+//   (3) The role keyword is part of a longer word that itself is a
+//       role keyword (only `user` ⊂ `users`, etc. — none extend to
+//       a different role) → still case (2), since the extension is
+//       lowercase.
+// This implements the suggested fix on review r3324277xxx —
+// preserves the documented "everything from the marker onward is
+// silently dropped" contract across chunk boundaries that fall
+// inside the lookahead-detection window.
+const FIRST_CHUNK_PENDING_MARKER_TAIL_RE =
+  /(?:^|\n)[ \t]*##[ \t]+(?:user|assistant|assist|system)$/;
+
+const NEWLINE_ANCHORED_PENDING_MARKER_TAIL_RE =
+  /\n[ \t]*##[ \t]+(?:user|assistant|assist|system)$/;
+
 // Bounded tail size for cross-chunk matching. Must comfortably exceed
 // the longest possible marker prefix:
 //   "\n" + whitespace run + "##" + whitespace + "assistant"  ≈  16–24
@@ -137,16 +165,31 @@ export interface RoleMarkerGuard {
  *   }
  */
 export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
-  // Rolling tail of the bytes we have emitted so far, capped at
-  // TAIL_BUFFER_SIZE. Used as the prefix when matching against new text
-  // so we catch markers that straddle a chunk boundary.
+  // Rolling tail of the bytes we have ALREADY EMITTED, capped at
+  // TAIL_BUFFER_SIZE. Used as the prefix when matching against new
+  // text so we catch markers that straddle a chunk boundary.
   let tail = '';
-  // Tracks whether we have processed a non-empty feed yet. On the very
-  // first non-empty chunk, `^` in the canonical regex is a legitimate
-  // anchor — that position really IS the message start. On every
-  // subsequent chunk, `tail` is a mid-stream slice and `^` no longer
-  // anchors at the real message start; we switch to the newline-only
-  // variant so a sliding window cannot manufacture a match from prose.
+  // Bytes we have RECEIVED but DEFERRED — held back because they form
+  // a complete-but-unconfirmed marker suffix at the end of the buffer
+  // and we don't yet know whether the next chunk will confirm them
+  // (next char non-lowercase → contaminated, drop) or deny them
+  // (next char lowercase → suffix was part of a longer word, emit).
+  // Without this, a chunk boundary falling exactly between the role
+  // keyword and its lookahead char would leak the marker line itself
+  // into the UI / app.sqlite before we could classify it. See review
+  // r3324277xxx.
+  let pending = '';
+  // Tracks whether any byte has been EMITTED to the consumer yet.
+  // While `tail` is empty (no bytes pushed), the conceptual message
+  // start is still upstream of anything the consumer has seen — `^`
+  // in the canonical regex is a legitimate anchor. Once we emit any
+  // byte, `^` of subsequent buffers no longer represents the message
+  // start and we switch to the newline-only variants so a sliding
+  // window cannot manufacture a match from prose. Importantly:
+  // `firstChunk` stays true even when an entire feed is deferred to
+  // `pending`, because no bytes have crossed the emission boundary
+  // yet (e.g. a message that starts with `## system` followed by a
+  // separate `\n` chunk).
   let firstChunk = true;
   let _contaminated = false;
   let markerText: string | null = null;
@@ -160,34 +203,66 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
       if (_contaminated) return '';
       if (text.length === 0) return '';
 
-      const buffer = tail + text;
-      const re = firstChunk
+      // Combine `tail` (already-emitted suffix for cross-chunk matching),
+      // `pending` (deferred-from-prior-call suspicious suffix), and the
+      // new `text` into a single matching buffer.
+      const buffer = tail + pending + text;
+      const matchRe = firstChunk
         ? FABRICATED_ROLE_MARKER_RE
         : NEWLINE_ANCHORED_ROLE_MARKER_RE;
-      const match = re.exec(buffer);
+      const pendingRe = firstChunk
+        ? FIRST_CHUNK_PENDING_MARKER_TAIL_RE
+        : NEWLINE_ANCHORED_PENDING_MARKER_TAIL_RE;
+      // `firstChunk` transitions are tied to actual byte emission, not
+      // feed count — see comment above. Transitioned at the end of
+      // this function only when we emit at least one byte.
 
-      if (!match) {
-        // Clean. Pass text through, roll the tail forward, and mark
-        // the first chunk consumed so subsequent calls use the
-        // newline-only variant.
-        firstChunk = false;
-        tail = buffer.length > TAIL_BUFFER_SIZE
-          ? buffer.slice(buffer.length - TAIL_BUFFER_SIZE)
-          : buffer;
-        return text;
+      const match = matchRe.exec(buffer);
+      if (match) {
+        // Marker confirmed. Compute the safe-to-emit portion (bytes
+        // between previously-emitted `tail` and the marker), drop
+        // `pending` (the deferred portion sits inside the marker
+        // region by definition once the lookahead char arrives), and
+        // mark contaminated. Subsequent feeds early-return.
+        _contaminated = true;
+        markerText = match[0].trim();
+        pending = '';
+        const alreadyEmitted = tail.length;
+        const markerStart = match.index;
+        if (markerStart <= alreadyEmitted) return '';
+        return buffer.slice(alreadyEmitted, markerStart);
       }
 
-      // Marker found. Compute how much of `text` is still safe to emit
-      // (the portion before the marker that hasn't already been emitted
-      // via prior calls). `tail.length` is the count of chars at the
-      // head of `buffer` that have already been emitted; `match.index`
-      // is the marker position within `buffer`.
-      _contaminated = true;
-      markerText = match[0].trim();
+      // No confirmed marker. Check whether the buffer ends with a
+      // complete-but-unconfirmed marker prefix (role keyword present,
+      // lookahead char not yet arrived). If so, withhold that suffix
+      // until the next feed; emit the rest.
+      const pendingMatch = pendingRe.exec(buffer);
       const alreadyEmitted = tail.length;
-      const markerStart = match.index;
-      if (markerStart <= alreadyEmitted) return '';
-      return text.slice(0, markerStart - alreadyEmitted);
+      const pendingStart = pendingMatch
+        // Never withhold bytes we have already emitted in a prior
+        // feed — the suspicious suffix could in pathological cases
+        // start inside `tail` (we held back `pending` correctly on
+        // the prior call, but the suffix-start position is upstream
+        // of where we hold). Clamp to alreadyEmitted so safeToEmit
+        // never goes negative.
+        ? Math.max(pendingMatch.index, alreadyEmitted)
+        : buffer.length;
+
+      const safeToEmit = buffer.slice(alreadyEmitted, pendingStart);
+      pending = buffer.slice(pendingStart);
+
+      // Roll the emitted-bytes tail forward.
+      const fullEmitted = tail + safeToEmit;
+      tail = fullEmitted.length > TAIL_BUFFER_SIZE
+        ? fullEmitted.slice(fullEmitted.length - TAIL_BUFFER_SIZE)
+        : fullEmitted;
+      // Only transition firstChunk once a byte has actually crossed
+      // the emission boundary. If everything was deferred to pending,
+      // the `^` anchor is still valid for the next call.
+      if (safeToEmit.length > 0) firstChunk = false;
+
+      return safeToEmit;
     },
 
     warningEvent() {

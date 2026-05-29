@@ -300,6 +300,75 @@ describe('createRoleMarkerGuard', () => {
     expect(guard.warningEvent()!.marker).toBe('## user');
   });
 
+  // ── Pending-marker deferral (PR #3303 review r3324277xxx) ─────────
+  // When a chunk boundary falls between the complete role keyword and
+  // its lookahead character, the marker line itself must not leak to
+  // the consumer. The guard defers the marker suffix as `pending` until
+  // the next feed confirms (contaminated) or denies (emit alongside
+  // continuation) it.
+
+  it('withholds `## user` suffix when chunk boundary falls before the lookahead char', () => {
+    const guard = createRoleMarkerGuard('msg-pending-1');
+    // Chunk 1 ends exactly after the role keyword.
+    const r1 = guard.feedText('OK\n## user');
+    // Only the pre-marker prefix is emitted; the marker line is deferred.
+    expect(r1).toBe('OK');
+    expect(guard.contaminated).toBe(false);
+
+    // Chunk 2 brings the lookahead char (newline) — confirms the marker.
+    const r2 = guard.feedText('\nfabricated');
+    expect(r2).toBe('');
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## user');
+  });
+
+  it('emits deferred `## user` suffix once the next char denies the lookahead (e.g. `userl…`)', () => {
+    const guard = createRoleMarkerGuard('msg-pending-2');
+    const r1 = guard.feedText('Hello\n## user');
+    expect(r1).toBe('Hello');
+    expect(guard.contaminated).toBe(false);
+
+    // Next char is lowercase `l` — turns `user` into `userland`, NOT a
+    // role marker. Deferred suffix is released and emitted alongside.
+    const r2 = guard.feedText('land thoughts');
+    expect(r2).toBe('\n## userland thoughts');
+    expect(guard.contaminated).toBe(false);
+  });
+
+  it('withholds `## assistant` suffix at chunk boundary, confirms on punctuation', () => {
+    const guard = createRoleMarkerGuard('msg-pending-3');
+    const r1 = guard.feedText('See below.\n## assistant');
+    expect(r1).toBe('See below.');
+    expect(guard.contaminated).toBe(false);
+
+    const r2 = guard.feedText('. Doing the thing.');
+    expect(r2).toBe('');
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## assistant');
+  });
+
+  it('does not withhold `## User` (Title-Case) — pending regex is also case-sensitive', () => {
+    const guard = createRoleMarkerGuard('msg-pending-4');
+    // Title-Case heading must pass through unconditionally — not even
+    // the pending deferral should swallow it.
+    const r = guard.feedText('intro\n## User');
+    expect(r).toBe('intro\n## User');
+    expect(guard.contaminated).toBe(false);
+  });
+
+  it('withholds `## system` at end of buffer when message starts with the marker', () => {
+    const guard = createRoleMarkerGuard('msg-pending-5');
+    // First chunk IS the marker (no prefix). `^` legitimately anchors.
+    const r1 = guard.feedText('## system');
+    expect(r1).toBe('');
+    expect(guard.contaminated).toBe(false);
+
+    const r2 = guard.feedText('\nfabricated');
+    expect(r2).toBe('');
+    expect(guard.contaminated).toBe(true);
+    expect(guard.warningEvent()!.marker).toBe('## system');
+  });
+
   // ── Streaming-anchor regression (PR #3303 review r3324060995) ─────
   // The bounded-tail refactor must not let `^` in the canonical regex
   // anchor at an arbitrary mid-stream cut point. When `tail` is a
