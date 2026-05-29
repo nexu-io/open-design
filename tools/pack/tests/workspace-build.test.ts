@@ -168,6 +168,32 @@ describe("ensureWorkspaceBuildArtifacts", () => {
     }
   });
 
+  it("materializes cached internal package outputs for pack tarballs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-package-cache-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config = createConfig(root, cache.root);
+    let builds = 0;
+
+    try {
+      await writeWorkspace(root);
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+      await rm(join(root, "packages/host/dist/index.mjs"), { force: true });
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+
+      expect(builds).toBe(1);
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
+      expect(await readFile(join(root, "packages/host/dist/index.mjs"), "utf8")).toBe("build-1\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps platform-specific workspace build cache nodes separate", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-platform-"));
     const cache = new ToolPackCache(join(root, ".cache"));
