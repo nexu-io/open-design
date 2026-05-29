@@ -9285,7 +9285,6 @@ function HtmlViewer({
     options?: { fallbackToExisting?: boolean },
   ) {
     const requestSeq = ++deployProviderLoadSeqRef.current;
-    setDeployProviderId(providerId);
     const deployments = await fetchProjectDeployments(projectId, workspaceContext);
     const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
     const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
@@ -9293,17 +9292,17 @@ function HtmlViewer({
       ? Object.values(nextDeploymentsByProvider)[0] ?? null
       : null;
     const currentDeployment = exactDeployment ?? fallbackDeployment;
-    // Use the explicit providerId for config/form so a fallback deployment from
-    // another provider only fills the existing-URL display, never the form/credentials.
-    const config = await fetchDeployConfig(providerId);
+    const activeProviderId = currentDeployment ? currentDeployment.providerId : providerId;
+    setDeployProviderId(activeProviderId);
+    const config = await fetchDeployConfig(activeProviderId);
     if (requestSeq !== deployProviderLoadSeqRef.current) {
       return { config: null, currentDeployment: null };
     }
-    syncDeployFormFromConfig(providerId, config);
+    syncDeployFormFromConfig(activeProviderId, config);
     setDeploymentsByProvider(nextDeploymentsByProvider);
     setDeployment(currentDeployment ?? null);
     setDeployResult(currentDeployment ?? null);
-    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
+    if (activeProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
       void loadCloudflareZones(config, { requestSeq });
     }
     return { config, currentDeployment };
@@ -13986,7 +13985,7 @@ function HtmlViewer({
   }
 
   async function retryDeploymentLink() {
-    const current = (deployResult?.providerId === deployProviderId ? deployResult : null) || deployment;
+    const current = (deployResult?.providerId === deployProviderId ? deployResult : null) || (deployment?.providerId === deployProviderId ? deployment : null);
     if (!current?.id) return;
     setDeployError(null);
     setDeployPhase('preparing-link');
@@ -15098,7 +15097,7 @@ function HtmlViewer({
       clearBoardComposer();
     }
   }, [activePreviewCommentId, boardMode, effectiveDeck, slideState?.active, visibleSideComments]);
-  const activeDeployment = (deployResult?.providerId === deployProviderId ? deployResult : null) || deployment;
+  const activeDeployment = (deployResult?.providerId === deployProviderId ? deployResult : null) || (deployment?.providerId === deployProviderId ? deployment : null);
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';

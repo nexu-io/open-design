@@ -823,7 +823,7 @@ export async function deployToRender({
       if (existing) {
         const item = existing.service || existing;
         serviceId = item.id;
-        serviceUrl = item.url;
+        serviceUrl = item.serviceDetails?.url || item.url || `https://${repoName}.onrender.com`;
       }
     }
   }
@@ -857,7 +857,7 @@ export async function deployToRender({
     const created = (await createServiceResp.json()) as any;
     const item = created.service || created;
     serviceId = item.id;
-    serviceUrl = item.url;
+    serviceUrl = item.serviceDetails?.url || item.url || `https://${repoName}.onrender.com`;
   } else {
     // Service already exists, trigger a fresh deploy
     const triggerResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys`, {
