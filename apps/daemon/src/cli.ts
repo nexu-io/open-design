@@ -573,7 +573,7 @@ async function runAuth(args) {
         console.error(`daemon ${resp.status}: ${text}`);
         process.exit(1);
       }
-      const keys = await resp.json();
+      const { keys } = await resp.json();
       if (keys.length === 0) {
         console.log('No API keys configured.');
       } else {
