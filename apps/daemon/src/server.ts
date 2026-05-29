@@ -220,6 +220,7 @@ import {
   classifyAgentServiceFailure,
   cursorAuthGuidance,
 } from './runtimes/auth.js';
+import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
@@ -12458,17 +12459,36 @@ export async function startServer({
             { retryable: true },
           ));
         } else {
-          const rewritten = rewriteKnownAgentStreamError(
-            def.id,
-            (agentStderrTail || agentStdoutTail || '').trim(),
-            `${agentStderrTail}\n${agentStdoutTail}`,
-          );
-          if (rewritten !== 'Agent stream error') {
+          // OpenCode swallows provider failures in headless mode: a 429
+          // usage-limit is marked retryable and retried silently with
+          // nothing on stdout/stderr, so the run only dies via the
+          // inactivity watchdog and the checks above find no signal. The
+          // real reason is recorded only in OpenCode's own session log,
+          // so recover it before falling back to the generic rewrite.
+          // See issue #982.
+          const openCodeFailure =
+            def.id === 'opencode'
+              ? readOpenCodeServiceFailure(spawnedAgentEnv)
+              : null;
+          if (openCodeFailure) {
             send('error', createSseErrorPayload(
-              'AGENT_EXECUTION_FAILED',
-              rewritten,
+              openCodeFailure.code,
+              openCodeFailure.message,
               { retryable: true },
             ));
+          } else {
+            const rewritten = rewriteKnownAgentStreamError(
+              def.id,
+              (agentStderrTail || agentStdoutTail || '').trim(),
+              `${agentStderrTail}\n${agentStdoutTail}`,
+            );
+            if (rewritten !== 'Agent stream error') {
+              send('error', createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                rewritten,
+                { retryable: true },
+              ));
+            }
           }
         }
       }
