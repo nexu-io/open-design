@@ -422,6 +422,7 @@ interface PublicComposioConfigResponse {
 
 interface PublicMediaProviderConfigEntry {
   configured?: boolean;
+  source?: string;
   apiKeyTail?: string;
   baseUrl?: string;
   model?: string;
@@ -507,16 +508,21 @@ export function buildMediaProvidersForDaemonSave(
   for (const [providerId, currentEntry] of Object.entries(currentProviders ?? {})) {
     const daemonEntry = daemonProviders?.[providerId];
     const apiKey = currentEntry?.apiKey?.trim() ?? '';
+    const hasStoredKeyMarker = Boolean(
+      currentEntry?.apiKeyTail?.trim()
+      || daemonEntry?.apiKeyTail?.trim(),
+    );
     const preserveApiKey = !apiKey && Boolean(
       currentEntry?.apiKeyConfigured
-      && (daemonEntry?.apiKeyConfigured || daemonEntry?.apiKeyTail?.trim()),
+      && hasStoredKeyMarker,
     );
-    const baseUrl =
+    const explicitBaseUrl =
       currentEntry?.baseUrl?.trim()
       || daemonEntry?.baseUrl?.trim()
-      || defaultBaseUrlForProvider(providerId);
+      || '';
     const model = currentEntry?.model?.trim() || daemonEntry?.model?.trim() || '';
-    if (!apiKey && !preserveApiKey && !baseUrl && !model) continue;
+    if (!apiKey && !preserveApiKey && !explicitBaseUrl && !model) continue;
+    const baseUrl = explicitBaseUrl || defaultBaseUrlForProvider(providerId);
     providers[providerId] = {
       ...(apiKey ? { apiKey } : {}),
       ...(preserveApiKey ? { preserveApiKey: true } : {}),
@@ -558,6 +564,9 @@ export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvid
         apiKeyConfigured: Boolean(entry?.configured),
         apiKeyTail: entry?.apiKeyTail ?? '',
         baseUrl: entry?.baseUrl ?? '',
+        ...(typeof entry?.source === 'string' && entry.source.trim()
+          ? { source: entry.source.trim() }
+          : {}),
         ...(typeof entry?.model === 'string' && entry.model.trim()
           ? { model: entry.model.trim() }
           : {}),
