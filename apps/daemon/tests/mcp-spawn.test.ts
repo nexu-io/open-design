@@ -112,7 +112,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
     }
   });
 
-  async function createProject(): Promise<{ id: string; dir: string }> {
+  async function createProject(): Promise<{ id: string; dir: string; conversationId: string }> {
     const id = `mcp-spawn-${randomUUID()}`;
     const r = await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
@@ -120,6 +120,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
       body: JSON.stringify({ id, name: id }),
     });
     expect(r.ok).toBe(true);
+    const body = (await r.json()) as { conversationId: string };
     projectsToClean.push(id);
     // The daemon owns its data dir; we discover the on-disk project path by
     // having the daemon return the upload root, then composing path manually.
@@ -127,7 +128,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
     const projectsBase = process.env.OD_DATA_DIR
       ? join(process.env.OD_DATA_DIR, 'projects')
       : join(process.cwd(), '.od', 'projects');
-    return { id, dir: join(projectsBase, id) };
+    return { id, dir: join(projectsBase, id), conversationId: body.conversationId };
   }
 
   async function importFolderProject(): Promise<{ id: string; dir: string; externalDir: string }> {
@@ -387,7 +388,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
   });
 
   it('rejects run-scoped MCP bundles the selected runtime cannot receive', async () => {
-    const { id } = await createProject();
+    const { id, conversationId } = await createProject();
 
     const unsupportedRuntimeRes = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
@@ -414,6 +415,14 @@ describe('spawn writes external MCP config for Claude Code', () => {
     expect(unsupportedRuntimeBody.error?.message).toContain(
       'Codex CLI (codex) does not support run-scoped MCP tool bundles',
     );
+    const messagesRes = await fetch(
+      `${baseUrl}/api/projects/${id}/conversations/${conversationId}/messages`,
+    );
+    expect(messagesRes.ok).toBe(true);
+    const messagesBody = (await messagesRes.json()) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(messagesBody.messages.some((msg) => msg.content === 'bad tools')).toBe(false);
 
     const unsupportedTransportRes = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
