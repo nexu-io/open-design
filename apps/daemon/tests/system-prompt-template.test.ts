@@ -428,7 +428,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('Keep ElevenLabs SFX `--prompt` under 450 characters');
     expect(out).toContain('lo-fi felt-piano cafe loop');
     expect(out).toContain('SFX duration is capped at 30 seconds');
-    expect(out).toContain('MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations');
+    expect(out).toContain('MiniMax image/music/TTS, and the FishAudio and ElevenLabs audio renderers are production integrations');
     expect(out).not.toContain('fishaudio, …) are still stubs');
   });
 

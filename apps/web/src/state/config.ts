@@ -1,5 +1,4 @@
 import type { AppConfigPrefs } from '@open-design/contracts';
-import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
@@ -601,10 +600,6 @@ export function isStoredMediaProviderEntryEmpty(
   return !isStoredMediaProviderEntryPresent(entry);
 }
 
-function defaultBaseUrlForProvider(providerId: string): string {
-  return MEDIA_PROVIDERS.find((provider) => provider.id === providerId)?.defaultBaseUrl ?? '';
-}
-
 function buildMediaProviderProfilesForDaemonSave(
   currentProfiles: MediaProviderProfileCredentials[] | undefined,
   daemonProfiles: MediaProviderProfileCredentials[] | undefined,
@@ -625,15 +620,9 @@ function buildMediaProviderProfilesForDaemonSave(
       currentProfile.apiKeyConfigured
       && hasStoredKeyMarker,
     );
-    const baseUrl =
-      currentProfile.baseUrl?.trim()
-      || daemonProfile?.baseUrl?.trim()
-      || '';
-    const model =
-      currentProfile.model?.trim()
-      || daemonProfile?.model?.trim()
-      || '';
-    const label = currentProfile.label?.trim() || daemonProfile?.label?.trim() || '';
+    const baseUrl = currentProfile.baseUrl?.trim() ?? '';
+    const model = currentProfile.model?.trim() ?? '';
+    const label = currentProfile.label?.trim() ?? '';
     if (!apiKey && !preserveApiKey && !baseUrl && !model && !label) continue;
     out.push({
       id,
@@ -664,22 +653,18 @@ export function buildMediaProvidersForDaemonSave(
       currentEntry?.apiKeyConfigured
       && hasStoredKeyMarker,
     );
-    const explicitBaseUrl =
-      currentEntry?.baseUrl?.trim()
-      || daemonEntry?.baseUrl?.trim()
-      || '';
-    const enabled = currentEntry?.enabled === true || daemonEntry?.enabled === true;
-    const model = currentEntry?.model?.trim() || daemonEntry?.model?.trim() || '';
+    const explicitBaseUrl = currentEntry?.baseUrl?.trim() ?? '';
+    const enabled = currentEntry?.enabled === true;
+    const model = currentEntry?.model?.trim() ?? '';
     const profiles = buildMediaProviderProfilesForDaemonSave(
       currentEntry?.profiles,
       daemonEntry?.profiles,
     );
     if (!apiKey && !preserveApiKey && !explicitBaseUrl && !model && !enabled && profiles.length === 0) continue;
-    const baseUrl = explicitBaseUrl || defaultBaseUrlForProvider(providerId);
     providers[providerId] = {
       ...(apiKey ? { apiKey } : {}),
       ...(preserveApiKey ? { preserveApiKey: true } : {}),
-      ...(baseUrl ? { baseUrl } : {}),
+      ...(explicitBaseUrl ? { baseUrl: explicitBaseUrl } : {}),
       ...(enabled ? { enabled: true } : {}),
       ...(model ? { model } : {}),
       ...(profiles.length > 0 ? { profiles } : {}),

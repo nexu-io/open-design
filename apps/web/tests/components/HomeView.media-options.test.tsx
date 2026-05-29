@@ -183,6 +183,42 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
   });
 
+  it('preserves configured Custom Image API models when media options normalize', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({
+      onSubmit,
+      mediaProviders: {
+        openai: {
+          apiKey: '',
+          baseUrl: 'https://api.openai.com/v1',
+          source: 'unset',
+        },
+        'custom-image': {
+          apiKey: '',
+          baseUrl: 'https://images.example.test/v1',
+          model: 'wan2.7-image',
+        },
+      },
+    });
+
+    await clickHomeRailChip('image');
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-model').textContent).toContain('wan2.7-image');
+    });
+
+    setHomePrompt('Generate a product image.');
+    await submitHome();
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          imageModel: 'wan2.7-image',
+        }),
+      }));
+    });
+  });
+
   it('hides the full selector grid for media surfaces', async () => {
     stubFetch();
     renderHome();

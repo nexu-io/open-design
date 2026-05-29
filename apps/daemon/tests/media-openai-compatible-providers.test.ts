@@ -264,6 +264,54 @@ describe('OpenAI-compatible media providers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('routes profile-only OpenAI catalog overrides through their matching custom endpoint', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          profiles: [{
+            id: 'wan',
+            apiKey: 'profile-key',
+            baseUrl: 'https://profile-proxy.example.test/v1',
+            model: 'gpt-image-2',
+          }],
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://profile-proxy.example.test/v1/images/generations');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer profile-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        prompt: 'A clean app icon with glass material',
+        model: 'gpt-image-2',
+      });
+      return new Response(JSON.stringify({
+        data: [{ b64_json: PNG_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A clean app icon with glass material',
+      output: 'profile-proxy.png',
+    });
+
+    expect(result.providerId).toBe('custom-image');
+    expect(result.providerNote).toContain('custom-image/gpt-image-2');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('rewrites custom-image text-only requests back to /v1/images/generations when configured with an edits URL', async () => {
     await writeConfig({
       providers: {

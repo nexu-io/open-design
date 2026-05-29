@@ -751,7 +751,7 @@ describe('fetchMediaProvidersFromDaemon', () => {
 });
 
 describe('buildMediaProvidersForDaemonSave', () => {
-  it('preserves a stored key while applying daemon/default non-secret values', () => {
+  it('preserves a stored key without restoring cleared non-secret values', () => {
     expect(
       buildMediaProvidersForDaemonSave(
         {
@@ -776,7 +776,6 @@ describe('buildMediaProvidersForDaemonSave', () => {
       providers: {
         openai: {
           preserveApiKey: true,
-          baseUrl: 'https://api.openai.com/v1',
         },
       },
       force: true,
@@ -898,6 +897,71 @@ describe('buildMediaProvidersForDaemonSave', () => {
         },
       },
       force: false,
+    });
+  });
+
+  it('lets users clear stored provider flags, models, base URLs, and profile fields', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          google: {
+            apiKey: '',
+            baseUrl: '',
+            enabled: false,
+            model: '',
+          },
+          'custom-image': {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1111',
+            baseUrl: '',
+            model: '',
+            profiles: [{
+              id: 'wan',
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '2222',
+              baseUrl: '',
+              model: '',
+            }],
+          },
+        },
+        {
+          google: {
+            apiKey: '',
+            baseUrl: '',
+            enabled: true,
+            model: 'imagen-4.0-fast-generate-001',
+          },
+          'custom-image': {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1111',
+            baseUrl: 'https://old-main.example/v1',
+            model: 'main-image',
+            profiles: [{
+              id: 'wan',
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '2222',
+              baseUrl: 'https://old-wan.example/v1',
+              model: 'wan2.7-image',
+            }],
+          },
+        },
+        { force: true },
+      ),
+    ).toEqual({
+      providers: {
+        'custom-image': {
+          preserveApiKey: true,
+          profiles: [{
+            id: 'wan',
+            preserveApiKey: true,
+          }],
+        },
+      },
+      force: true,
     });
   });
 });

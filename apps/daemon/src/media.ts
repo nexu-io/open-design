@@ -1238,7 +1238,9 @@ function customImageOverridesOpenAIModel(
   ctx: MediaContext,
   credentials: ProviderConfig | null,
 ): credentials is ProviderConfig {
-  const baseUrl = credentials?.baseUrl?.trim();
+  if (!credentials) return false;
+  const selectedProfile = selectCustomImageProfile(ctx, credentials);
+  const baseUrl = (selectedProfile.baseUrl || credentials.baseUrl || '').trim();
   if (!baseUrl) return false;
   return customImageModelConfigured(ctx.model, credentials)
     || customImageModelConfigured(ctx.wireModel, credentials);

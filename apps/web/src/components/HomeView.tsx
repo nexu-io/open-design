@@ -467,6 +467,7 @@ export function HomeView({
         elevenLabsVoiceWarning,
         elevenLabsVoicesLoading,
         imageModels: composerImageModels,
+        mediaProviders,
       },
     );
     const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
@@ -498,7 +499,7 @@ export function HomeView({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels]);
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels, mediaProviders]);
 
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
@@ -1074,7 +1075,10 @@ export function HomeView({
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
     const normalizedInputs = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels)
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, {
+          imageModels: composerImageModels,
+          mediaProviders,
+        })
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
@@ -1143,13 +1147,17 @@ export function HomeView({
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels)
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, {
+          imageModels: composerImageModels,
+          mediaProviders,
+        })
       : next;
     const mediaComposer = active.mediaSurface
       ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
           elevenLabsVoiceWarning,
           elevenLabsVoicesLoading,
           imageModels: composerImageModels,
+          mediaProviders,
         })
       : null;
     const inputFields = mediaComposer?.fields ?? active.inputFields;
@@ -1360,6 +1368,7 @@ export function HomeView({
               elevenLabsVoiceWarning,
               elevenLabsVoicesLoading,
               imageModels: composerImageModels,
+              mediaProviders,
             },
           );
           requestActivePlugin(record, undefined, {

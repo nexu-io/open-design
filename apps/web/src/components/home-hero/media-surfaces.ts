@@ -1,8 +1,9 @@
 import type { InputFieldSpec, ProjectKind } from '@open-design/contracts';
-import type { AudioKind, ProjectMetadata, PromptTemplateSummary } from '../../types';
+import type { AudioKind, MediaProviderCredentials, ProjectMetadata, PromptTemplateSummary } from '../../types';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
+  CUSTOM_IMAGE_MODEL_ID,
   DEFAULT_AUDIO_MODEL,
   DEFAULT_IMAGE_MODEL,
   DEFAULT_VIDEO_MODEL,
@@ -11,7 +12,9 @@ import {
   type MediaModel,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
+  configuredCustomImageModelIds,
 } from '../../media/models';
+import { isMediaModelPickerReady } from '../../media/provider-readiness';
 
 export type HomeComposerMediaSurface = 'image' | 'video' | 'hyperframes' | 'audio';
 export const ELEVENLABS_DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
@@ -25,6 +28,13 @@ export interface HomeMediaComposerState {
   inputs: Record<string, unknown>;
   editableFieldNames: string[];
 }
+
+type HomeMediaComposerOptions = {
+  elevenLabsVoiceWarning?: string | null;
+  elevenLabsVoicesLoading?: boolean;
+  imageModels?: MediaModel[];
+  mediaProviders?: Record<string, MediaProviderCredentials>;
+};
 
 export const HOME_MEDIA_CHIP_IDS = ['image', 'video', 'hyperframes', 'audio'] as const;
 const NO_TEMPLATE_PLACEHOLDER = 'No template';
@@ -49,11 +59,7 @@ export function buildHomeMediaComposer(
   promptTemplates: PromptTemplateSummary[],
   seedInputs: Record<string, unknown> = {},
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
-  options: {
-    elevenLabsVoiceWarning?: string | null;
-    elevenLabsVoicesLoading?: boolean;
-    imageModels?: MediaModel[];
-  } = {},
+  options: HomeMediaComposerOptions = {},
 ): HomeMediaComposerState {
   const imageModels = options.imageModels ?? IMAGE_MODELS;
   const inputs = normalizeHomeMediaInputs(
@@ -64,7 +70,7 @@ export function buildHomeMediaComposer(
     },
     promptTemplates,
     voiceOptions,
-    imageModels,
+    { imageModels, mediaProviders: options.mediaProviders },
   );
   const fields = fieldsForSurface(surface, inputs, voiceOptions, options, imageModels);
   const editableFieldNames = fields.map((field) => field.name);
@@ -84,10 +90,14 @@ export function normalizeHomeMediaInputs(
   raw: Record<string, unknown>,
   promptTemplates: PromptTemplateSummary[] = [],
   voiceOptions: Array<{ voiceId: string; name: string }> = [],
-  imageModels: MediaModel[] = IMAGE_MODELS,
+  options: {
+    imageModels?: MediaModel[];
+    mediaProviders?: Record<string, MediaProviderCredentials>;
+  } = {},
 ): Record<string, unknown> {
   if (surface === 'image') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
+    const imageModels = options.imageModels ?? IMAGE_MODELS;
     return {
       mediaKind: 'image',
       subject: stringValue(raw.subject) || 'a premium product concept',
@@ -95,7 +105,7 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(stringValue(raw.model), imageModels.map((m) => m.id), DEFAULT_IMAGE_MODEL),
+      model: validImageModel(stringValue(raw.model), imageModels, options.mediaProviders),
       ratio,
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
@@ -229,7 +239,7 @@ function fieldsForSurface(
   surface: HomeComposerMediaSurface,
   inputs: Record<string, unknown>,
   voiceOptions: Array<{ voiceId: string; name: string }>,
-  options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean },
+  options: HomeMediaComposerOptions,
   imageModels: MediaModel[] = IMAGE_MODELS,
 ): InputFieldSpec[] {
   if (surface === 'image') {
@@ -427,6 +437,30 @@ function validAudioDuration(kind: AudioKind, raw: unknown): number {
     return Math.max(...options);
   }
   return 10;
+}
+
+function validImageModel(
+  raw: string,
+  imageModels: MediaModel[],
+  mediaProviders?: Record<string, MediaProviderCredentials>,
+): string {
+  const customModels = configuredCustomImageModelIds(
+    mediaProviders?.['custom-image']?.model,
+    mediaProviders?.['custom-image']?.profiles,
+  );
+  const modelIds = imageModels.flatMap((model) => (
+    model.id === CUSTOM_IMAGE_MODEL_ID && customModels.length > 0
+      ? customModels
+      : [model.id]
+  ));
+  const readyModelIds = mediaProviders
+    ? modelIds.filter((modelId) => isMediaModelPickerReady(modelId, mediaProviders))
+    : modelIds;
+  if (raw === CUSTOM_IMAGE_MODEL_ID && customModels.length > 0) {
+    return readyModelIds.find((modelId) => customModels.includes(modelId)) ?? customModels[0]!;
+  }
+  if (readyModelIds.includes(raw)) return raw;
+  return readyModelIds[0] ?? DEFAULT_IMAGE_MODEL;
 }
 
 function homeAudioModels(kind: AudioKind) {

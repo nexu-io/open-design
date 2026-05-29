@@ -2077,7 +2077,10 @@ function FooterSelectOption({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement | null>(null);
-  const selected = options.find((option) => option.value === value) ?? options[0];
+  const autoSelectRequestRef = useRef<string | null>(null);
+  const selected = options.find((option) => option.value === value)
+    ?? (autoSelectValue ? options.find((option) => option.value === autoSelectValue) : undefined)
+    ?? options[0];
   const visibleOptions = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return options;
@@ -2123,9 +2126,20 @@ function FooterSelectOption({
     if (!open) setSearch('');
   }, [open]);
   useEffect(() => {
-    if (!autoSelectValue || autoSelectValue === value) return;
+    if (!autoSelectValue || options.length === 0) return;
+    if (options.some((option) => option.value === value)) {
+      autoSelectRequestRef.current = null;
+      return;
+    }
+    const requestKey = `${value}\u0000${autoSelectValue}`;
+    if (autoSelectRequestRef.current === requestKey) return;
+    autoSelectRequestRef.current = requestKey;
     onChange(autoSelectValue);
-  }, [autoSelectValue, onChange, value]);
+  }, [autoSelectValue, onChange, options, value]);
+
+  const fallbackLabel = fieldName === 'model' && options.length === 0
+    ? t('newproj.modelMissingTitle')
+    : value;
 
   return (
     <div
@@ -2147,7 +2161,7 @@ function FooterSelectOption({
         {selected?.icon ? <FooterOptionIcon name={selected.icon} compact /> : null}
         {selected?.modelIcon ? <ModelOptionIcon icon={selected.modelIcon} compact /> : null}
         {selected?.ratioIcon ? <RatioOptionIcon icon={selected.ratioIcon} compact /> : null}
-        <span className="home-hero__footer-select-label">{selected?.label ?? value}</span>
+        <span className="home-hero__footer-select-label">{selected?.label ?? fallbackLabel}</span>
         <Icon name="chevron-down" size={12} aria-hidden />
       </button>
       {open ? (
