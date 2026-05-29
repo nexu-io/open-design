@@ -943,14 +943,19 @@ export function wellKnownUserToolchainBins(
     join(home, ".npm-packages", "bin"),
   );
 
-  // Mise shims: makes every tool installed with `mise install` (pi, kimi,
-  // aider, grok, claude via mise, etc.) visible to GUI-launched daemons
-  // even when the process inherits a stripped PATH. Respect MISE_DATA_DIR
-  // (the official way to relocate the whole mise tree) and fall back to
-  // the standard location. Also cover the legacy ~/.mise/shims path.
+  // Mise shims: makes every tool installed with `mise install` visible to
+  // GUI-launched daemons even when the process inherits a stripped PATH.
+  // Respect MISE_DATA_DIR (the official way to relocate the whole mise tree)
+  // and fall back to the standard location. Also cover the legacy
+  // ~/.mise/shims path when it differs.
   const miseData = resolveUserScopedHome(env.MISE_DATA_DIR, home) || join(home, ".local", "share", "mise");
-  dirs.push(join(miseData, "shims"));
-  dirs.push(join(home, ".mise", "shims"));
+  const miseShims = join(miseData, "shims");
+  dirs.push(miseShims);
+
+  const legacyShims = join(home, ".mise", "shims");
+  if (legacyShims !== miseShims) {
+    dirs.push(legacyShims);
+  }
 
   if (includeSystemBins) {
     dirs.push("/opt/homebrew/bin", "/usr/local/bin");
@@ -958,10 +963,12 @@ export function wellKnownUserToolchainBins(
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
   // contribute nothing.
-  dirs.push(...existingMiseNpmPackageBinDirs(join(home, ".local", "share", "mise", "installs")));
+  // When MISE_DATA_DIR is set we use the same root for consistency with shims.
+  const miseInstalls = join(miseData, "installs");
+  dirs.push(...existingMiseNpmPackageBinDirs(miseInstalls));
   for (const installRoot of [
     {
-      root: join(home, ".local", "share", "mise", "installs", "node"),
+      root: join(miseInstalls, "node"),
       segments: ["bin"],
     },
     {
