@@ -55,9 +55,22 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     return `${currentMessageId ?? 'anon'}:${index}`;
   }
 
-  // Per-message role-marker guard (#3247). Covers text_delta and thinking_delta.
+  // Per-message role-marker guard (#3247). Covers text_delta ONLY.
+  //
+  // Why not thinking_delta: extended thinking is rendered to a
+  // separate `kind: 'thinking'` payload and is never folded into
+  // `m.content` by `buildDaemonTranscript` (apps/web/src/providers/daemon.ts),
+  // so it cannot be re-serialized as a turn boundary on the next
+  // round-trip — it is not a #3247 re-injection vector. Models
+  // routinely emit literal `## user` / `## assistant` lines in
+  // chain-of-thought when reasoning about conversation structure,
+  // and with kill-on-detection wired in server.ts a guard on the
+  // thinking channel would abort otherwise-legitimate runs without
+  // any compensating security benefit. See PR #3303 review
+  // r3324xxxxxx. Thinking is passed through unguarded; only the
+  // user-visible text channel is policed.
   function emitSafeText(msgId: string | null, text: string, eventType: string = 'text_delta') {
-    if (!msgId) {
+    if (eventType !== 'text_delta' || !msgId) {
       onEvent({ type: eventType, delta: text });
       return;
     }
