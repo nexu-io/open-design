@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -136,6 +136,43 @@ describe('POST /api/import/folder', () => {
       const runsBody = (await runsResp.json()) as { runs: unknown[] };
       expect(runsBody.runs).toHaveLength(0);
     });
+  });
+
+  it('opens imported-folder projects through host editor routes in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    const binDir = makeFolder();
+    const cursorBin = path.join(
+      binDir,
+      process.platform === 'win32' ? 'cursor.cmd' : 'cursor',
+    );
+    await writeFile(
+      cursorBin,
+      process.platform === 'win32' ? '@echo off\r\nexit /b 0\r\n' : '#!/bin/sh\nexit 0\n',
+    );
+    await chmod(cursorBin, 0o755);
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
+    try {
+      await withSandboxMode(async () => {
+        const resp = await fetch(`${baseUrl}/api/projects/${project.id}/open-in`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ editorId: 'cursor' }),
+        });
+        expect(resp.status).toBe(200);
+        const body = (await resp.json()) as { path?: string };
+        expect(body.path).toBe(await realpath(folder));
+      });
+    } finally {
+      if (previousPath == null) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   it('still opens an imported-folder project record in sandbox mode', async () => {
