@@ -41,7 +41,6 @@ function renderPopover(onSendBatch: () => void) {
       onClose={() => {}}
       onSaveComment={() => {}}
       onSendBatch={onSendBatch}
-      onRemove={() => {}}
       onRemoveMember={() => {}}
       sending={false}
       t={((key: string) => String(key)) as never}

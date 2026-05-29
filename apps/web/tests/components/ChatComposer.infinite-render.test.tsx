@@ -97,6 +97,7 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
     renderComposer({
       draftStorageKey: key,
       onSend,
+      enterToSend: false,
     });
     const textarea = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
     fireEvent.change(textarea, {
