@@ -384,6 +384,8 @@
 .df-cell-name {
   padding: 10px 12px 10px 0;
   vertical-align: middle;
+  width: 100%;
+  max-width: 0;
 }
 .df-cell-openable {
   cursor: pointer;
@@ -395,6 +397,7 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  max-width: 100%;
 }
 .df-row-name-btn:hover:not(:disabled) {
   background: transparent;
@@ -655,7 +658,7 @@
 .df-row-icon[data-kind="code"] { background: #fff7d8; color: #8c6700; }
 .df-row-icon[data-kind="text"] { background: var(--bg-subtle); color: var(--text-muted); }
 .df-row-icon[data-kind="sketch"] { background: var(--purple-bg); color: var(--purple); }
-.df-row-name-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.df-row-name-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
 .df-row-name {
   font-size: 13px;
   font-weight: 500;
@@ -663,6 +666,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
 }
 .df-rename-input {
   width: 100%;
