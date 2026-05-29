@@ -68,10 +68,14 @@ process.exit(0);
 async function waitForRunStatus(
   baseUrl: string,
   runId: string,
-): Promise<{ status: string }> {
+): Promise<{ status: string; error?: string | null; errorCode?: string | null }> {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     const r = await fetch(`${baseUrl}/api/runs/${runId}`);
-    const body = (await r.json()) as { status: string };
+    const body = (await r.json()) as {
+      status: string;
+      error?: string | null;
+      errorCode?: string | null;
+    };
     if (body.status !== 'queued' && body.status !== 'running') return body;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -235,7 +239,7 @@ describe('spawn writes external MCP config for Claude Code', () => {
     });
   }, 30_000);
 
-  it('keeps sandbox runs for imported-folder projects in the managed project dir', async () => {
+  it('fails sandbox runs for imported-folder projects before writing MCP config', async () => {
     await withFakeClaude(async () => {
       const putRes = await fetch(`${baseUrl}/api/mcp/servers`, {
         method: 'PUT',
@@ -268,17 +272,14 @@ describe('spawn writes external MCP config for Claude Code', () => {
         expect(chatRes.status).toBe(202);
         const { runId } = (await chatRes.json()) as { runId: string };
         const status = await waitForRunStatus(baseUrl, runId);
-        expect(status.status).toBe('succeeded');
+        expect(status.status).toBe('failed');
+        expect(status.errorCode).toBe('BAD_REQUEST');
+        expect(status.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
       });
 
       const managedTarget = join(dir, '.mcp.json');
-      expect(existsSync(managedTarget)).toBe(true);
+      expect(existsSync(managedTarget)).toBe(false);
       expect(existsSync(join(externalDir, '.mcp.json'))).toBe(false);
-      const written = JSON.parse(await fsp.readFile(managedTarget, 'utf8'));
-      expect(written.mcpServers['sandbox-run']).toMatchObject({
-        type: 'sse',
-        url: 'https://mcp.example.test/',
-      });
     });
   }, 30_000);
 
