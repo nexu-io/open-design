@@ -20,6 +20,7 @@ import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
 import { parseMediaExecutionPolicyInput } from './media-policy.js';
+import { createRoleMarkerGuard } from './role-marker-guard.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -549,7 +550,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!match || match.index === undefined) break;
         const frame = buffer.slice(0, match.index);
         buffer = buffer.slice(match.index + match[0].length);
-        if (await onFrame(collectSseFrame(frame))) return;
+        if (await onFrame(collectSseFrame(frame))) { await reader.cancel(); return; }
       }
     }
 
@@ -575,7 +576,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!line) continue;
         try {
           const data = JSON.parse(line);
-          if (await onFrame({ data })) return;
+          if (await onFrame({ data })) { await reader.cancel(); return; }
         } catch {
           // Ignore malformed provider keepalive lines.
         }
@@ -643,6 +644,30 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
     return '';
   };
+
+  // Per-request role-marker guard for BYOK proxy streams (#3247).
+  function createDeltaGuard(sse: any) {
+    const guard = createRoleMarkerGuard('proxy');
+    return {
+      sendDelta(text: string) {
+        if (guard.contaminated || !text) return;
+        const safe = guard.feedText(text);
+        if (safe.length > 0) {
+          sse.send('delta', { delta: safe });
+        }
+        if (guard.contaminated) {
+          const warn = guard.warningEvent();
+          const markerText = warn?.marker ?? '## user';
+          sse.send('delta', {
+            delta: `\n\n---\n⚠️ **Security warning:** The model attempted to emit a fabricated role marker (\`${markerText}\`). Response was truncated to prevent unauthorized instruction injection. See issue #3247.\n`,
+          });
+        }
+      },
+      get contaminated() { 
+        return guard.contaminated; 
+      },
+    };
+  }
 
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
@@ -716,6 +741,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ event, data }: any) => {
         if (!data) return false;
         if (event === 'error' || data.type === 'error') {
@@ -725,7 +751,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
-          sse.send('delta', { delta: data.delta.text });
+          guard.sendDelta(data.delta.text);
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            ended = true; 
+            return true; 
+          }
         }
         if (event === 'message_stop') {
           sse.send('end', {});
@@ -820,6 +851,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload, data }: any) => {
         if (payload === '[DONE]') {
           sse.send('end', {});
@@ -834,7 +866,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const delta = extractOpenAIText(data);
-        if (delta) sse.send('delta', { delta });
+        if (delta) { 
+          guard.sendDelta(delta); 
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            ended = true; 
+            return true; 
+          } 
+        }
         return false;
       });
       if (!ended) sse.send('end', {});
@@ -967,6 +1006,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
         if (ssePayload === '[DONE]') {
           sse.send('end', {});
@@ -981,7 +1021,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const delta = extractOpenAIText(data);
-        if (delta) sse.send('delta', { delta });
+        if (delta) { guard.sendDelta(delta); 
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            ended = true; 
+            return true; 
+          } 
+        }
         return false;
       });
       if (!ended) sse.send('end', {});
@@ -1070,6 +1116,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ data }: any) => {
         if (!data) return false;
         const streamError = extractStreamErrorMessage(data);
@@ -1079,7 +1126,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const delta = extractGeminiText(data);
-        if (delta) sse.send('delta', { delta });
+        if (delta) { guard.sendDelta(delta); 
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            ended = true; 
+            return true; 
+          } 
+        }
         const blockMessage = extractGeminiBlockMessage(data);
         if (blockMessage) {
           sendProxyError(sse, blockMessage, { details: data });
@@ -1157,6 +1210,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      const guard = createDeltaGuard(sse);
       await streamUpstreamNdjson(response, ({ data }: any) => {
         if (!data) return false;
         if (data.done) {
@@ -1165,7 +1219,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const content = data.message?.content;
-        if (typeof content === 'string' && content) sse.send('delta', { delta: content });
+        if (typeof content === 'string' && content) { 
+          guard.sendDelta(content); 
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            ended = true; 
+            return true; 
+          } 
+        }
         return false;
       });
       if (!ended) sse.send('end', {});
@@ -1335,6 +1396,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       let finishReason = '';
       let providerError = '';
 
+      const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload, data }: any) => {
         if (payload === '[DONE]') return true;
         if (!data) return false;
@@ -1356,7 +1418,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         // emit text before / after a tool_call in the same turn, and
         // we want the user to see whatever the model decided to say.
         if (typeof delta.content === 'string' && delta.content) {
-          sse.send('delta', { delta: delta.content });
+          guard.sendDelta(delta.content);
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            return true; 
+          }
         }
 
         // Tool call deltas stream as fragments — `id` arrives once at

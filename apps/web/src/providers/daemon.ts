@@ -903,6 +903,13 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       durationMs: typeof data.durationMs === 'number' ? data.durationMs : undefined,
     };
   }
+  if (t === 'fabricated_role_marker' && typeof data.marker === 'string') {
+    return {
+      kind: 'status',
+      label: 'warning',
+      detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated to prevent unauthorized instruction injection.`,
+    };
+  }
   if (t === 'raw' && typeof data.line === 'string') {
     return { kind: 'raw', line: data.line };
   }

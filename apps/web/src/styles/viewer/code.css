@@ -679,6 +679,24 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+/* Warning status — fabricated role markers (#3247), audit warnings, etc. */
+.status-pill.is-warning {
+  background: color-mix(in srgb, var(--amber, #b26200) 12%, transparent);
+  color: var(--amber, #b26200);
+  border-color: color-mix(in srgb, var(--amber, #b26200) 32%, transparent);
+}
+.status-pill.is-warning .status-detail {
+  color: color-mix(in srgb, var(--amber, #b26200) 85%, var(--text));
+}
+/* Error status — agent failures, tool errors, etc. */
+.status-pill.is-error {
+  background: color-mix(in srgb, var(--red, #dc2626) 10%, transparent);
+  color: var(--red, #dc2626);
+  border-color: color-mix(in srgb, var(--red, #dc2626) 30%, transparent);
+}
+.status-pill.is-error .status-detail {
+  color: color-mix(in srgb, var(--red, #dc2626) 85%, var(--text));
+}
 
 /* Grouped tool / action card — the collapsible pill from screenshot 9 */
 .action-card {
