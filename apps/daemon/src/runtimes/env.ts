@@ -1,9 +1,12 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
+import { resolveProjectRootFromNestedModule } from '../project-root.js';
 import {
   applySandboxRuntimeEnv,
   isSandboxModeEnabled,
@@ -12,6 +15,10 @@ import {
 } from '../sandbox-mode.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
+
+const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
+  path.dirname(fileURLToPath(import.meta.url)),
+);
 
 // Build the env passed to spawn() for a given agent adapter.
 //
@@ -87,7 +94,11 @@ function sandboxRuntimeConfigForBaseEnv(
   if (!isSandboxModeEnabled(baseEnv)) return null;
   const dataDir = baseEnv.OD_DATA_DIR?.trim();
   if (!dataDir) return null;
-  return resolveSandboxRuntimeConfig(true, dataDir);
+  const resolvedDataDir = resolveProjectRelativePath(
+    dataDir,
+    RUNTIME_MODULE_PROJECT_ROOT,
+  );
+  return resolveSandboxRuntimeConfig(true, resolvedDataDir);
 }
 
 function reapplySandboxRuntimeEnv(
