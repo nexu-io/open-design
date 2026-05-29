@@ -820,7 +820,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'netlify';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'netlify' | 'render';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -919,6 +919,7 @@ export interface DeployConfigResponse {
   providerId: DeployProviderId;
   configured: boolean;
   tokenMask: string;
+  githubTokenMask?: string;
   teamId: string;
   teamSlug: string;
   accountId?: string;
@@ -930,6 +931,7 @@ export interface DeployConfigResponse {
 export interface UpdateDeployConfigRequest {
   providerId?: DeployProviderId;
   token?: string;
+  githubToken?: string;
   teamId?: string;
   teamSlug?: string;
   accountId?: string;

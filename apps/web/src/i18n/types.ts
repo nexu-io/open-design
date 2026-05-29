@@ -4315,6 +4315,7 @@ export interface Dict {
   'fileViewer.deployTargetPreview': string;
   'fileViewer.deployTargetProduction': string;
   'fileViewer.netlifyProvider': string;
+  'fileViewer.renderProvider': string;
   'fileViewer.deployToProvider': string;
   'fileViewer.redeployToProvider': string;
   'fileViewer.deployingToProvider': string;
@@ -4351,6 +4352,16 @@ export interface Dict {
   'fileViewer.netlifyTokenReuseHint': string;
   'fileViewer.netlifyTokenRequired': string;
   'fileViewer.netlifyPreviewOnly': string;
+  'fileViewer.renderToken': string;
+  'fileViewer.renderTokenGetLink': string;
+  'fileViewer.renderTokenPlaceholder': string;
+  'fileViewer.renderTokenReuseHint': string;
+  'fileViewer.renderTokenRequired': string;
+  'fileViewer.githubPatToken': string;
+  'fileViewer.githubPatTokenGetLink': string;
+  'fileViewer.githubPatTokenPlaceholder': string;
+  'fileViewer.githubPatTokenReuseHint': string;
+  'fileViewer.githubPatTokenRequired': string;
   'fileViewer.cloudflareApiToken': string;
   'fileViewer.cloudflareApiTokenGetLink': string;
   'fileViewer.cloudflareApiTokenPlaceholder': string;
