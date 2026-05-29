@@ -9,6 +9,7 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
+  workspacePaths,
   makeWrapper,
   python3,
   gnumake,
@@ -40,9 +41,12 @@ let
   version = (lib.importJSON ../package.json).version;
 
   pnpmDepsHash = (import ./pnpm-deps.nix).daemonHash;
+  pnpmWorkspaceFilters = map (workspacePath: "./${workspacePath}") workspacePaths;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;
+
+    pnpmWorkspaces = pnpmWorkspaceFilters;
 
     nativeBuildInputs = [
       nodejs
@@ -60,6 +64,7 @@ in
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
+      pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };
 
@@ -128,17 +133,7 @@ in
         exit 1
       fi
 
-      for target in \
-        packages/contracts \
-        packages/registry-protocol \
-        packages/agui-adapter \
-        packages/plugin-runtime \
-        packages/sidecar-proto \
-        packages/sidecar \
-        packages/platform \
-        packages/diagnostics \
-        apps/daemon
-      do
+      for target in ${lib.escapeShellArgs workspacePaths}; do
         pnpm -C "$target" run --if-present build
       done
       runHook postBuild

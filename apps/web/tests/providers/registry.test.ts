@@ -20,6 +20,7 @@ import {
   isDeployProviderId,
   updateDeployConfig,
   uploadProjectFiles,
+  writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
 
 describe('fetchAppVersionInfo', () => {
@@ -52,6 +53,29 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('writeProjectTextFileDetailed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces daemon save errors instead of collapsing them to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        error: { code: 'ARTIFACT_REGRESSION', message: 'new artifact is smaller than the prior version' },
+      }), { status: 422, headers: { 'Content-Type': 'application/json' } })),
+    );
+
+    await expect(writeProjectTextFileDetailed('project-1', 'preview.html', '<html></html>')).resolves.toEqual({
+      ok: false,
+      status: 422,
+      code: 'ARTIFACT_REGRESSION',
+      message: 'new artifact is smaller than the prior version',
+    });
   });
 });
 

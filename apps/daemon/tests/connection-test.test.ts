@@ -1,15 +1,19 @@
 // Coverage for the /api/test/connection route. Hits status mapping for each
 // provider protocol and uses fake CLI bins for deterministic agent outcomes.
 
-import type http from 'node:http';
+import * as http from 'node:http';
 import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as platform from '@open-design/platform';
 import {
   createAgentSink,
   isSmokeOkReply,
+  mergeNoProxyWithLoopbackDefaults,
+  proxyDispatcherRequestInit,
   redactSecrets,
   resolveConnectionTestTimeoutMs,
   testAgentConnection,
@@ -177,6 +181,43 @@ describe('POST /api/provider/models', () => {
         { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
       ],
     });
+  });
+
+  it('routes provider model discovery through the live proxy dispatcher', async () => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+      HTTP_PROXY: 'http://proxy.example.test:8080',
+      NODE_USE_ENV_PROXY: '1',
+      NO_PROXY: 'localhost,127.0.0.1,[::1]',
+    });
+    const fetchMock = passThroughOrUpstream((_url, init) => {
+      expect(init?.dispatcher).toBeTruthy();
+      return jsonResponse({
+        data: [{ id: 'gpt-4o', object: 'model' }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-openai',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        models: [{ id: 'gpt-4o', label: 'gpt-4o' }],
+      });
+      expect(proxySpy).toHaveBeenCalledWith();
+    } finally {
+      proxySpy.mockRestore();
+    }
   });
 
   it('lists Anthropic models with display names and a high page limit', async () => {
@@ -588,6 +629,103 @@ describe('POST /api/test/connection provider mode', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.deepinfra.com/v1/openai/chat/completions',
       expect.anything(),
+    );
+  });
+
+  it('checks SenseAudio non-chat model availability without probing chat completions', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.senseaudio.cn/v1/models') {
+        return jsonResponse({
+          data: [
+            { id: 'doubao-1-5-pro-32k-250115' },
+            { id: 'senseaudio-image-2.0-260319' },
+          ],
+        });
+      }
+      return jsonResponse({ error: { message: 'unexpected endpoint' } }, { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'senseaudio-image-2.0-260319',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+    expect(body.detail).toContain('not chat-testable');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/chat/completions',
+      expect.anything(),
+    );
+  });
+
+  it('returns not_found_model when a SenseAudio non-chat model is absent from /models', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        expect(url).toBe('https://api.senseaudio.cn/v1/models');
+        return jsonResponse({
+          data: [{ id: 'senseaudio-image-1.0-260319' }],
+        });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'senseaudio-image-2.0-260319',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('not_found_model');
+    expect(body.detail).toContain('not reported by SenseAudio /models');
+  });
+
+  it('keeps SenseAudio chat models on the chat completions smoke test', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+        });
+      }
+      return jsonResponse({ error: { message: 'unexpected endpoint' } }, { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'doubao-1-5-pro-32k-250115',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/chat/completions',
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 
@@ -1504,6 +1642,305 @@ describe('POST /api/test/connection provider mode', () => {
       ok: false,
       kind: 'timeout',
     });
+  });
+
+  it('uses a live system-proxy dispatcher for provider-mode fetches', async () => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+      HTTPS_PROXY: 'http://system-proxy.internal:8443',
+      NODE_USE_ENV_PROXY: '1',
+    });
+    const fetchMock = vi.fn((_input: FetchInput, init?: FetchInit) => {
+      expect(init?.dispatcher).toBeDefined();
+      return Promise.resolve(jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-good',
+        model: 'gpt-4o',
+      })).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+      });
+    } finally {
+      proxySpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['*', '*'],
+    ['*,.corp.example', '*'],
+    [' * , .corp.example ', '*'],
+    ['* .corp.example', '*'],
+    ['.corp.example', '.corp.example,localhost,127.0.0.1,[::1]'],
+    ['::1', '[::1],localhost,127.0.0.1'],
+    [undefined, 'localhost,127.0.0.1,[::1]'],
+  ])('mergeNoProxyWithLoopbackDefaults(%p)', (input, expected) => {
+    expect(mergeNoProxyWithLoopbackDefaults(input)).toBe(expected);
+  });
+
+  it('uses a SOCKS dispatcher when ALL_PROXY is the only configured proxy', async () => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
+
+    try {
+      const { close, requestInit } = proxyDispatcherRequestInit({
+        ALL_PROXY: 'socks5://system-socks:1080',
+      });
+
+      expect(requestInit.dispatcher).toBeDefined();
+      await expect(close()).resolves.toBeUndefined();
+    } finally {
+      proxySpy.mockRestore();
+    }
+  });
+
+  it('forwards timeout options through SOCKS dispatches', async () => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
+    const dispatchSpy = vi
+      .spyOn(Socks5ProxyAgent.prototype, 'dispatch')
+      .mockReturnValue(true as ReturnType<typeof Socks5ProxyAgent.prototype.dispatch>);
+
+    try {
+      const { close, requestInit } = proxyDispatcherRequestInit(
+        {
+          ALL_PROXY: 'socks5://system-socks:1080',
+        },
+        {
+          headersTimeout: 1234,
+          bodyTimeout: 5678,
+        },
+      );
+
+      const dispatcher = requestInit.dispatcher as unknown as {
+        dispatch(options: { origin: string; path: string; method: string }, handler: unknown): boolean;
+      };
+      expect(dispatcher).toBeDefined();
+      dispatcher.dispatch(
+        {
+          origin: 'https://api.openai.com',
+          path: '/v1/chat/completions',
+          method: 'POST',
+        },
+        {},
+      );
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          origin: 'https://api.openai.com',
+          path: '/v1/chat/completions',
+          headersTimeout: 1234,
+          bodyTimeout: 5678,
+        }),
+        expect.anything(),
+      );
+      await expect(close()).resolves.toBeUndefined();
+    } finally {
+      dispatchSpy.mockRestore();
+      proxySpy.mockRestore();
+    }
+  });
+
+  it('resolves system proxy env for each HTTP proxy dispatcher request', async () => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
+
+    try {
+      const { close, requestInit } = proxyDispatcherRequestInit();
+
+      expect(proxySpy).toHaveBeenCalledWith();
+      expect(requestInit).toEqual({});
+      await expect(close()).resolves.toBeUndefined();
+    } finally {
+      proxySpy.mockRestore();
+    }
+  });
+
+  it('reports malformed proxy env without leaking the connection-test timer', async () => {
+    const originalHttpProxy = process.env.HTTP_PROXY;
+    const originalHttpsProxy = process.env.HTTPS_PROXY;
+    const originalAllProxy = process.env.ALL_PROXY;
+    process.env.HTTP_PROXY = 'not a valid proxy url';
+    delete process.env.HTTPS_PROXY;
+    delete process.env.ALL_PROXY;
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-good',
+        model: 'gpt-4o',
+      })).resolves.toMatchObject({
+        ok: false,
+        kind: 'unknown',
+      });
+    } finally {
+      if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
+      else process.env.HTTP_PROXY = originalHttpProxy;
+      if (originalHttpsProxy === undefined) delete process.env.HTTPS_PROXY;
+      else process.env.HTTPS_PROXY = originalHttpsProxy;
+      if (originalAllProxy === undefined) delete process.env.ALL_PROXY;
+      else process.env.ALL_PROXY = originalAllProxy;
+    }
+  });
+
+  it('keeps loopback provider probes off the proxy when user NO_PROXY omits localhost', async () => {
+    const providerServer = http.createServer((req, res) => {
+      if (req.url === '/v1/models') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'google/gemma-4-e4b', object: 'model' }] }));
+        return;
+      }
+      if (req.url === '/v1/chat/completions') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'ok' } }],
+        }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((resolve) => providerServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = providerServer.address();
+    if (!address || typeof address === 'string') {
+      providerServer.close();
+      throw new Error('Expected an IPv4 provider test server address');
+    }
+
+    const originalNoProxy = process.env.NO_PROXY;
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+      HTTP_PROXY: 'http://127.0.0.1:9',
+      NO_PROXY: 'localhost,127.0.0.1,[::1]',
+      NODE_USE_ENV_PROXY: '1',
+    });
+    process.env.NO_PROXY = '*.corp.com';
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'openai',
+        baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        apiKey: 'lm-studio',
+        model: 'google/gemma-4-e4b',
+      })).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+      });
+    } finally {
+      if (originalNoProxy === undefined) delete process.env.NO_PROXY;
+      else process.env.NO_PROXY = originalNoProxy;
+      proxySpy.mockRestore();
+      await new Promise<void>((resolve, reject) =>
+        providerServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it('keeps loopback provider probes off the proxy when inherited proxy env omits NO_PROXY', async () => {
+    const providerServer = http.createServer((req, res) => {
+      if (req.url === '/v1/models') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'llama3.2', object: 'model' }] }));
+        return;
+      }
+      if (req.url === '/v1/chat/completions') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'ok' } }],
+        }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((resolve) => providerServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = providerServer.address();
+    if (!address || typeof address === 'string') {
+      providerServer.close();
+      throw new Error('Expected an IPv4 provider test server address');
+    }
+
+    const originalHttpProxy = process.env.HTTP_PROXY;
+    const originalHttpsProxy = process.env.HTTPS_PROXY;
+    const originalNoProxy = process.env.NO_PROXY;
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
+    process.env.HTTP_PROXY = 'http://127.0.0.1:9';
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:9';
+    delete process.env.NO_PROXY;
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'openai',
+        baseUrl: `http://localhost:${address.port}/v1`,
+        apiKey: 'ollama',
+        model: 'llama3.2',
+      })).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+      });
+    } finally {
+      if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
+      else process.env.HTTP_PROXY = originalHttpProxy;
+      if (originalHttpsProxy === undefined) delete process.env.HTTPS_PROXY;
+      else process.env.HTTPS_PROXY = originalHttpsProxy;
+      if (originalNoProxy === undefined) delete process.env.NO_PROXY;
+      else process.env.NO_PROXY = originalNoProxy;
+      proxySpy.mockRestore();
+      await new Promise<void>((resolve, reject) =>
+        providerServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it('keeps loopback provider probes off a SOCKS-only proxy', async () => {
+    const providerServer = http.createServer((req, res) => {
+      if (req.url === '/v1/models') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'llama3.2', object: 'model' }] }));
+        return;
+      }
+      if (req.url === '/v1/chat/completions') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'ok' } }],
+        }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((resolve) => providerServer.listen(0, '127.0.0.1', () => resolve()));
+    const address = providerServer.address();
+    if (!address || typeof address === 'string') {
+      providerServer.close();
+      throw new Error('Expected an IPv4 provider test server address');
+    }
+
+    const originalAllProxy = process.env.ALL_PROXY;
+    const originalNoProxy = process.env.NO_PROXY;
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
+    process.env.ALL_PROXY = 'socks5://127.0.0.1:9';
+    delete process.env.NO_PROXY;
+
+    try {
+      await expect(testProviderConnection({
+        protocol: 'openai',
+        baseUrl: `http://localhost:${address.port}/v1`,
+        apiKey: 'ollama',
+        model: 'llama3.2',
+      })).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+      });
+    } finally {
+      if (originalAllProxy === undefined) delete process.env.ALL_PROXY;
+      else process.env.ALL_PROXY = originalAllProxy;
+      if (originalNoProxy === undefined) delete process.env.NO_PROXY;
+      else process.env.NO_PROXY = originalNoProxy;
+      proxySpy.mockRestore();
+      await new Promise<void>((resolve, reject) =>
+        providerServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
   });
 });
 
@@ -2469,6 +2906,148 @@ setInterval(() => {}, 1000);
       body: JSON.stringify({ mode: 'agent' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  // Regression coverage for #2248: the daemon must return structured
+  // diagnostics next to the existing `kind`/`detail` strings so Settings
+  // and CLI consumers don't have to scrape the human-readable detail
+  // line to know what phase failed, which binary path was used, or what
+  // the child's exit metadata was. The legacy fields stay unchanged so
+  // older clients keep rendering.
+  it('attaches structured diagnostics on Claude smoke-test success (#2248)', async () => {
+    await withFakeClaude(
+      `
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({ ok: true, kind: 'success' });
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        // The binary path is whatever fake bin the test harness installed
+        // on PATH (a temp directory). All we want here is that the
+        // daemon actually fills it in, not that it matches an exact path.
+        expect(typeof result.diagnostics?.binaryPath).toBe('string');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/claude/);
+        expect(result.diagnostics?.exitCode).toBe(0);
+      },
+    );
+  });
+
+  it('attaches structured diagnostics on Claude exit-failed (#2248)', async () => {
+    await withFakeClaude(
+      `console.error('boom-on-stderr'); process.exit(7);`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result.ok).toBe(false);
+        // Back-compat: existing kind + detail keep their shape.
+        expect(typeof result.kind).toBe('string');
+        expect(typeof result.detail).toBe('string');
+        // New: structured fields are attached.
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics?.phase).toBe('spawn');
+        expect(result.diagnostics?.exitCode).toBe(7);
+        expect(result.diagnostics?.stderrTail ?? '').toContain('boom-on-stderr');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/claude/);
+      },
+    );
+  });
+
+  it('reports an early-phase diagnostics block when the agent CLI is missing (#2248)', async () => {
+    // Isolate every resolver input so the daemon truly cannot locate
+    // `claude`, even on machines that have a pinned CLAUDE_BIN or an
+    // alternate user toolchain home configured. PATH alone is no longer
+    // sufficient because runtime resolution also consults CLI env
+    // overrides and OD_AGENT_HOME-scoped toolchain bins.
+    const oldPath = process.env.PATH;
+    const oldClaudeBin = process.env.CLAUDE_BIN;
+    const oldAgentHome = process.env.OD_AGENT_HOME;
+    const emptyHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-missing-claude-home-'));
+    process.env.PATH = '';
+    delete process.env.CLAUDE_BIN;
+    process.env.OD_AGENT_HOME = emptyHome;
+    try {
+      const result = await testAgentConnection({ agentId: 'claude' });
+      expect(result.ok).toBe(false);
+      expect(['agent_not_installed', 'agent_spawn_failed']).toContain(result.kind);
+      expect(result.diagnostics).toBeDefined();
+      expect(['binary_resolution', 'spawn']).toContain(result.diagnostics?.phase);
+    } finally {
+      process.env.PATH = oldPath;
+      if (oldClaudeBin === undefined) delete process.env.CLAUDE_BIN;
+      else process.env.CLAUDE_BIN = oldClaudeBin;
+      if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+      else process.env.OD_AGENT_HOME = oldAgentHome;
+      await fsp.rm(emptyHome, { recursive: true, force: true });
+    }
+  });
+
+  it('attaches diagnostics when the preflight auth probe reports missing auth (#2248)', async () => {
+    // Cursor Agent's preflight `cursor-agent status` check rejects the
+    // smoke run before the daemon ever spawns the smoke prompt. The
+    // initial #2248 pass forgot to stamp diagnostics on that return
+    // path, which contradicted the "Always set on local agent test
+    // responses" contract in packages/contracts. Lock the contract,
+    // and additionally lock the probe's own stderr/exit metadata —
+    // without those, the diagnostics block would drop the only context
+    // a caller has on a missing-auth failure (no smoke spawn ever ran,
+    // so the smoke sink is empty).
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.error('Not logged in');
+  process.exit(1);
+}
+console.error('smoke prompt should not run when status reports missing auth');
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'cursor-agent' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+        });
+        expect(result.diagnostics).toBeDefined();
+        // Preflight runs after binary resolution but before the smoke
+        // spawn, so phase should still be 'binary_resolution'.
+        expect(result.diagnostics?.phase).toBe('binary_resolution');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/cursor-agent/);
+        // The probe child wrote "Not logged in" on stderr and exited
+        // 1; both must propagate into diagnostics so Settings/CLI can
+        // render the structured auth-failure context.
+        expect(result.diagnostics?.stderrTail ?? '').toContain('Not logged in');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
   });
 });
 

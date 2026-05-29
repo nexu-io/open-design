@@ -6,7 +6,7 @@
 // home view. Until then the poster image is the only thing the
 // browser fetches — keeps a 50-tile gallery cheap.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { MediaPreviewSpec } from '../preview';
 import { Icon } from '../../Icon';
 
@@ -18,9 +18,20 @@ interface Props {
 
 export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   const [hovering, setHovering] = useState(false);
+  // Track per-URL poster load failure so a 404 / decode error / dead
+  // host swaps in the typographic fallback instead of leaving the
+  // browser's default broken-image glyph on the card. Reset whenever
+  // the poster URL itself changes — the previous failure must not
+  // poison a freshly-assigned URL (filter rotations, daemon
+  // repopulating a preview after an offline flip). #2955.
+  const [posterLoadFailed, setPosterLoadFailed] = useState(false);
+  useEffect(() => {
+    setPosterLoadFailed(false);
+  }, [preview.poster]);
   const showVideo =
     inView && hovering && preview.mediaType === 'video' && Boolean(preview.videoUrl);
   const hasPoster = Boolean(preview.poster);
+  const useFallback = !hasPoster || posterLoadFailed;
 
   return (
     <div
@@ -28,7 +39,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {inView && preview.poster ? (
+      {inView && preview.poster && !posterLoadFailed ? (
         <img
           className="plugins-home__media-img"
           src={preview.poster}
@@ -36,8 +47,9 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
+          onError={() => setPosterLoadFailed(true)}
         />
-      ) : !hasPoster ? (
+      ) : useFallback ? (
         <MediaFallback pluginTitle={pluginTitle} mediaType={preview.mediaType} />
       ) : (
         <div
@@ -55,11 +67,6 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           loop
           preload="none"
         />
-      ) : null}
-      {preview.mediaType === 'video' && !preview.imageOnly ? (
-        <span className="plugins-home__media-badge" aria-hidden>
-          <Icon name="play" size={12} />
-        </span>
       ) : null}
     </div>
   );

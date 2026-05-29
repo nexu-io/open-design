@@ -11,7 +11,10 @@ import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateBaseUrlResolved } from './connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 
-type ProviderModelsInput = ProviderModelsRequest & { signal?: AbortSignal };
+type ProviderModelsInput = ProviderModelsRequest & {
+  signal?: AbortSignal;
+  requestInit?: Pick<RequestInit, 'dispatcher'>;
+};
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
 
@@ -236,6 +239,7 @@ export async function listProviderModels(
     const response = await fetch(url, {
       method: 'GET',
       headers: providerModelsHeaders(input.protocol, input.apiKey),
+      ...input.requestInit,
       signal: controller.signal,
       redirect: 'error',
     });

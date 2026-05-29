@@ -62,6 +62,28 @@ describe('ChatComposer /search command', () => {
     );
   });
 
+  it('queues a typed follow-up when send is clicked during streaming', async () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-composer-input'), {
+      target: { value: 'follow-up while busy' },
+    });
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    expect(onSend).toHaveBeenCalledWith('follow-up while busy', [], [], undefined);
+  });
+
   it('auto-sends concurrent queued visual annotations when streaming ends', async () => {
     const onSend = vi.fn();
     const firstUpload = deferred<Awaited<ReturnType<typeof uploadProjectFiles>>>();
@@ -116,11 +138,7 @@ describe('ChatComposer /search command', () => {
       await Promise.all([firstUpload.promise, secondUpload.promise]);
     });
 
-    await waitFor(() => expect(screen.getByText('first.png')).toBeTruthy());
-    expect(screen.getByText('second.png')).toBeTruthy();
-    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
-    expect(input.value).toContain('first note');
-    expect(input.value).toContain('second note');
+    expect(onSend).not.toHaveBeenCalled();
     expect(screen.queryByTestId('staged-comment-attachments')).toBeNull();
 
     rerender(
@@ -135,22 +153,21 @@ describe('ChatComposer /search command', () => {
     );
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
-    const [, attachments, commentAttachments] = onSend.mock.calls[0]! as [
+    const [prompt, attachments, commentAttachments] = onSend.mock.calls[0]! as [
       string,
       ChatAttachment[],
       ChatCommentAttachment[],
     ];
-    expect(attachments).toEqual(expect.arrayContaining([
-      { path: 'uploads/first.png', name: 'first.png', kind: 'image' },
+    expect(prompt).toContain('first note');
+    expect(prompt).toContain('second note');
+    expect(attachments).toEqual([
       { path: 'uploads/second.png', name: 'second.png', kind: 'image' },
-    ]));
-    expect(commentAttachments).toHaveLength(2);
-    expect(new Set(commentAttachments.map((attachment) => attachment.id)).size).toBe(2);
-    expect(commentAttachments.map((attachment) => attachment.order)).toEqual([1, 2]);
-    expect(commentAttachments.map((attachment) => attachment.screenshotPath).sort()).toEqual([
-      'uploads/first.png',
-      'uploads/second.png',
+      { path: 'uploads/first.png', name: 'first.png', kind: 'image' },
     ]);
+    expect(commentAttachments).toHaveLength(2);
+    expect(commentAttachments[0]?.screenshotPath).toBe('uploads/second.png');
+    expect(commentAttachments[1]?.screenshotPath).toBe('uploads/first.png');
+    expect(commentAttachments[0]?.id).not.toBe(commentAttachments[1]?.id);
   });
 
   it('sends draw annotations directly when requested', async () => {
@@ -274,11 +291,8 @@ describe('ChatComposer /search command', () => {
       },
     }));
 
-    await waitFor(() => expect(screen.getByText('drawing.png')).toBeTruthy());
     expect(screen.queryByText('Visual mark')).toBeNull();
-    expect(screen.getByText('drawing.png')).toBeTruthy();
     expect(screen.queryByTestId('staged-comment-attachments')).toBeNull();
-    expect((screen.getByTestId('chat-composer-input') as HTMLTextAreaElement).value).toBe('tighten this area');
     expect(onSend).not.toHaveBeenCalled();
 
     rerender(

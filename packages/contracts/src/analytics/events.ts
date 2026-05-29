@@ -157,6 +157,10 @@ export type TrackingCliProviderId =
   | 'kilo'
   | 'other';
 
+export type TrackingFeedbackProviderId =
+  | TrackingCliProviderId
+  | TrackingByokProviderId;
+
 export type TrackingArtifactKind =
   | 'html'
   | 'markdown'
@@ -1016,7 +1020,15 @@ export interface AutomationsClickProps {
     | 'run_now'
     | 'open_artifact'
     | 'type_card'
-    | 'filter_tab';
+    | 'filter_tab'
+    | 'edit'
+    | 'pause'
+    | 'resume'
+    | 'delete'
+    | 'history'
+    | 'cancel'
+    | 'create'
+    | 'save';
   type_id?: 'orbit' | 'routines' | 'schedules' | 'live_artifacts';
   filter_id?: 'all' | 'scheduled' | 'running' | 'done';
 }
@@ -1076,6 +1088,20 @@ export interface PluginsSourcesTabClickProps {
   element: 'source_url_input' | 'add_source' | 'refresh' | 'remove';
   plugin_id?: string;
   plugin_type?: string;
+}
+
+export interface PluginDetailClickProps {
+  page_name: 'plugins';
+  area: 'plugin_detail';
+  element: 'back' | 'use_plugin';
+  plugin_id?: string;
+}
+
+export interface PluginLoopClickProps {
+  page_name: 'plugins';
+  area: 'plugin_loop';
+  element: 'clear_active' | 'submit' | 'card_details' | 'card_use';
+  plugin_id?: string;
 }
 
 // DESIGN SYSTEMS
@@ -1179,6 +1205,14 @@ export interface ChatPanelClickProps {
     | 'resources_popover_trigger';
 }
 
+// Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
+// `go_amr` is the link that opens https://open-design.ai/amr.
+export interface RunFailedToastClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'go_amr';
+}
+
 export interface ChatPanelResourcesPopoverClickProps {
   page_name: 'chat_panel';
   area: 'resources_popover';
@@ -1244,6 +1278,14 @@ export interface TweaksPopoverClickProps {
   status_after: 'on' | 'off';
 }
 
+export interface CommentPopoverClickProps {
+  page_name: 'artifact';
+  area: 'comment_popover';
+  element: 'save_comment' | 'send_to_chat' | 'add_note';
+  artifact_id?: string;
+  artifact_kind?: TrackingArtifactKind;
+}
+
 export interface ArtifactHeaderClickProps {
   page_name: 'artifact';
   area: 'artifact_header';
@@ -1276,6 +1318,12 @@ export interface ShareOptionPopoverClickProps {
 }
 
 // FEEDBACK clicks (CSV rows 56 / 58)
+// `agent_provider_id` / `model_id` are carried on every feedback event so
+// `reason × agent` and `reason × model` analyses don't need to join back to
+// `run_created` (which loses rows when the feedback is given to a message
+// whose run is outside the query window — the dominant source of "unknown"
+// in earlier reports). `model_id` uses `'default'` instead of null when the
+// user did not pick a specific model; see `modelIdForTracking`.
 export interface AssistantFeedbackButtonClickProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -1286,6 +1334,8 @@ export interface AssistantFeedbackButtonClickProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string;
+  agent_provider_id: TrackingFeedbackProviderId;
+  model_id: string;
   // For `clear_feedback_rating`, `rating` carries the rating that was
   // cleared (not the previous-before-clear value, which lives in
   // `rating_before`). Mason flagged the v1 emission supplied the wrong
@@ -1305,6 +1355,8 @@ export interface AssistantFeedbackReasonSubmitClickProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string;
+  agent_provider_id: TrackingFeedbackProviderId;
+  model_id: string;
   rating: 'positive' | 'negative';
   reason?: string;
   reason_count: number;
@@ -1482,6 +1534,8 @@ export type UiClickProps =
   | PluginsTemplatesDropdownClickProps
   | PluginsAvailableTabClickProps
   | PluginsSourcesTabClickProps
+  | PluginDetailClickProps
+  | PluginLoopClickProps
   | DesignSystemsTopClickProps
   | DesignSystemsTemplateCardClickProps
   | DesignSystemsTemplatesModalClickProps
@@ -1492,10 +1546,12 @@ export type UiClickProps =
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | RunFailedToastClickProps
   | ChatPanelResourcesPopoverClickProps
   | FileManagerClickProps
   | ArtifactToolbarClickProps
   | TweaksPopoverClickProps
+  | CommentPopoverClickProps
   | ArtifactHeaderClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
@@ -1540,6 +1596,21 @@ export interface DesignSystemsTemplatesModalSurfaceViewProps {
   templates_type?: string;
 }
 
+// Impression of the hosted-AMR nudge under a failed run's error toast. Fires
+// once per render of the toast for a non-AMR agent whose failure is a
+// model/auth/quota error (`error_code` carries the specific class).
+export interface RunFailedToastSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_failed_toast';
+  error_code: string;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id: string | null;
+}
+
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -1571,6 +1642,7 @@ export interface UpdatePromptSurfaceViewProps {
 }
 
 export type SurfaceViewProps =
+  | RunFailedToastSurfaceViewProps
   | HelpPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps
   | PluginReplacementModalSurfaceViewProps
@@ -1668,8 +1740,11 @@ export interface RunCreatedProps {
   aspect?: string;
   has_attachment: boolean;
   user_query_tokens: number;
-  model_id: string | null;
-  agent_provider_id: string | null;
+  // `'default'` when the user did not pick a specific model and the agent's
+  // own default was selected; use `modelIdForTracking` to bucket null/empty
+  // into `'default'` at every emit site.
+  model_id: string;
+  agent_provider_id: TrackingCliProviderId;
   skill_id: string | null;
   mcp_id: string | null;
   token_count_source: TrackingTokenCountSource;
@@ -1791,6 +1866,14 @@ export interface FeedbackSubmitResultProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string;
+  // `model_id` uses `modelIdForTracking` to bucket null/empty into the real
+  // `'default'` bucket (user accepted the agent's own default), so the
+  // PostHog `model_id` column never carries the analyst-hostile mix of
+  // "no selection" and "join failed" that `null/unknown` used to mean.
+  // `agent_provider_id` carries the BYOK provider when the agent maps to
+  // one, so reason × provider analyses can split CLI vs API surfaces.
+  model_id: string;
+  agent_provider_id: TrackingFeedbackProviderId;
   rating: 'positive' | 'negative';
   reason?: string;
   reason_count: number;
@@ -1810,6 +1893,12 @@ interface AssistantFeedbackBase {
   // but the product funnel keys off this; we emit `null` rather than dropping
   // the field so PostHog can distinguish "no run id" from "field forgotten".
   run_id: string | null;
+  // Same rationale as `FeedbackSubmitResultProps`: carry agent/model on the
+  // event itself so reason × agent / reason × model analyses don't depend
+  // on joining back to `run_created`. Buckets via `modelIdForTracking` and
+  // `feedbackAgentProviderIdToTracking` at every emit site.
+  agent_provider_id: TrackingFeedbackProviderId;
+  model_id: string;
   rating: TrackingFeedbackRating;
 }
 
@@ -2005,6 +2094,16 @@ export function executionModeToTracking(
   return mode === 'daemon' ? 'local_cli' : 'byok';
 }
 
+// Model id bucket for analytics. `'default'` represents "user did not pick
+// a specific model — went with the agent's own default". This is a real,
+// analysable bucket, distinct from `null/unknown` which previously masked
+// both "no selection" and "join failed". Callers that have a non-empty
+// model string pass it through unchanged.
+export function modelIdForTracking(model: string | null | undefined): string {
+  const trimmed = typeof model === 'string' ? model.trim() : '';
+  return trimmed.length > 0 ? trimmed : 'default';
+}
+
 // Daemon agent id (apps/daemon/src/agents.ts) → CSV cli_provider_id.
 export function agentIdToTracking(agentId: string | null | undefined): TrackingCliProviderId {
   switch (agentId) {
@@ -2036,6 +2135,27 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'kilo';
     default:
       return 'other';
+  }
+}
+
+export function feedbackAgentProviderIdToTracking(
+  agentId: string | null | undefined,
+): TrackingFeedbackProviderId {
+  switch (agentId) {
+    case 'anthropic-api':
+      return byokProtocolToTracking('anthropic') ?? 'other';
+    case 'openai-api':
+      return byokProtocolToTracking('openai') ?? 'other';
+    case 'azure-openai-api':
+      return byokProtocolToTracking('azure') ?? 'other';
+    case 'google-gemini-api':
+      return byokProtocolToTracking('google') ?? 'other';
+    case 'ollama-cloud-api':
+      return byokProtocolToTracking('ollama') ?? 'other';
+    case 'senseaudio-api':
+      return byokProtocolToTracking('senseaudio') ?? 'other';
+    default:
+      return agentIdToTracking(agentId);
   }
 }
 

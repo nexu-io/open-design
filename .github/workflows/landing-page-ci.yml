@@ -5,7 +5,8 @@ on:
     paths:
       # Workflow files
       - .github/workflows/landing-page-ci.yml
-      - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/landing-page-staging.yml
+      - .github/workflows/landing-page-production.yml
       - .github/workflows/blog-indexing-on-deploy.yml
       - .github/workflows/blog-indexing-monitor.yml
       # Landing page sources
@@ -19,16 +20,29 @@ on:
       - design-systems/**
       - craft/**
       - templates/**
+      # Plugin manifests power the bundled-plugin catalog and the new
+      # `_lib/bundled-plugins.ts` reader; CI must rerun when their
+      # `title_i18n` / `description_i18n` maps or other fields change.
+      - plugins/**
       # Workspace plumbing
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
+  # Merge queue trigger so PRs that touch the same paths can clear
+  # `Validate landing page` / `Strict PR visual tests` while queued.
+  # Without this branch ruleset blocks merges (the queue waits forever
+  # for a check name that never gets dispatched against the merge_group
+  # ref), which is the exact deadlock observed during the 5/26 release
+  # window.
+  merge_group:
+    types: [checks_requested]
   push:
     branches:
       - main
     paths:
       - .github/workflows/landing-page-ci.yml
-      - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/landing-page-staging.yml
+      - .github/workflows/landing-page-production.yml
       - .github/workflows/blog-indexing-on-deploy.yml
       - .github/workflows/blog-indexing-monitor.yml
       - apps/landing-page/**
@@ -37,6 +51,7 @@ on:
       - design-systems/**
       - craft/**
       - templates/**
+      - plugins/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -44,6 +59,10 @@ on:
 
 permissions:
   contents: read
+  # Needed to post/update the preview-URL comment on the PR. Fork PRs run
+  # with a read-only token regardless, so the preview steps below are gated
+  # to same-repo branches.
+  pull-requests: write
 
 concurrency:
   group: landing-page-ci-${{ github.event.pull_request.number || github.ref }}
@@ -69,7 +88,7 @@ jobs:
         uses: actions/cache@v5.0.5
         with:
           path: apps/landing-page/public/previews
-          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
           restore-keys: |
             landing-page-previews-${{ runner.os }}-
 
@@ -92,18 +111,30 @@ jobs:
       # launch failure or a 100%-failure run exits non-zero so the
       # build stops instead of silently shipping zero thumbnails.
       - name: Generate skill + template previews
+        # Exact previews-cache hit ⇒ public/previews already holds the correct
+        # thumbnails, skip the slow Playwright render. A restore-keys partial
+        # hit keeps cache-hit false, so we still regenerate — no stale-thumbnail
+        # drift.
+        if: steps.previews-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @open-design/landing-page previews
 
+      # No PUBLIC_GA_MEASUREMENT_ID for PR/CI builds: the per-PR preview must
+      # not report into the production GA property. OD_LANDING_NOINDEX=1 keeps
+      # the PR preview (pr-<n>.open-design-landing-staging.pages.dev) out of
+      # search engines. Only `landing-page-production` builds without these.
       - name: Build landing page
         env:
-          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
+          OD_LANDING_NOINDEX: '1'
         run: pnpm --filter @open-design/landing-page build:static
 
       - name: Lint changed blog SEO
         run: |
-          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            BASE="HEAD^"
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            # merge_group (and first-push) events have no base SHA. Resolve a
+            # concrete commit instead of passing the literal "HEAD^", which the
+            # blog-indexing scripts' assertSafeGitRef rejects (no "^" allowed).
+            BASE="$(git rev-parse HEAD^)"
           fi
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/lint-blog-seo.ts \
             --base "$BASE" \
@@ -112,9 +143,12 @@ jobs:
 
       - name: Guard blog URL changes
         run: |
-          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            BASE="HEAD^"
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || '' }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            # merge_group (and first-push) events have no base SHA. Resolve a
+            # concrete commit instead of passing the literal "HEAD^", which the
+            # blog-indexing scripts' assertSafeGitRef rejects (no "^" allowed).
+            BASE="$(git rev-parse HEAD^)"
           fi
           pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/check-blog-url-changes.ts \
             --base "$BASE" \
@@ -153,3 +187,74 @@ jobs:
             process.exit(1);
           }
           NODE
+
+      # --- PR preview deploy -------------------------------------------------
+      # Publish this PR's built site to its own preview URL in the STAGING
+      # project (`--branch=pr-<number>`) so reviewers see the rendered result
+      # before merge. It lands in the staging project, never the production
+      # project. Gated to same-repo branches: fork PRs run without the
+      # Cloudflare secrets and with a read-only token, so they skip the
+      # deploy/comment and keep just the validation above.
+      - name: Deploy PR preview to Cloudflare Pages
+        id: preview
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          command: >
+            pages deploy out
+            --project-name=open-design-landing-staging
+            --branch=pr-${{ github.event.pull_request.number }}
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_URL: ${{ steps.preview.outputs.deployment-url }}
+          ALIAS_URL: ${{ steps.preview.outputs.pages-deployment-alias-url }}
+        with:
+          script: |
+            const marker = '<!-- landing-preview -->';
+            const deploy = process.env.DEPLOY_URL || '';
+            const alias =
+              process.env.ALIAS_URL ||
+              `https://pr-${context.issue.number}.open-design-landing-staging.pages.dev`;
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+            const body = [
+              marker,
+              '### 🚀 Landing page preview',
+              '',
+              'This PR is deployed to a Cloudflare Pages preview — **not** staging or production:',
+              '',
+              `- Stable alias: ${alias}`,
+              deploy ? `- This build: ${deploy}` : '',
+              '',
+              `Updated for commit \`${sha}\`.`,
+            ]
+              .filter(Boolean)
+              .join('\n');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

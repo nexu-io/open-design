@@ -363,6 +363,67 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('renders AMR recharge guidance when a reattached run reports insufficient balance', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-amr-balance',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-amr-balance',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-amr-balance',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      const error = new Error(
+        'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://open-design.ai/amr/wallet, then retry this run.',
+      ) as Error & { code: string; details: unknown };
+      error.code = 'AMR_INSUFFICIENT_BALANCE';
+      error.details = {
+        kind: 'amr_account',
+        action: 'recharge',
+        actionUrl: 'https://open-design.ai/amr/wallet',
+      };
+      options.handlers.onError(error);
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-amr-balance' && m.runStatus === 'failed')
+        .at(-1);
+      expect(finalSave?.events?.some(
+        (event) => event.kind === 'status'
+          && event.label === 'error'
+          && (event as { code?: string }).code === 'AMR_INSUFFICIENT_BALANCE',
+      )).toBe(true);
+    });
+  });
+
   it('preserves canceled runStatus when onRunStatus records cancellation before onDone fires', async () => {
     const startedAt = Date.now();
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);

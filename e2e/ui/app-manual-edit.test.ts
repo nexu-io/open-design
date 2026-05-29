@@ -203,6 +203,38 @@ test('manual edit mode keeps deck navigation available for deck-shaped HTML', as
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
+test('HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'toggle-preview.html',
+    '<!doctype html><html><body><main><h1>Toggle Preview Stable</h1><p>Still visible after tab switches.</p></main></body></html>',
+  );
+  await page.goto(`/projects/${projectId}`);
+  await openDesignFile(page, 'toggle-preview.html');
+
+  const previewFrame = page.getByTestId('artifact-preview-frame');
+  await expect(previewFrame).toBeVisible();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Toggle Preview Stable' }),
+  ).toBeVisible();
+
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('Toggle Preview Stable');
+
+  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+  await expect(previewFrame).toBeVisible();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Toggle Preview Stable' }),
+  ).toBeVisible();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByText('Still visible after tab switches.'),
+  ).toBeVisible();
+});
+
 async function routeMockAgents(page: Page) {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({

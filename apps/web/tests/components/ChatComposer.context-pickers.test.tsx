@@ -5,6 +5,8 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import { I18nProvider } from '../../src/i18n';
+import type { Locale } from '../../src/i18n/types';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -115,8 +117,11 @@ let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
 let servers = [MCP_SERVER];
 
-function renderComposer(overrides: Partial<ComponentProps<typeof ChatComposer>> = {}) {
-  return render(
+function renderComposer(
+  overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
+  options: { locale?: Locale } = {},
+) {
+  const tree = (
     <ChatComposer
       projectId="project-1"
       projectFiles={[]}
@@ -127,7 +132,19 @@ function renderComposer(overrides: Partial<ComponentProps<typeof ChatComposer>> 
       onOpenMcpSettings={vi.fn()}
       skills={skills}
       {...overrides}
-    />,
+    />
+  );
+
+  if (options.locale) {
+    return render(
+      <I18nProvider initial={options.locale}>
+        {tree}
+      </I18nProvider>,
+    );
+  }
+
+  return render(
+    tree,
   );
 }
 
@@ -194,6 +211,33 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
     expect(screen.getByText('Search plugins, skills, MCP servers, connectors, and Design Files.')).toBeTruthy();
+  });
+
+  it('localizes @ panel tabs and empty states in Chinese mode', async () => {
+    plugins = [];
+    skills = [];
+    servers = [];
+    renderComposer({}, { locale: 'zh-CN' });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@', selectionStart: 1 },
+    });
+
+    expect(screen.getByRole('tab', { name: '全部' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '插件' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '技能' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '连接器' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '设计文件' })).toBeTruthy();
+    expect(screen.getByText('搜索插件、技能、MCP 服务器、连接器和设计文件。')).toBeTruthy();
+
+    fireEvent.change(input, {
+      target: { value: '@missing', selectionStart: 8 },
+    });
+
+    expect(screen.getByText('没有找到“missing”的结果。')).toBeTruthy();
+    expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
   it('selects an MCP server from @ search and keeps the inline token visible', async () => {

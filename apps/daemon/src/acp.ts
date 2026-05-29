@@ -65,11 +65,13 @@ interface AttachAcpSessionOptions {
   prompt: string;
   cwd?: string;
   model?: string | null;
+  imagePaths?: string[];
   mcpServers?: AcpMcpServerInput[];
   send: (event: string, payload: unknown) => void;
   clientName?: string;
   clientVersion?: string;
   stageTimeoutMs?: number;
+  modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
 }
 
 function errorMessage(err: unknown): string {
@@ -113,6 +115,15 @@ function sendRpc(writable: RpcWritable, id: JsonRpcId, method: string, params: u
 
 function sendRpcResult(writable: RpcWritable, id: JsonRpcId, result: unknown): void {
   writable.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
+}
+
+function buildPromptBlocks(prompt: string, imagePaths: string[]): Array<Record<string, string>> {
+  const blocks: Array<Record<string, string>> = [{ type: 'text', text: prompt }];
+  for (const imagePath of imagePaths) {
+    if (typeof imagePath !== 'string' || imagePath.trim().length === 0) continue;
+    blocks.push({ type: 'resource_link', uri: imagePath });
+  }
+  return blocks;
 }
 
 function isJsonRpcId(value: unknown): value is JsonRpcId {
@@ -421,11 +432,13 @@ export function attachAcpSession({
   prompt,
   cwd,
   model,
+  imagePaths = [],
   mcpServers,
   send,
   clientName = 'open-design',
   clientVersion = 'runtime-adapter',
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
+  modelUnavailableErrorCode,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -443,6 +456,7 @@ export function attachAcpSession({
   let modelConfigId: string | null = null;
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
+  let emittedTextChunk = false;
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -467,12 +481,41 @@ export function attachAcpSession({
     stageTimer = null;
   };
 
-  const fail = (message: string) => {
+  const amrModelUnavailablePayload = (message: string) => ({
+    message,
+    error: {
+      code: 'AMR_MODEL_UNAVAILABLE',
+      message,
+      retryable: false,
+      details: { kind: 'amr_model', action: 'choose_model' },
+    },
+  });
+
+  const isModelUnavailableError = (message: string) => {
+    const value = message.toLowerCase();
+    return (
+      value.includes('model not found') ||
+      value.includes('providermodelnotfounderror') ||
+      value.includes('unknown model') ||
+      value.includes('invalid model')
+    );
+  };
+
+  const fail = (
+    message: string,
+    options: { forceModelUnavailable?: boolean } = {},
+  ) => {
     if (finished) return;
     finished = true;
     fatal = true;
     clearStageTimer();
-    send('error', { message });
+    const useModelUnavailable =
+      modelUnavailableErrorCode &&
+      (options.forceModelUnavailable || isModelUnavailableError(message));
+    send(
+      'error',
+      useModelUnavailable ? amrModelUnavailablePayload(message) : { message },
+    );
     if (!child.killed) child.kill('SIGTERM');
   };
 
@@ -493,7 +536,7 @@ export function attachAcpSession({
       'session/prompt',
       {
         sessionId,
-        prompt: [{ type: 'text', text: prompt }],
+        prompt: buildPromptBlocks(prompt, imagePaths),
       },
       'session/prompt',
     );
@@ -575,6 +618,7 @@ export function attachAcpSession({
       if (update.sessionUpdate === 'agent_message_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
+          emittedTextChunk = true;
           if (!emittedFirstTokenStatus) {
             emittedFirstTokenStatus = true;
             send('agent', {
@@ -638,6 +682,13 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
+      if (!emittedTextChunk && modelUnavailableErrorCode) {
+        fail(
+          'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
+          { forceModelUnavailable: true },
+        );
+        return;
+      }
       const usage = formatUsage(result.usage);
       if (usage) {
         send('agent', {
@@ -672,9 +723,12 @@ export function attachAcpSession({
   });
 
   stdout.on('data', (chunk: string) => parser.feed(chunk));
-  child.on('close', () => {
+  child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
+    if (!finished && !aborted && !fatal) {
+      fail(`ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`);
+    }
   });
   child.on('error', (err: Error) => fail(err.message));
   stdin.on('error', (err: Error) => fail(`stdin error: ${err.message}`));
@@ -701,12 +755,27 @@ export function attachAcpSession({
       aborted = true;
       finished = true;
       clearStageTimer();
-      if (!sessionId || !child.stdin || child.stdin.destroyed || child.stdin.writableEnded) return;
+      if (!child.stdin || child.stdin.destroyed || child.stdin.writableEnded)
+        return;
+      // Only cancel an established session; before session/new resolves there
+      // is no sessionId to cancel, but we must still close stdin below.
+      if (sessionId) {
+        try {
+          sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
+          nextId += 1;
+        } catch {
+          // The caller owns process-signal fallback if the ACP transport is gone.
+        }
+      }
+      // Always close stdin so the agent receives EOF and shuts down its own
+      // runtime — the vela ACP bridge tears down its private OpenCode server on
+      // EOF — instead of lingering (and leaking that server) until the caller's
+      // SIGTERM fallback fires. This also covers aborts during ACP startup,
+      // before session/new returns. Mirrors the clean-completion path above.
       try {
-        sendRpc(child.stdin, nextId, 'session/cancel', { sessionId });
-        nextId += 1;
+        child.stdin.end();
       } catch {
-        // The caller owns process-signal fallback if the ACP transport is gone.
+        // Best effort; the caller still owns the SIGTERM/SIGKILL fallback.
       }
     },
   };

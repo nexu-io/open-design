@@ -86,6 +86,8 @@ export const gemini = requireAgent('gemini');
 export const qoder = requireAgent('qoder');
 export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
+export const aider = requireAgent('aider');
+export const antigravity = requireAgent('antigravity');
 export const deepseekMaxPromptArgBytes = (() => {
   assert.ok(
     deepseek.maxPromptArgBytes !== undefined,

@@ -1,5 +1,9 @@
 import type http from 'node:http';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
+import * as platform from '@open-design/platform';
 import { startServer } from '../src/server.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
@@ -7,6 +11,7 @@ type FetchInit = Parameters<typeof fetch>[1];
 
 describe('API proxy routes', () => {
   const realFetch = globalThis.fetch;
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   let server: http.Server;
   let baseUrl: string;
 
@@ -21,6 +26,11 @@ describe('API proxy routes', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  afterEach(async () => {
+    if (originalMediaConfigDir == null) delete process.env.OD_MEDIA_CONFIG_DIR;
+    else process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -58,6 +68,257 @@ describe('API proxy routes', () => {
         redirect: 'error',
       }),
     );
+  });
+
+  it.each([
+    {
+      provider: 'anthropic',
+      path: '/api/proxy/anthropic/stream',
+      body: {
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-ant',
+        model: 'claude-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      response: sseResponse('event: message_stop\ndata: {}\n\n'),
+    },
+    {
+      provider: 'openai',
+      path: '/api/proxy/openai/stream',
+      body: {
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-openai',
+        model: 'gpt-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      response: sseResponse('data: [DONE]\n\n'),
+    },
+    {
+      provider: 'azure',
+      path: '/api/proxy/azure/stream',
+      body: {
+        baseUrl: 'https://resource.openai.azure.com',
+        apiKey: 'azure-key',
+        model: 'deployment-one',
+        apiVersion: '2024-10-21',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      response: sseResponse('data: [DONE]\n\n'),
+    },
+    {
+      provider: 'google',
+      path: '/api/proxy/google/stream',
+      body: {
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'google-key',
+        model: 'gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      response: sseResponse('data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n'),
+    },
+    {
+      provider: 'ollama',
+      path: '/api/proxy/ollama/stream',
+      body: {
+        baseUrl: 'https://ollama.example.com',
+        apiKey: 'ollama-key',
+        model: 'llama3',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      response: new Response(new TextEncoder().encode('{"done":true}\n'), {
+        status: 200,
+        headers: { 'content-type': 'application/x-ndjson' },
+      }),
+    },
+    {
+      provider: 'senseaudio',
+      path: '/api/proxy/senseaudio/stream',
+      body: {
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sa-key',
+        model: 'senseaudio-s2',
+        projectId: 'test-project',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      response: sseResponse('data: [DONE]\n\n'),
+    },
+  ])('uses the live proxy dispatcher for $provider proxy requests', async ({ path, body, response }) => {
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+      HTTPS_PROXY: 'http://system-proxy.internal:8443',
+      NODE_USE_ENV_PROXY: '1',
+    });
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      expect(init?.dispatcher).toBeDefined();
+      return Promise.resolve(response.clone());
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await realFetch(`${baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      expect(res.status).toBe(200);
+      await res.text();
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) => !String(input).startsWith(baseUrl) && init?.dispatcher,
+        ),
+      ).toBe(true);
+    } finally {
+      proxySpy.mockRestore();
+    }
+  });
+
+  it('uses the live proxy dispatcher for ElevenLabs voice discovery', async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), 'od-elevenlabs-proxy-route-'));
+    process.env.OD_MEDIA_CONFIG_DIR = configDir;
+    await mkdir(configDir, { recursive: true });
+    await writeFile(path.join(configDir, 'media-config.json'), JSON.stringify({
+      providers: {
+        elevenlabs: {
+          apiKey: 'eleven-test-key',
+          baseUrl: 'https://elevenlabs-gateway.example.test',
+        },
+      },
+    }), 'utf8');
+
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+      HTTPS_PROXY: 'http://system-proxy.internal:8443',
+      NODE_USE_ENV_PROXY: '1',
+    });
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      expect(url).toBe('https://elevenlabs-gateway.example.test/v2/voices?page_size=100');
+      expect(init?.dispatcher).toBeDefined();
+      return Promise.resolve(Response.json({
+        voices: [{ voice_id: 'voice-1', name: 'Rachel' }],
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await realFetch(`${baseUrl}/api/media/providers/elevenlabs/voices?limit=100`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        voices: [{ voiceId: 'voice-1', name: 'Rachel' }],
+      });
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) => input === 'https://elevenlabs-gateway.example.test/v2/voices?page_size=100' && init?.dispatcher,
+        ),
+      ).toBe(true);
+    } finally {
+      proxySpy.mockRestore();
+      await rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the live proxy dispatcher for Tavily research search', async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), 'od-tavily-proxy-route-'));
+    process.env.OD_MEDIA_CONFIG_DIR = configDir;
+    await mkdir(configDir, { recursive: true });
+    await writeFile(path.join(configDir, 'media-config.json'), JSON.stringify({
+      providers: {
+        tavily: {
+          apiKey: 'tavily-test-key',
+          baseUrl: 'https://tavily-gateway.example.test',
+        },
+      },
+    }), 'utf8');
+
+    const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
+      HTTPS_PROXY: 'http://system-proxy.internal:8443',
+      NODE_USE_ENV_PROXY: '1',
+    });
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      expect(url).toBe('https://tavily-gateway.example.test/search');
+      expect(init?.dispatcher).toBeDefined();
+      return Promise.resolve(Response.json({
+        answer: 'Proxy-safe summary',
+        results: [
+          {
+            title: 'Proxy-safe source',
+            url: 'https://example.test/source',
+            content: 'Snippet',
+          },
+        ],
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await realFetch(`${baseUrl}/api/research/search`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          query: 'proxy-aware research',
+          providers: ['tavily'],
+        }),
+      });
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual(expect.objectContaining({
+        query: 'proxy-aware research',
+        provider: 'tavily',
+        summary: 'Proxy-safe summary',
+        sources: [
+          expect.objectContaining({
+            title: 'Proxy-safe source',
+            url: 'https://example.test/source',
+          }),
+        ],
+      }));
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) => input === 'https://tavily-gateway.example.test/search' && init?.dispatcher,
+        ),
+      ).toBe(true);
+    } finally {
+      proxySpy.mockRestore();
+      await rm(configDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports malformed proxy env before sending the start event on Anthropic streams', async () => {
+    const originalHttpProxy = process.env.HTTP_PROXY;
+    const originalHttpsProxy = process.env.HTTPS_PROXY;
+    const originalAllProxy = process.env.ALL_PROXY;
+    process.env.HTTP_PROXY = 'not a valid proxy url';
+    delete process.env.HTTPS_PROXY;
+    delete process.env.ALL_PROXY;
+
+    try {
+      const res = await realFetch(`${baseUrl}/api/proxy/anthropic/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: 'https://api.anthropic.com',
+          apiKey: 'sk-ant',
+          model: 'claude-test',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('event: error');
+      expect(text).toContain('INTERNAL_ERROR');
+      expect(text).not.toContain('event: start');
+    } finally {
+      if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
+      else process.env.HTTP_PROXY = originalHttpProxy;
+      if (originalHttpsProxy === undefined) delete process.env.HTTPS_PROXY;
+      else process.env.HTTPS_PROXY = originalHttpsProxy;
+      if (originalAllProxy === undefined) delete process.env.ALL_PROXY;
+      else process.env.ALL_PROXY = originalAllProxy;
+    }
   });
 
   // Regression: appendVersionedApiPath needs to thread three shapes:

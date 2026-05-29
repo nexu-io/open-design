@@ -180,6 +180,48 @@ export function resolveNamespaceRoot<TStamp extends SidecarStampShape>({
   return join(resolve(base), contract.normalizeNamespace(namespace));
 }
 
+/**
+ * Resolve the namespace root (the directory that holds `logs/`, `runs/`,
+ * `current.json`, …) from a *live* {@link SidecarRuntimeContext}.
+ *
+ * `resolveNamespaceRoot` alone is not enough here because the sidecar `base`
+ * carries a different meaning depending on how the process was launched:
+ *
+ * - **dev (`tools-dev`):** every child is launched with `base` set to the
+ *   pre-namespace source runtime root (see `tools/dev/src/config.ts`), so the
+ *   namespace root is `base/<namespace>` — exactly what `resolveNamespaceRoot`
+ *   computes.
+ * - **packaged (runtime mode):** the orchestrator launches every child with
+ *   `base = <namespaceRoot>/runtime` (see `apps/packaged/src/paths.ts` →
+ *   `runtimeRoot`, wired in `apps/packaged/src/sidecars.ts`), while the actual
+ *   logs live as a sibling at `<namespaceRoot>/logs`. Re-appending the
+ *   namespace via `resolveNamespaceRoot` would yield
+ *   `<namespaceRoot>/runtime/<namespace>`, so every daemon/web log file
+ *   resolved that way is an ENOENT — which is why packaged diagnostics bundles
+ *   used to capture none of them.
+ *
+ * Callers pass their contract's runtime-mode constant (e.g.
+ * `SIDECAR_MODES.RUNTIME`) so this generic helper does not have to hardcode
+ * Open Design's mode strings.
+ */
+export function resolveRuntimeNamespaceRoot<TStamp extends SidecarStampShape>({
+  contract,
+  runtime,
+  runtimeMode,
+}: {
+  contract: SidecarContractDescriptor<TStamp>;
+  runtime: Pick<SidecarRuntimeContext<TStamp>, "base" | "mode" | "namespace">;
+  runtimeMode: TStamp["mode"] | string;
+}): string {
+  if (runtime.mode === runtimeMode) {
+    // packaged: `base` already points INTO the namespace tree
+    // (`<namespaceRoot>/runtime`), so the namespace root is its parent.
+    return dirname(resolve(runtime.base));
+  }
+  // dev / tools-dev: `base` is the pre-namespace source runtime root.
+  return resolveNamespaceRoot({ base: runtime.base, contract, namespace: runtime.namespace });
+}
+
 export function resolveRuntimeRoot<TStamp extends SidecarStampShape>({
   base,
   contract,

@@ -34,7 +34,6 @@ function renderPopover(onSendBatch: () => void, sending = false) {
       onClose={() => {}}
       onSaveComment={() => {}}
       onSendBatch={onSendBatch}
-      onRemove={() => {}}
       onRemoveMember={() => {}}
       sending={sending}
       t={((key: string) => String(key)) as never}
@@ -72,7 +71,6 @@ describe('BoardComposerPopover keyboard submit', () => {
         onClose={() => {}}
         onSaveComment={() => {}}
         onSendBatch={onSendBatch}
-        onRemove={() => {}}
         onRemoveMember={() => {}}
         sending={false}
         t={((key: string) => String(key)) as never}

@@ -90,7 +90,7 @@ interface Props {
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
   defaultDesignSystemId?: string | null;
-  onSetDefaultDesignSystem?: (id: string) => void;
+  onSetDefaultDesignSystem?: (id: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onDesignSystemNeedsWork?: (
     sectionTitle: string,
@@ -106,6 +106,8 @@ interface Props {
   onUseDesignSystem?: (id: string, title: string) => void;
   onConnectRepo?: () => void;
   githubConnected?: boolean;
+  commentPortalId?: string;
+  onCommentModeChange?: (active: boolean) => void;
 }
 
 interface SketchState {
@@ -222,6 +224,8 @@ export function FileWorkspace({
   onUseDesignSystem,
   onConnectRepo,
   githubConnected,
+  commentPortalId,
+  onCommentModeChange,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -1065,6 +1069,8 @@ export function FileWorkspace({
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
             onFileSaved={onRefreshFiles}
             onOpenFileReplacing={openFileReplacing}
+            commentPortalId={commentPortalId}
+            onCommentModeChange={onCommentModeChange}
           />
         ) : (
           <div className="viewer-empty">
@@ -1145,7 +1151,7 @@ function DesignSystemProjectPanel({
   onOpenFile: (name: string) => void;
   onUploadAssets: () => void;
   defaultDesignSystemId?: string | null;
-  onSetDefaultDesignSystem?: (id: string) => void;
+  onSetDefaultDesignSystem?: (id: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onNeedsWork?: (
     sectionTitle: string,
@@ -1539,7 +1545,7 @@ function DesignSystemProjectPanel({
                   checked={isDefault}
                   disabled={statusBusy}
                   onChange={(event) => {
-                    if (event.target.checked) onSetDefaultDesignSystem?.(system.id);
+                    onSetDefaultDesignSystem?.(event.target.checked ? system.id : null);
                   }}
                 />
                 Default

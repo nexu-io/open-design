@@ -2,6 +2,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  pluginSlug,
+  pluginDetailPath,
+  pluginPreviewPath,
+} from './_lib/plugin-slug';
+import {
   DEFAULT_LOCALE,
   getLandingUiCopy,
   getLocalizedString,
@@ -172,18 +177,6 @@ const titleize = (value: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
-const slugSegment = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'plugin';
-
-const detailHrefFor = (id: string) =>
-  `/plugins/${id.split('/').map(slugSegment).join('/')}/`;
-
-const previewHrefFor = (id: string) =>
-  `/plugins/previews/${id.split('/').map(slugSegment).join('/')}/`;
-
 const sourceUrlFromSource = (source: string): string | undefined => {
   const match = /^github:([^/]+)\/([^@]+)@([^/]+)\/(.+)$/.exec(source);
   if (!match) {
@@ -285,7 +278,7 @@ const previewFrom = (
       pluginDir && entry ? localPluginPath(pluginDir, entry) : undefined;
     if (localHtmlPath) {
       const frameHref = canRenderHtmlPreview(localHtmlPath)
-        ? previewHrefFor(id)
+        ? pluginPreviewPath(id)
         : undefined;
       return {
         type: 'html',
@@ -388,7 +381,7 @@ const entryFromMarketplace = (
   const capabilities = asStringArray(rawEntry.capabilitiesSummary);
   const version = asString(rawEntry.version) ?? '0.1.0';
   const publisher = publisherLabel(rawEntry.publisher, locale);
-  const detailHref = detailHrefFor(id);
+  const detailHref = pluginDetailPath(id);
   const mode = asString(rawEntry.mode);
   const taskKind = asString(rawEntry.taskKind);
   const surface = undefined;
@@ -420,7 +413,7 @@ const entryFromMarketplace = (
 
   return {
     id,
-    slug: id.split('/').map(slugSegment).join('/'),
+    slug: pluginSlug(id),
     title,
     description,
     version,
@@ -538,7 +531,7 @@ const officialEntryFromManifest = (
   const od = asRecord(manifest?.od) as RawOdMetadata | undefined;
   const capabilities = asStringArray(od?.capabilities);
   const tags = asStringArray(manifest?.tags);
-  const detailHref = detailHrefFor(id);
+  const detailHref = pluginDetailPath(id);
   const mode = asString(od?.mode);
   const taskKind = asString(od?.taskKind);
   const surface = asString(od?.surface);
@@ -573,7 +566,7 @@ const officialEntryFromManifest = (
 
   return {
     id,
-    slug: id.split('/').map(slugSegment).join('/'),
+    slug: pluginSlug(id),
     title,
     description,
     version: asString(manifest?.version) ?? '0.1.0',
