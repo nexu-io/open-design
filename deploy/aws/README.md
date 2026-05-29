@@ -39,7 +39,7 @@ When deploying the CloudFormation stack, you can customize the following paramet
 | `PrivateSubnet2Cidr` | The CIDR block for Private Subnet 2 (AZ2). | `10.42.4.0/24` |
 | `TaskSize` | The compute size for the Open Design application. Allowed values: `small` (256 CPU, 1024 MiB), `medium` (512 CPU, 2048 MiB), `large` (1024 CPU, 4096 MiB). | `small` |
 | `TaskCpuArchitecture` | The CPU architecture for the ECS task. Must match the architecture of your Docker image. Allowed values (available as a dropdown): `X86_64`, `ARM64`. | `X86_64` |
-| `CustomDomainName` | *(Optional)* Your custom domain name (e.g., `design.yourcompany.com`). If blank, the default ALB DNS name is used over HTTP. | *None* |
+| `CustomDomainName` | *(Optional)* Your custom domain name (e.g., `design.yourcompany.com`). If provided, you must manually create a DNS CNAME/Alias record pointing to the ALB after deployment. If blank, the default ALB DNS name is used over HTTP. | *None* |
 | `AcmCertificateArn` | *(Optional)* The ARN of your AWS Certificate Manager (ACM) certificate. **Required** if `CustomDomainName` is provided. | *None* |
 | `ProxyPort` | The dynamic port used by the Nginx proxy and exposed to the Load Balancer. Must be >= 1024 (unprivileged container). | `8080` |
 | `AppStoragePath` | The container path where the `.od` SQLite directory is mounted via EFS. | `/app/.od` |
@@ -80,6 +80,10 @@ aws cloudformation deploy \
 
 ## Accessing the Application
 
-Once the CloudFormation stack creation is complete, go to the **Outputs** tab of the stack in the AWS CloudFormation Console. 
+Once the CloudFormation stack creation is complete, go to the **Outputs** tab of the stack in the AWS CloudFormation Console to find the `AlbDnsName` and `AppUrl`.
 
-You will find the `AppUrl` output, which contains the HTTP link to the Application Load Balancer (or your custom domain if configured). Use this URL to access Open Design.
+**If you did NOT use a custom domain:**
+Access Open Design directly using the HTTP URL provided in `AppUrl`.
+
+**If you used a Custom Domain (HTTPS):**
+You must create a DNS record to route traffic to your new load balancer. Go to your DNS provider (e.g., AWS Route53, Cloudflare) and create a CNAME or Alias (A) record that points your `CustomDomainName` to the `AlbDnsName` output value. Once DNS propagates, you can access Open Design securely via your custom HTTPS domain.
