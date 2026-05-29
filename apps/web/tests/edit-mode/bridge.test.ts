@@ -259,7 +259,32 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain('targets.push(targetFrom(nodes[i], false))');
     expect(bridge).toContain("target: targetFrom(el, true)");
     expect(bridge).toContain('if (!isSourceMappable(nodes[i])) continue;');
-    expect(bridge).toContain('if (isPrimaryTarget(el)) return el;');
+    expect(bridge).toContain('return el;');
+    expect(bridge).not.toContain('if (isPrimaryTarget(el)) return el;');
+  });
+
+  it('prefers the deepest source-mapped child over an annotated group on hover', async () => {
+    const posts: Array<{ type?: string; target?: { id: string; label?: string } }> = [];
+    const dom = new JSDOM(
+      `<main>
+        <section data-od-id="hero-group">
+          <span data-od-source-path="path-0-0-0">Small label</span>
+        </section>
+      </main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const span = dom.window.document.querySelector('span')!;
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; target?: { id: string; label?: string } });
+    }) as typeof dom.window.parent.postMessage;
+
+    span.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+
+    const hover = posts.find((message) => message.type === 'od-edit-hover');
+    expect(hover?.target?.id).toBe('path-0-0-0');
+    expect(hover?.target?.label).toBe('Small label');
+
+    dom.window.close();
   });
 
   it('acks live preview style patches by id and version', () => {

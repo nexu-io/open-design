@@ -765,6 +765,70 @@ test('Cursor auth matcher covers current unauthenticated Cursor error records', 
   assert.equal(isCursorAuthFailureText('Error: [unauthenticated] Error'), true);
 });
 
+// agy's print mode (`-p -`) exits with code 0 but emits one of these
+// shapes when the keyring entry is missing or expired. Without the
+// matcher, the daemon treats this as a successful turn and shows the
+// raw OAuth URL as the agent's "reply" — but the user has no way to
+// complete OAuth from inside chat (agy `-p` has no input field to
+// paste the auth code into). The matcher converts each shape into
+// AGENT_AUTH_REQUIRED with actionable guidance.
+test('antigravity auth matcher covers agy print-mode + log-file auth signals', async () => {
+  const { isAntigravityAuthFailureText, antigravityAuthGuidance, classifyAgentAuthFailure } =
+    await import('../../src/runtimes/auth.js');
+
+  // print-mode stdout shape — user-visible
+  assert.equal(
+    isAntigravityAuthFailureText(
+      'Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?…',
+    ),
+    true,
+  );
+  assert.equal(
+    isAntigravityAuthFailureText('Waiting for authentication (timeout 30s)...\nError: authentication timed out.'),
+    true,
+  );
+
+  // `agy --log-file` shape — surfaces in stderr / log-file probes
+  assert.equal(
+    isAntigravityAuthFailureText(
+      'E log.go:398] Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity.',
+    ),
+    true,
+  );
+
+  // Negative: prose mentioning "authentication" must not false-fire
+  assert.equal(
+    isAntigravityAuthFailureText('I added two-factor authentication to the login flow.'),
+    false,
+  );
+  assert.equal(isAntigravityAuthFailureText(''), false);
+
+  // Classifier wires the agy detector to the user-actionable guidance
+  // text so the chat surfaces a re-auth message rather than the raw
+  // OAuth URL the user can't act on from inside OD.
+  const cls = classifyAgentAuthFailure(
+    'antigravity',
+    'Authentication required. Please visit the URL to log in: https://example',
+  );
+  assert.ok(cls);
+  assert.equal(cls.status, 'missing');
+  assert.equal(cls.message, antigravityAuthGuidance());
+  assert.ok(
+    antigravityAuthGuidance().includes('open a terminal and run `agy` once'),
+    'guidance must tell the user exactly what one-time command to run',
+  );
+  assert.ok(
+    antigravityAuthGuidance().includes('keyring'),
+    'guidance must mention the keyring so users understand it persists',
+  );
+
+  // Non-matching text → null (don't claim auth failure on unrelated errors)
+  assert.equal(
+    classifyAgentAuthFailure('antigravity', 'rate limit exceeded'),
+    null,
+  );
+});
+
 // Windows env-var names are case-insensitive at the kernel level, but
 // spreading process.env into a plain object loses Node's case-insensitive
 // accessor — a `Anthropic_Api_Key` key would survive a literal

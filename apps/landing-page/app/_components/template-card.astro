@@ -1,0 +1,182 @@
+---
+/*
+ * Card-style row used by `/plugins/templates/` (and its kind-scoped
+ * facets) — the YouMind-inspired layout product called for after PR
+ * #3010 shipped:
+ *
+ *   ┌──────────────────────────┐
+ *   │ ▆ accent band            │
+ *   │ [Featured]               │  ← optional, top-anchored
+ *   │ ┌──────────────────────┐ │
+ *   │ │ 16:9 video / poster   │ │  ← hover-autoplay when video
+ *   │ └──────────────────────┘ │
+ *   │ @author          DATE    │
+ *   │ ┌──────────────────────┐ │
+ *   │ │ Read full prompt →    │ │
+ *   │ │ <description clamp>   │ │
+ *   │ └──────────────────────┘ │
+ *   │ [ Use this template ] [⤴] │
+ *   └──────────────────────────┘
+ *
+ * The legacy `plugin-row.astro` row component still backs
+ * `/plugins/skills/` and other list-style routes; this file is
+ * intentionally separate so a future refactor can split the data
+ * shapes cleanly. For now it accepts the same `BundledPluginRecord`
+ * shape that the templates page already iterates over.
+ *
+ * Hover-autoplay is wired here via a small inline script per page —
+ * one IntersectionObserver across all `<video data-tpl-autoplay>`
+ * elements pauses anything outside the viewport so we don't spawn
+ * 200 simultaneous decoders on a long grid.
+ */
+import {
+  resolveBundledDescription,
+  resolveBundledTitle,
+  type BundledPluginRecord,
+} from '../_lib/bundled-plugins';
+import { localeFromPath, localizedHref } from '../i18n';
+import { localizeTaxonomyValue } from '../content-i18n';
+import { getPluginsCopy } from '../_lib/plugins-i18n';
+
+export interface Props {
+  record: BundledPluginRecord;
+  /** Index used to derive a stable accent-band hue. */
+  index: number;
+  /** Force-mark the card as featured (e.g. top-N from `od.featured`). */
+  featured?: boolean;
+  /**
+   * Subcategory slug used by the per-kind page's client-side scene
+   * filter to toggle visibility — same contract `plugin-row.astro`
+   * exposes so the existing filter script keeps working when the row
+   * is rendered as a card.
+   */
+  dataScene?: string;
+}
+
+const { record, index, featured = false, dataScene } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+const name = resolveBundledTitle(record, locale);
+const description = resolveBundledDescription(record, locale);
+const detailHref = href(record.detailHref);
+
+/*
+ * Share text — bake the localized share template into a `data-share-text`
+ * attribute on the share button so the page-level click handler can
+ * surface it via the Web Share API on mobile or the clipboard on desktop
+ * without each card needing its own dialog. The detail page still ships
+ * a full `<dialog>` for the platform jump-to grid; cards on the catalog
+ * surface get the lighter affordance.
+ */
+const pcopy = getPluginsCopy(locale);
+const shareUrl = new URL(detailHref, 'https://open-design.ai').toString();
+const shareText = pcopy.shareTemplate({ title: name, url: shareUrl });
+
+/*
+ * Accent band — derived from the plugin's `mode` so the same kind of
+ * artifact gets the same hue across the grid (videos green, prototypes
+ * blue, etc.). Falls back to a stable per-index hue rotation so cards
+ * without a recognized mode still get a band rather than disappearing
+ * visually. The seven-slot palette mirrors YouMind's color-coded
+ * top-band pattern but uses our paper-tone-friendly hues.
+ */
+const ACCENT_BY_MODE: Record<string, string> = {
+  video: '#7fb46a',           // mossy green
+  prototype: '#5b8db8',        // dusty blue
+  deck: '#e9b94a',             // mustard (matches token)
+  image: '#a285c2',            // wisteria
+  hyperframes: '#d97373',      // coral-rose
+  audio: '#d28d3f',            // amber
+  'live-artifact': '#5fb0a8',  // teal
+  'design-system': '#7a8857',  // olive (matches token's --olive ish)
+};
+const PALETTE = ['#7fb46a', '#5b8db8', '#e9b94a', '#a285c2', '#d97373', '#d28d3f', '#5fb0a8', '#7a8857'];
+const accent = (record.mode && ACCENT_BY_MODE[record.mode]) ?? PALETTE[index % PALETTE.length];
+
+/*
+ * Author + date strip. Author surfaces the manifest's `author.name`
+ * with a leading `@` per YouMind convention; first-party manifests
+ * read as `@open-design`. Date is intentionally absent — bundled
+ * manifests don't carry a `published_at` and inferring it from git
+ * mtime adds build-time complexity for a soft signal. We render
+ * a paper-toned `Open Design` attribution badge in the date slot
+ * instead so the row still balances visually.
+ */
+const authorRaw = record.authorName ?? 'Open Design';
+const authorHandle = `@${authorRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+/*
+ * Localized chip labels. The catalog row's prior chip rail leaked
+ * raw English mode/scenario slugs on un-localized rows; the same
+ * fallback rule applies here. When `localizeTaxonomyValue` returns
+ * undefined the chip drops rather than showing a kebab slug.
+ */
+const modeLabel = localizeTaxonomyValue(record.mode, locale);
+const scenarioLabel = localizeTaxonomyValue(record.scenario, locale);
+
+const isVideoPreview = record.previewType === 'video' && record.previewVideo;
+---
+
+<article class={`tpl-card${featured ? ' tpl-card-featured' : ''}`} data-mode={record.mode ?? 'misc'} data-scene={dataScene}>
+  <span class="tpl-band" aria-hidden="true" style={`background:${accent}`}></span>
+  {featured && <span class="tpl-featured-tag">{pcopy.cardFeaturedTag}</span>}
+
+  <a class="tpl-media" href={detailHref} aria-label={name}>
+    {isVideoPreview ? (
+      <video
+        class="tpl-media-video"
+        muted
+        loop
+        playsinline
+        preload="none"
+        poster={record.previewPoster}
+        data-tpl-autoplay
+        data-src={record.previewVideo}
+      />
+    ) : record.previewPoster ? (
+      <img
+        class="tpl-media-poster"
+        src={record.previewPoster}
+        alt={pcopy.previewImageAlt(name)}
+        loading="lazy"
+        decoding="async"
+      />
+    ) : (
+      <span class="tpl-media-empty" aria-hidden="true" />
+    )}
+    {modeLabel && <span class="tpl-media-kind">{modeLabel}</span>}
+  </a>
+
+  <div class="tpl-meta">
+    <span class="tpl-author">{authorHandle}</span>
+    <span class="tpl-meta-date">Open Design</span>
+  </div>
+
+  <a class="tpl-excerpt" href={detailHref}>
+    <span class="tpl-excerpt-head">{pcopy.cardReadFullPrompt}</span>
+    <h3 class="tpl-excerpt-title">{name}</h3>
+    <p class="tpl-excerpt-body">{description}</p>
+  </a>
+
+  <div class="tpl-actions">
+    <a class="tpl-cta" href={detailHref}>{pcopy.cardUseTemplate}</a>
+    <button
+      type="button"
+      class="tpl-share"
+      data-tpl-card-share
+      data-share-text={shareText}
+      data-share-url={shareUrl}
+      data-share-title={name}
+      aria-label={pcopy.cardShareAria(name)}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+      </svg>
+    </button>
+  </div>
+</article>

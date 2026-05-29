@@ -127,10 +127,10 @@ body.sub-page {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-bottom: 56px;
-  padding: 24px 0 28px;
+  margin-bottom: 0;
+  padding: 22px 0;
   border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-bottom: none;
   /*
    * When the user clicks an artifact-kind chip on a different
    * /plugins/templates/<kind>/ page, the anchor `#filter-strip`
@@ -140,6 +140,21 @@ body.sub-page {
    * snapping flush to the viewport edge.
    */
   scroll-margin-top: 96px;
+}
+/*
+ * Adjacent strips share the single divider above the artifact-kind
+ * rail rather than drawing one each — keeps the kind + scene chip
+ * block reading as a single unit instead of stacked horizontal
+ * cuts. The grid below gets its own breathing-room margin so it
+ * doesn't slam straight into the last chip row.
+ */
+.filter-strip + .filter-strip {
+  border-top: 0;
+  padding-top: 6px;
+}
+.filter-strip + .tpl-grid,
+.filter-strip + .catalog-grid {
+  margin-top: 36px;
 }
 .filter-group {
   display: grid;
@@ -1751,4 +1766,363 @@ body.sub-page {
   margin-top: auto;
   padding-top: 8px;
   border-top: 1px solid var(--line-soft);
+}
+
+/*
+ * ─── /plugins/templates/ grid (YouMind-inspired) ───────────────
+ * Card layout used by `template-card.astro`. Keeps `.catalog-grid`
+ * + `.catalog-row` available for /plugins/skills/ and other list
+ * surfaces, and ships alongside them so a single page can mix list
+ * + grid (the `index.astro` for templates uses grid; sub-routes can
+ * choose whichever shape fits).
+ */
+.tpl-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--mustard);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  white-space: nowrap;
+}
+.tpl-counter strong {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.005em;
+  text-transform: none;
+}
+
+.tpl-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 32px;
+  align-items: end;
+  margin: 12px 0 28px;
+}
+.tpl-hero-text { min-width: 0; }
+.tpl-hero-side {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .tpl-hero { grid-template-columns: 1fr; align-items: start; }
+  .tpl-hero-side { justify-content: flex-start; }
+}
+
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 28px;
+  margin-top: 28px;
+}
+@media (max-width: 720px) {
+  .tpl-grid { grid-template-columns: 1fr; gap: 20px; }
+}
+
+.tpl-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 12px;
+  background: var(--bone);
+  border: 1.5px solid var(--ink);
+  padding: 0 16px 16px;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.tpl-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+.tpl-band {
+  display: block;
+  height: 6px;
+  margin: 0 -16px;
+}
+.tpl-featured-tag {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 14px;
+  background: var(--mustard);
+  border: 1.5px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  z-index: 2;
+}
+
+.tpl-media {
+  position: relative;
+  display: block;
+  margin: 0 -16px;
+  aspect-ratio: 16 / 10;
+  background: var(--paper-warm);
+  overflow: hidden;
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--ink);
+}
+.tpl-media-video,
+.tpl-media-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tpl-media-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--paper-dark),
+      var(--paper-dark) 10px,
+      var(--paper-warm) 10px,
+      var(--paper-warm) 20px
+    );
+}
+.tpl-media-kind {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 4px 10px;
+  background: rgba(21, 20, 15, 0.72);
+  color: #f7f1de;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+}
+
+.tpl-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+}
+.tpl-author {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tpl-excerpt {
+  display: block;
+  text-decoration: none;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  background: var(--paper);
+  padding: 12px 14px 14px;
+  transition: background 0.16s ease;
+}
+.tpl-excerpt:hover { background: var(--paper-warm); }
+.tpl-excerpt-head {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.tpl-excerpt-title {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.tpl-excerpt-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tpl-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+.tpl-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.005em;
+  text-decoration: none;
+  border: 1.5px solid var(--ink);
+  transition: background 0.16s ease;
+}
+.tpl-cta:hover { background: var(--coral); border-color: var(--coral); }
+.tpl-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: var(--bone);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+.tpl-share:hover { background: var(--paper-warm); }
+
+/*
+ * ─── FAQ section (YouMind-style accordion) ─────────────────────
+ */
+.tpl-faq {
+  margin: 96px 0 56px;
+  border-top: 1.5px solid var(--ink);
+  padding-top: 32px;
+}
+.tpl-faq-head {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 36px;
+  letter-spacing: -0.01em;
+  margin-bottom: 24px;
+  color: var(--ink);
+}
+.tpl-faq-list { display: grid; gap: 0; }
+.tpl-faq-item {
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+}
+.tpl-faq-item summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+}
+.tpl-faq-item summary::-webkit-details-marker { display: none; }
+.tpl-faq-item summary::after {
+  content: '+';
+  font-family: var(--mono);
+  font-size: 22px;
+  color: var(--ink-mute);
+  transition: transform 0.18s ease;
+}
+.tpl-faq-item[open] summary::after { content: '−'; color: var(--coral); }
+.tpl-faq-body {
+  margin-top: 12px;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.tpl-faq-body p { margin-bottom: 8px; }
+.tpl-faq-body p:last-child { margin-bottom: 0; }
+.tpl-faq-body a { color: var(--coral); border-bottom: 1px solid currentColor; }
+
+/*
+ * Card-level share toast (templates pages). Single instance per page,
+ * fades in for ~2.4s after the click handler copies the share text to
+ * the clipboard or the user's Web Share sheet closes. Bottom-center
+ * positioning so it doesn't collide with the fixed footer; pointer-
+ * events: none so the toast itself never swallows clicks.
+ */
+.tpl-share-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translate(-50%, 12px);
+  padding: 12px 18px;
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+  border: 1.5px solid var(--ink);
+  box-shadow: 0 12px 30px -12px rgba(21, 20, 15, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 50;
+  transition: opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+              transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.tpl-share-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/*
+ * ─── Templates page share popover ───────────────────────────────
+ * Reuses the `.detail-share-dialog` skin from the detail page (same
+ * textarea + Copy buttons + 4-platform jump rail) but escapes the
+ * default `<dialog>` modal centering. The catalog's share button is
+ * anchored to a specific card; the popup needs to read as "this
+ * card" rather than as a page-level modal that could belong to
+ * anything. Inline `top` / `left` come from the JS positioner per
+ * click; the rules here just supply the geometry the positioner
+ * counts on (no `margin: auto`, fixed positioning, narrower max
+ * width, no backdrop, lighter shadow).
+ */
+dialog.tpl-share-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: min(420px, calc(100vw - 32px));
+  box-shadow: 0 18px 48px -16px rgba(21, 20, 15, 0.32),
+              0 6px 14px -8px rgba(21, 20, 15, 0.18);
+  /* JS sets top + left based on the trigger's bounding rect. The
+     defaults are off-screen so a pre-position render doesn't flash
+     in the wrong place. */
+  top: -9999px;
+  left: -9999px;
+}
+dialog.tpl-share-popover::backdrop {
+  /* Non-modal — `.show()` skips the backdrop entirely. Hide it for
+     the rare older browser that treats every dialog as modal. */
+  background: transparent;
+}
+dialog.tpl-share-popover .detail-share-dialog-form {
+  padding: 18px 20px 20px;
+  gap: 12px;
+}
+dialog.tpl-share-popover .detail-share-dialog-head h2 {
+  font-size: 18px;
+}
+dialog.tpl-share-popover .detail-share-dialog-lead {
+  font-size: 12.5px;
+}
+dialog.tpl-share-popover .detail-share-dialog-text {
+  rows: 5;
+  font-size: 12.5px;
+  line-height: 1.55;
 }

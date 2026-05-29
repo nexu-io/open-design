@@ -28,6 +28,10 @@ import {
   DesignSystemDetailView,
 } from './components/DesignSystemFlow';
 import {
+  IframeKeepAliveProvider,
+  useIframeKeepAlivePool,
+} from './components/IframeKeepAlivePool';
+import {
   SettingsDialog,
   switchApiProtocolConfig,
   updateCurrentApiProtocolConfig,
@@ -172,7 +176,16 @@ export function resolveSettingsCloseConfig(
 }
 
 export function App() {
+  return (
+    <IframeKeepAliveProvider>
+      <AppInner />
+    </IframeKeepAliveProvider>
+  );
+}
+
+function AppInner() {
   const { t } = useI18n();
+  const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
@@ -1078,12 +1091,13 @@ export function App() {
   const handleDeleteProject = useCallback(async (id: string) => {
     const ok = await deleteProjectApi(id);
     if (!ok) return false;
+    iframeKeepAlivePool.evictProject(id, { includeActive: true });
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
       navigate({ kind: 'home', view: 'home' });
     }
     return true;
-  }, [route]);
+  }, [iframeKeepAlivePool, route]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
@@ -1120,8 +1134,70 @@ export function App() {
   }, [route]);
 
   const handleProjectChange = useCallback((updated: Project) => {
-    setProjects((curr) => curr.map((p) => (p.id === updated.id ? updated : p)));
-  }, []);
+    setProjects((curr) => {
+      const previous = curr.find((p) => p.id === updated.id);
+      if (
+        previous
+        && (
+          previous.skillId !== updated.skillId
+          || previous.designSystemId !== updated.designSystemId
+          || previous.customInstructions !== updated.customInstructions
+        )
+      ) {
+        iframeKeepAlivePool.evictProject(updated.id, { includeActive: true });
+      }
+      return curr.map((p) => (p.id === updated.id ? updated : p));
+    });
+  }, [iframeKeepAlivePool]);
+
+  // ProjectView's prompt-context signature derives from SkillSummary /
+  // DesignSystemSummary fields, so a body-only registry edit (same name,
+  // description, etc.) leaves every signature unchanged and the active
+  // preview keeps serving stale prompt context. Settings → Skills /
+  // Settings → Design Systems call back through these handlers after
+  // every successful mutation; we drop any pool entry whose project
+  // depends on the affected id — active or parked — so the next mount
+  // recomposes the system prompt with the new body. A ref tracks
+  // projects so the callback is stable across renders.
+  const projectsRef = useRef<Project[]>(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  const handleSkillsChanged = useCallback(
+    (affectedSkillId?: string) => {
+      void fetchSkills().then((list) => setSkills(list));
+      void fetchDesignTemplates().then((list) => setDesignTemplates(list));
+      iframeKeepAlivePool.evictMatching(
+        (entry) => {
+          const proj = projectsRef.current.find((p) => p.id === entry.projectId);
+          if (!proj) return false;
+          if (affectedSkillId) return proj.skillId === affectedSkillId;
+          return proj.skillId != null;
+        },
+        { includeActive: true },
+      );
+    },
+    [iframeKeepAlivePool],
+  );
+
+  const handleDesignSystemsChanged = useCallback(
+    (affectedDesignSystemId?: string) => {
+      void fetchDesignSystems().then((list) => setDesignSystems(list));
+      iframeKeepAlivePool.evictMatching(
+        (entry) => {
+          const proj = projectsRef.current.find((p) => p.id === entry.projectId);
+          if (!proj) return false;
+          if (affectedDesignSystemId) {
+            return proj.designSystemId === affectedDesignSystemId;
+          }
+          return proj.designSystemId != null;
+        },
+        { includeActive: true },
+      );
+    },
+    [iframeKeepAlivePool],
+  );
 
   const activeProject =
     route.kind === 'project'
@@ -1540,6 +1616,8 @@ export function App() {
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+          onSkillsChanged={handleSkillsChanged}
+          onDesignSystemsChanged={handleDesignSystemsChanged}
         />
       ) : null}
       <MemoryToast onOpenMemory={() => openSettings('memory')} />

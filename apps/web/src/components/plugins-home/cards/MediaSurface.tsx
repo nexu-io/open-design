@@ -68,11 +68,6 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           preload="none"
         />
       ) : null}
-      {preview.mediaType === 'video' && !preview.imageOnly ? (
-        <span className="plugins-home__media-badge" aria-hidden>
-          <Icon name="play" size={12} />
-        </span>
-      ) : null}
     </div>
   );
 }

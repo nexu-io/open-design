@@ -6,6 +6,7 @@ import {
   FileViewer,
   cancelManualEditPendingStyleSnapshot,
 } from '../../src/components/FileViewer';
+import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 import type { ProjectFile } from '../../src/types';
 
 afterEach(() => {
@@ -17,6 +18,33 @@ afterEach(() => {
 describe('FileViewer manual edit regressions', () => {
   function clickManualTool(testId: string) {
     fireEvent.click(screen.getByTestId(testId));
+  }
+
+  async function hoverManualEditTarget(target = heroTarget()) {
+    const frame = await waitFor(() => {
+      const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      if (!node.contentWindow) throw new Error('Preview frame not ready');
+      return node;
+    });
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od-edit-hover', target },
+        source: frame.contentWindow,
+      }));
+    });
+    await waitFor(() => {
+      expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+    });
+  }
+
+  async function findStyleInput(label: string) {
+    return waitFor(() => {
+      const input = Array.from(document.querySelectorAll('.cc-row'))
+        .find((row) => row.textContent?.includes(label))
+        ?.querySelector('input') as HTMLInputElement | null;
+      if (!input) throw new Error(`${label} input not found`);
+      return input;
+    });
   }
 
   it('removes invalid fields from pending manual edit style saves without dropping unrelated fields', () => {
@@ -48,8 +76,27 @@ describe('FileViewer manual edit regressions', () => {
     expect(cancelManualEditPendingStyleSnapshot(otherTargetPending, 'cta', ['fontSize'])).toBe(otherTargetPending);
   });
 
-  it('does not let a pending manual edit style save survive a file switch', () => {
-    vi.useFakeTimers();
+  it('opens the page edit panel before a target is hovered or selected', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    ));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+    expect(screen.getByText('PAGE')).toBeTruthy();
+
+    await hoverManualEditTarget();
+    expect(document.querySelector('.manual-edit-right')).not.toBeNull();
+  });
+
+  it('does not let a pending manual edit style save survive a file switch', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
@@ -61,39 +108,29 @@ describe('FileViewer manual edit regressions', () => {
       return new Response('<!doctype html><html><body></body></html>', { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
-    try {
-      const first = htmlPreviewFile();
-      const second = { ...htmlPreviewFile(), name: 'second.html', path: 'second.html' };
-      const { rerender } = render(
-        <FileViewer projectId="project-1" projectKind="prototype" file={first}
-          liveHtml='<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>'
-        />,
-      );
+    const first = htmlPreviewFile();
+    const second = { ...htmlPreviewFile(), name: 'second.html', path: 'second.html' };
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={first}
+        liveHtml='<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
 
-      fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-      const baseSizeInput = Array.from(document.querySelectorAll('.cc-row'))
-        .find((row) => row.textContent?.includes('Base size'))
-        ?.querySelector('input') as HTMLInputElement | null;
-      if (!baseSizeInput) throw new Error('Base size input not found');
-      fireEvent.change(baseSizeInput, { target: { value: '18' } });
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await hoverManualEditTarget();
+    const baseSizeInput = await findStyleInput('Size');
+    fireEvent.change(baseSizeInput, { target: { value: '18' } });
 
-      rerender(
-        <FileViewer projectId="project-1" projectKind="prototype" file={second}
-          liveHtml='<!doctype html><html><body><main data-od-id="second">Second</main></body></html>'
-        />,
-      );
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={second}
+        liveHtml='<!doctype html><html><body><main data-od-id="second">Second</main></body></html>'
+      />,
+    );
 
-      act(() => {
-        vi.advanceTimersByTime(1100);
-      });
-
-      expect(fetchMock).not.toHaveBeenCalledWith(
-        '/api/projects/project-1/files',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/projects/project-1/files',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('clears loaded source immediately on file switch without liveHtml before manual edit can save', async () => {
@@ -125,13 +162,8 @@ describe('FileViewer manual edit regressions', () => {
         {},
       ));
       fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
-      const baseSizeInput = await waitFor(() => {
-        const input = Array.from(document.querySelectorAll('.cc-row'))
-          .find((row) => row.textContent?.includes('Base size'))
-          ?.querySelector('input') as HTMLInputElement | null;
-        if (!input) throw new Error('Base size input not found');
-        return input;
-      });
+      await hoverManualEditTarget();
+      const baseSizeInput = await findStyleInput('Size');
       fireEvent.change(baseSizeInput, { target: { value: '18' } });
 
       rerender(<FileViewer projectId="project-1" projectKind="prototype" file={second} />);
@@ -181,25 +213,104 @@ describe('FileViewer manual edit regressions', () => {
     );
 
     clickManualTool('manual-edit-mode-toggle');
-    const baseSizeInput = await waitFor(() => {
-      const input = Array.from(document.querySelectorAll('.cc-row'))
-        .find((row) => row.textContent?.includes('Base size'))
-        ?.querySelector('input') as HTMLInputElement | null;
-      if (!input) throw new Error('Base size input not found');
-      return input;
-    });
+    await hoverManualEditTarget();
+    const baseSizeInput = await findStyleInput('Size');
 
     fireEvent.change(baseSizeInput, { target: { value: '18' } });
+    fireEvent.click(screen.getByText('Save'));
     await waitFor(() => {
       expect(screen.getByText(/Could not save the edited file/)).toBeTruthy();
     });
 
     fireEvent.change(baseSizeInput, { target: { value: '19' } });
+    fireEvent.click(screen.getByText('Save'));
     await waitFor(() => {
       expect(screen.queryByText(/Could not save the edited file/)).toBeNull();
     });
   });
+
+  it('closes manual edit without saving when footer cancel is clicked', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    const fetchMock = vi.fn(async () =>
+      new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await hoverManualEditTarget();
+    const baseSizeInput = await findStyleInput('Size');
+
+    fireEvent.change(baseSizeInput, { target: { value: '18' } });
+    fireEvent.click(screen.getByText('Cancel'));
+
+    await waitFor(() => {
+      expect(document.querySelector('.manual-edit-right')).toBeNull();
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/projects/project-1/files',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('closes manual edit after footer save succeeds', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(source, { status: 200, headers: { 'Content-Type': 'text/html' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await hoverManualEditTarget();
+    const baseSizeInput = await findStyleInput('Size');
+
+    fireEvent.change(baseSizeInput, { target: { value: '18' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/projects/project-1/files',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(document.querySelector('.manual-edit-right')).toBeNull();
+    });
+  });
 });
+
+function heroTarget(): ManualEditTarget {
+  return {
+    id: 'hero',
+    kind: 'text',
+    label: 'Hero',
+    tagName: 'main',
+    className: '',
+    text: 'Hero',
+    rect: { x: 24, y: 24, width: 160, height: 48 },
+    fields: { text: 'Hero' },
+    attributes: { 'data-od-id': 'hero' },
+    styles: emptyManualEditStyles(),
+    isLayoutContainer: false,
+    outerHtml: '<main data-od-id="hero">Hero</main>',
+  };
+}
 
 function htmlPreviewFile(): ProjectFile {
   return {

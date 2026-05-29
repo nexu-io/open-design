@@ -1436,6 +1436,27 @@
   max-width: 48ch;
   line-height: 1.5;
 }
+/* Unavailable state mirrors .ds-modal-error's column layout so the
+   title and body stack with a visible gap instead of collapsing onto a
+   single line under the parent flex-row default. Surfaced on the plugin
+   path after #2840 wired plugin 404s into this placeholder. Issue #3216. */
+.ds-modal-unavailable {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+}
+.ds-modal-unavailable-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-modal-unavailable-body {
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 48ch;
+  line-height: 1.5;
+}
 .ds-modal-actions .ghost.is-active {
   background: var(--accent-tint);
   color: var(--accent);

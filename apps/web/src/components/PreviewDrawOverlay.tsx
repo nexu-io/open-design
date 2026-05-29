@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 
 import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
+import { useT } from '../i18n';
 import type { PreviewVisualMarkKind } from '../types';
 import { requestPreviewSnapshot } from '../runtime/exports';
 import { isImeComposing } from '../utils/imeComposing';
@@ -28,6 +29,7 @@ export interface AnnotationEventDetail {
   markKind?: PreviewVisualMarkKind;
   bounds?: { x: number; y: number; width: number; height: number };
   target?: CaptureTarget | null;
+  ack?: (result: { ok: boolean; message?: string }) => void;
 }
 
 interface Props {
@@ -55,6 +57,7 @@ export function PreviewDrawOverlay({
   sendDisabled = false,
   sendDisabledReason,
 }: Props) {
+  const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [note, setNote] = useState('');
@@ -66,6 +69,10 @@ export function PreviewDrawOverlay({
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
   const [pendingAction, setPendingAction] = useState<'queue' | 'send' | null>(null);
+  const [captureWarning, setCaptureWarning] = useState<{
+    action: 'queue' | 'send';
+    message: string;
+  } | null>(null);
   const sending = pendingAction !== null;
 
   const redraw = useCallback(() => {
@@ -76,19 +83,19 @@ export function PreviewDrawOverlay({
     if (!ctx) return;
     ctx.clearRect(0, 0, cvs.width, cvs.height);
     ctx.strokeStyle = STROKE_COLOR;
-    ctx.lineWidth = STROKE_WIDTH;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.lineWidth = STROKE_WIDTH * dpr;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const dpr = window.devicePixelRatio || 1;
     const all = drawingRef.current ? [...strokesRef.current, drawingRef.current] : strokesRef.current;
     for (const s of all) {
       const first = s.points[0];
       if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(first.x * dpr, first.y * dpr);
+      ctx.moveTo(first.x * cvs.width, first.y * cvs.height);
       for (let i = 1; i < s.points.length; i++) {
         const p = s.points[i]!;
-        ctx.lineTo(p.x * dpr, p.y * dpr);
+        ctx.lineTo(p.x * cvs.width, p.y * cvs.height);
       }
       ctx.stroke();
     }
@@ -139,7 +146,12 @@ export function PreviewDrawOverlay({
   function pointFromEvent(e: PointerEvent): Point {
     const cvs = canvasRef.current!;
     const rect = cvs.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+    const y = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+    return {
+      x: Math.min(1, Math.max(0, x)),
+      y: Math.min(1, Math.max(0, y)),
+    };
   }
 
   function activePreviewIframe(): HTMLIFrameElement | null {
@@ -222,10 +234,12 @@ export function PreviewDrawOverlay({
   }, [active, redraw]);
 
   function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
     const points = strokesRef.current.flatMap((stroke) => stroke.points);
     if (points.length === 0) return null;
-    const xs = points.map((point) => point.x);
-    const ys = points.map((point) => point.y);
+    const xs = points.map((point) => point.x * rect.width);
+    const ys = points.map((point) => point.y * rect.height);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     const maxX = Math.max(...xs);
@@ -335,10 +349,10 @@ export function PreviewDrawOverlay({
       const first = s.points[0];
       if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(first.x * sx, first.y * sy);
+      ctx.moveTo(first.x * snap.w, first.y * snap.h);
       for (let i = 1; i < s.points.length; i++) {
         const p = s.points[i]!;
-        ctx.lineTo(p.x * sx, p.y * sy);
+        ctx.lineTo(p.x * snap.w, p.y * snap.h);
       }
       ctx.stroke();
     }
@@ -350,6 +364,10 @@ export function PreviewDrawOverlay({
     const shouldCapture = hasInk || hasTarget || captureViewport;
     const canSubmit = shouldCapture || Boolean(note.trim());
     if (sending || !canSubmit) return;
+    // While a task is running the primary Send is disabled (use Queue instead).
+    // The note/attachment is not lost: Queue still stages it for the next turn.
+    if (action === 'send' && sendDisabled) return;
+    setCaptureWarning(null);
     setPendingAction(action);
     try {
       let file: File | null = null;
@@ -358,39 +376,49 @@ export function PreviewDrawOverlay({
         const snap = await requestSnapshot();
         if (snap) blob = await compositeWithBackground(snap);
         if (!blob) {
-          const cvs = canvasRef.current;
-          if (cvs) {
-            const copy = document.createElement('canvas');
-            copy.width = cvs.width;
-            copy.height = cvs.height;
-            const ctx = copy.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(cvs, 0, 0);
-              const dpr = window.devicePixelRatio || 1;
-              drawCaptureTarget(ctx, dpr, dpr, captureTarget);
-              blob = await new Promise<Blob | null>((resolve) => copy.toBlob((b) => resolve(b), 'image/png'));
-            } else {
-              blob = await new Promise<Blob | null>((resolve) => cvs.toBlob((b) => resolve(b), 'image/png'));
-            }
-          }
+          setCaptureWarning({
+            action,
+            message: captureViewport && !hasInk && !hasTarget
+              ? t('chat.annotationPreviewMissing')
+              : t('chat.annotationPreviewMissingInk'),
+          });
+          return;
         }
-        if (blob) {
-          const ts = new Date().toISOString().replace(/[:.]/g, '-');
-          file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
-        }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
       }
       const kind = markKind();
-      const detail: AnnotationEventDetail = {
-        file,
-        note: note.trim(),
-        action,
-        filePath: captureTarget?.filePath || filePath,
-        markKind: kind,
-        bounds: kind ? annotationBounds() : undefined,
-        target: captureTarget,
-      };
-      window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
+        let settled = false;
+        const finish = (next: { ok: boolean; message?: string }) => {
+          if (settled) return;
+          settled = true;
+          resolve(next);
+        };
+        window.setTimeout(() => {
+          finish({ ok: false, message: t('chat.annotationTimeout') });
+        }, 60000);
+        const detail: AnnotationEventDetail = {
+          file,
+          note: note.trim(),
+          action,
+          filePath: captureTarget?.filePath || filePath,
+          markKind: kind,
+          bounds: kind ? annotationBounds() : undefined,
+          target: captureTarget,
+          ack: finish,
+        };
+        window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      });
+      if (!result.ok) {
+        setCaptureWarning({
+          action,
+          message: result.message || t('chat.annotationFailed'),
+        });
+        return;
+      }
       clearInk();
+      setCaptureWarning(null);
       setNote('');
     } finally {
       setPendingAction(null);
@@ -400,7 +428,7 @@ export function PreviewDrawOverlay({
   const overlayPointer = active ? 'auto' : 'none';
   const showCanvas = active || hasInk;
   const canSubmit = hasInk || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
-  const canSend = canSubmit;
+  const canSend = canSubmit && !sendDisabled;
   const canUndo = undoCount > 0 && !sending;
   const canRedo = redoCount > 0 && !sending;
 
@@ -432,33 +460,61 @@ export function PreviewDrawOverlay({
         />
       ) : null}
       {active ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 16,
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 8px',
-            background: 'rgba(20,20,20,0.92)',
-            color: '#fff',
-            borderRadius: 999,
-            boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 10,
-            pointerEvents: 'auto',
-            fontSize: 13,
-          }}
-        >
+        <>
+          {captureWarning ? (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 82,
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                maxWidth: 'min(420px, calc(100% - 32px))',
+                padding: '8px 12px',
+                borderRadius: 999,
+                background: 'rgba(20,20,20,0.92)',
+                color: '#fff',
+                boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(8px)',
+                zIndex: 11,
+                pointerEvents: 'none',
+                fontSize: 13,
+                lineHeight: 1.35,
+              }}
+            >
+              <span>{captureWarning.message}</span>
+            </div>
+          ) : null}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 16,
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 8px',
+              background: 'rgba(20,20,20,0.92)',
+              color: '#fff',
+              borderRadius: 999,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 10,
+              pointerEvents: 'auto',
+              fontSize: 13,
+            }}
+          >
           <button
             type="button"
             onClick={undoStroke}
             disabled={!canUndo}
             style={historyButtonStyle(canUndo)}
-            aria-label="Undo"
-            title="Undo"
+            aria-label={t('manualEdit.undo')}
+            title={t('manualEdit.undo')}
           >
             <RemixIcon name="arrow-go-back-line" size={14} />
           </button>
@@ -467,8 +523,8 @@ export function PreviewDrawOverlay({
             onClick={redoStroke}
             disabled={!canRedo}
             style={historyButtonStyle(canRedo)}
-            aria-label="Redo"
-            title="Redo"
+            aria-label={t('manualEdit.redo')}
+            title={t('manualEdit.redo')}
           >
             <RemixIcon name="arrow-go-forward-line" size={14} />
           </button>
@@ -477,7 +533,7 @@ export function PreviewDrawOverlay({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={sending}
-            placeholder="Add a note for this annotation"
+            placeholder={t('chat.annotationNotePlaceholder')}
             style={{
               background: 'rgba(218, 97, 56, 0.18)',
               border: '1px solid rgba(248, 150, 104, 0.82)',
@@ -514,10 +570,10 @@ export function PreviewDrawOverlay({
             {pendingAction === 'queue' ? (
               <>
                 <Icon name="spinner" size={12} />
-                <span>Queueing...</span>
+                <span>{t('chat.annotationQueueing')}</span>
               </>
             ) : (
-              'Queue'
+              t('chat.annotationQueue')
             )}
           </button>
           <button
@@ -534,23 +590,24 @@ export function PreviewDrawOverlay({
             {pendingAction === 'send' ? (
               <>
                 <Icon name="spinner" size={12} />
-                <span>Sending...</span>
+                <span>{t('chat.annotationSending')}</span>
               </>
             ) : (
-              'Send'
+              t('chat.send')
             )}
           </button>
           <button
             type="button"
             onClick={closeOverlay}
             disabled={sending}
-            aria-label="Close draw toolbar"
-            title="Close"
+            aria-label={t('common.close')}
+            title={t('common.close')}
             style={iconButtonStyle}
           >
             <Icon name="close" size={13} />
           </button>
-        </div>
+          </div>
+        </>
       ) : null}
     </div>
   );

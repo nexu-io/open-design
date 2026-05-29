@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { handleMcpToolCall } from '../src/mcp.js';
+import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -12,6 +12,7 @@ function firstJson<T>(result: { content: Array<{ text: string }> }): T {
 
 describe('public MCP get_project', () => {
   afterEach(() => {
+    _resetWebBaseUrlCache();
     vi.unstubAllGlobals();
     globalThis.fetch = originalFetch;
   });
@@ -21,6 +22,9 @@ describe('public MCP get_project', () => {
     const projectId = '11111111-1111-1111-1111-111111111111';
     const resolvedDir = '/tmp/open-design/projects/demo';
     const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
       expect(url).toBe(`${base}/api/projects/${projectId}`);
       return new Response(
         JSON.stringify({
@@ -40,7 +44,7 @@ describe('public MCP get_project', () => {
       project: projectId,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(firstJson(result)).toMatchObject({
       id: projectId,
       name: 'Demo',

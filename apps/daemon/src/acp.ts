@@ -65,6 +65,7 @@ interface AttachAcpSessionOptions {
   prompt: string;
   cwd?: string;
   model?: string | null;
+  imagePaths?: string[];
   mcpServers?: AcpMcpServerInput[];
   send: (event: string, payload: unknown) => void;
   clientName?: string;
@@ -114,6 +115,15 @@ function sendRpc(writable: RpcWritable, id: JsonRpcId, method: string, params: u
 
 function sendRpcResult(writable: RpcWritable, id: JsonRpcId, result: unknown): void {
   writable.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
+}
+
+function buildPromptBlocks(prompt: string, imagePaths: string[]): Array<Record<string, string>> {
+  const blocks: Array<Record<string, string>> = [{ type: 'text', text: prompt }];
+  for (const imagePath of imagePaths) {
+    if (typeof imagePath !== 'string' || imagePath.trim().length === 0) continue;
+    blocks.push({ type: 'resource_link', uri: imagePath });
+  }
+  return blocks;
 }
 
 function isJsonRpcId(value: unknown): value is JsonRpcId {
@@ -422,6 +432,7 @@ export function attachAcpSession({
   prompt,
   cwd,
   model,
+  imagePaths = [],
   mcpServers,
   send,
   clientName = 'open-design',
@@ -525,7 +536,7 @@ export function attachAcpSession({
       'session/prompt',
       {
         sessionId,
-        prompt: [{ type: 'text', text: prompt }],
+        prompt: buildPromptBlocks(prompt, imagePaths),
       },
       'session/prompt',
     );

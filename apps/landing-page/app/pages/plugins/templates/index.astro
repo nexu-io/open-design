@@ -1,6 +1,7 @@
 ---
 /*
- * /plugins/templates/ — visual templates landing page.
+ * /plugins/templates/ — visual templates landing page (YouMind-style
+ * grid).
  *
  * Reads `plugins/_official/<bucket>/open-design.json` (the daemon's
  * bundled-plugin registry) and groups by the seven artifact kinds
@@ -11,9 +12,16 @@
  * `design-systems` and `atoms` buckets are excluded — the former has
  * its own /plugins/systems/ tile, the latter is infrastructure the
  * client filters out of the public library.
+ *
+ * Layout shape adopted from the YouMind seedance-prompts catalogue:
+ * marketing-friendly hero (with a static counter chip on the right
+ * instead of baking the count into the H1), kind-faceted chip rail,
+ * a `.tpl-grid` of card-style entries with hover-autoplay video
+ * preview on the rows whose manifest carries an MP4 URL, and a
+ * folded FAQ section below the grid for SEO + onboarding lift.
  */
 import Layout from '../../../_components/sub-page-layout.astro';
-import PluginRow from '../../../_components/plugin-row.astro';
+import TemplateCard from '../../../_components/template-card.astro';
 import { getBundledPlugins, type BundledPluginRecord } from '../../../_lib/bundled-plugins';
 import {
   PLUGIN_CATEGORIES,
@@ -52,17 +60,69 @@ for (const t of templates) {
 }
 
 const totalCount = templates.length;
-const title = `${pcopy.tileTemplates} · ${totalCount} · Open Design`;
-const description = pcopy.templatesLead;
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'CollectionPage',
-  name: title,
-  description,
-  url: new URL('/plugins/templates/', Astro.site).toString(),
-  numberOfItems: totalCount,
-};
+/*
+ * Featured ordering: manifests that carry a numeric `od.featured`
+ * weight surface first (highest weight wins), then everything else
+ * keeps the alphabetical order `getBundledPlugins()` already returns.
+ * The top six become the "Featured" callout band on each card; the
+ * threshold is a soft heuristic, not a hard count, so we always
+ * surface at least the explicit-weighted entries even if they're
+ * fewer than six.
+ *
+ * `BundledPluginRecord` doesn't currently expose `od.featured` — the
+ * loader stops at preview metadata. For now we use the manifest's
+ * tag list as a featured proxy (any plugin tagged `featured` lights
+ * up); a follow-up commit can promote `od.featured` into the record
+ * shape proper if we want quantitative ranking.
+ */
+const featuredSet = new Set(
+  templates
+    .filter((t) => t.record.tags?.includes('featured'))
+    .map((t) => t.record.manifestId),
+);
+
+const title = `Templates · Open Source Claude Design alternative`;
+const description =
+  'Agent-built templates you can fork and ship — prototypes, slides, image and video artifacts. Apache-2.0, BYOK, run on your own keys.';
+
+/*
+ * FAQ items live on the locale-aware `PluginsCopy` so the visible
+ * accordion below the grid and the FAQPage JSON-LD entry both speak
+ * the visitor's language. Single source of truth — the structured
+ * data search engines see can't drift from the copy a visitor reads.
+ */
+const FAQ_ITEMS = pcopy.faqItems;
+
+/*
+ * Two structured-data entries: the catalog itself (CollectionPage,
+ * count + URL for crawler indexing) and the FAQ block (FAQPage with
+ * each Q + A as a Question entity). Keeping both as siblings under
+ * a single `<script type="application/ld+json">` array means we
+ * don't have to thread a second jsonLd prop through `Layout`.
+ */
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    description,
+    url: new URL('/plugins/templates/', Astro.site).toString(),
+    numberOfItems: totalCount,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQ_ITEMS.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
+  },
+];
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
@@ -74,10 +134,15 @@ const jsonLd = {
     <span aria-current="page">{pcopy.tileTemplates}</span>
   </nav>
 
-  <header class="catalog-head">
-    <span class="label">{pcopy.templatesLabel}</span>
-    <h1 class="display">{pcopy.templatesHeading(totalCount)}<span class="dot">.</span></h1>
-    <p class="lead">{pcopy.templatesLead}</p>
+  <header class="catalog-head tpl-hero">
+    <div class="tpl-hero-text">
+      <span class="label">{pcopy.templatesHeroEyebrow}</span>
+      <h1 class="display">{pcopy.tileTemplates}<span class="dot">.</span></h1>
+      <p class="lead">{pcopy.templatesHeroLead}</p>
+    </div>
+    <div class="tpl-hero-side">
+      <span class="tpl-counter">{pcopy.templatesCounterLabel} · <strong>{totalCount}</strong></span>
+    </div>
   </header>
 
   <section class="filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
@@ -102,11 +167,263 @@ const jsonLd = {
     </div>
   </section>
 
-  <section class="catalog-grid catalog-grid-skills" aria-label={pcopy.tileTemplates}>
-    <ol>
-      {templates.map((item, idx) => (
-        <PluginRow item={{ kind: 'bundled', record: item.record }} index={idx} />
-      ))}
-    </ol>
+  <section class="tpl-grid" aria-label={pcopy.tileTemplates}>
+    {templates.map((item, idx) => (
+      <TemplateCard
+        record={item.record}
+        index={idx}
+        featured={featuredSet.has(item.record.manifestId)}
+      />
+    ))}
   </section>
+
+  <section class="tpl-faq" aria-label={pcopy.faqHead}>
+    <h2 class="tpl-faq-head">{pcopy.faqHead}</h2>
+    <div class="tpl-faq-list">
+      {FAQ_ITEMS.map((item) => (
+        <details class="tpl-faq-item">
+          <summary>{item.question}</summary>
+          {/*
+           * Answer is HTML (the same payload as the FAQPage JSON-LD
+           * entity above) so inline links + code spans + emphasis
+           * stay rendered. Astro's `set:html` is the safe equivalent
+           * of `dangerouslySetInnerHTML`; the source content is
+           * authored in this file, not user input, so XSS is not
+           * a concern.
+           */}
+          <div class="tpl-faq-body" set:html={`<p>${item.answer}</p>`} />
+        </details>
+      ))}
+    </div>
+  </section>
+
+  {/*
+    Single share dialog for every card on the page. Same DOM shape as
+    the detail-page dialog (`pages/plugins/[slug]/index.astro` ~line 227)
+    so the global handlers in `header-enhancer.astro` for `data-share-copy`
+    and `data-copy-link` wire it up automatically. Per-card data is
+    threaded in at click time — the page-level boot script populates
+    `<textarea data-share-text>` and the Copy-link button's `data-copy-link`
+    attribute right before `dialog.showModal()`.
+  */}
+  <dialog class="detail-share-dialog tpl-share-popover" data-tpl-share-dialog>
+    <form method="dialog" class="detail-share-dialog-form">
+      <header class="detail-share-dialog-head">
+        <h2>{pcopy.shareTitle}</h2>
+        <button
+          type="submit"
+          class="detail-share-dialog-close"
+          aria-label={pcopy.shareDialogClose}
+          value="cancel"
+        >×</button>
+      </header>
+      <p class="detail-share-dialog-lead">{pcopy.shareLead}</p>
+      <textarea
+        class="detail-share-dialog-text"
+        readonly
+        rows="6"
+        data-share-text
+      ></textarea>
+      <div class="detail-share-dialog-actions">
+        <button
+          type="button"
+          class="btn btn-primary detail-share-dialog-copy"
+          data-share-copy
+        >
+          {pcopy.shareCopyText}
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost detail-share-dialog-copy-link"
+          data-copy-link
+        >
+          {pcopy.shareCopyLink}
+        </button>
+      </div>
+      <div class="detail-share-dialog-platforms">
+        <span class="detail-share-dialog-platforms-label">{pcopy.shareJumpTo}</span>
+        <a class="detail-share-platform-btn" href="https://x.com/compose/post" target="_blank" rel="noopener" aria-label="X">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+          <span class="sr-only">X</span>
+        </a>
+        <a class="detail-share-platform-btn" href="https://www.linkedin.com/feed/?shareActive=true" target="_blank" rel="noopener" aria-label="LinkedIn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          <span class="sr-only">LinkedIn</span>
+        </a>
+        <a class="detail-share-platform-btn" href="https://www.reddit.com/submit" target="_blank" rel="noopener" aria-label="Reddit">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12.3c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 00.029-.463.33.33 0 00-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 00-.232-.095z"/></svg>
+          <span class="sr-only">Reddit</span>
+        </a>
+        <a class="detail-share-platform-btn" href="https://www.facebook.com/" target="_blank" rel="noopener" aria-label="Facebook">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          <span class="sr-only">Facebook</span>
+        </a>
+      </div>
+    </form>
+  </dialog>
 </Layout>
+
+<script>
+  /*
+   * Hover-autoplay observer + card-level share button — bundled into a
+   * single <script> so they share the same boot lifecycle. The earlier
+   * split version dispatched `astro:page-load` from the autoplay
+   * script before the share script's listener attached, so the share
+   * handler missed the event and click did nothing. One init() runs
+   * eagerly when DOM is ready, then re-binds on `astro:page-load`
+   * (Astro's view-transition signal) idempotently — `addEventListener`
+   * is a no-op when the same handler instance is registered twice on
+   * the same node, so we just re-query and bind fresh handlers per
+   * fire to cover the case where the DOM rehydrated.
+   */
+  const initTemplatesPage = () => {
+    // 1) Hover-only video preview. The IntersectionObserver only
+    //    hydrates `data-src` into `src` lazily so the network fetch
+    //    + decoder warmup happens just-in-time; play/pause is gated
+    //    to pointer + focus interactions so we never spawn N
+    //    simultaneous decoders when the user is just scrolling past.
+    //    Without this, the grid plays every card the moment it
+    //    enters the viewport, which both reads as visually noisy and
+    //    burns mobile CPU. (Reviewer flag #3185.)
+    const videos = document.querySelectorAll<HTMLVideoElement>('video[data-tpl-autoplay]:not([data-tpl-init])');
+    if (videos.length > 0) {
+      const hydrate = (v: HTMLVideoElement) => {
+        const src = v.getAttribute('data-src');
+        if (src && !v.src) v.src = src;
+      };
+      const lazyObs = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const v = entry.target as HTMLVideoElement;
+            hydrate(v);
+            lazyObs.unobserve(v); // one-shot — once the src is set we're done with the observer
+          }
+        },
+        { rootMargin: '300px' },
+      );
+      videos.forEach((v) => {
+        v.setAttribute('data-tpl-init', '1');
+        lazyObs.observe(v);
+        // Ensure src is hydrated before playback even if the observer
+        // fired late on a scroll-and-hover sequence.
+        const startPlayback = () => {
+          hydrate(v);
+          v.play().catch(() => {/* user-gesture / autoplay-policy fallback: card stays on poster */});
+        };
+        const stopPlayback = () => {
+          v.pause();
+        };
+        // Find the parent card (anchor wrapping the media) so hovering
+        // anywhere on the preview frame, not just the video pixels,
+        // triggers playback. Falls back to the video element itself.
+        const host = v.closest('.tpl-media') ?? v;
+        host.addEventListener('pointerenter', startPlayback);
+        host.addEventListener('pointerleave', stopPlayback);
+        host.addEventListener('focusin', startPlayback);
+        host.addEventListener('focusout', stopPlayback);
+      });
+    }
+
+    // 2) Card-level share button → page-level <dialog> (single
+    //    instance for the whole grid, populated per-click). Using the
+    //    same dialog UI shape as the detail page (`detail-share-dialog`)
+    //    so the global handlers in `header-enhancer.astro` for
+    //    `data-share-copy` and `data-copy-link` wire up the textarea
+    //    copy + link copy actions automatically. The platform jump
+    //    rail (X / LinkedIn / Reddit / Facebook) is static — those are
+    //    compose URLs the user pastes the just-copied text into.
+    const dialog = document.querySelector<HTMLDialogElement>('[data-tpl-share-dialog]');
+    /*
+     * Anchor the popover to the trigger button: prefer above-right
+     * (so the share button itself peeks out from underneath the
+     * popover), flip below if the card is high in the viewport, and
+     * clamp horizontally so the popover never spills off-screen on
+     * narrower viewports. We measure post-show because the dialog's
+     * intrinsic width depends on the textarea + platform rail
+     * — sizing it before mount produces a 0×0 rect.
+     */
+    const positionPopover = (trigger: HTMLElement) => {
+      if (!dialog) return;
+      // Show off-screen so we can measure dimensions, then place.
+      dialog.style.top = '-9999px';
+      dialog.style.left = '-9999px';
+      if (typeof dialog.show === 'function') {
+        dialog.show();
+      } else {
+        dialog.setAttribute('open', '');
+      }
+      const tr = trigger.getBoundingClientRect();
+      const dr = dialog.getBoundingClientRect();
+      const margin = 12;
+      const gap = 8;
+      // Horizontal: align dialog's right edge with the trigger's right
+      // edge so the popover unfolds from the share button.
+      let left = tr.right - dr.width;
+      // If that pushes the popover off the left side, anchor to the
+      // viewport's left margin instead.
+      left = Math.max(margin, Math.min(left, window.innerWidth - dr.width - margin));
+      // Vertical: prefer above the trigger; flip below when there's
+      // not enough headroom.
+      let top = tr.top - dr.height - gap;
+      if (top < margin) top = tr.bottom + gap;
+      // Last clamp so a tall dialog still fits the viewport.
+      top = Math.max(margin, Math.min(top, window.innerHeight - dr.height - margin));
+      dialog.style.left = `${left}px`;
+      dialog.style.top = `${top}px`;
+    };
+
+    /*
+     * Outside-click + Escape close. Non-modal `<dialog>` doesn't get
+     * either for free (only `showModal()` does). One document-level
+     * listener pair survives every open/close cycle; we register
+     * once and let it short-circuit on `dialog.open === false`.
+     */
+    if (dialog && !dialog.hasAttribute('data-tpl-popover-bound')) {
+      dialog.setAttribute('data-tpl-popover-bound', '1');
+      document.addEventListener('click', (event) => {
+        if (!dialog.open) return;
+        const target = event.target;
+        if (!(target instanceof Node)) return;
+        if (dialog.contains(target)) return;
+        // Don't close if the user clicked another card's share button —
+        // the click is about to re-open this same dialog at a new
+        // position. Letting `close()` fire first triggers a flicker.
+        if ((target as Element).closest?.('[data-tpl-card-share]')) return;
+        dialog.close();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && dialog.open) dialog.close();
+      });
+    }
+
+    document
+      .querySelectorAll<HTMLButtonElement>('[data-tpl-card-share]:not([data-tpl-share-bound])')
+      .forEach((btn) => {
+        btn.setAttribute('data-tpl-share-bound', '1');
+        btn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!dialog) return;
+          const text = btn.getAttribute('data-share-text') ?? '';
+          const url = btn.getAttribute('data-share-url') ?? '';
+          const ta = dialog.querySelector<HTMLTextAreaElement>('[data-share-text]');
+          const copyLinkBtn = dialog.querySelector<HTMLButtonElement>('[data-copy-link]');
+          if (ta) ta.value = text;
+          if (copyLinkBtn) copyLinkBtn.setAttribute('data-copy-link', url);
+          // Close-then-reopen so the positioner runs fresh against the
+          // new trigger; otherwise an already-open dialog stays put at
+          // its previous coordinates while the textarea swaps.
+          if (dialog.open) dialog.close();
+          positionPopover(btn);
+        });
+      });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTemplatesPage);
+  } else {
+    initTemplatesPage();
+  }
+  document.addEventListener('astro:page-load', initTemplatesPage);
+</script>

@@ -4,6 +4,7 @@ import {
   buildDaemonTranscript,
   latestUserPromptFromHistory,
   reattachDaemonRun,
+  sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
@@ -143,6 +144,115 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
     expect(transcript).not.toContain('x'.repeat(13_000));
     expect(transcript).toContain('small answer');
+  });
+
+  // PR #3157 form-loop investigation: weak / medium plain-stream models
+  // (GPT-OSS-120B Medium, Gemini 3.5 Flash through Antigravity's `agy`)
+  // pattern-match on the literal `<question-form>` markup the agent
+  // emitted on turn 1 and re-emit an identical form on turn 2 even when
+  // the OD-side OVERRIDE block explicitly forbids it. Stripping the
+  // markup from prior assistant turns at the transcript layer kills the
+  // echo source entirely.
+  it('strips question-form markup from prior assistant turns to kill the form-echo loop', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        'Got it — let me ask a few questions:',
+        '',
+        '<question-form id="discovery" title="Quick brief — 30 seconds">',
+        '{',
+        '  "description": "I will lock the brief.",',
+        '  "questions": [{ "id": "output", "label": "What are we making?" }]',
+        '}',
+        '</question-form>',
+      ].join('\n'),
+    );
+
+    expect(sanitized).not.toContain('<question-form');
+    expect(sanitized).not.toContain('</question-form>');
+    expect(sanitized).not.toContain('"questions": [');
+    expect(sanitized).toContain('question-form was emitted here on a prior turn');
+  });
+
+  it('also strips ```json fenced form-schema echoes that some models add alongside the form tag', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        'Got it — 请告诉我以下信息：',
+        '',
+        '```json',
+        '{',
+        '  "title": "快速简报 — 30 秒",',
+        '  "questions": [',
+        '    { "id": "output", "label": "我们要做什么？" }',
+        '  ]',
+        '}',
+        '```',
+        '',
+        '<question-form id="discovery" title="快速简报 — 30 秒">',
+        '{ "questions": [] }',
+        '</question-form>',
+      ].join('\n'),
+    );
+
+    expect(sanitized).not.toContain('```json');
+    expect(sanitized).not.toContain('<question-form');
+    expect(sanitized).toContain('form schema was echoed here on a prior turn');
+  });
+
+  it('preserves unrelated ```json fences (regular JSON snippets without "questions") so model output stays intact', () => {
+    const original = [
+      'Here is the config you asked about:',
+      '',
+      '```json',
+      '{ "endpoint": "https://api.example.com", "version": 2 }',
+      '```',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+
+    // No `"questions"` key → fence is NOT stripped.
+    expect(sanitized).toBe(original);
+  });
+
+  it('preserves <artifact> blocks — only question-form is stripped, the deliverable stays intact', () => {
+    const original = [
+      'Build summary below.',
+      '',
+      '<artifact identifier="deck" type="text/html" title="Pitch deck">',
+      '<!doctype html>',
+      '<html><body>slide content</body></html>',
+      '</artifact>',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+
+    expect(sanitized).toBe(original);
+    expect(sanitized).toContain('<artifact');
+    expect(sanitized).toContain('<!doctype html>');
+  });
+
+  it('sanitizes ONLY assistant content inside buildDaemonTranscript — user messages quoting <question-form> stay verbatim', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'user',
+        // User legitimately quotes the markup in chat. Must not be mangled —
+        // they might be discussing the markup itself with the agent.
+        content: 'Why does <question-form id="discovery"> render as a card?',
+      },
+      {
+        id: '2',
+        role: 'assistant',
+        content: [
+          '<question-form id="discovery" title="Brief">',
+          '{ "questions": [] }',
+          '</question-form>',
+        ].join('\n'),
+      },
+    ]);
+
+    // User's <question-form> mention survives.
+    expect(transcript).toContain('Why does <question-form id="discovery"> render');
+    // Assistant's emission is replaced with the placeholder.
+    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
   });
 
   it('escapes role delimiter lines in prior message content', () => {

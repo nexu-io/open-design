@@ -20,6 +20,12 @@
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
 .viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
+.viewer-toolbar-tool-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 5px;
+  background: var(--border);
+}
 .viewer-toolbar .icon-only,
 .viewer-toolbar-actions .icon-only {
   width: 28px;
@@ -140,6 +146,23 @@
   width: 30px;
   height: 30px;
   padding: 0;
+}
+.viewer-comment-count-trigger {
+  position: relative;
+  justify-content: center;
+  min-width: 42px;
+  height: 30px;
+  padding: 0 8px;
+  gap: 5px;
+}
+.viewer-comment-count {
+  min-width: 12px;
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: left;
 }
 .viewer-action-icon[data-tooltip]::after {
   content: attr(data-tooltip);
@@ -1070,32 +1093,36 @@
   pointer-events: none;
 }
 .comment-saved-outline {
-  position: absolute;
-  inset: 0;
-  border: 1px dashed rgba(22, 119, 255, 0.72);
-  background: rgba(22, 119, 255, 0.08);
+  display: none;
 }
-.comment-saved-pin {
+.comment-saved-pin,
+.comment-active-pin {
   position: absolute;
   z-index: 2;
-  left: -8px;
-  top: -8px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border: 1px solid #0958d9;
-  border-radius: var(--radius-pill);
-  background: #1677ff;
+  left: 0;
+  top: 0;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 10px;
+  background: #d96a46;
   color: white;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  box-shadow: var(--shadow-sm);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 36px;
+  text-align: center;
+  box-shadow: 0 10px 22px rgba(33, 24, 18, 0.22);
   pointer-events: auto;
+  transform: translate(-50%, -50%);
 }
-.comment-saved-pin:hover {
-  background: #0958d9;
-  transform: translateY(-1px);
+.comment-saved-pin:hover,
+.comment-active-pin:hover {
+  background: #c95e3e;
+  transform: translate(-50%, calc(-50% - 1px));
+}
+.comment-active-pin {
+  pointer-events: none;
 }
 .comment-popover {
   position: absolute;
@@ -1509,6 +1536,38 @@
 .comment-side-selectbar .primary:hover:not(:disabled) {
   background: #e94a2d;
   border-color: #e94a2d;
+}
+.comment-side-new-comment {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  background: var(--bg-panel, #fff);
+}
+.comment-side-new-comment .comment-side-new-comment-shell {
+  padding: 8px 10px 6px;
+  gap: 6px;
+}
+.comment-side-new-comment textarea {
+  min-height: 88px;
+  max-height: 160px;
+}
+.comment-side-new-comment .composer-row {
+  padding-top: 4px;
+}
+.comment-side-new-comment .composer-send {
+  min-width: 0;
+  max-width: 170px;
+}
+.comment-side-new-comment .composer-send.is-sending:disabled {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+  opacity: 1;
+}
+.comment-side-new-comment .composer-send span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Anchor for the transient comment-save toast. Centered at the top
