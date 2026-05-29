@@ -1,5 +1,9 @@
 import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { writeFile as writeFsFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
@@ -8,6 +12,7 @@ describe('project export manifest route', () => {
   let server: http.Server;
   let baseUrl: string;
   const projectsToClean: string[] = [];
+  const tempDirs: string[] = [];
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -22,8 +27,28 @@ describe('project export manifest route', () => {
     for (const id of projectsToClean.splice(0)) {
       await fetch(`${baseUrl}/api/projects/${id}`, { method: 'DELETE' }).catch(() => {});
     }
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
+
+  function makeFolder(): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'od-export-manifest-'));
+    tempDirs.push(dir);
+    return dir;
+  }
+
+  async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.env.OD_SANDBOX_MODE;
+    process.env.OD_SANDBOX_MODE = '1';
+    try {
+      return await run();
+    } finally {
+      if (previous == null) delete process.env.OD_SANDBOX_MODE;
+      else process.env.OD_SANDBOX_MODE = previous;
+    }
+  }
 
   async function createProject(
     metadata: Record<string, unknown> = { kind: 'prototype', entryFile: 'index.html' },
@@ -154,5 +179,26 @@ describe('project export manifest route', () => {
   it('rejects invalid project ids before listing files', async () => {
     const response = await fetch(`${baseUrl}/api/projects/bad:id/export/manifest`);
     expect(response.status).toBe(400);
+  });
+
+  it('rejects imported-folder projects in sandbox mode instead of returning an empty manifest', async () => {
+    const folder = makeFolder();
+    await writeFsFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResponse = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder }),
+    });
+    expect(importResponse.status).toBe(200);
+    const importBody = (await importResponse.json()) as { project: { id: string } };
+    projectsToClean.push(importBody.project.id);
+
+    await withSandboxMode(async () => {
+      const response = await fetch(`${baseUrl}/api/projects/${importBody.project.id}/export/manifest`);
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+    });
   });
 });
