@@ -226,6 +226,17 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(text).toBe('<html/>');
   });
 
+  it('injects the URL preview scroll bridge only when requested', async () => {
+    const plain = await fetch(rawUrl('page.html'));
+    expect(await plain.text()).toBe('<html/>');
+
+    const bridged = await fetch(`${rawUrl('page.html')}?odPreviewBridge=scroll`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html).toContain('data-od-url-scroll-bridge');
+    expect(html).toContain("type: 'od:preview-scroll'");
+  });
+
   it('returns 404 for a missing file', async () => {
     const res = await fetch(rawUrl('missing.mp4'));
     expect(res.status).toBe(404);

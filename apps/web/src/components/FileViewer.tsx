@@ -4519,7 +4519,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -4692,7 +4692,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   
   useEffect(() => {
     restorePreviewScrollPosition();
-  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+  }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -6016,6 +6016,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setAgentToolsOpen(false);
       return;
     }
+    capturePreviewScrollPosition();
     const activateDraw = () => {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
