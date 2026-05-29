@@ -7634,7 +7634,7 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
     }
   };
 
-  const generateNewKey = async () => {
+  const generateNewKey = async (): Promise<boolean> => {
     setError(null);
     try {
       const res = await fetch('/api/auth/keys', {
@@ -7642,14 +7642,16 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label }),
       });
-      if (!res.ok) { setError(t('settings.networkSaveError')); return; }
+      if (!res.ok) { setError(t('settings.networkSaveError')); return false; }
       const data = await res.json();
       setNewKey(data.key);
       setNewKeyId(data.id);
       setLabel('');
       setKeys((k) => [...k, { id: data.id, label: data.label ?? '', createdAt: data.createdAt }]);
+      return true;
     } catch {
       setError(t('settings.networkSaveError'));
+      return false;
     }
   };
 
@@ -7696,7 +7698,8 @@ function NetworkSection({ daemonLive }: { daemonLive: boolean }) {
           <p className="hint">{t('settings.networkKeyRequiredHint')}</p>
           <div className="settings-actions">
             <button type="button" className="seg-btn active" onClick={async () => {
-              await generateNewKey();
+              const ok = await generateNewKey();
+              if (!ok) return;
               setBindHost(pendingBindHost);
               saveConfig({ bindHost: pendingBindHost });
               setPendingBindHost(null);
