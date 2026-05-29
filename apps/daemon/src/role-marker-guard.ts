@@ -31,15 +31,55 @@
 // boundaries, narrow the additions to that frontend's specific
 // path rather than the shared regex.
 //
-// Alternation order matters: `assistant` is listed before `assist` so a
-// fully-spelled `## assistant` consumes 9 chars (not 6). For truncated
-// or glued forms (`## assist`, `## assistantReading…`) the engine still
-// matches the `assist` prefix. No `\b` after the role keyword — model
-// emissions glue the role and the following sentence ("## assistantNow
-// reading…") with no separator, and `\b` doesn't fire between two
-// word characters.
+// Three deliberate refinements vs. a naive `## role` match:
+//
+// 1. CASE-SENSITIVE. The chat host's turn-boundary delimiter is
+//    lowercase (`## user` / `## assistant` / `## system` — see
+//    `buildDaemonTranscript` in apps/web/src/providers/daemon.ts), and
+//    the `## CRITICAL` system-prompt block forbids only the lowercase
+//    forms. Title-Case Markdown headings like `## User Guide`,
+//    `## System Architecture`, `## Assistant settings` are LEGITIMATE
+//    content (LLMs emit these constantly in technical writing) and
+//    must not contaminate. Matching with `/i` would deterministically
+//    abort any run that produced such a heading — exactly the
+//    "false positive aborts the whole run" cost the docblock cites
+//    as the reason to keep the regex narrow.
+//    (See PR #3303 review r3324151877.)
+//
+// 2. POSITIVE LOOKAHEAD `(?=[^a-z])`. Without it, `## userland`,
+//    `## userspace`, `## users guide`, `## systemd`, `## assistance`
+//    all match via prefix in the alternation. The positive lookahead
+//    requires the character after the role keyword to exist AND to NOT
+//    be a lowercase letter:
+//      - `## user\n…`     → match (newline is not lowercase)
+//      - `## assistantR…` → match (R is uppercase; the glued-form
+//                           attack pattern still gets caught)
+//      - `## assistant.`  → match (. is not a letter)
+//      - `## users guide` → no match (s is lowercase letter)
+//      - `## userland`    → no match (l is lowercase letter)
+//    Why POSITIVE `[^a-z]` rather than NEGATIVE `(?![a-z])`: the
+//    negative form is satisfied at end-of-string, which in a streaming
+//    context means "we have just received `## user` but don't know
+//    what comes next yet". A negative lookahead would fire prematurely
+//    if the rest of the role-keyword landed in a later chunk (e.g.
+//    the model emits `## user` then `land` arrives). The positive
+//    form requires an actual non-lowercase character to be present,
+//    so detection waits one more chunk in that edge case — a
+//    one-character latency traded for correctness.
+//
+// 3. `[ \t]` instead of `\s` for inner whitespace. `\s` matches
+//    newlines, which would let oddities like `##\nuser` match across
+//    lines. Markdown role markers are always single-line by
+//    convention; restricting to space/tab tightens the match without
+//    losing any real attack pattern.
+//
+// Alternation order: `assistant` is listed before `assist` so a
+// fully-spelled `## assistant` consumes 9 chars (not 6) and the
+// `(?![a-z])` check is applied at position 9 (after the full word)
+// rather than position 6. Truncated forms (`## assist\n` from a
+// stream cut mid-emission) still match via the `assist` branch.
 export const FABRICATED_ROLE_MARKER_RE =
-  /(?:^|\n)\s*##\s+(?:user|assistant|assist|system)/i;
+  /(?:^|\n)[ \t]*##[ \t]+(?:user|assistant|assist|system)(?=[^a-z])/;
 
 // Internal-only variant used after the first chunk has been processed.
 // Drops the `^` alternative: once `tail` is a rolling slice of
@@ -53,7 +93,7 @@ export const FABRICATED_ROLE_MARKER_RE =
 // straddling a chunk boundary are still caught.
 // (See PR #3303 review r3324060995.)
 const NEWLINE_ANCHORED_ROLE_MARKER_RE =
-  /\n\s*##\s+(?:user|assistant|assist|system)/i;
+  /\n[ \t]*##[ \t]+(?:user|assistant|assist|system)(?=[^a-z])/;
 
 // Bounded tail size for cross-chunk matching. Must comfortably exceed
 // the longest possible marker prefix:
