@@ -7155,7 +7155,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
             ) : null}
             {commentPortalHost && commentSidePanel
               ? createPortal(commentSidePanel, commentPortalHost)
-              : commentSidePanel}
+              : commentPortalId
+                ? null
+                : commentSidePanel}
             {inspectMode && activeInspectTarget ? (
               <InspectPanel
                 target={activeInspectTarget}
