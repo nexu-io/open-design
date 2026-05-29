@@ -35,4 +35,15 @@ describe('HomeHero footer select theme styles', () => {
       expect(background, selector).toMatch(/var\(--bg-panel\)/);
     }
   });
+
+  it('inverts monochrome model logos in dark dropdown panels', () => {
+    for (const icon of ['openai', 'dalle', 'grok', 'elevenlabs', 'suno']) {
+      const selector = `[data-theme="dark"] .home-hero__model-option-icon--${icon} img`;
+      expect(ruleValue(cssDeclarations(selector), 'filter'), selector)
+        .toBe('invert(1) brightness(1.2)');
+      expect(homeHeroCss).toContain(
+        `html:not([data-theme="light"]) .home-hero__model-option-icon--${icon} img`,
+      );
+    }
+  });
 });
