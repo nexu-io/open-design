@@ -80,6 +80,9 @@ export interface McpInstallPayload {
   /** First valid MCP key for remote auth. Included so the UI
    *  can pre-fill the Authorization header in remote snippets. */
   remoteMcpKey?: string;
+  /** True when the daemon requires auth for remote MCP access,
+   *  even when no stored MCP key exists (e.g. OD_API_TOKEN only). */
+  remoteAuthRequired?: boolean;
 }
 
 export function buildMcpInstallPayload(
@@ -150,6 +153,7 @@ export function buildMcpInstallPayload(
       networkExposed: true,
       remoteUrl,
       ...(inputs.mcpKey ? { remoteMcpKey: inputs.mcpKey } : {}),
+      ...(inputs.authRequired || inputs.apiKey ? { remoteAuthRequired: true } : {}),
     } : {}),
   };
 }

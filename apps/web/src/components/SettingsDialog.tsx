@@ -6357,6 +6357,7 @@ interface McpInstallInfo {
   networkExposed?: boolean;
   remoteUrl?: string;
   remoteMcpKey?: string;
+  remoteAuthRequired?: boolean;
 }
 
 interface McpStdioServerConfig {
@@ -6564,7 +6565,7 @@ function CodexInstallToggle(): JSX.Element | null {
 }
 
 function buildRemoteHeaders(info: McpInstallInfo): Record<string, string> {
-  if (!info.remoteMcpKey) return {};
+  if (!info.remoteMcpKey && !info.remoteAuthRequired) return {};
   return { Authorization: 'Bearer $OD_MCP_TOKEN' };
 }
 

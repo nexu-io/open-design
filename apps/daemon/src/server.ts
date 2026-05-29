@@ -5375,6 +5375,13 @@ export async function startServer({
       res.status(403).json({ error: 'FORBIDDEN', reason: 'restart is only available from localhost' });
       return;
     }
+    const rOrigin = req.headers.origin;
+    const rHost = req.headers.host ?? `localhost:${resolvedPortRef.current}`;
+    const rProto = isProxyTrusted() ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
+    if (rOrigin && rOrigin !== `${rProto}://${rHost}`) {
+      res.status(403).json({ error: 'FORBIDDEN', reason: 'cross-origin request rejected' });
+      return;
+    }
     if (daemonShuttingDown) {
       res.status(409).json({ error: 'ALREADY_SHUTTING_DOWN' });
       return;
@@ -5396,6 +5403,13 @@ export async function startServer({
   app.post('/api/auth/keys', async (req, res) => {
     if (!isLocalManagementRequest(req)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
+      return;
+    }
+    const aOrigin = req.headers.origin;
+    const aHost = req.headers.host ?? `localhost:${resolvedPortRef.current}`;
+    const aProto = isProxyTrusted() ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
+    if (aOrigin && aOrigin !== `${aProto}://${aHost}`) {
+      res.status(403).json({ error: 'FORBIDDEN', reason: 'cross-origin request rejected' });
       return;
     }
     const { label } = req.body ?? {};
@@ -5462,6 +5476,13 @@ export async function startServer({
   app.post('/api/mcp-keys', async (req, res) => {
     if (!isLocalManagementRequest(req)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
+      return;
+    }
+    const mOrigin = req.headers.origin;
+    const mHost = req.headers.host ?? `localhost:${resolvedPortRef.current}`;
+    const mProto = isProxyTrusted() ? (req.headers['x-forwarded-proto'] ?? 'http') : 'http';
+    if (mOrigin && mOrigin !== `${mProto}://${mHost}`) {
+      res.status(403).json({ error: 'FORBIDDEN', reason: 'cross-origin request rejected' });
       return;
     }
     const { label } = req.body ?? {};
