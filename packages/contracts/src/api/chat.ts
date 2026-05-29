@@ -116,6 +116,22 @@ export interface ChatRunCreateRequest extends ChatRequest {
   clientRequestId: string;
 }
 
+/**
+ * Minimal POST /api/runs shape accepted from MCP / SDK callers that do not
+ * manage conversation state client-side. Only `projectId` is required;
+ * `message` and `agentId` are optional — the daemon resolves `agentId` from
+ * the saved app-config when it is omitted.
+ */
+export interface McpRunCreateRequest {
+  projectId: string;
+  message?: string;
+  agentId?: string;
+  skillId?: string;
+  pluginId?: string;
+  model?: string;
+  pluginInputs?: Record<string, unknown>;
+}
+
 export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
 export type ChatMessageFeedbackRating = 'positive' | 'negative';
@@ -172,8 +188,14 @@ export interface ChatRunFeedbackResponse {
 
 export interface ChatRunCreateResponse {
   runId: string;
-  appliedPluginSnapshotId?: string;
-  pluginId?: string;
+  // Daemon-resolved conversation/message ids — populated for MCP /
+  // SDK callers that POST /api/runs with only projectId. The web flow
+  // normally sends these in already; daemon falls back to the
+  // project's default conversation otherwise.
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  appliedPluginSnapshotId?: string | null;
+  pluginId?: string | null;
 }
 
 export interface ChatRunStatusResponse {
@@ -191,6 +213,10 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  /** Absolute path to the per-run JSONL event log the daemon mirrors
+   *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
+   *  daemon was launched without event persistence configured. */
+  eventsLogPath?: string | null;
   /** Present on daemon run status responses that know the effective run policy. */
   mediaExecution?: MediaExecutionPolicy;
 }

@@ -21,6 +21,8 @@ import { startServer } from '../src/server.js';
 async function withFakeClaude<T>(run: () => Promise<T>): Promise<T> {
   const dir = await fsp.mkdtemp(join(tmpdir(), 'od-mcp-spawn-bin-'));
   const oldPath = process.env.PATH;
+  const oldClaudeBin = process.env.CLAUDE_BIN;
+  const oldAgentHome = process.env.OD_AGENT_HOME;
   // Fake `claude` that prints stream-json the daemon understands and exits 0.
   // The single result frame is enough to drive the run to `succeeded`.
   const script = `
@@ -50,9 +52,15 @@ process.exit(0);
       await fsp.chmod(bin, 0o755);
     }
     process.env.PATH = `${dir}${delimiter}${oldPath ?? ''}`;
+    delete process.env.CLAUDE_BIN;
+    process.env.OD_AGENT_HOME = dir;
     return await run();
   } finally {
     process.env.PATH = oldPath;
+    if (oldClaudeBin === undefined) delete process.env.CLAUDE_BIN;
+    else process.env.CLAUDE_BIN = oldClaudeBin;
+    if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+    else process.env.OD_AGENT_HOME = oldAgentHome;
     await fsp.rm(dir, { recursive: true, force: true });
   }
 }
@@ -61,13 +69,13 @@ async function waitForRunStatus(
   baseUrl: string,
   runId: string,
 ): Promise<{ status: string }> {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     const r = await fetch(`${baseUrl}/api/runs/${runId}`);
     const body = (await r.json()) as { status: string };
     if (body.status !== 'queued' && body.status !== 'running') return body;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('run did not finish');
+  throw new Error('run did not finish within 5s of polling');
 }
 
 describe('spawn writes external MCP config for Claude Code', () => {

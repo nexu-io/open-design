@@ -36,7 +36,7 @@ import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
-  renderModelOptions,
+  SearchableModelSelect,
 } from './modelOptions';
 import {
   DEFAULT_NOTIFICATIONS,
@@ -194,6 +194,18 @@ interface Props {
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  /**
+   * Notified by Settings → Skills after a successful skill registry
+   * mutation (create / edit / delete). App.tsx uses this to drop preview
+   * iframes whose project depends on the affected skill — body-only
+   * edits do not move SkillSummary fields, so ProjectView's signature
+   * path can miss them.
+   */
+  onSkillsChanged?: (affectedSkillId?: string) => void;
+  /** Same channel for design-system registry mutations. */
+  onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
 }
 
 export interface AgentRefreshOptions {
@@ -823,6 +835,10 @@ export function SettingsDialog({
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
+  onSkillsChanged,
+  onDesignSystemsChanged,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -933,9 +949,11 @@ export function SettingsDialog({
         initial.apiVersion ?? '',
       );
     });
-  const [providerModelsCache, setProviderModelsCache] = useState<
+  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
   >({});
+  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
+  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
   const agentTestAbortRef = useRef<AbortController | null>(null);
   const providerTestAbortRef = useRef<AbortController | null>(null);
   const providerModelsAbortRef = useRef<AbortController | null>(null);
@@ -947,7 +965,7 @@ export function SettingsDialog({
   const providerAutoTestKeyRef = useRef<string | null>(null);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const baseUrlInputRef = useRef<HTMLInputElement | null>(null);
-  const modelSelectRef = useRef<HTMLSelectElement | null>(null);
+  const modelSelectRef = useRef<HTMLButtonElement | null>(null);
   const customModelInputRef = useRef<HTMLInputElement | null>(null);
   const focusByokRequiredFieldAfterProtocolSwitchRef = useRef(false);
   const [apiModelCustomEditing, setApiModelCustomEditing] = useState(false);
@@ -2059,7 +2077,12 @@ export function SettingsDialog({
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
-    const allowCustomModel = selected.id !== 'amr';
+    // Adapters opt out via `supportsCustomModel: false` on their
+    // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
+    // upstream issue #35) or when free-text ids silently fail at spawn
+    // (AMR routes through ACP `session/set_model` and validates against
+    // a live catalog). Undefined === allow, matching today's UX.
+    const allowCustomModel = selected.supportsCustomModel !== false;
     const configuredModel =
       typeof choice.model === 'string' && choice.model
         ? choice.model
@@ -2122,10 +2145,16 @@ export function SettingsDialog({
                 </span>
               </span>
               <div className="agent-model-select-wrap">
-                <select
+                <SearchableModelSelect
+                  className="inline-switcher__select settings-model-select"
                   value={selectValue}
-                  onChange={(e) => {
-                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                  aria-label={t('settings.modelPicker')}
+                  searchPlaceholder={t('designs.searchPlaceholder')}
+                  searchInputTestId={`settings-agent-model-search-${selected.id}`}
+                  popoverTestId={`settings-agent-model-popover-${selected.id}`}
+                  models={selected.models!}
+                  onChange={(nextValue) => {
+                    if (nextValue === CUSTOM_MODEL_SENTINEL) {
                       setAgentCustomModelIds((prev) => {
                         const next = new Set(prev);
                         next.add(selected.id);
@@ -2139,21 +2168,19 @@ export function SettingsDialog({
                         next.delete(selected.id);
                         return next;
                       });
-                      setChoice({ model: e.target.value });
+                      setChoice({ model: nextValue });
                     }
                   }}
-                >
-                  {renderModelOptions(selected.models!)}
-                  {allowCustomModel ? (
-                    <option value={CUSTOM_MODEL_SENTINEL}>
-                      {t('settings.modelCustom')}
-                    </option>
-                  ) : null}
-                </select>
-                <Icon
-                  name="chevron-down"
-                  size={12}
-                  className="agent-model-select-chevron"
+                  additionalOptions={
+                    allowCustomModel
+                      ? [
+                          {
+                            value: CUSTOM_MODEL_SENTINEL,
+                            label: t('settings.modelCustom'),
+                          },
+                        ]
+                      : undefined
+                  }
                 />
               </div>
             </label>
@@ -3353,13 +3380,21 @@ export function SettingsDialog({
                     *
                   </span>
                 </span>
-                <select
+                <SearchableModelSelect
                   ref={modelSelectRef}
+                  className="inline-switcher__select settings-model-select settings-model-select--byok"
                   aria-label={
                     apiProtocol === 'azure'
                       ? t('settings.azureDeploymentModel')
                       : t('settings.model')
                   }
+                  searchPlaceholder={t('designs.searchPlaceholder')}
+                  searchInputTestId="settings-byok-model-search"
+                  popoverTestId="settings-byok-model-popover"
+                  models={apiModelOptions.map((m) => ({
+                    id: m.id,
+                    label: apiModelOptionLabel(m),
+                  }))}
                   value={apiModelSelectValue}
                   onFocus={() => {
                     const byokProviderId = byokProtocolToTracking(apiProtocol);
@@ -3373,21 +3408,22 @@ export function SettingsDialog({
                       });
                     }
                   }}
-                  onChange={(e) => {
-                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                  onChange={(nextValue) => {
+                    if (nextValue === CUSTOM_MODEL_SENTINEL) {
                       setApiModelCustomEditing(true);
                       updateApiConfig({ model: '' });
                     } else {
                       setApiModelCustomEditing(false);
-                      updateApiConfig({ model: e.target.value });
+                      updateApiConfig({ model: nextValue });
                     }
                   }}
-                >
-                  {apiModelOptions.map((m) => (
-                    <option value={m.id} key={m.id}>{apiModelOptionLabel(m)}</option>
-                  ))}
-                  <option value={CUSTOM_MODEL_SENTINEL}>{t('settings.modelCustom')}</option>
-                </select>
+                  additionalOptions={[
+                    {
+                      value: CUSTOM_MODEL_SENTINEL,
+                      label: t('settings.modelCustom'),
+                    },
+                  ]}
+                />
                 {loadedAccountModelCount > 0 ? (
                   <span className="field-inline-status success" role="status">
                     {t('settings.modelsLoadedFromAccount', {
@@ -3616,11 +3652,16 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               onSkillsRefresh={onSkillsRefresh}
+              onSkillsChanged={onSkillsChanged}
             />
           ) : null}
 
           {activeSection === 'designSystems' ? (
-            <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
+            <DesignSystemsSection
+              cfg={cfg}
+              setCfg={setCfg}
+              onDesignSystemsChanged={onDesignSystemsChanged}
+            />
           ) : null}
 
           {activeSection === 'instructions' ? (
@@ -5078,6 +5119,8 @@ function MediaProvidersSection({
   setCfg,
   mediaProvidersNotice,
   onReloadMediaProviders,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   pendingLocalProviderIds,
   onChange,
 }: {
@@ -5085,6 +5128,8 @@ function MediaProvidersSection({
   setCfg: Dispatch<SetStateAction<AppConfig>>;
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   pendingLocalProviderIds: ReadonlySet<string>;
   onChange: (providerId: string) => void;
 }) {
@@ -5590,6 +5635,118 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
 }`;
 }
 
+// One-click install toggle for Codex: queries the daemon for whether
+// `codex mcp get open-design` succeeds, and POSTs/DELETEs the install
+// endpoint to call `codex mcp add/remove` on the user's behalf. The
+// copy-snippet path still works for users who prefer to paste manually
+// or whose Codex CLI is not on PATH (button shows a disabled hint in
+// that case).
+function CodexInstallToggle(): JSX.Element | null {
+  const { t } = useI18n();
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/mcp/install/codex/status');
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as { available: boolean; installed: boolean };
+      setAvailable(Boolean(data.available));
+      setInstalled(Boolean(data.installed));
+    } catch {
+      // Daemon unreachable or endpoint missing — hide the toggle
+      // entirely rather than spook the user with a permanent error.
+      setAvailable(false);
+      setInstalled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const run = useCallback(
+    async (method: 'POST' | 'DELETE', successKey: 'settings.mcpCodexInstallSuccess' | 'settings.mcpCodexUninstallSuccess') => {
+      setBusy(true);
+      setMessage(null);
+      try {
+        const res = await fetch('/api/mcp/install/codex', { method });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+          throw new Error(body?.error?.message || `HTTP ${res.status}`);
+        }
+        setMessage({ kind: 'success', text: t(successKey) });
+        await refresh();
+      } catch (err) {
+        setMessage({
+          kind: 'error',
+          text: t('settings.mcpCodexInstallError', { error: err instanceof Error ? err.message : String(err) }),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh, t],
+  );
+
+  if (available === null) return null;
+
+  if (!available) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          disabled
+          style={{ padding: '6px 14px', fontSize: 13, opacity: 0.6 }}
+        >
+          {t('settings.mcpCodexOneClickInstall')}
+        </button>
+        <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--fg-2, #9aa0a6)' }}>
+          {t('settings.mcpCodexOneClickUnavailable')}
+        </span>
+      </div>
+    );
+  }
+
+  const label = installed
+    ? t('settings.mcpCodexOneClickUninstall')
+    : t('settings.mcpCodexOneClickInstall');
+  const onClick = () => {
+    if (installed) {
+      void run('DELETE', 'settings.mcpCodexUninstallSuccess');
+    } else {
+      void run('POST', 'settings.mcpCodexInstallSuccess');
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <button
+        type="button"
+        className={installed ? '' : 'primary'}
+        disabled={busy}
+        onClick={onClick}
+        style={{ padding: '6px 14px', fontSize: 13 }}
+      >
+        {busy ? t('settings.mcpCodexBusy') : label}
+      </button>
+      {message ? (
+        <span
+          style={{
+            marginLeft: 10,
+            fontSize: 12,
+            color: message.kind === 'error' ? 'var(--danger, #ff6b6b)' : 'var(--fg-2, #9aa0a6)',
+          }}
+        >
+          {message.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function IntegrationsSection() {
   const { t } = useI18n();
 
@@ -5860,6 +6017,8 @@ function IntegrationsSection() {
         {info ? (
           <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
         ) : null}
+
+        {client.id === 'codex' ? <CodexInstallToggle /> : null}
 
         {client.buildDeeplink && info ? (
           <div style={{ marginBottom: 12 }}>

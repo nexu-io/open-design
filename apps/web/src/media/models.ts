@@ -136,7 +136,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'custom-image',
     label: 'Custom Image API',
-    hint: 'OpenAI-compatible /v1/images/generations (local or cloud)',
+    hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)',
     integrated: true,
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
@@ -417,13 +417,13 @@ export const IMAGE_MODELS: MediaModel[] = [
     caps: ['t2i'],
   },
 
-  // Custom OpenAI-compatible /v1/images/generations endpoint.
+  // Custom OpenAI-compatible image generation + edit endpoints.
   {
     id: 'custom-image',
     label: 'custom-image',
     hint: 'Custom · OpenAI-compatible endpoint',
     provider: 'custom-image',
-    caps: ['t2i'],
+    caps: ['t2i', 'i2i'],
   },
 
   // Black Forest Labs FLUX family.

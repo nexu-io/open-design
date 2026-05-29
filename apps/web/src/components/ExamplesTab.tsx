@@ -482,7 +482,7 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
                 // it can render a calm "no shipped preview" placeholder
                 // instead of bouncing through the error state. Issue #897.
                 unavailable: unavailableKind
-                  ? { kind: unavailableKind }
+                  ? { kind: unavailableKind, noun: 'skill' }
                   : null,
                 deck: previewSkill.mode === 'deck',
               },

@@ -18,6 +18,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getRememberedLiveModels,
+  preferFreshLiveModels,
   rememberLiveModels,
   resolveModelForAgent,
 } from '../../src/runtimes/models.js';
@@ -62,6 +64,21 @@ describe('resolveModelForAgent', () => {
 
     expect(resolveModelForAgent(def, null)).toBe('deepseek-v3.2');
     expect(resolveModelForAgent(def, 'default')).toBe('deepseek-v3.2');
+    expect(getRememberedLiveModels(def.id)).toEqual([
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
+    ]);
+  });
+
+  it('prefers remembered live models only when the fresh AMR catalog is empty', () => {
+    const remembered = [
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
+    ];
+    const fresh = [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }];
+
+    expect(preferFreshLiveModels(fresh, remembered)).toEqual(fresh);
+    expect(preferFreshLiveModels([], remembered)).toEqual(remembered);
   });
 
   it('keeps common default-capable defs untouched even when live models are remembered', () => {

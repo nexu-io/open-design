@@ -1,6 +1,9 @@
 import { execAgentFile } from './shared.js';
 import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
+const AMR_MODELS_TIMEOUT_MS = 10_000;
+const AMR_MODELS_RETRY_DELAYS_MS = [250, 750] as const;
+
 const PREFERRED_AMR_CHAT_MODEL_ORDER = [
   'deepseek-v4-flash',
   'deepseek-v3.2',
@@ -44,6 +47,7 @@ export function normalizeVelaModelId(rawId: string): string | null {
     : withoutProvider;
   if (!withoutPrefix) return null;
   if (/^deepseek_v3_2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
+  if (/^deepseek-v3-2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
   if (/^kimi_k2_6$/i.test(withoutPrefix)) return 'kimi-k2.6';
   if (/^glm_5_1$/i.test(withoutPrefix)) return 'glm-5.1';
   if (/^glm_5$/i.test(withoutPrefix)) return 'glm-5';
@@ -128,24 +132,76 @@ function orderAmrChatModels(
     .map(({ model }) => model);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function velaModelsErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error ?? '');
+}
+
+function isRetriableVelaModelsError(error: unknown): boolean {
+  const message = velaModelsErrorMessage(error).toLowerCase();
+  return [
+    'deadline exceeded',
+    'timed out',
+    'timeout',
+    'temporarily unavailable',
+    'temporary failure',
+    'econnreset',
+    'econnrefused',
+    'enotfound',
+    '502',
+    '503',
+    '504',
+  ].some((pattern) => message.includes(pattern));
+}
+
+async function fetchVelaModelsWithRetry(
+  resolvedBin: string,
+  env: NodeJS.ProcessEnv,
+): Promise<RuntimeModelOption[]> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= AMR_MODELS_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const { stdout } = await execAgentFile(resolvedBin, ['models'], {
+        env,
+        timeout: AMR_MODELS_TIMEOUT_MS,
+        maxBuffer: 1024 * 1024,
+      });
+      return parseVelaModels(String(stdout));
+    } catch (error) {
+      lastError = error;
+      if (
+        attempt === AMR_MODELS_RETRY_DELAYS_MS.length ||
+        !isRetriableVelaModelsError(error)
+      ) {
+        throw error;
+      }
+      await sleep(AMR_MODELS_RETRY_DELAYS_MS[attempt] ?? 0);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(velaModelsErrorMessage(lastError));
+}
+
 export const amrAgentDef = {
   id: 'amr',
   name: 'AMR',
   bin: 'vela',
   versionArgs: ['--version'],
-  fetchModels: async (resolvedBin, env) => {
-    const { stdout } = await execAgentFile(resolvedBin, ['models'], {
-      env,
-      timeout: 10_000,
-      maxBuffer: 1024 * 1024,
-    });
-    return parseVelaModels(String(stdout));
-  },
+  fetchModels: fetchVelaModelsWithRetry,
   // Fail closed when Vela's live catalog is unavailable. Stale static
   // fallbacks let users select models that link/opencode no longer accepts.
   fallbackModels: [] as RuntimeModelOption[],
   buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
   streamFormat: 'acp-json-rpc',
+  // Vela routes model selection through ACP's `session/set_model` and only
+  // accepts ids that survived the `vela models` preflight check, so a
+  // free-text "Custom" id silently fails at spawn. The model picker
+  // surfaces the live Vela catalog instead.
+  supportsCustomModel: false,
+  supportsImagePaths: true,
   // Daemon-process env override for emergency operator pinning. Normal UI
   // selection comes from the live `vela models` catalog and is preflighted
   // before spawn.

@@ -20,10 +20,33 @@ const PROMOTE_AMR_CODES = new Set<string>([
 ]);
 
 // Primary action offered in the gray error card.
-//   - retry:     re-run with the current agent.
-//   - authorize: AMR sign-in/authorize flow, then auto-retry on success.
-//   - recharge:  open the AMR wallet (manual retry afterwards).
-export type RunFailurePrimaryAction = 'retry' | 'authorize' | 'recharge';
+//   - retry:                       re-run with the current agent.
+//   - authorize:                   AMR sign-in/authorize flow, then auto-retry on success.
+//   - recharge:                    open the AMR wallet (manual retry afterwards).
+//   - launch-terminal-auth:        Antigravity-specific. agy's `-p`
+//                                  print mode cannot complete Google
+//                                  Sign-In on its own (no input field
+//                                  for the auth code), so OD spawns a
+//                                  system Terminal running `agy` and
+//                                  the user finishes OAuth there.
+//   - launch-terminal-switch-model: Antigravity-specific. agy has no
+//                                  `--model` flag (upstream #35), so
+//                                  switching to a model with available
+//                                  quota means opening agy's TUI and
+//                                  using its Switch Model picker. The
+//                                  daemon spawns the same terminal as
+//                                  launch-terminal-auth — the button
+//                                  label is the only thing that changes.
+// Both terminal-launch actions pair with `secondaryRetry: true` so the
+// user has a Retry button after the external step completes (OAuth /
+// switching models happens out-of-band; we can't auto-retry from the
+// daemon side).
+export type RunFailurePrimaryAction =
+  | 'retry'
+  | 'authorize'
+  | 'recharge'
+  | 'launch-terminal-auth'
+  | 'launch-terminal-switch-model';
 
 // i18n keys for the gray-card text override (null = show the raw error).
 export type RunFailureMessageKey =
@@ -76,6 +99,33 @@ export function resolveRunFailureUi(
       secondaryRetry: false,
       showSwitchCard: false,
     };
+  }
+  // Antigravity's auth flow is terminal-only — see the
+  // `launch-terminal-auth` action comment for why. Without this branch
+  // the user sees the daemon-emitted guidance text and would have to
+  // open a terminal themselves; with it they get a one-click button
+  // that opens Terminal.app / x-terminal-emulator / cmd with `agy`
+  // running, and a Retry button to redo the chat after OAuth completes.
+  if (agentId === 'antigravity') {
+    if (code === 'AGENT_AUTH_REQUIRED') {
+      return {
+        primaryAction: 'launch-terminal-auth',
+        messageKey: null,
+        secondaryRetry: true,
+        showSwitchCard: false,
+      };
+    }
+    // Quota: each Antigravity model has its own quota, so the action
+    // is "open agy, switch model" rather than "sign in." Same handler
+    // spawns the same terminal; only the label changes.
+    if (code === 'RATE_LIMITED') {
+      return {
+        primaryAction: 'launch-terminal-switch-model',
+        messageKey: null,
+        secondaryRetry: true,
+        showSwitchCard: false,
+      };
+    }
   }
   const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
   return {

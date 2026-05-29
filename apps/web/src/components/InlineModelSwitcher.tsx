@@ -17,7 +17,7 @@ import {
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
+import type { AgentInfo, ApiProtocol, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -30,7 +30,7 @@ import {
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import { normalizeAgentModelChoice } from './agentModelSelection';
-import { renderModelOptions } from './modelOptions';
+import { SearchableModelSelect } from './modelOptions';
 
 interface Props {
   config: AppConfig;
@@ -44,6 +44,7 @@ interface Props {
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
   onOpenSettings: (
     section?:
       | 'execution'
@@ -108,6 +109,7 @@ export function InlineModelSwitcher({
   onAgentModelChange,
   onApiProtocolChange,
   onApiModelChange,
+  providerModelsCache,
   onOpenSettings,
 }: Props) {
   const t = useT();
@@ -348,6 +350,12 @@ export function InlineModelSwitcher({
         : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const providerModelsInputKey = [
+    apiProtocol,
+    config.baseUrl.trim().replace(/\/+$/, ''),
+    config.apiKey.trim(),
+    config.apiVersion?.trim() ?? '',
+  ].join('\n');
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -359,7 +367,18 @@ export function InlineModelSwitcher({
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
-  const apiModelOptions = providerForProtocol?.models ?? [];
+  const fetchedProviderModels = providerModelsCache?.[providerModelsInputKey] ?? [];
+  const apiModelOptions = useMemo(() => {
+    const discovered = fetchedProviderModels.map((model) => model.id);
+    const staticOptions = providerForProtocol?.models ?? [];
+    const merged = new Set<string>([...discovered, ...staticOptions]);
+    if (config.model.trim()) merged.add(config.model.trim());
+    return Array.from(merged);
+  }, [config.model, fetchedProviderModels, providerForProtocol?.models]);
+  const apiModelChoices = useMemo(
+    () => apiModelOptions.map((id) => ({ id, label: id })),
+    [apiModelOptions],
+  );
 
   // Chip text — keep it tight so the pill doesn't wrap on small viewports.
   // CLI: "Claude · Sonnet 4.5"; BYOK: "Anthropic · sonnet-4.5".
@@ -618,25 +637,33 @@ export function InlineModelSwitcher({
                   <span className="inline-switcher__label">
                     {t('inlineSwitcher.modelLabel')}
                   </span>
-                  <select
+                  <SearchableModelSelect
                     className="inline-switcher__select"
                     data-testid="inline-model-switcher-agent-model"
+                    searchInputTestId="inline-model-switcher-agent-model-search"
+                    popoverTestId="inline-model-switcher-agent-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={currentAgent.models}
                     value={currentModelId ?? ''}
-                    onChange={(e) =>
+                    onChange={(nextValue) =>
                       onAgentModelChange?.(currentAgent.id, {
-                        model: e.target.value,
+                        model: nextValue,
                       })
                     }
-                  >
-                    {renderModelOptions(currentAgent.models)}
-                    {currentAgent.id !== 'amr' &&
-                    currentModelId &&
-                    !currentAgent.models.some((m) => m.id === currentModelId) ? (
-                      <option value={currentModelId}>
-                        {currentModelId} {t('inlineSwitcher.customSuffix')}
-                      </option>
-                    ) : null}
-                  </select>
+                    additionalOptions={
+                      currentAgent.id !== 'amr' &&
+                      currentModelId &&
+                      !currentAgent.models.some((m) => m.id === currentModelId)
+                        ? [
+                            {
+                              value: currentModelId,
+                              label: `${currentModelId} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
                 </div>
               ) : null}
             </>
@@ -674,24 +701,27 @@ export function InlineModelSwitcher({
                   {t('inlineSwitcher.modelLabel')}
                 </span>
                 {apiModelOptions.length > 0 ? (
-                  <select
+                  <SearchableModelSelect
                     className="inline-switcher__select"
                     data-testid="inline-model-switcher-api-model"
+                    searchInputTestId="inline-model-switcher-api-model-search"
+                    popoverTestId="inline-model-switcher-api-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={apiModelChoices}
                     value={config.model}
-                    onChange={(e) => onApiModelChange?.(e.target.value)}
-                  >
-                    {apiModelOptions.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
-                      </option>
-                    ))}
-                    {config.model &&
-                    !apiModelOptions.includes(config.model) ? (
-                      <option value={config.model}>
-                        {config.model} {t('inlineSwitcher.customSuffix')}
-                      </option>
-                    ) : null}
-                  </select>
+                    onChange={(nextValue) => onApiModelChange?.(nextValue)}
+                    additionalOptions={
+                      config.model && !apiModelOptions.includes(config.model)
+                        ? [
+                            {
+                              value: config.model,
+                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
                 ) : (
                   <span className="inline-switcher__hint">
                     {t('inlineSwitcher.openSettingsForModel')}

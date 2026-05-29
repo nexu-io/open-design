@@ -41,10 +41,14 @@ function makeSkill(overrides: Partial<SkillSummary>): SkillSummary {
 
 function renderSkillsSection(
   skills: SkillSummary[],
-  options?: { onSkillsRefresh?: () => void | Promise<void> },
+  options?: {
+    onSkillsRefresh?: () => void | Promise<void>;
+    onSkillsChanged?: (id?: string) => void;
+  },
 ) {
   const setCfg = vi.fn();
   const onSkillsRefresh = options?.onSkillsRefresh;
+  const onSkillsChanged = options?.onSkillsChanged;
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url === '/api/skills' && (!init || init.method === undefined)) {
@@ -74,6 +78,37 @@ function renderSkillsSection(
         headers: { 'content-type': 'application/json' },
       });
     }
+    if (url.startsWith('/api/skills/') && init?.method === 'PUT') {
+      const id = decodeURIComponent(url.split('/').pop() ?? '');
+      const payload = init.body
+        ? (JSON.parse(init.body as string) as { name?: string; description?: string; body?: string; triggers?: string[] })
+        : {};
+      const updated = makeSkill({
+        id,
+        name: payload.name ?? id,
+        description: payload.description ?? '',
+        triggers: payload.triggers ?? [],
+        source: 'user',
+      });
+      return new Response(JSON.stringify({ skill: updated }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.match(/^\/api\/skills\/[^/]+\/files$/) && (!init || init.method === undefined)) {
+      return new Response(JSON.stringify({ files: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.match(/^\/api\/skills\/[^/]+$/) && (!init || init.method === undefined)) {
+      const id = decodeURIComponent(url.split('/').pop() ?? '');
+      const summary = makeSkill({ id });
+      return new Response(JSON.stringify({ ...summary, body: '' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     return new Response(JSON.stringify({}), { status: 404 });
   }) as typeof fetch;
 
@@ -82,9 +117,15 @@ function renderSkillsSection(
       cfg={TEST_CONFIG}
       setCfg={setCfg}
       onSkillsRefresh={onSkillsRefresh}
+      onSkillsChanged={onSkillsChanged}
     />,
   );
-  return { fetchMock: globalThis.fetch as ReturnType<typeof vi.fn>, setCfg, onSkillsRefresh };
+  return {
+    fetchMock: globalThis.fetch as ReturnType<typeof vi.fn>,
+    setCfg,
+    onSkillsRefresh,
+    onSkillsChanged,
+  };
 }
 
 describe('SkillsSection', () => {
@@ -199,5 +240,60 @@ describe('SkillsSection', () => {
           url.toString() === '/api/skills/import' && init?.method === 'POST',
       ),
     ).toBe(true);
+  });
+
+  // Regression for the mrcfps follow-up on PR #2190: when a user edits
+  // only the body of a skill (no name/description/trigger changes), the
+  // SkillSummary fields ProjectView hashes do not move and the
+  // signature-driven eviction misses the change. SkillsSection must
+  // notify the App shell so the preview keep-alive pool can drop any
+  // entry whose project uses this skill.
+  it('notifies onSkillsChanged after a body-only edit', async () => {
+    const onSkillsChanged = vi.fn();
+    renderSkillsSection(
+      [
+        makeSkill({
+          id: 'user-skill',
+          name: 'User skill',
+          description: 'Original description',
+          triggers: ['ping'],
+          source: 'user',
+        }),
+      ],
+      { onSkillsChanged },
+    );
+
+    const row = await screen.findByTestId('skill-row-user-skill');
+    fireEvent.click(within(row).getByTestId('skills-edit'));
+    const form = await within(row).findByTestId('skills-edit-form');
+    const bodyField = within(form).getAllByRole('textbox').at(-1) as HTMLTextAreaElement;
+    fireEvent.change(bodyField, { target: { value: 'A fresh body that did not exist before.' } });
+    fireEvent.click(within(form).getByTestId('skills-save'));
+
+    await waitFor(() => {
+      expect(onSkillsChanged).toHaveBeenCalledWith('user-skill');
+    });
+  });
+
+  it('notifies onSkillsChanged after a delete', async () => {
+    const onSkillsChanged = vi.fn();
+    renderSkillsSection(
+      [
+        makeSkill({
+          id: 'user-skill',
+          name: 'User skill',
+          source: 'user',
+        }),
+      ],
+      { onSkillsChanged },
+    );
+
+    const row = await screen.findByTestId('skill-row-user-skill');
+    fireEvent.click(within(row).getByTestId('skills-delete'));
+    fireEvent.click(within(row).getByTestId('skills-delete-confirm'));
+
+    await waitFor(() => {
+      expect(onSkillsChanged).toHaveBeenCalledWith('user-skill');
+    });
   });
 });

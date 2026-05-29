@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Alias wrapper for opencode-cli — the primary bin name OD resolves for
+# the opencode RuntimeAgentDef (bin: 'opencode-cli', fallbackBins: ['opencode']).
+# Delegates to the same mock as mocks/bin/opencode.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec node "$HERE/../mock-agent.mjs" --as opencode "$@"

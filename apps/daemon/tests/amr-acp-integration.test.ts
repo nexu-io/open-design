@@ -15,6 +15,8 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -104,6 +106,8 @@ describe('AMR runtime def', () => {
     expect(normalizeVelaModelId('public_model_qwen3_235b_a22b')).toBe('qwen3-235b-a22b');
     expect(normalizeVelaModelId('deepseek-v3.2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('vela/deepseek-v3.2')).toBe('deepseek-v3.2');
+    expect(normalizeVelaModelId('deepseek-v3-2')).toBe('deepseek-v3.2');
+    expect(normalizeVelaModelId('vela/deepseek-v3-2')).toBe('deepseek-v3.2');
   });
 
   it('parses `vela models` output with fast chat defaults and plain canonical labels', () => {
@@ -148,6 +152,61 @@ describe('AMR runtime def', () => {
       { id: 'minimax-m2.7', label: 'minimax-m2.7' },
       { id: 'qwen3-235b-a22b', label: 'qwen3-235b-a22b' },
     ]);
+  });
+
+  it('retries transient `vela models` failures before succeeding', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-retry-'));
+    const stateFile = path.join(tempDir, 'retry-state.json');
+    const wrapperPath = path.join(tempDir, 'vela-wrapper');
+    const wrapperSource = `#!/usr/bin/env node
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const { spawn } = require('node:child_process');
+const stateFile = process.env.RETRY_STATE_FILE;
+const fakeVela = process.env.FAKE_VELA_PATH;
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  const state = stateFile && existsSync(stateFile)
+    ? JSON.parse(readFileSync(stateFile, 'utf8'))
+    : { attempts: 0 };
+  state.attempts += 1;
+  if (stateFile) writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+  if (state.attempts < 3) {
+    process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+    process.exit(1);
+  }
+}
+const child = spawn(process.execPath, [fakeVela, ...args], {
+  stdio: ['ignore', 'pipe', 'pipe'],
+  env: process.env,
+});
+let stdout = '';
+let stderr = '';
+child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+child.on('exit', (code) => {
+  if (stdout) process.stdout.write(stdout);
+  if (stderr) process.stderr.write(stderr);
+  process.exit(code ?? 0);
+});
+`;
+    writeFileSync(wrapperPath, wrapperSource, 'utf8');
+    chmodSync(wrapperPath, 0o755);
+    try {
+      const models = await amrAgentDef.fetchModels?.(
+        wrapperPath,
+        {
+          ...process.env,
+          FAKE_VELA_PATH: FAKE_VELA,
+          RETRY_STATE_FILE: stateFile,
+        },
+      );
+      expect(models?.[0]?.id).toBe('deepseek-v4-flash');
+      expect(existsSync(stateFile)).toBe(true);
+      const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
+      expect(attempts.attempts).toBe(3);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 

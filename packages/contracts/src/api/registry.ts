@@ -32,6 +32,14 @@ export interface AgentInfo {
     | 'claude-mcp-json'
     | 'acp-merge'
     | 'opencode-env-content';
+  /**
+   * When `false`, the Settings model picker hides the "Custom (fill below)"
+   * option and the free-text input. Use this for agents whose CLI doesn't
+   * accept a model id (e.g. Antigravity `agy` has no `--model` flag yet —
+   * upstream issue #35) or rejects free-form ids (AMR validates against the
+   * live Vela catalog). Undefined === allow, matching the historical UX.
+   */
+  supportsCustomModel?: boolean;
 }
 
 export interface AgentsResponse {

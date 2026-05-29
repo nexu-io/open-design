@@ -58,14 +58,20 @@
   .nav{position:sticky;top:0;z-index:50;background:rgba(239,231,210,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line-soft)}
   .nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px}
   .brand{display:flex;align-items:center;gap:10px;font:600 14px/1 var(--sans);letter-spacing:-.01em}
-  .brand-mark{width:22px;height:22px;border-radius:50%;background:var(--ink);display:grid;place-items:center;color:var(--bone);font:700 11px/1 var(--sans)}
-  .brand .sep{color:var(--ink-faint);margin:0 6px;font-weight:400}
-  .brand .crumb{color:var(--ink-mute);font-weight:500}
-  .nav-links{display:flex;gap:28px;align-items:center;font:500 13.5px/1 var(--sans)}
+  .brand-mark{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center}
+  .brand-mark img{width:100%;height:100%;display:block;object-fit:contain;border-radius:6px}
+  .nav-links{display:flex;gap:18px;align-items:center;font:500 13.5px/1 var(--sans)}
   .nav-links a{color:var(--ink-soft);transition:color .15s}
   .nav-links a:hover{color:var(--coral)}
   .nav-links .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--ink);color:var(--bone)}
   .nav-links .pill:hover{background:var(--coral);color:var(--bone)}
+  /* Icon-only chrome buttons mirror the main landing-page nav: surface
+     GitHub + X alongside the prominent Discord pill without burning a
+     text-nav slot. Pattern lifted from PR #3230. */
+  .nav-links .nav-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid rgba(21,20,15,.18);background:transparent;color:var(--ink);transition:background .15s,border-color .15s,color .15s;flex-shrink:0}
+  .nav-links .nav-icon:hover{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .nav-links .nav-icon svg{display:block}
+  .nav-sep{width:1px;height:20px;background:var(--line);display:inline-block}
 
   /* --------- hero ---------- */
   .hero{position:relative;padding:90px 0 110px;overflow:hidden}
@@ -73,7 +79,8 @@
   .hero-copy .kicker{margin-bottom:28px}
   .hero h1{font-size:clamp(56px, 7.2vw, 104px);margin:14px 0 32px}
   .hero .lead{font-size:21px;max-width:46ch;margin-bottom:40px}
-  .hero-cta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .hero-cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .hero-cta .btn{padding:13px 20px;font-size:13.5px;white-space:nowrap}
   .hero-meta{margin-top:54px;display:flex;gap:48px;border-top:1px solid var(--line-soft);padding-top:28px}
   .hero-meta .item{display:flex;flex-direction:column;gap:4px}
   .hero-meta .item .v{font:500 28px/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:var(--ink)}
@@ -223,9 +230,49 @@
   .amb-side .amb-apply:hover{transform:translateY(-2px)}
   .amb-side p{font:400 15px/1.55 var(--body);color:var(--ink-mute);max-width:38ch;margin:0}
 
+  /* --------- showcase / plugin-everything ---------- */
+  .showcase{background:linear-gradient(180deg, var(--bone) 0%, var(--paper) 100%);position:relative;overflow:hidden}
+  .showcase::before{content:"";position:absolute;left:-220px;top:120px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle, rgba(233,185,74,.18) 0%, transparent 70%);pointer-events:none}
+  .showcase::after{content:"";position:absolute;right:-180px;bottom:-100px;width:480px;height:480px;border-radius:50%;background:radial-gradient(circle, rgba(237,111,92,.16) 0%, transparent 70%);pointer-events:none}
+  .showcase .wrap{position:relative;z-index:1}
+  .showcase .section-head h2{max-width:24ch}
+  .showcase-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:64px;align-items:stretch}
+  .showcase-tenets{display:flex;flex-direction:column;gap:36px}
+  .showcase-tenet{display:grid;grid-template-columns:46px 1fr;gap:20px;align-items:start}
+  .showcase-tenet .ord{font:500 14px/1 var(--mono);letter-spacing:.18em;color:var(--coral);padding-top:6px}
+  .showcase-tenet h3{font:500 26px/1.15 var(--serif);letter-spacing:-.005em;margin-bottom:10px;color:var(--ink)}
+  .showcase-tenet h3 em{color:var(--coral);font-style:italic}
+  .showcase-tenet p{font:400 15.5px/1.6 var(--body);color:var(--ink-mute);max-width:46ch}
+  .contrib-card{background:var(--bone);border:1px solid var(--line);border-radius:18px;padding:36px 34px 32px;display:flex;flex-direction:column;justify-content:space-between;gap:24px;box-shadow:var(--shadow-card);position:relative;overflow:hidden}
+  .contrib-card .pane-kicker{font:500 11.5px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .contrib-card .pane-kicker .dot{display:inline-block;width:6px;height:6px;border-radius:50%}
+  .contrib-card h3{font:500 28px/1.15 var(--serif);letter-spacing:-.005em;color:var(--ink)}
+  .contrib-card h3 em{color:var(--coral);font-style:italic}
+  .contrib-card .pane-lede{font:400 14.5px/1.55 var(--body);color:var(--ink-mute);margin-top:8px;max-width:42ch}
+  .contrib-card::before{content:"";position:absolute;left:-60px;bottom:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle, rgba(237,111,92,.14) 0%, transparent 70%);pointer-events:none}
+  .contrib-card > *{position:relative;z-index:1}
+  .contrib-card .pane-kicker{color:var(--coral)}
+  .contrib-card .pane-kicker .dot{background:var(--coral)}
+  .contrib-steps{display:flex;flex-direction:column;gap:14px;margin:4px 0 0;padding:22px 0 4px;border-top:1px solid var(--line-soft)}
+  .contrib-step{display:grid;grid-template-columns:28px 1fr;gap:14px;align-items:start}
+  .contrib-step .n{font:500 11.5px/1 var(--mono);color:var(--coral);letter-spacing:.16em;padding-top:5px}
+  .contrib-step h4{font:500 15.5px/1.3 var(--sans);color:var(--ink);margin-bottom:4px;letter-spacing:-.005em}
+  .contrib-step p{font:400 13.5px/1.5 var(--body);color:var(--ink-mute)}
+  .contrib-step code{font:500 12.5px/1.4 var(--mono);background:var(--paper);border:1px solid var(--line-soft);border-radius:5px;padding:2px 7px;color:var(--ink);letter-spacing:-.005em}
+  .contrib-install{display:grid;grid-template-columns:1fr auto;gap:0;border:1px solid var(--ink);border-radius:10px;overflow:hidden;background:var(--ink);color:var(--paper);font:500 13px/1.4 var(--mono);letter-spacing:-.005em}
+  .contrib-install .cmd{padding:14px 16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--paper);user-select:all}
+  .contrib-install .cmd::before{content:"$ ";color:var(--coral);user-select:none}
+  .contrib-install button{appearance:none;border:0;border-left:1px solid rgba(247,241,222,.16);background:transparent;color:var(--paper);padding:0 18px;font:500 11.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;cursor:pointer;transition:background .15s,color .15s;min-width:90px}
+  .contrib-install button:hover{background:var(--coral);color:var(--ink)}
+  .contrib-install button.is-copied{background:var(--olive);color:var(--bone)}
+  .contrib-tail{font:400 12.5px/1.55 var(--body);color:var(--ink-faint)}
+  .contrib-tail a{color:var(--coral);border-bottom:1px solid transparent;transition:border-color .15s}
+  .contrib-tail a:hover{border-color:var(--coral)}
+
   /* --------- discord cta ---------- */
   .discord{padding:120px 0}
-  .discord-card{background:var(--coral);color:var(--ink);border-radius:24px;padding:88px 72px;display:grid;grid-template-columns:1.4fr .8fr;gap:64px;align-items:center;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  .discord .wrap{max-width:1440px;padding:0 32px}
+  .discord-card{background:var(--coral);color:var(--ink);border-radius:24px;padding:72px 64px;display:grid;grid-template-columns:1fr 1.05fr;gap:56px;align-items:center;position:relative;overflow:hidden;box-shadow:var(--shadow)}
   .discord-card::after{content:"";position:absolute;top:-80px;right:-100px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle, rgba(247,241,222,.32) 0%, transparent 70%);pointer-events:none}
   .discord-card .kicker{color:var(--ink-soft)}
   .discord-card .kicker .dot{background:var(--ink)}
@@ -236,25 +283,41 @@
   .discord-card .btn-primary:hover{background:var(--bone);color:var(--ink)}
   .discord-card .btn-ghost{border-color:var(--ink);color:var(--ink)}
   .discord-card .btn-ghost:hover{background:var(--ink);color:var(--coral)}
-  .discord-side{position:relative;z-index:2}
-  .discord-side .pop{font:500 12px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:22px}
+  .discord-side{position:relative;z-index:2;display:flex;flex-direction:column;gap:18px}
   .discord-side .stack{background:var(--ink);color:var(--bone);border-radius:14px;padding:22px}
   .discord-side .stack .row-d{display:flex;align-items:center;gap:14px;padding:8px 0;font:500 13.5px/1 var(--sans)}
   .discord-side .stack .row-d .dot-g{width:8px;height:8px;border-radius:50%;background:var(--coral)}
   .discord-side .stack .row-d .h{font:400 11px/1 var(--mono);color:var(--ink-faint);margin-left:auto;text-transform:uppercase;letter-spacing:.12em}
+  .mod-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .moderator-card{background:var(--ink);color:var(--bone);border-radius:14px;padding:22px 20px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+  .moderator-card .mod-avatar{width:64px;height:64px;border-radius:50%;overflow:hidden;border:2px solid var(--coral);background:var(--paper-dark);flex-shrink:0}
+  .moderator-card .mod-avatar img{width:100%;height:100%;object-fit:cover}
+  .moderator-card .mod-role{font:600 10px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--coral)}
+  .moderator-card .mod-name{font:500 22px/1.1 var(--serif);letter-spacing:-.005em;color:var(--bone);margin:0}
+  .moderator-card .mod-bio{font:400 12.5px/1.55 var(--body);color:rgba(247,241,222,.78);margin:0}
 
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 
   /* --------- footer ---------- */
-  .foot{padding:56px 0 64px;border-top:1px solid var(--line-soft);font:400 13px/1.5 var(--body);color:var(--ink-mute)}
-  .foot-inner{display:flex;justify-content:space-between;flex-wrap:wrap;gap:24px}
+  .foot{padding:72px 0 56px;border-top:1px solid var(--line-soft);font:400 13px/1.5 var(--body);color:var(--ink-mute)}
   .foot a:hover{color:var(--coral)}
-  .foot .l{display:flex;gap:24px}
+  .foot-cols{display:grid;grid-template-columns:1.6fr repeat(3, 1fr);gap:48px;margin-bottom:48px}
+  .foot-brand{display:flex;flex-direction:column;gap:16px}
+  .foot-brand .brand{font:600 14px/1 var(--sans);letter-spacing:-.01em;color:var(--ink);display:flex;align-items:center;gap:10px}
+  .foot-brand .brand-mark{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center}
+  .foot-brand .brand-mark img{width:100%;height:100%;display:block;object-fit:contain;border-radius:5px}
+  .foot-summary{font:400 13px/1.55 var(--body);color:var(--ink-mute);max-width:36ch}
+  .foot-col h5{font:600 11.5px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--ink);margin-bottom:18px}
+  .foot-col ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+  .foot-col a{color:var(--ink-mute);transition:color .15s}
+  .foot-bottom{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;padding-top:28px;border-top:1px solid var(--line-soft);font-size:12.5px}
+  .foot-bottom .l{display:flex;gap:18px;flex-wrap:wrap}
 
   /* --------- responsive softening (desktop-first per brief) ---------- */
   @media (max-width:1100px){
     .wrap{padding:0 32px}
     .hero-grid,.signal-grid,.discord-card{grid-template-columns:1fr;gap:48px}
+    .discord .wrap{padding:0 24px}
     .steps,.maintainers-grid{grid-template-columns:repeat(2,1fr);row-gap:56px}
     .step:nth-child(2){border-right:0}
     .section-head{grid-template-columns:1fr}
@@ -264,6 +327,10 @@
     .amb-col:last-child{border-bottom:0}
     .amb-more-grid{grid-template-columns:1fr;gap:32px}
     .amb-side{align-items:flex-start;text-align:left}
+    .showcase-grid{grid-template-columns:1fr;gap:48px}
+    .foot-cols{grid-template-columns:1fr 1fr;gap:36px}
+    .foot-brand{grid-column:1 / -1}
+    .nav-links a:not(.pill):not(.nav-icon),.nav-sep{display:none}
   }
   @media (max-width:640px){
     .wrap{padding:0 20px}
@@ -279,6 +346,9 @@
     .leaderboard-head,.row{grid-template-columns:32px 1fr auto}
     .leaderboard-head span:nth-child(3),.leaderboard-head span:nth-child(4),.row .v:not(.coral),.row .arr{display:none}
     .amb-col{padding:32px 24px 36px}
+    .foot-cols{grid-template-columns:1fr;gap:32px}
+    .foot-bottom{flex-direction:column;align-items:flex-start;gap:12px}
+    .mod-row{grid-template-columns:1fr}
   }
 
   /* loading skeletons */
@@ -292,16 +362,20 @@
 <nav class="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="https://open-design.ai/">
-      <span class="brand-mark">O</span>
+      <span class="brand-mark"><img src="/logo.webp" alt="Open Design" width="32" height="32" /></span>
       Open Design
-      <span class="sep">/</span>
-      <span class="crumb">Contributors</span>
     </a>
     <div class="nav-links">
+      <a href="#maintainers">Contributors</a>
       <a href="#ambassadors">Ambassadors</a>
-      <a href="https://github.com/nexu-io/open-design">GitHub</a>
-      <a href="https://open-design.ai/skills">Skills</a>
-      <a href="https://open-design.ai/design-systems">Design systems</a>
+      <a href="#showcase">Showcase</a>
+      <span class="nav-sep" aria-hidden="true"></span>
+      <a class="nav-icon" href="https://github.com/nexu-io/open-design" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.8 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2.9-.3 2-.4 3-.4s2.1.1 3 .4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.5-1.5 7.8-5.8 7.8-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+      </a>
+      <a class="nav-icon" href="https://x.com/nexudotio" target="_blank" rel="noopener" aria-label="Follow Open Design on X" title="X / Twitter">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M17.53 3H21l-7.39 8.45L22 21h-6.83l-5.36-6.99L3.7 21H.23l7.9-9.04L0 3h7l4.85 6.41L17.53 3Zm-2.39 16h2.04L5.96 4.9H3.78L15.14 19Z"/></svg>
+      </a>
       <a class="pill" href="#discord">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19.27 5.33A18 18 0 0 0 14.72 4l-.2.4a13.7 13.7 0 0 0-5.04 0L9.27 4a18 18 0 0 0-4.54 1.33C2.4 8.94 1.78 12.45 2.09 15.9a18.4 18.4 0 0 0 5.6 2.83l1.13-1.55a11.6 11.6 0 0 1-1.78-.86l.44-.34a13 13 0 0 0 11.04 0l.44.34c-.55.33-1.16.61-1.78.86l1.13 1.55a18.3 18.3 0 0 0 5.6-2.83c.45-4.05-.5-7.53-2.64-10.57ZM9.5 14.07c-1.07 0-1.95-.99-1.95-2.21 0-1.22.86-2.22 1.95-2.22 1.1 0 1.97 1 1.95 2.22 0 1.22-.86 2.21-1.95 2.21Zm5 0c-1.07 0-1.95-.99-1.95-2.21 0-1.22.87-2.22 1.96-2.22 1.1 0 1.96 1 1.95 2.22 0 1.22-.86 2.21-1.96 2.21Z"/></svg>
         Join Discord
@@ -317,17 +391,11 @@
     <div class="hero-copy">
       <span class="kicker"><span class="dot"></span>Contributors · <span class="num">2026 cycle</span></span>
       <h1 class="h-display">Open design <em>takes shape</em><br/>when you ship it.</h1>
-      <p class="lead">Open Design is built by people, in public. Skills, DESIGN.md systems, plugins, docs — every commit is a brushstroke. Pick an issue, send a PR, and earn a one-of-one honor card the moment you're merged.</p>
+      <p class="lead">Open Design is built by people, in public. Skills, DESIGN.md systems, plugins, docs: every commit is a brushstroke. Pick an issue, send a PR, and earn a one-of-one honor card the moment you're merged.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="#issues">
-          Pick a first issue
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </a>
-        <a class="btn btn-ghost" href="#how">How contributing works</a>
-        <a class="btn btn-coral" href="#discord">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.27 5.33A18 18 0 0 0 14.72 4l-.2.4a13.7 13.7 0 0 0-5.04 0L9.27 4a18 18 0 0 0-4.54 1.33C2.4 8.94 1.78 12.45 2.09 15.9a18.4 18.4 0 0 0 5.6 2.83l1.13-1.55a11.6 11.6 0 0 1-1.78-.86l.44-.34a13 13 0 0 0 11.04 0l.44.34c-.55.33-1.16.61-1.78.86l1.13 1.55a18.3 18.3 0 0 0 5.6-2.83c.45-4.05-.5-7.53-2.64-10.57Z"/></svg>
-          Join the Discord
-        </a>
+        <a class="btn btn-primary" href="#showcase">Stage your masterpieces</a>
+        <a class="btn btn-ghost" href="#ambassadors">Become an ambassador</a>
+        <a class="btn btn-ghost" href="#maintainers">Contributors hall of fame</a>
       </div>
     </div>
     <div class="hero-card">
@@ -342,6 +410,87 @@
     </div>
   </div>
 </section>
+<!-- ============ SHOWCASE — PLUGIN EVERYTHING ============ -->
+<section class="section showcase" id="showcase">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <span class="kicker"><span class="dot"></span>Plugin everything</span>
+        <h2 class="h-display">Open Design as a stage. <em>Your work</em> as the show.</h2>
+      </div>
+      <p class="right">The atelier is also a gallery. Helping you make the work is half the address; making sure the room comes to look is the other. Every piece you ship lands not in a vault but on a wall, where the world can find it.</p>
+    </div>
+
+    <div class="showcase-grid">
+      <div class="showcase-tenets">
+        <div class="showcase-tenet">
+          <div class="ord">I</div>
+          <div>
+            <h3>Anything <em>can be a plugin</em>.</h3>
+            <p>Whatever the studio yields (content, a finished product, a template, a Skill, a workflow) can be folded back into a plugin. The registry accepts any shape; the door keeps no gatekeeper.</p>
+          </div>
+        </div>
+        <div class="showcase-tenet">
+          <div class="ord">II</div>
+          <div>
+            <h3>Your debut piece, your <em>induction</em>.</h3>
+            <p>The day your first piece lands in the registry, your name joins the wall. Not a visitor's badge. A permanent line on the contributor list, beside everyone who arrived before.</p>
+          </div>
+        </div>
+        <div class="showcase-tenet">
+          <div class="ord">III</div>
+          <div>
+            <h3>Once it's in, <em>it travels</em>.</h3>
+            <p>The registry at <a href="https://open-design.ai/plugins/" target="_blank" rel="noopener">open-design.ai/plugins</a> is only the threshold. From there the strongest pieces are carried outward: to X, to Discord's <span class="num">#showcase</span>, to the newsletter, to the video reels. Each handoff widens the room; the world meets your hand.</p>
+          </div>
+        </div>
+        <div class="showcase-tenet">
+          <div class="ord">IV</div>
+          <div>
+            <h3>Need a <em>first stroke</em>?</h3>
+            <p>Walk the <a href="https://open-design.ai/plugins/" target="_blank" rel="noopener">plugin registry</a>. The works hung there are kindling for your own. Borrow the spark, then make the piece only your hand could.</p>
+          </div>
+        </div>
+      </div>
+
+      <aside class="contrib-card" id="contribute">
+        <div>
+          <div class="pane-kicker"><span class="dot"></span>The skill</div>
+          <h3>Let the <em>agent</em> ship for you.</h3>
+          <p class="pane-lede">For makers who'd rather not touch the code. The whole contribution lives in a single skill, spoken in plain language. The brushwork falls to the agent.</p>
+        </div>
+        <div class="contrib-install" data-install="curl -sSL https://raw.githubusercontent.com/nexu-io/open-design/main/.claude/skills/od-contribute/install.sh | bash">
+          <span class="cmd">curl -sSL https://raw.githubusercontent.com/nexu-io/open-design/main/.claude/skills/od-contribute/install.sh | bash</span>
+          <button type="button" data-copy>Copy</button>
+        </div>
+        <div class="contrib-steps">
+          <div class="contrib-step">
+            <span class="n">01</span>
+            <div>
+              <h4>Hand the line to the agent</h4>
+              <p>Paste the command above into the agent within Open Design, or into whichever you already keep at hand: Claude Code, Codex, Cursor. It installs itself.</p>
+            </div>
+          </div>
+          <div class="contrib-step">
+            <span class="n">02</span>
+            <div>
+              <h4>Wake the skill</h4>
+              <p>Type <code>/od-contribute</code>, or simply tell the agent to run what you just installed. Either phrase opens the door.</p>
+            </div>
+          </div>
+          <div class="contrib-step">
+            <span class="n">03</span>
+            <div>
+              <h4>Half a minute to the gallery</h4>
+              <p>The agent walks the rest. Your piece is bound for the open-source repository in about thirty seconds; we review at first chance, and the moment it lands, the room meets your hand.</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
 <!-- ============ AMBASSADORS ============ -->
 <section class="section ambassadors" id="ambassadors">
   <div class="wrap">
@@ -349,7 +498,7 @@
       <div>
         <span class="kicker"><span class="dot"></span>Open Design Ambassadors</span>
         <h2 class="h-display">Be Open Design's <em>voice</em> in your city.</h2>
-        <p class="amb-tagline">Open a local atelier. Convene the meetups, the demos, the late-night critiques — the studio carries the work with budget, materials, and a line straight to the team.</p>
+        <p class="amb-tagline">Open a local atelier. Convene the meetups, the demos, the late-night critiques. We back you with budget, materials, and a private channel to the core team.</p>
       </div>
       <div class="right amb-side">
         <a class="btn btn-coral amb-apply" href="https://discord.gg/2p7Ajbxw3h" target="_blank" rel="noopener">
@@ -357,7 +506,7 @@
           Apply on Discord
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </a>
-        <p>Ambassadors turn Open Design from a repository into something contributors can meet — in a room, with ink on the table and coffee gone cold.</p>
+        <p>Ambassadors turn Open Design from a repository into something contributors can meet in a room, with ink on the table and coffee gone cold.</p>
       </div>
     </div>
 
@@ -365,38 +514,38 @@
       <div class="amb-col">
         <div class="n">I · Vocation</div>
         <h3>Painters of <em>the local scene</em>.</h3>
-        <p class="lede">Designers, developers, organizers — the kind who already gather others. We give the gathering a flag.</p>
+        <p class="lede">Designers, developers, organizers: the kind who already gather others. We give the gathering a flag.</p>
         <ul>
-          <li><span class="ic">·</span><span><b>Local Atelier Host</b> — you keep a recurring meetup, study group, or late-night hack alive.</span></li>
-          <li><span class="ic">·</span><span><b>Online community lead</b> — Discord, WeChat, Telegram, X spaces.</span></li>
-          <li><span class="ic">·</span><span><b>Practising contributor or evangelist</b> — already shipping work, posting craft, ushering newcomers.</span></li>
-          <li><span class="ic">·</span><span><b>Comfortable carrying the name</b> — bound to the Code of Conduct, mindful of the brand.</span></li>
+          <li><span class="ic">·</span><span><b>Local Atelier Host:</b> you keep a recurring meetup, study group, or late-night hack alive.</span></li>
+          <li><span class="ic">·</span><span><b>Online community lead:</b> Discord, WeChat, Telegram, X spaces.</span></li>
+          <li><span class="ic">·</span><span><b>Practising contributor or evangelist:</b> already shipping work, posting craft, ushering newcomers.</span></li>
+          <li><span class="ic">·</span><span><b>Comfortable carrying the name:</b> bound to the Code of Conduct, mindful of the brand.</span></li>
         </ul>
       </div>
 
       <div class="amb-col">
         <div class="n">II · Patronage</div>
         <h3>What the <em>atelier</em> extends.</h3>
-        <p class="lede">Not a volunteer badge. A working bond — with budget, standing, and access.</p>
+        <p class="lede">Not a volunteer badge. A working bond, with budget, standing, and access.</p>
         <ul>
-          <li><span class="ic">·</span><span><b>A page on the site</b> — portrait, city, biography, socials, the chronicle of your events.</span></li>
-          <li><span class="ic">·</span><span><b>First sight</b> — beta features, internal roadmap previews, releases ahead of the queue.</span></li>
-          <li><span class="ic">·</span><span><b>The atelier kit</b> — posters, slide decks, demo pieces, swag; a purse for venue, drinks, and photography.</span></li>
-          <li><span class="ic">·</span><span><b>A line to the studio</b> — private channel, monthly sync, a dedicated path for your feedback.</span></li>
-          <li><span class="ic">·</span><span><b>A way forward</b> — honor cards and tiers, with a path into regional lead, speaker, or paid community roles.</span></li>
+          <li><span class="ic">·</span><span><b>A page on the site:</b> portrait, city, biography, socials, the chronicle of your events.</span></li>
+          <li><span class="ic">·</span><span><b>First sight:</b> beta features, internal roadmap previews, releases ahead of the queue.</span></li>
+          <li><span class="ic">·</span><span><b>The atelier kit:</b> posters, slide decks, demo pieces, swag; a purse for venue, drinks, and photography.</span></li>
+          <li><span class="ic">·</span><span><b>A line to the studio:</b> private channel, monthly sync, a dedicated path for your feedback.</span></li>
+          <li><span class="ic">·</span><span><b>A way forward:</b> honor cards and tiers, with a path into regional lead, speaker, or paid community roles.</span></li>
         </ul>
       </div>
 
       <div class="amb-col">
         <div class="n">III · Covenant</div>
         <h3>The <em>discipline</em> of the studio.</h3>
-        <p class="lede">A modest commitment, but binding. Extended absence folds into alumni status — the circle stays small and serious.</p>
+        <p class="lede">A modest commitment, but binding. Extended absence folds into alumni status; the circle stays small and serious.</p>
         <ul>
-          <li><span class="ic">·</span><span><b>Convene</b> at least one event per month or quarter — local or online.</span></li>
-          <li><span class="ic">·</span><span><b>Welcome the new hand</b> — usher newcomers through their first contribution.</span></li>
-          <li><span class="ic">·</span><span><b>Listen close</b> — gather honest feedback from users, designers, developers, teams.</span></li>
-          <li><span class="ic">·</span><span><b>Leave a record</b> — publish a recap after every gathering: attendance, photographs, links, leads.</span></li>
-          <li><span class="ic">·</span><span><b>Carry the name well</b> — hold to the Code of Conduct; no misuse of the mark, no deals signed on the studio's behalf.</span></li>
+          <li><span class="ic">·</span><span><b>Convene</b> at least one event per month or quarter, local or online.</span></li>
+          <li><span class="ic">·</span><span><b>Welcome the new hand.</b> Usher newcomers through their first contribution.</span></li>
+          <li><span class="ic">·</span><span><b>Listen close.</b> Gather honest feedback from users, designers, developers, teams.</span></li>
+          <li><span class="ic">·</span><span><b>Leave a record.</b> Publish a recap after every gathering: attendance, photographs, links, leads.</span></li>
+          <li><span class="ic">·</span><span><b>Carry the name well.</b> Hold to the Code of Conduct; no misuse of the mark, no deals signed on the studio's behalf.</span></li>
         </ul>
       </div>
     </div>
@@ -405,7 +554,7 @@
 </section>
 
 <!-- ============ MAINTAINERS ============ -->
-<section class="section">
+<section class="section" id="maintainers">
   <div class="wrap">
     <div class="section-head">
       <div>
@@ -494,8 +643,8 @@
   <div class="wrap">
     <div class="section-head">
       <div>
-        <span class="kicker"><span class="dot"></span>Recent signal</span>
-        <h2 class="h-display">Ten contributors with <em>recent momentum</em>.</h2>
+        <span class="kicker"><span class="dot"></span>This week's signal</span>
+        <h2 class="h-display">Ten contributors leading <em>this week</em>.</h2>
       </div>
       <p class="right">A snapshot of sharp contributors landing PRs, improving the product, and making Open Design feel alive.</p>
     </div>
@@ -504,8 +653,8 @@
 
       <article class="signal-feature" id="feature-card">
         <div class="top">
-          <div class="rank"><span class="badge">01</span> A recent leader</div>
-          <div class="week">Snapshot</div>
+          <div class="rank"><span class="badge">01</span> This week's leader</div>
+          <div class="week">Last 7 days</div>
         </div>
         <div class="body">
           <div class="avatar"><img id="feat-avatar" src="" alt="" /></div>
@@ -516,7 +665,7 @@
         </div>
         <div class="feature-stats">
           <div class="item"><div class="v coral" id="feat-rank">#01</div><div class="l">Rank</div></div>
-          <div class="item"><div class="v" id="feat-prs">—</div><div class="l">Recent PRs</div></div>
+          <div class="item"><div class="v" id="feat-prs">—</div><div class="l">PRs · 7d</div></div>
         </div>
       </article>
 
@@ -548,7 +697,7 @@
         <span class="kicker"><span class="dot"></span>Pick your first contribution</span>
         <h2 class="h-display">Open issues, <em>tagged for you</em>.</h2>
       </div>
-      <p class="right">Live from <span class="num">label:&ldquo;good first issue&rdquo;</span> on the Open Design repo. Comment on an issue to claim it — a maintainer will assign it within a day.</p>
+      <p class="right">Live from <span class="num">label:&ldquo;good first issue&rdquo;</span> on the Open Design repo. Comment on an issue to claim it, and a maintainer will assign it within a day.</p>
     </div>
 
     <div class="issue-list" id="issue-list">
@@ -587,7 +736,7 @@
         <span class="kicker"><span class="dot"></span>Four steps · any skill level</span>
         <h2 class="h-display">From zero to <em>merged</em>, in an afternoon.</h2>
       </div>
-      <p class="right">Whether you're a designer, a writer, an engineer, or someone who just spotted a typo — there's a contribution shape for you. Here's the path.</p>
+      <p class="right">Whether you're a designer, a writer, an engineer, or someone who just spotted a typo, there's a contribution shape for you. Here's the path.</p>
     </div>
 
     <div class="steps">
@@ -595,13 +744,13 @@
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></div>
         <div class="n">Step 01</div>
         <h3>Find a <em>spark</em>.</h3>
-        <p>Browse the good-first-issues list above, or open a new issue describing something you'd improve. Designers — DESIGN.md systems are the easiest entry.</p>
+        <p>Browse the good-first-issues list above, or open a new issue describing something you'd improve. Designers: DESIGN.md systems are the easiest entry.</p>
       </div>
       <div class="step">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9zM14 4v5h5"/></svg></div>
         <div class="n">Step 02</div>
         <h3>Open a <em>draft</em> PR.</h3>
-        <p>Fork, branch, push. Mark it draft — it signals you want feedback early. Mention which issue it closes. The CI is fast; bot-cards stays on its own branch.</p>
+        <p>Fork, branch, push. Mark it draft. It signals you want feedback early. Mention which issue it closes. The CI is fast; bot-cards stays on its own branch.</p>
       </div>
       <div class="step">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
@@ -613,7 +762,7 @@
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12l2 2 4-4M3 6l2 2 4-4M3 18l2 2 4-4M13 6h8M13 12h8M13 18h8"/></svg></div>
         <div class="n">Step 04</div>
         <h3>Merge → <em>card</em>.</h3>
-        <p>The bot mints your honor card the moment you're merged and pushes it to the bot-cards branch. Share it on X with #openDesign — we repost the best ones.</p>
+        <p>The bot mints your honor card the moment you're merged and pushes it to the bot-cards branch. Share it on X with #OpenDesign, and we repost the best ones.</p>
       </div>
     </div>
 
@@ -622,7 +771,6 @@
         Read the contributing guide
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
-      <a class="btn btn-ghost" href="https://github.com/nexu-io/open-design/blob/main/CODE_OF_CONDUCT.md" style="color:var(--paper);border-color:rgba(247,241,222,.25)">Code of Conduct</a>
     </div>
   </div>
 </section>
@@ -634,7 +782,7 @@
       <div>
         <span class="kicker"><span class="dot"></span>Where contributors hang out</span>
         <h2>Talk to the people who'll <em>review your PR</em>.</h2>
-        <p>Our Discord is where contributors show shipped work, discuss plugins, join beta tests, and get help when a PR gets stuck. No fake activity counters — just the channels people can actually use.</p>
+        <p>The front line of the agent-design era opens here. Our Discord is where the world's sharpest AI-native designers gather: shipping work, opening plugins, breaking betas, pulling one another unstuck. Step in. Bring what you're making.</p>
         <div style="display:flex;gap:14px;flex-wrap:wrap">
           <a class="btn btn-primary" href="https://discord.gg/3C6EWXbdQQ">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.27 5.33A18 18 0 0 0 14.72 4l-.2.4a13.7 13.7 0 0 0-5.04 0L9.27 4a18 18 0 0 0-4.54 1.33C2.4 8.94 1.78 12.45 2.09 15.9a18.4 18.4 0 0 0 5.6 2.83l1.13-1.55a11.6 11.6 0 0 1-1.78-.86l.44-.34a13 13 0 0 0 11.04 0l.44.34c-.55.33-1.16.61-1.78.86l1.13 1.55a18.3 18.3 0 0 0 5.6-2.83c.45-4.05-.5-7.53-2.64-10.57Z"/></svg>
@@ -644,7 +792,24 @@
         </div>
       </div>
       <div class="discord-side">
-        <div class="pop">Community Discord</div>
+        <div class="mod-row">
+          <article class="moderator-card">
+            <div class="mod-avatar">
+              <img src="https://cdn.discordapp.com/avatars/1433334626641907803/659cec9ed75df0156957ff23e81e27f1.webp?size=2048" alt="Koki — Open Design core team" loading="lazy" />
+            </div>
+            <span class="mod-role">From the studio</span>
+            <h3 class="mod-name">Koki</h3>
+            <p class="mod-bio">From the Open Design founding team. Hopes the Discord stays a good place to be. Wave at any time, on any question.</p>
+          </article>
+          <article class="moderator-card">
+            <div class="mod-avatar">
+              <img src="https://cdn.discordapp.com/avatars/1174739309509759008/60d038042d7246391a6c982d6508892e.webp?size=2048" alt="Victor — Discord steward" loading="lazy" />
+            </div>
+            <span class="mod-role">Steward of the room</span>
+            <h3 class="mod-name">Victor</h3>
+            <p class="mod-bio">A practiced hand at Discord and community-tending. Keeps the room warm, the doors open, the conversation flowing. Passionate about Open Design.</p>
+          </article>
+        </div>
         <div class="stack">
           <div class="row-d"><span class="dot-g"></span>#showcase<span class="h">work shipped</span></div>
           <div class="row-d"><span class="dot-g"></span>#plugin<span class="h">builders</span></div>
@@ -658,13 +823,46 @@
 
 <!-- ============ FOOTER ============ -->
 <footer class="foot">
-  <div class="wrap foot-inner">
-    <span>© 2026 Open Design · MIT-licensed · Built by contributors, in public.</span>
-    <div class="l">
-      <a href="https://github.com/nexu-io/open-design">GitHub</a>
-      <a href="https://discord.gg/3C6EWXbdQQ">Discord</a>
-      <a href="https://x.com/nexu_io">X / Twitter</a>
-      <a href="https://open-design.ai/">open-design.ai</a>
+  <div class="wrap">
+    <div class="foot-cols">
+      <div class="foot-col foot-brand">
+        <a class="brand" href="https://open-design.ai/">
+          <span class="brand-mark"><img src="/logo.webp" alt="" width="22" height="22" /></span>
+          Open Design
+        </a>
+        <p class="foot-summary">The official open-source, local-first alternative to Claude Design. Apache-2.0, BYOK at every layer.</p>
+      </div>
+      <div class="foot-col">
+        <h5>Products</h5>
+        <ul>
+          <li><a href="https://open-design.ai/">Open Design</a></li>
+          <li><a href="https://open-design.ai/html-anything/">HTML Anything</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h5>Plugins</h5>
+        <ul>
+          <li><a href="https://open-design.ai/plugins/templates/">Templates</a></li>
+          <li><a href="https://open-design.ai/plugins/skills/">Skills</a></li>
+          <li><a href="https://open-design.ai/plugins/systems/">Systems</a></li>
+          <li><a href="https://open-design.ai/plugins/craft/">Craft</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h5>Community</h5>
+        <ul>
+          <li><a href="https://github.com/nexu-io/open-design" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://discord.gg/3C6EWXbdQQ" target="_blank" rel="noopener">Discord</a></li>
+          <li><a href="https://x.com/nexudotio" target="_blank" rel="noopener">X / Twitter</a></li>
+          <li><a href="https://open-design.ai/blog/">Blog</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Open Design · Apache-2.0 · Built by contributors, in public.</span>
+      <div class="l">
+        <a href="https://open-design.ai/">open-design.ai</a>
+      </div>
     </div>
   </div>
 </footer>
@@ -778,8 +976,8 @@ async function loadWeeklyTop(){
   document.getElementById('feat-avatar').src = f.avatar;
   document.getElementById('feat-avatar').alt = f.login;
   setText('feat-name', f.login);
-  setText('feat-handle', '@' + f.login + ' · recent contribution');
-  setText('feat-blurb', `${f.login} has set the pace with ${f.prs} merged PR${f.prs === 1 ? '' : 's'} and the kind of steady craft that keeps Open Design moving.`);
+  setText('feat-handle', '@' + f.login + ' · leading this week');
+  setText('feat-blurb', `${f.login} is setting the pace this week with ${f.prs} merged PR${f.prs === 1 ? '' : 's'} and the kind of steady craft that keeps Open Design moving.`);
   setText('feat-prs-list', exampleCopy(f));
   setText('feat-rank', '#01');
   setText('feat-prs', f.prs);
@@ -867,8 +1065,24 @@ async function loadMaintainers(){
 function setText(id, v){ const el = document.getElementById(id); if (el && v != null) el.textContent = v; }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+/* --------- copy-to-clipboard for the install command --------- */
+function wireCopyButtons(){
+  document.querySelectorAll('[data-install] [data-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const cmd = btn.parentElement.getAttribute('data-install') || '';
+      try { await navigator.clipboard.writeText(cmd); }
+      catch { /* very old browsers — let the user select the text manually */ return; }
+      const original = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.classList.add('is-copied');
+      setTimeout(() => { btn.textContent = original; btn.classList.remove('is-copied'); }, 1600);
+    });
+  });
+}
+
 /* --------- boot --------- */
 (async function(){
+  wireCopyButtons();
   await Promise.all([ loadWeeklyTop(), loadAllTimeTop(), loadGoodFirstIssues(), loadMaintainers() ]);
 })();
 </script>

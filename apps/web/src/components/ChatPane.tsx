@@ -281,6 +281,12 @@ interface Props {
   onOpenSettings?: (section?: SettingsSection) => void;
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
+  // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
+  // so the auth banner offers a "Sign in via terminal" button that
+  // POSTs to /api/agents/antigravity/oauth-launch. Handler resolves
+  // after the daemon kicks off `osascript`/`x-terminal-emulator`/
+  // `cmd /c start` so the UI can disable the button while in flight.
+  onLaunchAntigravityOauth?: () => Promise<void>;
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
   onOpenMcpSettings?: () => void;
@@ -377,6 +383,7 @@ export function ChatPane({
   onOpenSettings,
   onOpenAmrSettings,
   onSwitchToAmrAndRetry,
+  onLaunchAntigravityOauth,
   onOpenMcpSettings,
   connectRepoNeeded,
   githubConnected,
@@ -1191,6 +1198,26 @@ export function ChatPane({
                           }}
                         >
                           {t('chat.amrError.authorizeCta')}
+                        </button>
+                      ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
+                        <button
+                          type="button"
+                          className="chat-error-action"
+                          onClick={() => {
+                            onLaunchAntigravityOauth?.();
+                          }}
+                        >
+                          {t('chat.antigravityError.launchTerminalCta')}
+                        </button>
+                      ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
+                        <button
+                          type="button"
+                          className="chat-error-action"
+                          onClick={() => {
+                            onLaunchAntigravityOauth?.();
+                          }}
+                        >
+                          {t('chat.antigravityError.launchSwitchModelCta')}
                         </button>
                       ) : runFailureUi.primaryAction === 'recharge' ? (
                         <button

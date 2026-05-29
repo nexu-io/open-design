@@ -18,7 +18,44 @@ export type RuntimeBuildOptions = {
 
 export type RuntimeContext = {
   cwd?: string;
+  // True when the current chat run has at least one prior persisted
+  // assistant message in the same conversation — i.e. this isn't the
+  // first user turn. Plain-streaming adapters that support a "continue
+  // the most recent conversation" CLI flag (e.g. `agy -c`) read this to
+  // decide whether to resume the upstream agent's own session state
+  // instead of spawning a fresh, context-free turn. Adapters that
+  // either have no resume flag or recompose history into the prompt
+  // themselves ignore this field.
+  hasPriorAssistantTurn?: boolean;
+  // Daemon-owned path to a temp file where the adapter should write
+  // its diagnostic log. Today only antigravity consumes this: agy in
+  // print mode is silent on stdout/stderr for both missing-auth AND
+  // quota-exhausted failures (verified via `agy --log-file` capture
+  // during PR #3157), so post-exit log inspection is the only way to
+  // tell them apart. Adapters that don't have a `--log-file` flag
+  // ignore this field; the daemon cleans the file up after reading.
+  agentLogFilePath?: string;
+  // Override for the antigravity model-selection settings file path.
+  // Production code leaves this undefined (falls back to the default
+  // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
+  // so unit assertions against buildArgs do not touch the real home dir.
+  antigravitySettingsPath?: string;
 };
+
+// Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
+// its own multi-turn conversation memory and the daemon should NOT also
+// pack the rendered web transcript (the `## user` / `## assistant` blocks
+// `buildDaemonTranscript` produces) into the user request. Today only
+// `agy -c` qualifies; other plain-stream adapters have no upstream
+// session storage and still rely on the daemon-side transcript injection
+// for multi-turn coherence.
+//
+// Without this opt-out, agy with `-c` receives the same prior turn
+// twice — once from its own conversation memory, once embedded in the
+// composed user request — and the embedded copy includes the literal
+// `<question-form>` markup it emitted on turn 1. The model then
+// pattern-matches that and re-emits the form on turn 2, looking like
+// the discovery loop never breaks.
 
 export type RuntimeCapabilityMap = Record<string, boolean>;
 
@@ -101,6 +138,21 @@ export type RuntimeAgentDef = {
     | 'opencode-env-content';
   installUrl?: string;
   docsUrl?: string;
+  // When `false`, the Settings model picker hides the "Custom (fill below)"
+  // option and the associated free-text input. Use this for agents whose
+  // CLI does not actually accept a model id (e.g. `agy` v1.0.3 has no
+  // `--model` flag yet — upstream issue #35 — and the model is chosen
+  // server-side; AMR routes model selection through ACP's
+  // `session/set_model` and rejects free-form ids). Defaults to allowing
+  // custom input (undefined === true) so most adapters keep today's UX.
+  supportsCustomModel?: boolean;
+  // When `true`, the daemon trusts this adapter's CLI to carry its own
+  // multi-turn conversation memory across spawn invocations (today only
+  // `agy -c`). The chat composer skips the rendered web transcript on
+  // follow-up turns and sends just the latest user message — see the
+  // RuntimeContext.hasPriorAssistantTurn comment for why double-context
+  // is the discovery-form loop's root cause.
+  resumesSessionViaCli?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
   // null or the synthetic 'default'. Used by adapters whose CLI rejects

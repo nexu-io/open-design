@@ -283,6 +283,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
+    const [petMenuOpen, setPetMenuOpen] = useState(false);
+    const petWrapRef = useRef<HTMLDivElement | null>(null);
+    const [petMenuStyle, setPetMenuStyle] = useState<React.CSSProperties>({});
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // initialDraft is only honored on the first non-empty value the parent
     // hands us. After we seed once, the composer is fully under user control
@@ -325,6 +328,53 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         document.removeEventListener('keydown', onKey);
       };
     }, [toolsOpen]);
+
+    useEffect(() => {
+      if (!petMenuOpen) return;
+      function onPointer(e: MouseEvent) {
+        const target = e.target as Node;
+        if (petWrapRef.current?.contains(target)) return;
+        setPetMenuOpen(false);
+      }
+      function onKey(e: KeyboardEvent) {
+        if (e.key === 'Escape') setPetMenuOpen(false);
+      }
+      document.addEventListener('mousedown', onPointer);
+      document.addEventListener('keydown', onKey);
+      return () => {
+        document.removeEventListener('mousedown', onPointer);
+        document.removeEventListener('keydown', onKey);
+      };
+    }, [petMenuOpen]);
+
+    // Viewport-aware pet menu positioning — flips the popover to stay
+    // within screen bounds instead of clipping at the edge.
+    useEffect(() => {
+      if (!petMenuOpen) return;
+      const wrap = petWrapRef.current;
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const menuW = 260;
+      const menuH = 200;
+      const gap = 6;
+      const viewW = window.innerWidth;
+      const viewH = window.innerHeight;
+      // Prefer opening upward (bottom of menu above the button).
+      // Flip downward when there isn't enough room above.
+      // When neither direction fits, clamp to viewport bounds.
+      let top: number;
+      if (rect.top >= menuH + gap) {
+        top = rect.top - menuH - gap;
+      } else if (rect.bottom + menuH + gap <= viewH) {
+        top = rect.bottom + gap;
+      } else {
+        top = Math.max(gap, viewH - menuH - gap);
+      }
+      // Right-align by default (menu right edge ≈ button right edge).
+      // Shift left when the menu would spill past the viewport left edge.
+      const left = Math.max(8, Math.min(viewW - menuW - 8, rect.right - menuW));
+      setPetMenuStyle({ position: 'fixed', top, left });
+    }, [petMenuOpen]);
 
     // Lazy-fetch the user's external MCP servers list once on mount so the
     // `/mcp …` slash palette and the composer's MCP button popover have
@@ -837,19 +887,50 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    async function uploadClipboardImagesFromAsyncClipboard() {
+      if (!navigator.clipboard?.read) return false;
+      try {
+        const items = await navigator.clipboard.read();
+        const files: File[] = [];
+        const stamp = Date.now();
+        for (const item of items) {
+          const imageType = item.types.find((type) => type.startsWith('image/'));
+          if (!imageType) continue;
+          const blob = await item.getType(imageType);
+          const extension = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+          files.push(new File([blob], `clipboard-screenshot-${stamp}.${extension}`, { type: imageType }));
+        }
+        if (files.length === 0) return false;
+        await uploadFiles(files);
+        return true;
+      } catch (err) {
+        console.warn('Could not read image from clipboard', err);
+        return false;
+      }
+    }
+
     useEffect(() => {
       function onAnnotation(e: Event) {
         const detail = (e as CustomEvent<AnnotationEventDetail>).detail;
         if (!detail) return;
         void (async () => {
+          let acked = false;
+          const ack = (result: { ok: boolean; message?: string }) => {
+            if (acked) return;
+            acked = true;
+            detail.ack?.(result);
+          };
           let uploaded: ChatAttachment[] = [];
           let visualAttachmentInput: Parameters<typeof buildVisualAnnotationAttachment>[0] | null = null;
           let visualAttachment: ChatCommentAttachment | null = null;
-          if (detail.file) {
-            const id = await ensureProject();
-            if (!id) return;
-            setUploading(true);
-            try {
+          try {
+            if (detail.file) {
+              const id = await ensureProject();
+              if (!id) {
+                ack({ ok: false, message: t('chat.annotationProjectCreateFailed') });
+                return;
+              }
+              setUploading(true);
               const result = await uploadProjectFiles(id, [detail.file]);
               if (result.uploaded.length > 0) {
                 uploaded = result.uploaded;
@@ -894,45 +975,57 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               if (result.failed.length > 0) {
                 const detailText = result.error ? ` (${result.error})` : '';
                 setUploadError(`Attachment upload failed for ${result.failed.length} file(s)${detailText}.`);
+                if (uploaded.length === 0) {
+                  ack({ ok: false, message: t('chat.annotationUploadFailed') });
+                  return;
+                }
               }
-            } finally {
-              setUploading(false);
             }
-          }
+            setUploading(false);
 
-          if (detail.action === 'send') {
-            if (streaming) {
-              if (uploaded.length > 0) setStaged((s) => [...s, ...uploaded]);
-              if (visualAttachmentInput) {
-                setStagedVisualComments((current) => [
-                  ...current,
-                  buildVisualAnnotationAttachment({
-                    ...visualAttachmentInput!,
-                    order: commentAttachments.length + current.length + 1,
-                  }),
-                ]);
+            if (detail.action === 'send') {
+              if (streaming) {
+                if (uploaded.length > 0) setStaged((s) => [...s, ...uploaded]);
+                if (visualAttachmentInput) {
+                  setStagedVisualComments((current) => [
+                    ...current,
+                    buildVisualAnnotationAttachment({
+                      ...visualAttachmentInput!,
+                      order: commentAttachments.length + current.length + 1,
+                    }),
+                  ]);
+                }
+                if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+                setStreamingAnnotationSendPending(true);
+                textareaRef.current?.focus();
+                ack({ ok: true });
+                return;
               }
-              if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
-              setStreamingAnnotationSendPending(true);
-              textareaRef.current?.focus();
+              if (visualAttachmentInput) {
+                visualAttachment = buildVisualAnnotationAttachment({
+                  ...visualAttachmentInput,
+                  order: commentAttachments.length + stagedVisualComments.length + 1,
+                });
+              }
+              const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
+              const attachments = [...staged, ...uploaded];
+              const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
+              ack({ ok: true });
               return;
             }
-            if (visualAttachmentInput) {
-              visualAttachment = buildVisualAnnotationAttachment({
-                ...visualAttachmentInput,
-                order: commentAttachments.length + stagedVisualComments.length + 1,
-              });
-            }
-            const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
-            const attachments = [...staged, ...uploaded];
-            const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-            sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
-            return;
-          }
 
-          if (detail.note) {
-            setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
-            textareaRef.current?.focus();
+            if (detail.note) {
+              setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+              textareaRef.current?.focus();
+            }
+            ack({ ok: true });
+          } catch (err) {
+            console.warn('Could not send annotation', err);
+            setUploadError(err instanceof Error ? err.message : t('chat.annotationFailed'));
+            ack({ ok: false, message: t('chat.annotationFailed') });
+          } finally {
+            setUploading(false);
           }
         })();
       }
@@ -949,6 +1042,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       stagedSkills,
       stagedVisualComments,
       streaming,
+      t,
     ]);
 
     useEffect(() => {
@@ -982,7 +1076,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (files.length > 0) {
         e.preventDefault();
         void uploadFiles(files);
+        return;
       }
+      void uploadClipboardImagesFromAsyncClipboard();
     }
 
     function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -1660,6 +1756,70 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 </div>
               ) : null}
             </div>
+            {petEnabled ? (
+              <div className="composer-pet-wrap" ref={petWrapRef}>
+                <button
+                  type="button"
+                  className={`composer-pet${petConfig?.adopted ? ' adopted' : ''}`}
+                  onClick={() => {
+                    if (petConfig?.adopted) {
+                      if (!petConfig.enabled) setPetMenuOpen(true);
+                      else setPetMenuOpen((v) => !v);
+                    } else {
+                      setPetMenuOpen((v) => !v);
+                    }
+                  }}
+                  title={t('pet.composerTitle')}
+                  aria-haspopup="menu"
+                  aria-expanded={petMenuOpen}
+                  aria-label={t('pet.composerTitle')}
+                >
+                  <span className="composer-pet-glyph">
+                    {petConfig?.adopted ? (petConfig?.custom?.glyph || '🐾') : '🐾'}
+                  </span>
+                  <span className="composer-pet-label">
+                    {petConfig?.adopted ? (petConfig?.custom?.name || 'Buddy') : t('pet.composerMenuTitle')}
+                  </span>
+                </button>
+                {petMenuOpen ? (
+                  <div
+                    className="composer-pet-menu"
+                    style={petMenuStyle}
+                  >
+                    <div className="composer-pet-menu-head">
+                      <strong>{t('pet.composerMenuTitle')}</strong>
+                      <span>{t('pet.composerMenuHint')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="composer-pet-menu-row toggle"
+                      onClick={() => {
+                        if (petConfig?.adopted) {
+                          onTogglePet?.();
+                        } else {
+                          onOpenPetSettings?.();
+                        }
+                        setPetMenuOpen(false);
+                      }}
+                    >
+                      <Icon name={petConfig?.enabled ? 'eye-off' : 'eye'} size={12} />
+                      <span>{petConfig?.enabled ? t('pet.tuck') : t('pet.wake')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="composer-pet-menu-row settings"
+                      onClick={() => {
+                        onOpenPetSettings?.();
+                        setPetMenuOpen(false);
+                      }}
+                    >
+                      <Icon name="settings" size={12} />
+                      <span>{t('pet.composerOpenSettings')}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <button
               className="icon-btn"
               data-testid="chat-attach"
@@ -2380,8 +2540,8 @@ function mcpTemplateMatchesQuery(tpl: McpTemplate, query: string): boolean {
     .includes(q);
 }
 
-function pluginSourceLabel(plugin: InstalledPluginRecord): string {
-  return plugin.sourceKind === 'bundled' ? 'Official' : 'My plugin';
+function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): string {
+  return plugin.sourceKind === 'bundled' ? t('chat.mentionPluginOfficial') : t('chat.mentionPluginMine');
 }
 
 function ToolsImportPanel({
@@ -2528,16 +2688,16 @@ function MentionPopover({
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
-    { id: 'all', label: 'All' },
-    { id: 'plugins', label: 'Plugins' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'mcp', label: 'MCP' },
-    { id: 'connectors', label: 'Connectors' },
-    { id: 'files', label: 'Design files' },
+    { id: 'all', label: t('chat.mentionTabAll') },
+    { id: 'plugins', label: t('chat.mentionTabPlugins') },
+    { id: 'skills', label: t('chat.mentionTabSkills') },
+    { id: 'mcp', label: t('chat.mentionTabMcp') },
+    { id: 'connectors', label: t('chat.mentionTabConnectors') },
+    { id: 'files', label: t('chat.mentionTabFiles') },
   ];
   const showPlugins = tab === 'all' || tab === 'plugins';
   const showSkills = tab === 'all' || tab === 'skills';
@@ -2555,7 +2715,7 @@ function MentionPopover({
   }, [connectors, files, plugins, skills, mcpServers, tab]);
   return (
     <div className="mention-popover" data-testid="mention-popover">
-      <div className="mention-tabs" role="tablist" aria-label="Mention surfaces">
+      <div className="mention-tabs" role="tablist" aria-label={t('chat.mentionTabsAria')}>
         {tabs.map((item) => (
           <button
             key={item.id}
@@ -2574,15 +2734,15 @@ function MentionPopover({
         {!hasVisibleResults ? (
           <div className="mention-empty">
             {query ? (
-              <>No results for “{query}”.</>
+              <>{t('chat.mentionNoResults', { query })}</>
             ) : (
-              <>Search plugins, skills, MCP servers, connectors, and Design Files.</>
+              <>{t('chat.mentionSearchPrompt')}</>
             )}
           </div>
         ) : null}
         {showPlugins && plugins.length > 0 ? (
         <>
-          <div className="mention-section-label">Plugins</div>
+          <div className="mention-section-label">{t('chat.mentionSectionPlugins')}</div>
           {plugins.map((p) => (
             <button
               key={`plugin-${p.id}`}
@@ -2599,14 +2759,14 @@ function MentionPopover({
                   {p.manifest?.description ?? p.id}
                 </span>
               </span>
-              <span className="mention-meta">{pluginSourceLabel(p)}</span>
+              <span className="mention-meta">{pluginSourceLabel(p, t)}</span>
             </button>
           ))}
         </>
       ) : null}
         {showSkills && skills.length > 0 ? (
           <>
-            <div className="mention-section-label">Skills</div>
+            <div className="mention-section-label">{t('chat.mentionSectionSkills')}</div>
             {skills.map((skill) => {
               const active = skill.id === currentSkillId;
               return (
@@ -2625,7 +2785,7 @@ function MentionPopover({
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{active ? 'Active' : skill.mode}</span>
+                  <span className="mention-meta">{active ? t('chat.mentionActiveSkill') : skill.mode}</span>
                 </button>
               );
             })}
@@ -2633,7 +2793,7 @@ function MentionPopover({
         ) : null}
         {showMcp && mcpServers.length > 0 ? (
           <>
-            <div className="mention-section-label">MCP</div>
+            <div className="mention-section-label">{t('chat.mentionSectionMcp')}</div>
             {mcpServers.map((server) => (
               <button
                 key={`mcp-${server.id}`}
@@ -2641,7 +2801,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickMcp(server)}
-                title={`Use ${server.label || server.id}`}
+                title={t('chat.mentionUseMcpTitle', { name: server.label || server.id })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -2657,7 +2817,7 @@ function MentionPopover({
         ) : null}
         {showConnectors && connectors.length > 0 ? (
           <>
-            <div className="mention-section-label">Connectors</div>
+            <div className="mention-section-label">{t('chat.mentionSectionConnectors')}</div>
             {connectors.map((connector) => (
               <button
                 key={`connector-${connector.id}`}
@@ -2665,7 +2825,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickConnector(connector)}
-                title={`Use ${connector.name}`}
+                title={t('chat.mentionUseConnectorTitle', { name: connector.name })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -2681,7 +2841,7 @@ function MentionPopover({
         ) : null}
         {showFiles && files.length > 0 ? (
         <>
-          <div className="mention-section-label">Design files</div>
+          <div className="mention-section-label">{t('chat.mentionSectionFiles')}</div>
           {files.map((f) => {
             const key = f.path ?? f.name;
             return (

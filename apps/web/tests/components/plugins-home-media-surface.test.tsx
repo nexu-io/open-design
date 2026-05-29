@@ -30,6 +30,13 @@ const POSTER: MediaPreviewSpec = {
   imageOnly: true,
 };
 
+const VIDEO_POSTER: MediaPreviewSpec = {
+  ...POSTER,
+  mediaType: 'video',
+  videoUrl: 'https://example.invalid/preview.mp4',
+  imageOnly: false,
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -98,5 +105,12 @@ describe('MediaSurface broken-poster fallback (#2955)', () => {
     );
     expect(container.querySelector('img.plugins-home__media-img')).toBeNull();
     expect(container.querySelector('.plugins-home__media-fallback')).not.toBeNull();
+  });
+
+  it('does not render a passive play badge for video cards that already auto-play on hover', () => {
+    const { container } = render(
+      <MediaSurface preview={VIDEO_POSTER} pluginTitle="Video example" inView={true} />,
+    );
+    expect(container.querySelector('.plugins-home__media-badge')).toBeNull();
   });
 });

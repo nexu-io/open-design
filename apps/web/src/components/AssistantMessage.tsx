@@ -20,7 +20,10 @@ import {
   trackFeedbackSubmitResult,
 } from "../analytics/events";
 import {
+  feedbackAgentProviderIdToTracking,
+  modelIdForTracking,
   normalizeCustomReason,
+  type TrackingFeedbackProviderId,
   type TrackingFeedbackReasonCode,
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
@@ -644,6 +647,8 @@ export function AssistantMessage({
                 conversationId={conversationId}
                 runId={message.runId ?? null}
                 assistantMessageId={message.id}
+                modelId={modelIdForTracking(assistantFeedbackModelId(message))}
+                agentProviderId={feedbackAgentProviderIdToTracking(message.agentId)}
                 producedFileCount={displayedProduced.length}
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
@@ -767,6 +772,16 @@ function assistantModelDetail(message: ChatMessage): string | null {
   return detail;
 }
 
+function assistantFeedbackModelId(message: ChatMessage): string | null {
+  const detail = assistantModelDetail(message);
+  if (detail) return detail;
+  const displayName = message.agentName?.trim();
+  if (!displayName) return null;
+  const parts = displayName.split(" · ");
+  const model = parts.length > 1 ? parts[parts.length - 1]?.trim() : "";
+  return model || null;
+}
+
 function appendRoleModel(label: string, model: string | null): string {
   if (!model || label.includes(" · ")) return label;
   return `${label} · ${model}`;
@@ -843,6 +858,8 @@ function AssistantFeedback({
   conversationId,
   runId,
   assistantMessageId,
+  modelId,
+  agentProviderId,
   producedFileCount,
 }: {
   feedback: ChatMessage["feedback"];
@@ -854,6 +871,8 @@ function AssistantFeedback({
   conversationId: string | null;
   runId: string | null;
   assistantMessageId: string;
+  modelId: string;
+  agentProviderId: TrackingFeedbackProviderId;
   producedFileCount: number;
 }) {
   const t = useT();
@@ -908,6 +927,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
       });
     }
@@ -919,6 +940,8 @@ function AssistantFeedback({
     conversationId,
     assistantMessageId,
     runId,
+    agentProviderId,
+    modelId,
   ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
@@ -942,6 +965,8 @@ function AssistantFeedback({
       conversation_id: conversationId,
       assistant_message_id: assistantMessageId,
       run_id: runId ?? "",
+      agent_provider_id: agentProviderId,
+      model_id: modelId,
       rating,
       rating_before: ratingBefore,
       has_produced_files: producedFileCount > 0,
@@ -961,6 +986,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: ratingAfter,
         rating_before: ratingBefore,
         has_produced_files: producedFileCount > 0,
@@ -1000,6 +1027,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -1024,6 +1053,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -1047,6 +1078,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         reason: reasons,
         reason_count: reasons.length,
@@ -1842,7 +1875,7 @@ function StatusPill({
 
 function renderStatusDetail(detail: string): ReactNode {
   const segments: ReactNode[] = [];
-  const urlRe = /(https?:\/\/[^\s)<>]+)/g;
+  const urlRe = /(https?:\/\/[^\s)<>"}\]]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -1875,7 +1908,7 @@ function renderStatusDetail(detail: string): ReactNode {
 }
 
 function splitStatusDetailUrlPunctuation(url: string): [string, string] {
-  const match = /([.,!?;:，。！？；：、'"」』】》〉）]+)$/.exec(url);
+  const match = /([.,!?;:，。！？；：、'"」』】》〉）}\]]+)$/.exec(url);
   if (!match?.[1]) return [url, ''];
   const trimmed = url.slice(0, -match[1].length);
   return trimmed ? [trimmed, match[1]] : [url, ''];
