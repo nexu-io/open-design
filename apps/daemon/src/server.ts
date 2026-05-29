@@ -10776,7 +10776,7 @@ export async function startServer({
   });
 
   app.post('/api/orbit/run', async (req, res) => {
-    if (!isLocalManagementRequest(req)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10829,7 +10829,7 @@ export async function startServer({
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
-    if (!isLocalManagementRequest(req)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({
         error:
           'cross-origin request rejected: media generation is restricted to the local UI / CLI',
@@ -10918,7 +10918,7 @@ export async function startServer({
     }
   });
   app.post('/api/research/search', async (req, res) => {
-    if (!isLocalManagementRequest(req)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({
         error:
           'cross-origin request rejected: research search is restricted to the local UI / CLI',
@@ -10954,7 +10954,7 @@ export async function startServer({
   });
 
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
-    if (!isLocalManagementRequest(req)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;

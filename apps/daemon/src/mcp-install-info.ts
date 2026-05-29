@@ -109,7 +109,9 @@ export function buildMcpInstallPayload(
     OD_DATA_DIR: inputs.dataDir,
     ...inputs.sidecarEnv,
   };
-  if (inputs.apiKey || inputs.authRequired) {
+  if (inputs.apiKey) {
+    env.OD_MCP_TOKEN = inputs.apiKey;
+  } else if (inputs.authRequired) {
     env.OD_MCP_TOKEN = '$OD_MCP_TOKEN';
   }
   if (inputs.electronAsNode) {
