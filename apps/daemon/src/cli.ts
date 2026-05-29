@@ -998,7 +998,7 @@ async function cliDaemonBaseUrl(flags) {
 }
 
 function cliAuthHeaders(): Record<string, string> {
-  const key = process.env.OD_API_KEY;
+  const key = process.env.OD_API_KEY ?? process.env.OD_API_TOKEN;
   return key ? { authorization: `Bearer ${key}` } : {};
 }
 
