@@ -12452,7 +12452,13 @@ export async function startServer({
         acpCleanCompletion,
         artifactQuietShutdownRequested,
       });
-      if (status === 'failed') {
+      // Skip the close-handler failure emit when the run is already
+      // terminal: the inactivity watchdog (failForInactivity) finishes the
+      // run — sending its error and clearing run.clients/eventsLogStream —
+      // before SIGTERM, so re-emitting here would double-send the error and
+      // reopen the closed events-log stream. The run is finalized below
+      // regardless (finish() no-ops once terminal).
+      if (status === 'failed' && !design.runs.isTerminal(run.status)) {
         const diagnostic = diagnoseClaudeCliFailure({
           agentId: def.id,
           exitCode: code,
