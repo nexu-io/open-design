@@ -41,16 +41,38 @@ export function projectDir(projectsRoot, projectId) {
   return path.join(projectsRoot, projectId);
 }
 
-function usesExternalProjectRoot(metadata?) {
-  if (isSandboxModeEnabled(process.env)) return false;
+export class SandboxImportedProjectError extends Error {
+  code = 'SANDBOX_IMPORTED_PROJECT_UNAVAILABLE';
+
+  constructor() {
+    super(
+      'Imported-folder projects are not available in OD_SANDBOX_MODE until their files are mirrored into the managed project directory.',
+    );
+    this.name = 'SandboxImportedProjectError';
+  }
+}
+
+function hasExternalProjectRoot(metadata?) {
   if (typeof metadata?.baseDir !== 'string') return false;
   return path.isAbsolute(path.normalize(metadata.baseDir));
+}
+
+function assertSandboxProjectRootAvailable(metadata?) {
+  if (isSandboxModeEnabled(process.env) && hasExternalProjectRoot(metadata)) {
+    throw new SandboxImportedProjectError();
+  }
+}
+
+function usesExternalProjectRoot(metadata?) {
+  if (isSandboxModeEnabled(process.env)) return false;
+  return hasExternalProjectRoot(metadata);
 }
 
 // Returns the folder a project's files live in. For git-linked projects
 // (metadata.baseDir set), this is the user's own folder. Otherwise falls
 // back to the standard computed path under projectsRoot.
 export function resolveProjectDir(projectsRoot, projectId, metadata?) {
+  assertSandboxProjectRootAvailable(metadata);
   if (usesExternalProjectRoot(metadata)) {
     return path.normalize(metadata.baseDir);
   }

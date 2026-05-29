@@ -56,6 +56,26 @@ describe('POST /api/import/folder', () => {
     }
   }
 
+  async function waitForRunStatus(
+    runId: string,
+  ): Promise<{ status: string; error?: string | null; errorCode?: string | null }> {
+    let lastStatus = 'unknown';
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+      const statusBody = (await statusResponse.json()) as {
+        status: string;
+        error?: string | null;
+        errorCode?: string | null;
+      };
+      lastStatus = statusBody.status;
+      if (statusBody.status !== 'queued' && statusBody.status !== 'running') {
+        return statusBody;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`run did not reach a terminal status; last status: ${lastStatus}`);
+  }
+
   it('creates a project rooted at the submitted folder', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -82,6 +102,33 @@ describe('POST /api/import/folder', () => {
       expect(resp.status).toBe(400);
       const body = (await resp.json()) as { error?: { message?: string } };
       expect(body.error?.message).toMatch(/OD_SANDBOX_MODE/i);
+    });
+  });
+
+  it('fails sandbox runs for imported folders instead of using an empty managed project', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: project.id,
+          message: 'Inspect the imported project.',
+        }),
+      });
+      expect(runResp.status).toBe(202);
+      const { runId } = (await runResp.json()) as { runId: string };
+      const status = await waitForRunStatus(runId);
+      expect(status.status).toBe('failed');
+      expect(status.errorCode).toBe('BAD_REQUEST');
+      expect(status.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
     });
   });
 

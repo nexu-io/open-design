@@ -355,6 +355,7 @@ import {
   renameProjectFile,
   removeProjectDir,
   resolveProjectDir,
+  SandboxImportedProjectError,
   sanitizeName,
   searchProjectFiles,
   resolveProjectDir,
@@ -10773,14 +10774,12 @@ export async function startServer({
       try {
         const chatProject = getProject(db, projectId);
         const chatMeta = chatProject?.metadata;
-        if (chatMeta?.baseDir) {
-          cwd = path.normalize(chatMeta.baseDir);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        } else {
-          cwd = await ensureProject(PROJECTS_DIR, projectId);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return design.runs.fail(run, 'BAD_REQUEST', err.message);
         }
-      } catch {
         cwd = null;
       }
     }
