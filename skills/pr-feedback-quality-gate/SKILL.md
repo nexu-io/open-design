@@ -30,11 +30,14 @@ needs a monitored follow-up after a fix.
    this repo, include `pnpm guard`; add package typechecks/builds/tests when
    touched files require them.
 5. Before commit or push, run a read-only cross-review of the staged or proposed
-   diff. Forbid file edits and git write or coordination commands. Treat the
-   reviewer as advisory: verify findings locally before acting.
-6. If cross-review reports blockers, fix them, rerun validation, and repeat the
+   diff. Forbid file edits and git write or coordination commands.
+6. Treat cross-review as evidence, not authority. Accept only findings grounded
+   in the diff, repository rules, user goal, or validation results. Downgrade or
+   reject style preferences, broad scope expansion, and suggestions that conflict
+   with safety or ownership boundaries; record the reason briefly.
+7. If accepted blockers remain, fix them, rerun validation, and repeat the
    review. Commit and push only after validation passes and there are no
-   blockers.
+   accepted blockers.
 
 ## Monitoring cadence
 
@@ -45,5 +48,6 @@ needs a monitored follow-up after a fix.
 
 ## Report
 
-Always report PR state, actions taken, cross-review verdict, validation run,
-commits pushed, skipped checks with reasons, remaining risks, and next step.
+Always report PR state, actions taken, cross-review verdict, accepted or
+rejected findings, validation run, commits pushed, skipped checks with reasons,
+remaining risks, and next step.
