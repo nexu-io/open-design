@@ -25,7 +25,7 @@ function collect(): { events: Event[]; sink: (ev: Event) => void } {
 
 function feedJsonl(handler: ReturnType<typeof createClaudeStreamHandler>, lines: object[]) {
   for (const line of lines) {
-    handler.feed(JSON.stringify(line) + '\n');
+    handler.feed(JSON.stringify({ type: 'stream_event', event: line }) + '\n');
   }
 }
 
@@ -83,7 +83,7 @@ describe('claude-stream role-marker guard scope', () => {
     // Real attack vector — must fire on the text channel.
     const warnings = events.filter((e) => e.type === 'fabricated_role_marker');
     expect(warnings).toHaveLength(1);
-    expect(warnings[0].marker).toBe('## user');
+    expect(warnings[0]!.marker).toBe('## user');
 
     // Pre-marker prefix `OK.` emitted; everything from the marker
     // onward suppressed.
