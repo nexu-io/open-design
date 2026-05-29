@@ -4093,6 +4093,16 @@ function HtmlViewer({
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const [urlLoadSubPath, setUrlLoadSubPath] = useState<string | null>(null);
   const [urlLoadHash, setUrlLoadHash] = useState('');
+  // Tracked URL-load location is per-artifact: it only makes sense for the
+  // file whose iframe last reported it. When the user switches to a
+  // different file (or project), we must clear the tracked location before
+  // the new iframe reports its own, otherwise the new file's src would be
+  // built from the previous file's sub-page/hash and the viewer would
+  // continue showing the old navigated page.
+  useEffect(() => {
+    setUrlLoadSubPath(null);
+    setUrlLoadHash('');
+  }, [projectId, file.name]);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);

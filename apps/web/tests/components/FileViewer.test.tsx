@@ -459,7 +459,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?preview=1&v=1710000000&r=0');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -467,7 +467,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?preview=1&v=1710000000&r=0');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -587,7 +587,7 @@ describe('FileViewer SVG artifacts', () => {
 
     const secondFrame = screen.getByTestId('pooled-frame');
     expect(secondFrame).not.toBe(firstFrame);
-    expect(secondFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1&r=0');
+    expect(secondFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?preview=1&v=1&r=0');
   });
 
   it('URL-loads a plain HTML preview iframe instead of inlining via srcDoc', () => {
