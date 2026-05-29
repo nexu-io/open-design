@@ -88,7 +88,7 @@ describe('buildSrcdoc', () => {
 
     const canSetActive = srcdoc.match(/function canSetActive\(list\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
 
-    expect(canSetActive).toContain('findActiveByClass(list) >= 0');
+    expect(canSetActive).toContain('findActiveByClass(list)');
     expect(canSetActive).toContain("list[i].style.display === 'none'");
     expect(canSetActive).toContain("list[i].style.visibility === 'hidden'");
     expect(canSetActive).toContain("list[i].hasAttribute('hidden')");
@@ -132,42 +132,40 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).not.toContain('stopImmediatePropagation');
   });
 
-  it('deck bridge injects hasScrollableOverflow to distinguish transform decks from scroll decks', () => {
-    // hasScrollableOverflow(el) gates scroller() on both the body and the
-    // documentElement/scrollingElement branches. Without it a transform deck
-    // with overflow:hidden (wide scrollWidth from the off-screen track but
-    // no actual scroll) is mis-classified as a scroll deck and navigation
-    // falls into scrollGo() instead of dispatchKey().
+  it('deck bridge injects overflow-mode helpers to distinguish transform decks from scroll decks', () => {
+    // isClippedOverflowMode() gates root-scroll-container promotion in isScrollDeck().
+    // Without it a transform deck with overflow:hidden (wide scrollWidth from the
+    // off-screen track but no actual scroll) is mis-classified as a scroll deck and
+    // navigation falls into scrollGo() instead of dispatchKey().
     const srcdoc = buildSrcdoc(
       '<section class="slide active">One</section><section class="slide">Two</section>',
       { deck: true }
     );
 
-    expect(srcdoc).toContain('function hasScrollableOverflow(el)');
+    expect(srcdoc).toContain('function isClippedOverflowMode(mode)');
+    expect(srcdoc).toContain('function isScrollableOverflowMode(mode)');
     expect(srcdoc).toContain("=== 'hidden' || ");
     expect(srcdoc).toContain("=== 'clip'");
-    expect(srcdoc).toContain("ox === 'auto' || ox === 'scroll'");
+    expect(srcdoc).toContain("=== 'auto' || ");
   });
 
-  it('scroller() gates both body and documentElement branches on hasScrollableOverflow and returns null', () => {
-    // The root-element fallback (document.scrollingElement || document.documentElement)
-    // was the remaining path through which overflow:hidden transform decks
-    // could still be classified as scroll decks even after the body branch
-    // was fixed — its scrollWidth grows with the wide transform track just
-    // like body. Both branches must be gated; scroller() must return null
-    // when neither element has genuine horizontal scrollability.
+  it('isScrollDeck() blocks clipped root containers and allows default-overflow wide root containers', () => {
+    // Both cases must be handled: a root container with overflow:hidden/clip
+    // must be rejected (transform decks with wide off-screen tracks), while an
+    // unclipped root container with genuine overflow content must be accepted.
+    // The old scroller() function has been replaced by modular helpers.
     const srcdoc = buildSrcdoc(
       '<section class="slide active">One</section><section class="slide">Two</section>',
       { deck: true }
     );
 
-    const scrollerFn = srcdoc.match(/function scroller\(\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
-
-    expect(scrollerFn).toContain('hasScrollableOverflow(document.body)');
-    // The documentElement / scrollingElement fallback must also be gated
-    expect(scrollerFn).toContain('hasScrollableOverflow(se)');
-    // Must return null (not the element) when no scrollable element is found
-    expect(scrollerFn).toContain('return null;');
+    expect(srcdoc).toContain('function isRootScrollContainer(el)');
+    expect(srcdoc).toContain('function rootScrollerClipped()');
+    expect(srcdoc).toContain('isRootScrollContainer(candidate)');
+    expect(srcdoc).toContain('isClippedOverflowMode(mode)');
+    expect(srcdoc).toContain('rootScrollerClipped()');
+    // Old scroller() function must not exist
+    expect(srcdoc).not.toContain('function scroller()');
   });
 
   it('gotoIndex() dispatches paced keys and falls back to setActive only when keyboard unhandled', () => {

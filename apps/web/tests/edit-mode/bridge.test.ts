@@ -418,4 +418,23 @@ describe('manual edit bridge target normalization', () => {
 
     dom.window.close();
   });
+
+  it('blocks clicks on unmapped elements while edit mode is enabled', () => {
+    const dom = new JSDOM(
+      `<main><button id="cta">Launch</button></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const button = dom.window.document.getElementById('cta') as HTMLButtonElement;
+    const clicked = vi.fn();
+    button.addEventListener('click', clicked);
+
+    const event = new dom.window.MouseEvent('click', { bubbles: true, cancelable: true });
+    const result = button.dispatchEvent(event);
+
+    expect(result).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(clicked).not.toHaveBeenCalled();
+
+    dom.window.close();
+  });
 });

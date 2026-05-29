@@ -9,6 +9,8 @@ import { isImeComposing } from '../utils/imeComposing';
 
 interface Point { x: number; y: number }
 interface Stroke { points: Point[] }
+interface NormalizedRect { x: number; y: number; width: number; height: number }
+type MarkTool = 'box' | 'pen';
 interface CaptureTarget {
   filePath?: string;
   elementId?: string;
@@ -61,11 +63,15 @@ export function PreviewDrawOverlay({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [note, setNote] = useState('');
+  const [markTool, setMarkTool] = useState<MarkTool>('box');
   const strokesRef = useRef<Stroke[]>([]);
   const undoneStrokesRef = useRef<Stroke[]>([]);
   const drawingRef = useRef<Stroke | null>(null);
+  const selectionBoxRef = useRef<NormalizedRect | null>(null);
+  const boxDraftRef = useRef<{ start: Point; current: Point } | null>(null);
   const composingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
+  const [hasBox, setHasBox] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
   const [pendingAction, setPendingAction] = useState<'queue' | 'send' | null>(null);
@@ -88,6 +94,10 @@ export function PreviewDrawOverlay({
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const all = drawingRef.current ? [...strokesRef.current, drawingRef.current] : strokesRef.current;
+    const box = boxDraftRef.current
+      ? normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current)
+      : selectionBoxRef.current;
+    if (box) drawNormalizedBox(ctx, box, cvs.width, cvs.height);
     for (const s of all) {
       const first = s.points[0];
       if (!first) continue;
@@ -119,7 +129,7 @@ export function PreviewDrawOverlay({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [redraw, active, hasInk]);
+  }, [redraw, active, hasInk, hasBox]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -139,6 +149,7 @@ export function PreviewDrawOverlay({
 
   function syncHistoryState() {
     setHasInk(strokesRef.current.length > 0);
+    setHasBox(Boolean(selectionBoxRef.current));
     setUndoCount(strokesRef.current.length);
     setRedoCount(undoneStrokesRef.current.length);
   }
@@ -164,16 +175,40 @@ export function PreviewDrawOverlay({
   function onPointerDown(e: PointerEvent) {
     if (!active || sending) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    drawingRef.current = { points: [pointFromEvent(e)] };
+    const point = pointFromEvent(e);
+    if (markTool === 'box') {
+      boxDraftRef.current = { start: point, current: point };
+      selectionBoxRef.current = null;
+      syncHistoryState();
+      redraw();
+      return;
+    }
+    drawingRef.current = { points: [point] };
     redraw();
   }
   function onPointerMove(e: PointerEvent) {
-    if (!active || sending || !drawingRef.current) return;
+    if (!active || sending) return;
+    if (boxDraftRef.current) {
+      boxDraftRef.current.current = pointFromEvent(e);
+      redraw();
+      return;
+    }
+    if (!drawingRef.current) return;
     drawingRef.current.points.push(pointFromEvent(e));
     redraw();
   }
-  function onPointerUp() {
-    if (!active || sending || !drawingRef.current) return;
+  function onPointerUp(e: PointerEvent) {
+    if (!active || sending) return;
+    if (boxDraftRef.current) {
+      boxDraftRef.current.current = pointFromEvent(e);
+      const next = normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current);
+      boxDraftRef.current = null;
+      selectionBoxRef.current = next.width >= 0.006 && next.height >= 0.006 ? next : null;
+      syncHistoryState();
+      redraw();
+      return;
+    }
+    if (!drawingRef.current) return;
     if (drawingRef.current.points.length > 1) {
       strokesRef.current.push(drawingRef.current);
       undoneStrokesRef.current = [];
@@ -196,12 +231,21 @@ export function PreviewDrawOverlay({
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
+    selectionBoxRef.current = null;
+    boxDraftRef.current = null;
     syncHistoryState();
     redraw();
   }
 
   function undoStroke() {
     if (sending) return;
+    if (selectionBoxRef.current || boxDraftRef.current) {
+      selectionBoxRef.current = null;
+      boxDraftRef.current = null;
+      syncHistoryState();
+      redraw();
+      return;
+    }
     const stroke = strokesRef.current.pop();
     if (!stroke) return;
     undoneStrokesRef.current.push(stroke);
@@ -229,9 +273,23 @@ export function PreviewDrawOverlay({
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
+    selectionBoxRef.current = null;
+    boxDraftRef.current = null;
     syncHistoryState();
     redraw();
   }, [active, redraw]);
+
+  function boxBounds(): { x: number; y: number; width: number; height: number } | null {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const box = selectionBoxRef.current;
+    if (!rect || rect.width <= 0 || rect.height <= 0 || !box) return null;
+    return {
+      x: box.x * rect.width,
+      y: box.y * rect.height,
+      width: Math.max(1, box.width * rect.width),
+      height: Math.max(1, box.height * rect.height),
+    };
+  }
 
   function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -254,23 +312,25 @@ export function PreviewDrawOverlay({
   }
 
   function annotationBounds(): { x: number; y: number; width: number; height: number } | undefined {
+    const box = boxBounds();
     const stroke = strokeBounds();
     const target = captureTarget?.position ?? null;
-    if (!stroke && !target) return undefined;
-    if (!stroke) return target ?? undefined;
-    if (!target) return stroke;
-    const left = Math.min(stroke.x, target.x);
-    const top = Math.min(stroke.y, target.y);
-    const right = Math.max(stroke.x + stroke.width, target.x + target.width);
-    const bottom = Math.max(stroke.y + stroke.height, target.y + target.height);
+    const bounds = [box, stroke, target].filter((item): item is { x: number; y: number; width: number; height: number } => Boolean(item));
+    if (bounds.length === 0) return undefined;
+    if (bounds.length === 1) return bounds[0];
+    const left = Math.min(...bounds.map((item) => item.x));
+    const top = Math.min(...bounds.map((item) => item.y));
+    const right = Math.max(...bounds.map((item) => item.x + item.width));
+    const bottom = Math.max(...bounds.map((item) => item.y + item.height));
     return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
   }
 
   function markKind(): PreviewVisualMarkKind | undefined {
     const hasTarget = Boolean(captureTarget);
-    if (hasTarget && hasInk) return 'click+stroke';
+    const hasVisualMark = hasInk || hasBox;
+    if (hasTarget && hasVisualMark) return 'click+stroke';
     if (hasTarget) return 'click';
-    if (hasInk) return 'stroke';
+    if (hasVisualMark) return 'stroke';
     return undefined;
   }
 
@@ -341,6 +401,7 @@ export function PreviewDrawOverlay({
     const sx = snap.w / Math.max(1, rect.width);
     const sy = snap.h / Math.max(1, rect.height);
     drawCaptureTarget(ctx, sx, sy, captureTarget);
+    if (selectionBoxRef.current) drawNormalizedBox(ctx, selectionBoxRef.current, snap.w, snap.h);
     ctx.strokeStyle = STROKE_COLOR;
     ctx.lineWidth = STROKE_WIDTH * Math.max(sx, sy);
     ctx.lineCap = 'round';
@@ -361,7 +422,7 @@ export function PreviewDrawOverlay({
 
   async function send(action: 'queue' | 'send') {
     const hasTarget = Boolean(captureTarget);
-    const shouldCapture = hasInk || hasTarget || captureViewport;
+    const shouldCapture = hasInk || hasBox || hasTarget || captureViewport;
     const canSubmit = shouldCapture || Boolean(note.trim());
     if (sending || !canSubmit) return;
     // While a task is running the primary Send is disabled (use Queue instead).
@@ -378,7 +439,7 @@ export function PreviewDrawOverlay({
         if (!blob) {
           setCaptureWarning({
             action,
-            message: captureViewport && !hasInk && !hasTarget
+            message: captureViewport && !hasInk && !hasBox && !hasTarget
               ? t('chat.annotationPreviewMissing')
               : t('chat.annotationPreviewMissingInk'),
           });
@@ -426,10 +487,10 @@ export function PreviewDrawOverlay({
   }
 
   const overlayPointer = active ? 'auto' : 'none';
-  const showCanvas = active || hasInk;
-  const canSubmit = hasInk || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
+  const showCanvas = active || hasInk || hasBox;
+  const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
   const canSend = canSubmit && !sendDisabled;
-  const canUndo = undoCount > 0 && !sending;
+  const canUndo = (undoCount > 0 || hasBox) && !sending;
   const canRedo = redoCount > 0 && !sending;
 
   return (
@@ -461,6 +522,7 @@ export function PreviewDrawOverlay({
       ) : null}
       {active ? (
         <>
+          <style>{tooltipStyle}</style>
           {captureWarning ? (
             <div
               role="status"
@@ -508,6 +570,42 @@ export function PreviewDrawOverlay({
               fontSize: 13,
             }}
           >
+          <button
+            type="button"
+            onClick={closeOverlay}
+            disabled={sending}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            style={closeButtonStyle}
+          >
+            <Icon name="close" size={13} />
+          </button>
+          <div style={subToolGroupStyle} aria-label={t('fileViewer.markTool')}>
+            <button
+              type="button"
+              onClick={() => setMarkTool('box')}
+              disabled={sending}
+              aria-label={t('fileViewer.boxSelect')}
+              title={t('fileViewer.boxSelect')}
+              data-tooltip={t('fileViewer.boxSelect')}
+              className="preview-draw-subtool-action"
+              style={subToolButtonStyle(markTool === 'box')}
+            >
+              <RemixIcon name="checkbox-blank-line" size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMarkTool('pen')}
+              disabled={sending}
+              aria-label={t('sketch.toolPen')}
+              title={t('sketch.toolPen')}
+              data-tooltip={t('sketch.toolPen')}
+              className="preview-draw-subtool-action"
+              style={subToolButtonStyle(markTool === 'pen')}
+            >
+              <RemixIcon name="pencil-line" size={14} />
+            </button>
+          </div>
           <button
             type="button"
             onClick={undoStroke}
@@ -561,50 +659,41 @@ export function PreviewDrawOverlay({
             type="button"
             onClick={() => void send('queue')}
             disabled={sending || !canSubmit}
+            aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+            title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+            data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+            className="preview-draw-icon-action"
             style={{
-              ...ghostStyle,
+              ...drawActionButtonStyle(false),
               opacity: canSubmit ? 1 : 0.4,
               cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
             }}
           >
             {pendingAction === 'queue' ? (
-              <>
-                <Icon name="spinner" size={12} />
-                <span>{t('chat.annotationQueueing')}</span>
-              </>
+              <Icon name="spinner" size={14} />
             ) : (
-              t('chat.annotationQueue')
+              <RemixIcon name="list-check-2" size={15} />
             )}
           </button>
           <button
             type="button"
             onClick={() => void send('send')}
             disabled={sending || !canSend}
-            title={sendDisabled ? sendDisabledReason : undefined}
+            aria-label={pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+            title={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+            data-tooltip={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+            className="preview-draw-icon-action"
             style={{
-              ...pillStyle(true),
+              ...drawActionButtonStyle(true),
               opacity: canSend ? 1 : 0.4,
               cursor: sending ? 'wait' : (canSend ? 'pointer' : 'not-allowed'),
             }}
           >
             {pendingAction === 'send' ? (
-              <>
-                <Icon name="spinner" size={12} />
-                <span>{t('chat.annotationSending')}</span>
-              </>
+              <Icon name="spinner" size={14} />
             ) : (
-              t('chat.send')
+              <Icon name="send" size={14} />
             )}
-          </button>
-          <button
-            type="button"
-            onClick={closeOverlay}
-            disabled={sending}
-            aria-label={t('common.close')}
-            title={t('common.close')}
-            style={iconButtonStyle}
-          >
-            <Icon name="close" size={13} />
           </button>
           </div>
         </>
@@ -613,33 +702,113 @@ export function PreviewDrawOverlay({
   );
 }
 
-function pillStyle(active: boolean): CSSProperties {
+const tooltipStyle = `
+  .preview-draw-icon-action,
+  .preview-draw-subtool-action {
+    position: relative;
+  }
+  .preview-draw-icon-action::after,
+  .preview-draw-subtool-action::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    z-index: 12;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(2px);
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: rgba(20,20,20,0.94);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.2;
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .preview-draw-icon-action:hover::after,
+  .preview-draw-icon-action:focus-visible::after,
+  .preview-draw-subtool-action:hover::after,
+  .preview-draw-subtool-action:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+`;
+
+function normalizedRectFromPoints(a: Point, b: Point): NormalizedRect {
+  const left = Math.min(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const right = Math.max(a.x, b.x);
+  const bottom = Math.max(a.y, b.y);
+  return {
+    x: left,
+    y: top,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  };
+}
+
+function drawNormalizedBox(ctx: CanvasRenderingContext2D, box: NormalizedRect, width: number, height: number) {
+  const left = box.x * width;
+  const top = box.y * height;
+  const boxWidth = Math.max(1, box.width * width);
+  const boxHeight = Math.max(1, box.height * height);
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 59, 48, 0.10)';
+  ctx.strokeStyle = STROKE_COLOR;
+  ctx.lineWidth = Math.max(2, Math.round(Math.min(width, height) * 0.002));
+  ctx.setLineDash([10, 6]);
+  ctx.fillRect(left, top, boxWidth, boxHeight);
+  ctx.strokeRect(left, top, boxWidth, boxHeight);
+  ctx.restore();
+}
+
+const subToolGroupStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: 3,
+  borderRadius: 999,
+  background: 'rgba(255,255,255,0.08)',
+};
+
+function subToolButtonStyle(active: boolean): CSSProperties {
   return {
     border: 'none',
     borderRadius: 999,
-    padding: '4px 12px',
+    width: 34,
+    height: 30,
+    padding: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: active ? 'rgba(255,255,255,0.18)' : 'transparent',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: active ? 650 : 500,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+}
+
+function drawActionButtonStyle(primary: boolean): CSSProperties {
+  return {
+    border: primary ? 'none' : '1px solid rgba(255,255,255,0.2)',
+    borderRadius: 999,
+    width: 36,
+    height: 36,
+    padding: 0,
     fontSize: 13,
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 6,
-    background: active ? 'var(--accent)' : 'transparent',
-    color: active ? '#fff' : 'inherit',
+    justifyContent: 'center',
+    flex: '0 0 auto',
+    whiteSpace: 'nowrap',
+    background: primary ? 'var(--accent)' : 'transparent',
+    color: primary ? '#fff' : 'inherit',
   };
 }
-
-const ghostStyle: CSSProperties = {
-  border: '1px solid rgba(255,255,255,0.2)',
-  borderRadius: 999,
-  padding: '3px 10px',
-  fontSize: 12,
-  cursor: 'pointer',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  background: 'transparent',
-  color: 'inherit',
-};
 
 function historyButtonStyle(enabled: boolean): CSSProperties {
   return {
@@ -661,4 +830,10 @@ const iconButtonStyle: CSSProperties = {
   justifyContent: 'center',
   background: 'rgba(255,255,255,0.06)',
   color: 'inherit',
+};
+
+const closeButtonStyle: CSSProperties = {
+  ...iconButtonStyle,
+  border: 'none',
+  background: 'transparent',
 };

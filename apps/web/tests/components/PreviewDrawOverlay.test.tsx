@@ -61,60 +61,39 @@ describe('PreviewDrawOverlay', () => {
     }
   });
 
-  it('does not direct-send via Enter while a task is running', () => {
-    const annotation = vi.fn();
+  it('disables only the primary send action when sending is blocked', async () => {
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
     window.addEventListener('opendesign:annotation', annotation);
 
     try {
-      const { container } = render(
-        <PreviewDrawOverlay active sendDisabled sendDisabledReason="A task is currently running">
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active sendDisabled sendDisabledReason="Task running">
           <div style={{ width: 320, height: 200 }} />
         </PreviewDrawOverlay>,
       );
 
       const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
       expect(input).toBeTruthy();
+      fireEvent.change(input!, { target: { value: 'Please queue this note.' } });
 
-      fireEvent.change(input!, { target: { value: 'Please inspect this panel.' } });
+      const sendButton = getByRole('button', { name: 'Send' }) as HTMLButtonElement;
+      const queueButton = getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+      expect(sendButton.disabled).toBe(true);
+      expect(sendButton.title).toBe('Task running');
+      expect(queueButton.disabled).toBe(false);
+
       fireEvent.keyDown(input!, { key: 'Enter' });
-
+      fireEvent.click(sendButton);
       expect(annotation).not.toHaveBeenCalled();
-    } finally {
-      window.removeEventListener('opendesign:annotation', annotation);
-    }
-  });
 
-  it('disables the primary Send action while a task is running', () => {
-    const { getByRole } = render(
-      <PreviewDrawOverlay active sendDisabled sendDisabledReason="A task is currently running">
-        <div style={{ width: 320, height: 200 }} />
-      </PreviewDrawOverlay>,
-    );
-
-    const sendButton = getByRole('button', { name: 'Send' });
-    expect((sendButton as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('keeps Queue available so an annotation is not lost while a task is running', async () => {
-    const annotation = vi.fn();
-    window.addEventListener('opendesign:annotation', annotation);
-
-    try {
-      const { container, getByRole } = render(
-        <PreviewDrawOverlay active sendDisabled sendDisabledReason="A task is currently running">
-          <div style={{ width: 320, height: 200 }} />
-        </PreviewDrawOverlay>,
-      );
-
-      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
-      fireEvent.change(input!, { target: { value: 'Queue this up.' } });
-
-      const queueButton = getByRole('button', { name: 'Queue' });
-      expect((queueButton as HTMLButtonElement).disabled).toBe(false);
       fireEvent.click(queueButton);
-
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
-      expect(annotation.mock.calls[0]?.[0].detail).toMatchObject({ action: 'queue' });
+      expect(annotation.mock.calls[0]?.[0]).toMatchObject({
+        detail: expect.objectContaining({ action: 'queue' }),
+      });
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
     }

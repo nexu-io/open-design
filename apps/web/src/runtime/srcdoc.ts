@@ -1114,6 +1114,9 @@ function meaningfulDomFallbackTarget(el) {
   }
   var postTargetsPending = false;
   var postPreviewScrollPending = false;
+  var postActiveTargetPending = false;
+  var activeCommentElementId = null;
+  var activeCommentSelector = null;
   function previewScrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
   }
@@ -1139,6 +1142,34 @@ function meaningfulDomFallbackTarget(el) {
   }
   function requestPreviewScrollRestore(){
     window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
+  function findCommentTargetByIdentity(elementId, selector){
+    var el = null;
+    if (selector) {
+      try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
+    }
+    if (!el && elementId) {
+      try {
+        var id = String(elementId).replace(/"/g, '\\"');
+        el = document.querySelector('[data-od-id="' + id + '"], [data-screen-label="' + id + '"]');
+      } catch (_) { el = null; }
+    }
+    return el;
+  }
+  function postActiveCommentTarget(){
+    if (!active() || !activeCommentElementId) return;
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    if (!el) return;
+    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+  }
+  function schedulePostActiveCommentTarget(){
+    if (!active() || !activeCommentElementId || postActiveTargetPending) return;
+    postActiveTargetPending = true;
+    window.requestAnimationFrame(function(){
+      postActiveTargetPending = false;
+      postActiveCommentTarget();
+    });
   }
   function postTargets(){
     if (!active()) return;
@@ -1214,7 +1245,11 @@ function meaningfulDomFallbackTarget(el) {
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
       if (active()) setTimeout(postTargets, 0);
-      else hoveredId = null;
+      else {
+        hoveredId = null;
+        activeCommentElementId = null;
+        activeCommentSelector = null;
+      }
       if (!commentEnabled || mode !== 'pod') {
         drawing = false;
         stroke = [];
@@ -1228,6 +1263,12 @@ function meaningfulDomFallbackTarget(el) {
       if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
       if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
       setTimeout(postPreviewScroll, 0);
+      return;
+    }
+    if (data.type === 'od:comment-active-target') {
+      activeCommentElementId = data.elementId ? String(data.elementId) : null;
+      activeCommentSelector = data.selector ? String(data.selector) : null;
+      schedulePostActiveCommentTarget();
       return;
     }
     if (data.type === 'od:inspect-mode') {
@@ -1316,7 +1357,11 @@ function meaningfulDomFallbackTarget(el) {
       var commentPickerClick = commentEnabled && mode === 'picker' && !inspectEnabled;
       var clickPoint = commentPickerClick ? { x: ev.clientX, y: ev.clientY } : null;
       var payload = targetFrom(result.target, commentPickerClick, result.clicked, clickPoint);
-      if (payload) window.parent.postMessage(payload, '*');
+      if (payload) {
+        activeCommentElementId = payload.elementId || activeCommentElementId;
+        activeCommentSelector = payload.selector || activeCommentSelector;
+        window.parent.postMessage(payload, '*');
+      }
       return;
     }
     // Free-pin fallback (comment mode only). Lets users drop a comment
@@ -1388,6 +1433,7 @@ function meaningfulDomFallbackTarget(el) {
   document.addEventListener('pointercancel', finishStroke, true);
   window.addEventListener('resize', schedulePostTargets);
   document.addEventListener('scroll', function(){
+    schedulePostActiveCommentTarget();
     schedulePostTargets();
     schedulePostPreviewScroll();
   }, true);
@@ -1483,24 +1529,42 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
-  function hasScrollableOverflow(el){
-    if (!el) return false;
-    var ios = (el.style && el.style.overflowX) || '';
-    var io  = (el.style && el.style.overflow)  || '';
-    if (ios === 'hidden' || ios === 'clip') return false;
-    if (io  === 'hidden' || io  === 'clip') return false;
-    try {
-      var cs = window.getComputedStyle(el);
-      var ox = cs.overflowX;
-      return ox === 'auto' || ox === 'scroll' || ox === 'overlay';
-    } catch (_) { return false; }
+  function scrollOverflow(el){
+    if (!el) return 0;
+    return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
   }
-  function scroller(){
-    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1
-        && hasScrollableOverflow(document.body)) return document.body;
-    var se = document.scrollingElement || document.documentElement;
-    if (se && se.scrollWidth > se.clientWidth + 1 && hasScrollableOverflow(se)) return se;
-    return null;
+  function overflowMode(el){
+    if (!el || !window.getComputedStyle) return '';
+    try {
+      return String(window.getComputedStyle(el).overflowX || '').toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+  function isScrollableOverflowMode(mode){
+    return mode === 'auto' || mode === 'scroll' || mode === 'overlay';
+  }
+  function isClippedOverflowMode(mode){
+    return mode === 'hidden' || mode === 'clip';
+  }
+  function isRootScrollContainer(el){
+    return !!el && (
+      el === document.scrollingElement ||
+      el === document.documentElement ||
+      el === document.body
+    );
+  }
+  function rootScrollerClipped(){
+    return isClippedOverflowMode(overflowMode(document.documentElement)) ||
+      isClippedOverflowMode(overflowMode(document.body));
+  }
+  function scrollLeftOf(el){
+    if (!el) return 0;
+    try {
+      return Number(el.scrollLeft) || 0;
+    } catch (_) {
+      return 0;
+    }
   }
   function scrollTargets(){
     var targets = [];
@@ -1530,7 +1594,15 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     return false;
   }
   function isScrollDeck(){
-    return scroller() !== null;
+    var targets = scrollTargets();
+    for (var i=0; i<targets.length; i++) {
+      var candidate = targets[i];
+      if (scrollOverflow(candidate) <= 1) continue;
+      var mode = overflowMode(candidate);
+      if (isScrollableOverflowMode(mode)) return true;
+      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return true;
+    }
+    return false;
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
@@ -1550,8 +1622,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   }
   function activeIndex(list){
     if (!list || !list.length) return 0;
-    var sc = scroller();
-    if (sc) {
+    if (isScrollDeck()) {
       var w = Math.max(1, window.innerWidth);
       return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
     }
@@ -1582,6 +1653,17 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       }
     }
     return 'active';
+  }
+  function hasComputedHiddenSibling(list, active){
+    if (active < 0) return false;
+    for (var i=0; i<list.length; i++) {
+      if (i === active) continue;
+      try {
+        var cs = window.getComputedStyle(list[i]);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
+      } catch (_) {}
+    }
+    return false;
   }
   function canSetActive(list){
     if (findActiveByClass(list) >= 0) return true;
@@ -1726,8 +1808,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
-    var sc = scroller();
-    if (sc) { scrollGo(target); return; }
+    if (isScrollDeck()) { scrollGo(target); return; }
     var current = activeIndex(list);
     var diff = target - current;
     if (!diff) { report(); return; }

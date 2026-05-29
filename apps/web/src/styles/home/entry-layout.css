@@ -1014,6 +1014,84 @@
 }
 
 /* Shared select inside the popover */
+.model-select-searchable {
+  position: relative;
+}
+.model-select-searchable.is-open {
+  z-index: 1400;
+}
+.model-select-searchable__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 1401;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.model-select-searchable__search-row {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.model-select-searchable__input {
+  width: 100%;
+}
+.model-select-searchable__list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+.model-select-searchable__option {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 30px 8px 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text);
+  cursor: pointer;
+  position: relative;
+}
+.model-select-searchable__option:hover {
+  background: var(--bg-subtle);
+}
+.model-select-searchable__option.is-active {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.model-select-searchable__option[data-selected='true']::after {
+  content: '✓';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: currentColor;
+}
+.model-select-searchable__option-label {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.model-select-searchable__option-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.model-select-searchable__empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+
 .inline-switcher__select {
   appearance: none;
   width: 100%;
