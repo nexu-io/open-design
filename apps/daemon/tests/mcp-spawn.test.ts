@@ -294,6 +294,69 @@ describe('spawn writes external MCP config for Claude Code', () => {
     });
   }, 30_000);
 
+  it('rejects sandbox routine reuse of imported-folder projects before creating run state', async () => {
+    const { id } = await importFolderProject();
+    const conversationsBeforeRes = await fetch(`${baseUrl}/api/projects/${id}/conversations`);
+    expect(conversationsBeforeRes.ok).toBe(true);
+    const conversationsBeforeBody = (await conversationsBeforeRes.json()) as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationIdsBefore = conversationsBeforeBody.conversations.map((conversation) => conversation.id);
+
+    let routineId: string | null = null;
+    try {
+      const createRoutineRes = await fetch(`${baseUrl}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Sandbox imported folder routine',
+          prompt: 'try to run inside an imported folder',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'reuse', projectId: id },
+          agentId: 'claude',
+          enabled: false,
+        }),
+      });
+      expect(createRoutineRes.status).toBe(201);
+      const createRoutineBody = (await createRoutineRes.json()) as {
+        routine: { id: string };
+      };
+      routineId = createRoutineBody.routine.id;
+
+      await withSandboxMode(async () => {
+        const runRoutineRes = await fetch(`${baseUrl}/api/routines/${routineId}/run`, {
+          method: 'POST',
+        });
+        expect(runRoutineRes.status).toBe(500);
+        const runRoutineBody = (await runRoutineRes.json()) as { error?: string };
+        expect(runRoutineBody.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+      });
+
+      const routineRunsRes = await fetch(`${baseUrl}/api/routines/${routineId}/runs?limit=10`);
+      expect(routineRunsRes.ok).toBe(true);
+      const routineRunsBody = (await routineRunsRes.json()) as { runs: unknown[] };
+      expect(routineRunsBody.runs).toHaveLength(0);
+
+      const runsRes = await fetch(`${baseUrl}/api/runs?projectId=${encodeURIComponent(id)}`);
+      expect(runsRes.ok).toBe(true);
+      const runsBody = (await runsRes.json()) as { runs: unknown[] };
+      expect(runsBody.runs).toHaveLength(0);
+
+      const conversationsAfterRes = await fetch(`${baseUrl}/api/projects/${id}/conversations`);
+      expect(conversationsAfterRes.ok).toBe(true);
+      const conversationsAfterBody = (await conversationsAfterRes.json()) as {
+        conversations: Array<{ id: string }>;
+      };
+      expect(conversationsAfterBody.conversations.map((conversation) => conversation.id)).toEqual(
+        conversationIdsBefore,
+      );
+    } finally {
+      if (routineId) {
+        await fetch(`${baseUrl}/api/routines/${routineId}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
+  }, 30_000);
+
   it('injects run-scoped MCP servers without saving them to the persistent registry', async () => {
     await withFakeClaude(async () => {
       const { id, dir } = await createProject();

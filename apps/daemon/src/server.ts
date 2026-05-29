@@ -13723,6 +13723,7 @@ export async function startServer({
     if (routine.target.mode === 'reuse') {
       const project = getProject(db, routine.target.projectId);
       if (!project) throw new Error(`Routine target project ${routine.target.projectId} not found`);
+      assertSandboxProjectRootAvailable(project.metadata);
       projectId = project.id;
       projectName = project.name;
       previousProjectSnapshotId = project.appliedPluginSnapshotId ?? null;
