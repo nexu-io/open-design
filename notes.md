@@ -1,0 +1,1 @@
+[KILLSWITCH] Irreversible destructive command detected
