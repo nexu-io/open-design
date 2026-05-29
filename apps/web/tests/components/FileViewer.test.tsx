@@ -413,6 +413,38 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
+  it('offers image export for URL-loaded HTML previews', () => {
+    const file = baseFile({
+      name: 'workspace.html',
+      path: 'workspace.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Workspace',
+        entry: 'workspace.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><main>Workspace</main></body></html>"
+      />,
+    );
+
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(screen.getByRole('menuitem', { name: /export as image/i })).toBeTruthy();
+  });
+
   it('keeps inactive HTML preview transports mounted without booting the artifact', async () => {
     const file = baseFile({
       name: 'page.html',

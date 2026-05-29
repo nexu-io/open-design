@@ -2047,6 +2047,12 @@ export interface Dict {
   'fileViewer.exportMd': string;
   'fileViewer.exportImage': string;
   'fileViewer.exportImageFailed': string;
+  'fileViewer.exportImageModalSubtitle': string;
+  'fileViewer.exportImageFormatLabel': string;
+  'fileViewer.exportImageSaving': string;
+  'fileViewer.exportImageSaved': string;
+  'fileViewer.exportImageDownloadStarted': string;
+  'fileViewer.exportImageDownloadDetails': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
   'fileViewer.saveAsTemplate': string;
