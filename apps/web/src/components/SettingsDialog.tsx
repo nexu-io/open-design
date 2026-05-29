@@ -59,6 +59,15 @@ import {
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
 import {
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+  type ProviderModelsCache,
+} from './providerModelsCache';
+export {
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+} from './providerModelsCache';
+import {
   MAX_MAX_TOKENS,
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
@@ -159,6 +168,7 @@ interface Props {
   welcome?: boolean;
   initialSection?: SettingsSection;
   initialHighlight?: SettingsHighlight;
+  providerModelsCache?: ProviderModelsCache;
   /**
    * Persist the current draft. Invoked by the dialog's autosave loop on
    * every committed edit. Returns a promise that resolves once both
@@ -204,8 +214,7 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
-  providerModelsCache?: Record<string, ProviderModelOption[]>;
-  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
 }
 
 export interface AgentRefreshOptions {
@@ -346,20 +355,6 @@ function missingByokModelFetchFields(
   return missing;
 }
 
-export function providerModelsCacheKey(
-  protocol: ApiProtocol,
-  baseUrl: string,
-  apiKey: string,
-  apiVersion = '',
-): string {
-  return [
-    protocol,
-    baseUrl.trim().replace(/\/+$/, ''),
-    apiKey,
-    protocol === 'azure' ? apiVersion.trim() : '',
-  ].join('\n');
-}
-
 function providerConnectionTestKey(
   protocol: ApiProtocol,
   config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion'>,
@@ -455,23 +450,6 @@ function cleanAgentVersionLabel(
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
   return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
-}
-
-export function mergeProviderModelOptions(
-  fetchedModels: readonly ProviderModelOption[],
-  suggestedModelIds: readonly string[],
-): ProviderModelOption[] {
-  const seen = new Set<string>();
-  const out: ProviderModelOption[] = [];
-  const add = (model: ProviderModelOption) => {
-    const id = model.id.trim();
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    out.push({ id, label: model.label.trim() || id });
-  };
-  for (const model of fetchedModels) add(model);
-  for (const id of suggestedModelIds) add({ id, label: id });
-  return out;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -930,6 +908,18 @@ export function SettingsDialog({
   } | null>(null);
   const [providerModelsState, setProviderModelsState] =
     useState<ProviderModelsState>({ status: 'idle' });
+  const [localProviderModelsCache, setLocalProviderModelsCache] =
+    useState<ProviderModelsCache>({});
+  const hasSharedProviderModelsCache =
+    Boolean(sharedProviderModelsCache) && Boolean(onProviderModelsCacheChange);
+  const activeProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? sharedProviderModelsCache!
+      : localProviderModelsCache;
+  const activeSetProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? onProviderModelsCacheChange!
+      : setLocalProviderModelsCache;
   const [providerModelsCommittedKey, setProviderModelsCommittedKey] =
     useState<string | null>(() => {
       const protocol = initial.apiProtocol ?? 'anthropic';
@@ -949,11 +939,6 @@ export function SettingsDialog({
         initial.apiVersion ?? '',
       );
     });
-  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
-    Record<string, ProviderModelOption[]>
-  >({});
-  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
-  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
   const agentTestAbortRef = useRef<AbortController | null>(null);
   const providerTestAbortRef = useRef<AbortController | null>(null);
   const providerModelsAbortRef = useRef<AbortController | null>(null);
@@ -1433,7 +1418,7 @@ export function SettingsDialog({
       cfg.apiKey,
       cfg.apiVersion ?? '',
     );
-    const cachedModels = providerModelsCache[cacheKey];
+    const cachedModels = activeProviderModelsCache[cacheKey];
     if (cachedModels) {
       setProviderModelsState({
         status: 'done',
@@ -1471,7 +1456,7 @@ export function SettingsDialog({
         return;
       }
       if (result.ok && result.models?.length) {
-        setProviderModelsCache((prev) => ({
+        activeSetProviderModelsCache((prev) => ({
           ...prev,
           [cacheKey]: result.models ?? [],
         }));
@@ -1832,7 +1817,8 @@ export function SettingsDialog({
     ),
     [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
   );
-  const fetchedApiModelOptions = providerModelsCache[providerModelsKey] ?? [];
+  const fetchedApiModelOptions =
+    activeProviderModelsCache[providerModelsKey] ?? [];
   const commitProviderModelsInputs = () => {
     if (missingByokModelFetchFields(cfg).length > 0 || !baseUrlValid) {
       setProviderModelsCommittedKey(null);
