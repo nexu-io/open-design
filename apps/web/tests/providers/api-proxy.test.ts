@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { historyWithApiAttachmentContext } from '../../src/api-attachment-context';
 import { buildProxyMessages, streamProxyEndpoint } from '../../src/providers/api-proxy';
 import type { ChatMessage } from '../../src/types';
 
@@ -169,6 +170,66 @@ describe('buildProxyMessages', () => {
           {
             type: 'text',
             text: 'Attached image could not be sent as native image content: path: references/logo.png | name: logo.png',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('does not send preview-unavailable text alongside sketch raster image blocks', async () => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'content-type' ? 'image/png' : null),
+        },
+        arrayBuffer: async () => pngBytes.buffer,
+      }),
+    );
+
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('Describe this image', [
+          { path: 'sketch-hero.png', name: 'sketch-hero.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [
+        {
+          name: 'sketch-hero.png',
+          path: 'sketch-hero.png',
+          type: 'file',
+          size: 4,
+          mtime: 123,
+          kind: 'sketch',
+          mime: 'image/png',
+        },
+      ],
+      { omitNativeImageAttachments: true },
+    );
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/anthropic/stream',
+      history,
+      { projectId: 'project-1' },
+    );
+
+    expect(JSON.stringify(messages)).not.toContain('Content preview unavailable');
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this image' },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: 'iVBORw==',
+            },
           },
         ],
       },

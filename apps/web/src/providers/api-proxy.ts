@@ -9,6 +9,7 @@ import type {
 import { projectFileUrl } from './registry';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
+import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
 
 /**
  * Optional per-request context that some protocols thread into the
@@ -217,11 +218,6 @@ function supportedAnthropicImageMediaType(
   if (lower.endsWith('.gif')) return 'image/gif';
   if (lower.endsWith('.webp')) return 'image/webp';
   return null;
-}
-
-function isAnthropicSupportedImagePath(path: string): boolean {
-  const lower = path.toLowerCase();
-  return /\.(jpe?g|png|gif|webp)$/.test(lower);
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

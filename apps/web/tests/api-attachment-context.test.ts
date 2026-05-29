@@ -99,6 +99,24 @@ describe('historyWithApiAttachmentContext', () => {
     expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
   });
 
+  it('omits sketch-prefixed raster image metadata when native image blocks carry them', async () => {
+    const history = await historyWithApiAttachmentContext(
+      [
+        userMessage('msg-1', 'Describe this image', [
+          { path: 'sketch-hero.png', name: 'sketch-hero.png', kind: 'image' },
+        ]),
+      ],
+      'msg-1',
+      'project-1',
+      [projectFile('sketch-hero.png', 'sketch')],
+      { omitNativeImageAttachments: true },
+    );
+
+    expect(history[0]?.content).toBe('Describe this image');
+    expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
+    expect(mockedFetchProjectFilePreview).not.toHaveBeenCalled();
+  });
+
   it('keeps unsupported image metadata when native image blocks cannot carry them', async () => {
     for (const path of ['hero.avif', 'hero.bmp']) {
       const history = await historyWithApiAttachmentContext(

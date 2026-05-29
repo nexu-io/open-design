@@ -51,3 +51,8 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
   }
   return Boolean(cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com');
 }
+
+export function isAnthropicSupportedImagePath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return /\.(jpe?g|png|gif|webp)$/.test(lower);
+}
