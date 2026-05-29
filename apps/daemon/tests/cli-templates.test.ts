@@ -451,13 +451,17 @@ describe('od templates CLI', () => {
   });
 
   it('reports project-not-found (not daemon-not-running) when `templates save` gets 404', async () => {
-    // structuredHttpFailure → exitWithStructuredError writes a
-    // { error: { code, message, data } } envelope to STDERR and exits
-    // with the per-code exit number (68 for project-not-found, see
-    // RECOVERABLE_EXIT_CODES).
+    // POST /api/templates returns a flat `{ error: '<message>' }` body
+    // (project-routes.ts:679), so the stub mirrors that exact shape
+    // rather than the nested `{ error: { code, message } }` envelope.
+    // structuredHttpFailure normalises the flat string into the
+    // structured envelope, mapping the 404 to project-not-found via
+    // the fallback code passed at the call site and surfacing the
+    // daemon's literal message so headless callers don't lose the
+    // only diagnostic the route emitted.
     stub.setResponder(() => ({
       status: 404,
-      body: { error: { code: 'TEMPLATE_SOURCE_NOT_FOUND', message: 'project not found' } },
+      body: { error: 'source project not found' },
     }));
     const result = await runCli([
       'templates',
@@ -471,12 +475,16 @@ describe('od templates CLI', () => {
     expect(result.code).toBe(68);
     const envelope = JSON.parse(result.stderr.trim());
     expect(envelope.error.code).toBe('project-not-found');
+    expect(envelope.error.message).toBe('source project not found');
   });
 
   it('reports missing-input (not daemon-not-running) when `templates save` gets 400', async () => {
+    // 400 from POST /api/templates is also a flat `{ error: '<msg>' }`
+    // body (project-routes.ts:669, :675). Same normalisation contract
+    // as the 404 case above.
     stub.setResponder(() => ({
       status: 400,
-      body: { error: { code: 'BAD_REQUEST', message: 'name required' } },
+      body: { error: 'name required' },
     }));
     const result = await runCli([
       'templates',
@@ -490,5 +498,6 @@ describe('od templates CLI', () => {
     expect(result.code).toBe(67);
     const envelope = JSON.parse(result.stderr.trim());
     expect(envelope.error.code).toBe('missing-input');
+    expect(envelope.error.message).toBe('name required');
   });
 });

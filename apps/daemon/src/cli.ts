@@ -917,21 +917,35 @@ function exitWithStructuredError({ code, message, data }) {
 
 // Map a daemon HTTP response into the exit-code envelope. Returns the
 // parsed body (so the caller can keep going if it doesn't want to exit).
+//
+// Daemon error envelopes come in two shapes in practice:
+//   { error: { code, message, ... } }  — newer routes using sendApiError
+//   { error: '<message>' }             — older flat-string routes
+//                                         (e.g. POST /api/templates at
+//                                         project-routes.ts:667-680)
+// Normalize so a flat-string body still surfaces its message to the
+// structured envelope instead of collapsing to `HTTP <status>: `, which
+// would drop the only diagnostic the daemon actually returned to a
+// headless caller.
 async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
   let parsed;
   try { parsed = await resp.json(); } catch { parsed = {}; }
-  const errCode = normalizeRecoverableErrorCode(parsed?.error?.code, parsed?.error?.message);
+  const errorObj =
+    typeof parsed?.error === 'string'
+      ? { message: parsed.error }
+      : parsed?.error;
+  const errCode = normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
   if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
     exitWithStructuredError({
       code:    errCode,
-      message: parsed.error.message ?? `HTTP ${resp.status}`,
-      data:    structuredErrorData(parsed.error),
+      message: errorObj?.message ?? `HTTP ${resp.status}`,
+      data:    structuredErrorData(errorObj),
     });
   }
   exitWithStructuredError({
     code:    fallbackCode,
-    message: parsed?.error?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
-    data:    structuredErrorData(parsed?.error),
+    message: errorObj?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
+    data:    structuredErrorData(errorObj),
   });
 }
 
