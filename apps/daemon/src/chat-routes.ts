@@ -550,7 +550,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!match || match.index === undefined) break;
         const frame = buffer.slice(0, match.index);
         buffer = buffer.slice(match.index + match[0].length);
-        if (await onFrame(collectSseFrame(frame))) { await reader.cancel(); return; }
+        if (await onFrame(collectSseFrame(frame))) {
+          // Fire-and-forget cancel: awaiting hangs on some response-stream
+          // implementations (notably Response built from Uint8Array body,
+          // exposed by tests/proxy-routes.test.ts ollama case where the
+          // mock body's tee'd cancel() never resolves). The cancel signal
+          // is a hint; we're already returning from the function, so we
+          // don't gain anything by blocking on it.
+          void reader.cancel().catch(() => {});
+          return;
+        }
       }
     }
 
@@ -576,7 +585,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!line) continue;
         try {
           const data = JSON.parse(line);
-          if (await onFrame({ data })) { await reader.cancel(); return; }
+          if (await onFrame({ data })) {
+            // See note in streamUpstreamSse — fire-and-forget cancel.
+            void reader.cancel().catch(() => {});
+            return;
+          }
         } catch {
           // Ignore malformed provider keepalive lines.
         }
