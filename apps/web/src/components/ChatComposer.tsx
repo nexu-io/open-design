@@ -2380,8 +2380,8 @@ function mcpTemplateMatchesQuery(tpl: McpTemplate, query: string): boolean {
     .includes(q);
 }
 
-function pluginSourceLabel(plugin: InstalledPluginRecord): string {
-  return plugin.sourceKind === 'bundled' ? 'Official' : 'My plugin';
+function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): string {
+  return plugin.sourceKind === 'bundled' ? t('chat.mentionPluginOfficial') : t('chat.mentionPluginMine');
 }
 
 function ToolsImportPanel({
@@ -2528,16 +2528,16 @@ function MentionPopover({
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
-    { id: 'all', label: 'All' },
-    { id: 'plugins', label: 'Plugins' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'mcp', label: 'MCP' },
-    { id: 'connectors', label: 'Connectors' },
-    { id: 'files', label: 'Design files' },
+    { id: 'all', label: t('chat.mentionTabAll') },
+    { id: 'plugins', label: t('chat.mentionTabPlugins') },
+    { id: 'skills', label: t('chat.mentionTabSkills') },
+    { id: 'mcp', label: t('chat.mentionTabMcp') },
+    { id: 'connectors', label: t('chat.mentionTabConnectors') },
+    { id: 'files', label: t('chat.mentionTabFiles') },
   ];
   const showPlugins = tab === 'all' || tab === 'plugins';
   const showSkills = tab === 'all' || tab === 'skills';
@@ -2555,7 +2555,7 @@ function MentionPopover({
   }, [connectors, files, plugins, skills, mcpServers, tab]);
   return (
     <div className="mention-popover" data-testid="mention-popover">
-      <div className="mention-tabs" role="tablist" aria-label="Mention surfaces">
+      <div className="mention-tabs" role="tablist" aria-label={t('chat.mentionTabsAria')}>
         {tabs.map((item) => (
           <button
             key={item.id}
@@ -2574,15 +2574,15 @@ function MentionPopover({
         {!hasVisibleResults ? (
           <div className="mention-empty">
             {query ? (
-              <>No results for “{query}”.</>
+              <>{t('chat.mentionNoResults', { query })}</>
             ) : (
-              <>Search plugins, skills, MCP servers, connectors, and Design Files.</>
+              <>{t('chat.mentionSearchPrompt')}</>
             )}
           </div>
         ) : null}
         {showPlugins && plugins.length > 0 ? (
         <>
-          <div className="mention-section-label">Plugins</div>
+          <div className="mention-section-label">{t('chat.mentionSectionPlugins')}</div>
           {plugins.map((p) => (
             <button
               key={`plugin-${p.id}`}
@@ -2599,14 +2599,14 @@ function MentionPopover({
                   {p.manifest?.description ?? p.id}
                 </span>
               </span>
-              <span className="mention-meta">{pluginSourceLabel(p)}</span>
+              <span className="mention-meta">{pluginSourceLabel(p, t)}</span>
             </button>
           ))}
         </>
       ) : null}
         {showSkills && skills.length > 0 ? (
           <>
-            <div className="mention-section-label">Skills</div>
+            <div className="mention-section-label">{t('chat.mentionSectionSkills')}</div>
             {skills.map((skill) => {
               const active = skill.id === currentSkillId;
               return (
@@ -2625,7 +2625,7 @@ function MentionPopover({
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{active ? 'Active' : skill.mode}</span>
+                  <span className="mention-meta">{active ? t('chat.mentionActiveSkill') : skill.mode}</span>
                 </button>
               );
             })}
@@ -2633,7 +2633,7 @@ function MentionPopover({
         ) : null}
         {showMcp && mcpServers.length > 0 ? (
           <>
-            <div className="mention-section-label">MCP</div>
+            <div className="mention-section-label">{t('chat.mentionSectionMcp')}</div>
             {mcpServers.map((server) => (
               <button
                 key={`mcp-${server.id}`}
@@ -2641,7 +2641,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickMcp(server)}
-                title={`Use ${server.label || server.id}`}
+                title={t('chat.mentionUseMcpTitle', { name: server.label || server.id })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -2657,7 +2657,7 @@ function MentionPopover({
         ) : null}
         {showConnectors && connectors.length > 0 ? (
           <>
-            <div className="mention-section-label">Connectors</div>
+            <div className="mention-section-label">{t('chat.mentionSectionConnectors')}</div>
             {connectors.map((connector) => (
               <button
                 key={`connector-${connector.id}`}
@@ -2665,7 +2665,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickConnector(connector)}
-                title={`Use ${connector.name}`}
+                title={t('chat.mentionUseConnectorTitle', { name: connector.name })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -2681,7 +2681,7 @@ function MentionPopover({
         ) : null}
         {showFiles && files.length > 0 ? (
         <>
-          <div className="mention-section-label">Design files</div>
+          <div className="mention-section-label">{t('chat.mentionSectionFiles')}</div>
           {files.map((f) => {
             const key = f.path ?? f.name;
             return (
