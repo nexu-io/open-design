@@ -109,6 +109,35 @@ describe('POST /api/import/folder', () => {
     });
   });
 
+  it('rejects sandbox chat runs for imported folders before creating a run', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const chatResp = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: project.id,
+          message: 'Inspect the imported project.',
+        }),
+      });
+      expect(chatResp.status).toBe(400);
+      const body = (await chatResp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+
+      const runsResp = await fetch(`${baseUrl}/api/runs?projectId=${encodeURIComponent(project.id)}`);
+      expect(runsResp.status).toBe(200);
+      const runsBody = (await runsResp.json()) as { runs: unknown[] };
+      expect(runsBody.runs).toHaveLength(0);
+    });
+  });
+
   it('still opens an imported-folder project record in sandbox mode', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');

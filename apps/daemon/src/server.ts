@@ -13636,6 +13636,17 @@ export async function startServer({
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
     };
+    if (typeof meta.projectId === 'string' && meta.projectId) {
+      try {
+        const project = getProject(db, meta.projectId);
+        assertSandboxProjectRootAvailable(project?.metadata);
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+        }
+        throw err;
+      }
+    }
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(meta, run));
