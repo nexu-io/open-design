@@ -4726,6 +4726,9 @@ export async function startServer({
       ...await allValidHashes(RUNTIME_DATA_DIR),
       ...await allMcpKeyHashes(RUNTIME_DATA_DIR),
     ];
+    if (apiToken.length > 0) {
+      validHashes.push(crypto.createHash('sha256').update(apiToken).digest('hex'));
+    }
     const valid = verifyKey(key.trim(), validHashes);
     if (!valid) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
