@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 import {
+  isSandboxModeEnabled,
   resolveSandboxRuntimeConfigFromEnv,
   sandboxAgentProfilesConfigPath,
 } from '../sandbox-mode.js';
@@ -19,17 +20,39 @@ const RUNTIME_PROJECT_ROOT = path.resolve(
   '../../../..',
 );
 
-function localAgentProfilesFile(): string {
-  const explicit = process.env.OD_AGENT_PROFILES_CONFIG;
-  if (typeof explicit === 'string' && explicit.trim()) {
-    return explicit.trim();
-  }
-  const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
-    process.env,
-    RUNTIME_PROJECT_ROOT,
+function isInsideDir(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
   );
-  if (sandboxRuntime?.enabled) {
+}
+
+function localAgentProfilesFile(): string | null {
+  const explicit = process.env.OD_AGENT_PROFILES_CONFIG;
+  const explicitPath =
+    typeof explicit === 'string' && explicit.trim()
+      ? path.resolve(explicit.trim())
+      : null;
+
+  if (isSandboxModeEnabled(process.env)) {
+    if (!process.env.OD_DATA_DIR?.trim()) return null;
+    const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
+      process.env,
+      RUNTIME_PROJECT_ROOT,
+    );
+    if (!sandboxRuntime?.enabled) return null;
+    if (
+      explicitPath &&
+      isInsideDir(sandboxRuntime.roots.agentHomeDir, explicitPath)
+    ) {
+      return explicitPath;
+    }
     return sandboxAgentProfilesConfigPath(sandboxRuntime);
+  }
+
+  if (explicitPath) {
+    return explicitPath;
   }
   return path.join(homedir(), '.open-design', 'agents.local.json');
 }
@@ -171,7 +194,9 @@ export function readLocalAgentProfileDefs(
 ): RuntimeAgentDef[] {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(localAgentProfilesFile(), 'utf8'));
+    const file = localAgentProfilesFile();
+    if (!file) return [];
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
   } catch {
     return [];
   }

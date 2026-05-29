@@ -80,7 +80,7 @@ test('sandbox runtime registry ignores host-local agent profiles at module load'
       async () => {
         process.env.OD_SANDBOX_MODE = '1';
         process.env.OD_DATA_DIR = dataDir;
-        delete process.env.OD_AGENT_PROFILES_CONFIG;
+        process.env.OD_AGENT_PROFILES_CONFIG = hostConfig;
 
         vi.resetModules();
         vi.doMock('node:os', async () => ({
@@ -92,6 +92,46 @@ test('sandbox runtime registry ignores host-local agent profiles at module load'
 
         assert.equal(ids.includes('host-wrapper'), false);
         assert.equal(ids.includes('sandbox-wrapper'), true);
+      },
+    );
+  } finally {
+    vi.doUnmock('node:os');
+    vi.resetModules();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sandbox runtime registry ignores implicit profiles without OD_DATA_DIR', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'od-sandbox-registry-missing-data-'));
+  const hostHome = path.join(root, 'host-home');
+  const hostConfigDir = path.join(hostHome, '.open-design');
+  const hostConfig = path.join(hostConfigDir, 'agents.local.json');
+
+  try {
+    mkdirSync(hostConfigDir, { recursive: true });
+    writeFileSync(
+      hostConfig,
+      JSON.stringify({
+        agents: [{ id: 'host-wrapper', baseAgent: 'claude', bin: 'host-wrapper' }],
+      }),
+    );
+
+    await withEnvSnapshot(
+      ['OD_SANDBOX_MODE', 'OD_DATA_DIR', 'OD_AGENT_PROFILES_CONFIG'],
+      async () => {
+        process.env.OD_SANDBOX_MODE = '1';
+        delete process.env.OD_DATA_DIR;
+        delete process.env.OD_AGENT_PROFILES_CONFIG;
+
+        vi.resetModules();
+        vi.doMock('node:os', async () => ({
+          ...(await vi.importActual<typeof import('node:os')>('node:os')),
+          homedir: () => hostHome,
+        }));
+        const { AGENT_DEFS } = await import('../src/runtimes/registry.js');
+        const ids = AGENT_DEFS.map((def) => def.id);
+
+        assert.equal(ids.includes('host-wrapper'), false);
       },
     );
   } finally {
