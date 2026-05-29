@@ -5,6 +5,7 @@ import {
   parseRunToolBundleForRequest,
   resolveExternalMcpServersForRun,
   summarizeRunToolBundle,
+  validateRunToolBundleForAgent,
 } from '../src/run-tool-bundle.js';
 
 describe('run-scoped tool bundles', () => {
@@ -168,5 +169,50 @@ describe('run-scoped tool bundles', () => {
       url: 'https://run.example.test/mcp',
     });
     expect([...selection.persistedTokenServerIds]).toEqual(['persisted-only']);
+  });
+
+  it('rejects bundles for runtimes that cannot receive the requested servers', () => {
+    const stdioOnly = normalizeRunToolBundleForRun({
+      mcpServers: [
+        {
+          id: 'local',
+          transport: 'stdio',
+          command: 'node',
+        },
+      ],
+    });
+    const remote = normalizeRunToolBundleForRun({
+      mcpServers: [
+        {
+          id: 'remote',
+          transport: 'http',
+          url: 'https://example.test/mcp',
+        },
+      ],
+    });
+
+    expect(validateRunToolBundleForAgent(stdioOnly, {
+      id: 'codex',
+      name: 'Codex CLI',
+    })).toEqual({
+      ok: false,
+      message: 'Codex CLI (codex) does not support run-scoped MCP tool bundles',
+    });
+
+    expect(validateRunToolBundleForAgent(remote, {
+      id: 'hermes',
+      name: 'Hermes',
+      externalMcpInjection: 'acp-merge',
+    })).toEqual({
+      ok: false,
+      message:
+        'toolBundle.mcpServers[0] uses http transport, but Hermes (hermes) only supports stdio run-scoped MCP servers',
+    });
+
+    expect(validateRunToolBundleForAgent(remote, {
+      id: 'claude',
+      name: 'Claude Code',
+      externalMcpInjection: 'claude-mcp-json',
+    })).toEqual({ ok: true });
   });
 });

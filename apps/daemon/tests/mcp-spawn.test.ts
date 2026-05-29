@@ -386,6 +386,62 @@ describe('spawn writes external MCP config for Claude Code', () => {
     expect(chatBody.error?.message).toContain('toolBundle must be an object');
   });
 
+  it('rejects run-scoped MCP bundles the selected runtime cannot receive', async () => {
+    const { id } = await createProject();
+
+    const unsupportedRuntimeRes = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'codex',
+        projectId: id,
+        message: 'bad tools',
+        toolBundle: {
+          mcpServers: [
+            {
+              id: 'run-local',
+              transport: 'stdio',
+              command: 'node',
+            },
+          ],
+        },
+      }),
+    });
+    expect(unsupportedRuntimeRes.status).toBe(400);
+    const unsupportedRuntimeBody = (await unsupportedRuntimeRes.json()) as {
+      error?: { message?: string };
+    };
+    expect(unsupportedRuntimeBody.error?.message).toContain(
+      'Codex CLI (codex) does not support run-scoped MCP tool bundles',
+    );
+
+    const unsupportedTransportRes = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'hermes',
+        projectId: id,
+        message: 'bad remote tools',
+        toolBundle: {
+          mcpServers: [
+            {
+              id: 'run-remote',
+              transport: 'http',
+              url: 'https://example.test/mcp',
+            },
+          ],
+        },
+      }),
+    });
+    expect(unsupportedTransportRes.status).toBe(400);
+    const unsupportedTransportBody = (await unsupportedTransportRes.json()) as {
+      error?: { message?: string };
+    };
+    expect(unsupportedTransportBody.error?.message).toContain(
+      'Hermes (hermes) only supports stdio run-scoped MCP servers',
+    );
+  });
+
   it('does not write .mcp.json for ACP agents (Hermes wires via session args)', async () => {
     // ACP agents (Hermes/Kimi) consume the `mcpServers` array via the ACP
     // session/new params instead of `.mcp.json`. The `.mcp.json` write path

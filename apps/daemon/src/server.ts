@@ -319,6 +319,7 @@ import {
 import {
   parseRunToolBundleForRequest,
   resolveExternalMcpServersForRun,
+  validateRunToolBundleForAgent,
 } from './run-tool-bundle.js';
 import {
   beginAuth,
@@ -13184,6 +13185,13 @@ export async function startServer({
         console.warn('[runs] agent id fallback failed', err);
       }
     }
+    const toolBundleSupport = validateRunToolBundleForAgent(
+      toolBundle.bundle,
+      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
+    );
+    if (!toolBundleSupport.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
+    }
     const run = design.runs.create(meta);
     try {
       pinAssistantMessageOnRunCreate(db, run);
@@ -13606,6 +13614,13 @@ export async function startServer({
     const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    const toolBundleSupport = validateRunToolBundleForAgent(
+      toolBundle.bundle,
+      typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
+    );
+    if (!toolBundleSupport.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
     }
     const meta = {
       ...requestBody,

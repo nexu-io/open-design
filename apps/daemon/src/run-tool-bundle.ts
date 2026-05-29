@@ -1,4 +1,5 @@
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp-config.js';
+import type { RuntimeAgentDef } from './runtimes/types.js';
 import { sanitizeMcpConfig, sanitizeMcpServer } from './mcp-config.js';
 
 export interface RunToolBundle {
@@ -25,8 +26,21 @@ export type RunToolBundleParseResult =
   | { ok: true; bundle: RunToolBundle }
   | { ok: false; message: string };
 
+export type RunToolBundleValidationResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+type RunToolBundleAgent = Pick<
+  RuntimeAgentDef,
+  'id' | 'name' | 'externalMcpInjection'
+>;
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function agentLabel(agent: RunToolBundleAgent): string {
+  return agent.name ? `${agent.name} (${agent.id})` : agent.id;
 }
 
 export function normalizeRunToolBundleForRun(raw: unknown): RunToolBundle {
@@ -79,6 +93,46 @@ export function summarizeRunToolBundle(bundle: RunToolBundle | null | undefined)
       enabled: server.enabled,
       ...(server.authMode ? { authMode: server.authMode } : {}),
     })),
+  };
+}
+
+export function validateRunToolBundleForAgent(
+  bundle: RunToolBundle | null | undefined,
+  agent: RunToolBundleAgent | null | undefined,
+): RunToolBundleValidationResult {
+  const servers = Array.isArray(bundle?.mcpServers) ? bundle.mcpServers : [];
+  const enabledServers = servers.filter((server) => server.enabled);
+  if (enabledServers.length === 0) return { ok: true };
+  if (!agent) {
+    return {
+      ok: false,
+      message: 'toolBundle requires a supported agentId',
+    };
+  }
+
+  if (
+    agent.externalMcpInjection === 'claude-mcp-json' ||
+    agent.externalMcpInjection === 'opencode-env-content'
+  ) {
+    return { ok: true };
+  }
+
+  if (agent.externalMcpInjection === 'acp-merge') {
+    const unsupported = servers.findIndex(
+      (server) => server.enabled && server.transport !== 'stdio',
+    );
+    if (unsupported === -1) return { ok: true };
+    return {
+      ok: false,
+      message:
+        `toolBundle.mcpServers[${unsupported}] uses ${servers[unsupported]?.transport} transport, ` +
+        `but ${agentLabel(agent)} only supports stdio run-scoped MCP servers`,
+    };
+  }
+
+  return {
+    ok: false,
+    message: `${agentLabel(agent)} does not support run-scoped MCP tool bundles`,
   };
 }
 
