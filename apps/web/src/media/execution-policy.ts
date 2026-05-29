@@ -13,19 +13,19 @@ export function mediaExecutionPolicyForProjectMetadata(
     const model = cleanModel(metadata.imageModel);
     return model
       ? { mode: 'enabled', allowedSurfaces: ['image'], allowedModels: [model] }
-      : { mode: 'disabled', allowedSurfaces: ['image'] };
+      : { mode: 'enabled', allowedSurfaces: ['image'] };
   }
   if (metadata.kind === 'video') {
     const model = cleanModel(metadata.videoModel);
     return model
       ? { mode: 'enabled', allowedSurfaces: ['video'], allowedModels: [model] }
-      : { mode: 'disabled', allowedSurfaces: ['video'] };
+      : { mode: 'enabled', allowedSurfaces: ['video'] };
   }
   if (metadata.kind === 'audio') {
     const model = cleanModel(metadata.audioModel);
     return model
       ? { mode: 'enabled', allowedSurfaces: ['audio'], allowedModels: [model] }
-      : { mode: 'disabled', allowedSurfaces: ['audio'] };
+      : { mode: 'enabled', allowedSurfaces: ['audio'] };
   }
   return undefined;
 }
