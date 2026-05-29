@@ -53,9 +53,9 @@ describe('extractEffectivePeer', () => {
     expect(extractEffectivePeer('127.0.0.1', '')).toBe('');
   });
 
-  it('returns remoteAddress when X-Forwarded-For is absent (direct connection)', () => {
+  it('returns empty string when X-Forwarded-For is absent under proxy trust (fail closed)', () => {
     process.env.OD_TRUST_PROXY = '1';
-    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('127.0.0.1');
+    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('');
   });
 
   it('returns empty string when both are undefined', () => {
@@ -122,13 +122,13 @@ describe('effectivePeerFromReq', () => {
     expect(effectivePeerFromReq(req)).toBe('192.168.1.100');
   });
 
-  it('returns loopback remoteAddress when XFF absent under proxy trust (direct connection)', () => {
+  it('returns empty string when XFF absent under proxy trust (fail closed)', () => {
     process.env.OD_TRUST_PROXY = 'nginx';
     const req = {
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
     };
-    expect(effectivePeerFromReq(req)).toBe('127.0.0.1');
+    expect(effectivePeerFromReq(req)).toBe('');
   });
 
   it('fails closed when XFF is empty string under proxy trust', () => {
@@ -174,12 +174,12 @@ describe('isLocalManagementRequest', () => {
     })).toBe(false);
   });
 
-  it('returns true when proxy trusted but XFF absent (direct loopback)', () => {
+  it('returns false when proxy trusted but XFF absent (fail closed)', () => {
     process.env.OD_TRUST_PROXY = 'nginx';
     expect(isLocalManagementRequest({
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
-    })).toBe(true);
+    })).toBe(false);
   });
 
   it('fails closed when proxy trusted but XFF is empty string', () => {
@@ -199,17 +199,17 @@ describe('isLocalManagementRequest', () => {
   });
 });
 
-describe('regression: direct localhost under proxy trust', () => {
-  it('allows direct loopback management request with OD_TRUST_PROXY=1 and no XFF', () => {
+describe('regression: proxy trust without XFF fails closed', () => {
+  it('rejects management request when proxy trusted but no XFF (proxied request)', () => {
     process.env.OD_TRUST_PROXY = '1';
-    // Simulates a direct browser/CLI request to http://127.0.0.1:7456
-    // when the daemon is behind a proxy config but accessed directly.
+    // A remote browser reaches Caddy/nginx on the daemon host but the proxy
+    // does not add X-Forwarded-For. The daemon sees loopback remoteAddress
+    // with no XFF — must fail closed, not treat as direct localhost.
     expect(isLocalManagementRequest({
       socket: { remoteAddress: '127.0.0.1' },
       headers: {},
-    })).toBe(true);
-    // extractEffectivePeer should also return the loopback address
-    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('127.0.0.1');
+    })).toBe(false);
+    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('');
   });
 
   it('rejects proxied remote client accessing management endpoint', () => {
@@ -223,11 +223,22 @@ describe('regression: direct localhost under proxy trust', () => {
     expect(extractEffectivePeer('127.0.0.1', '203.0.113.5')).toBe('203.0.113.5');
   });
 
-  it('preserves localhost bootstrap flow per docs/network-security.md:137', () => {
+  it('allows direct loopback when proxy trust is off', () => {
+    delete process.env.OD_TRUST_PROXY;
+    // Without OD_TRUST_PROXY, a direct localhost connection is trusted.
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: {},
+    })).toBe(true);
+    expect(extractEffectivePeer('127.0.0.1', undefined)).toBe('127.0.0.1');
+  });
+
+  it('allows proxied loopback client when XFF is present and shows loopback', () => {
     process.env.OD_TRUST_PROXY = '1';
-    // No keys configured, network-exposed, direct localhost access
-    // must be able to reach /login to generate the first key
-    const ip = extractEffectivePeer('127.0.0.1', undefined);
-    expect(ip).toBe('127.0.0.1');
+    // Proxy is trusted, XFF shows the real client is also loopback
+    expect(isLocalManagementRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+    })).toBe(true);
   });
 });
