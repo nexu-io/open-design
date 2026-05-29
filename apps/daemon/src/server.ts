@@ -1278,7 +1278,8 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
 }
 
 export function resolveDataDir(raw, projectRoot, options = {}) {
-  if (!raw) {
+  const value = raw?.trim();
+  if (!value) {
     if (options.requireExplicit) {
       throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
     }
@@ -1292,7 +1293,7 @@ export function resolveDataDir(raw, projectRoot, options = {}) {
   // expandHomePrefix turns those (and the ~ shorthand, with both / and \
   // separators) into os.homedir() before path.resolve runs so launch
   // surfaces stay consistent.
-  const resolved = resolveProjectRelativePath(raw, projectRoot);
+  const resolved = resolveProjectRelativePath(value, projectRoot);
   try {
     fs.mkdirSync(resolved, { recursive: true });
     fs.accessSync(resolved, fs.constants.W_OK);

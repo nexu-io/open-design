@@ -44,6 +44,14 @@ describe('resolveDataDir', () => {
     expect(() => resolveDataDir('', projectRoot, { requireExplicit: true })).toThrow(
       'OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled',
     );
+    expect(() =>
+      resolveDataDir('   ', projectRoot, { requireExplicit: true }),
+    ).toThrow('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+  });
+
+  it('trims OD_DATA_DIR before resolving the storage root', () => {
+    const out = resolveDataDir('  rel-od  ', projectRoot, { requireExplicit: true });
+    expect(out).toBe(path.join(projectRoot, 'rel-od'));
   });
 
   it('expands a leading ~/ against the user home directory', () => {
