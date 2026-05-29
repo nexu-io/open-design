@@ -243,7 +243,7 @@ describe('PluginShareMenu', () => {
     expect(labels.some((label) => label.includes('Copy install command'))).toBe(false);
   });
 
-  it('exposes Open in marketplace as a navigable item even without external links', () => {
+  it('points Open in marketplace at the public open-design.ai page for bundled plugins', () => {
     renderMenu(make({ id: 'plain' }));
     openPopover();
     const items = Array.from(
@@ -255,8 +255,76 @@ describe('PluginShareMenu', () => {
     const marketplaceLink = Array.from(
       container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
     ).find((link) => link.textContent?.includes('Open in marketplace'));
+    // Bundled plugins have a public detail page, so the link is the public
+    // open-design.ai URL — not a local /marketplace path.
     expect(marketplaceLink?.getAttribute('href')).toBe(
-      '/marketplace/plain',
+      'https://open-design.ai/plugins/plain/',
+    );
+  });
+
+  it('builds a public open-design.ai share link for bundled plugins', () => {
+    expect(buildPluginShareUrl(make({ id: 'simple-deck' }))).toBe(
+      'https://open-design.ai/plugins/simple-deck/',
+    );
+  });
+
+  it('builds a public open-design.ai share link for community marketplace plugins', () => {
+    // Community manifest names carry a `community-` prefix, but the landing
+    // page routes are keyed on the folder name via routeId=`community/<folder>`.
+    // buildPluginShareUrl must use sourceMarketplaceEntryName so pluginDetailSlug
+    // takes the last segment and matches the generated page slug.
+    expect(
+      buildPluginShareUrl(
+        make({
+          id: 'community-registry-starter',
+          sourceKind: 'marketplace',
+          source: 'community/registry-starter',
+          marketplaceId: 'community',
+          marketplaceEntryName: 'community/registry-starter',
+        }),
+      ),
+    ).toBe('https://open-design.ai/plugins/registry-starter/');
+  });
+
+  it('copies a README badge for community marketplace plugins', async () => {
+    renderMenu(
+      make({
+        id: 'community-registry-starter',
+        title: 'Community Registry Starter',
+        sourceKind: 'marketplace',
+        source: 'community/registry-starter',
+        marketplaceId: 'community',
+        marketplaceEntryName: 'community/registry-starter',
+      }),
+    );
+    openPopover();
+    clickItem('Copy README badge');
+    await Promise.resolve();
+    expect(
+      writes.some(
+        (value) =>
+          value.includes('Community Registry Starter') &&
+          value.includes('https://open-design.ai/plugins/registry-starter/'),
+      ),
+    ).toBe(true);
+  });
+
+  it('points Open in marketplace at the public page for community marketplace plugins', () => {
+    renderMenu(
+      make({
+        id: 'community-registry-starter',
+        sourceKind: 'marketplace',
+        source: 'community/registry-starter',
+        marketplaceId: 'community',
+        marketplaceEntryName: 'community/registry-starter',
+      }),
+    );
+    openPopover();
+    const marketplaceLink = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
+    ).find((link) => link.textContent?.includes('Open in marketplace'));
+    expect(marketplaceLink?.getAttribute('href')).toBe(
+      'https://open-design.ai/plugins/registry-starter/',
     );
   });
 

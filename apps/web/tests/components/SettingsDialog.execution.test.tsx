@@ -114,6 +114,7 @@ const amrAgent: AgentInfo = {
   available: true,
   version: '1.0.0',
   models: [{ id: 'default', label: 'Default' }],
+  supportsCustomModel: false,
 };
 
 type OnRefreshAgents = (
@@ -2402,7 +2403,10 @@ describe('SettingsDialog MCP server interactions', () => {
     });
     expect(screen.getByText(/\[mcp_servers\.open-design\]/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Codex/i }));
+    // Scope to the picker trigger ("Codex" + the TOML method chip) so
+    // we don't collide with the new one-click "Install in Codex" /
+    // "Remove from Codex" button on the same panel.
+    fireEvent.click(screen.getByRole('button', { name: /Codex.*TOML/i }));
     fireEvent.click(screen.getByRole('option', { name: /Cursor/i }));
 
     await waitFor(() => {

@@ -51,6 +51,7 @@ on:
       - design-systems/**
       - craft/**
       - templates/**
+      - plugins/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -87,7 +88,7 @@ jobs:
         uses: actions/cache@v5.0.5
         with:
           path: apps/landing-page/public/previews
-          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**') }}
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
           restore-keys: |
             landing-page-previews-${{ runner.os }}-
 
@@ -110,6 +111,11 @@ jobs:
       # launch failure or a 100%-failure run exits non-zero so the
       # build stops instead of silently shipping zero thumbnails.
       - name: Generate skill + template previews
+        # Exact previews-cache hit ⇒ public/previews already holds the correct
+        # thumbnails, skip the slow Playwright render. A restore-keys partial
+        # hit keeps cache-hit false, so we still regenerate — no stale-thumbnail
+        # drift.
+        if: steps.previews-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @open-design/landing-page previews
 
       # No PUBLIC_GA_MEASUREMENT_ID for PR/CI builds: the per-PR preview must

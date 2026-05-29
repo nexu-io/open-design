@@ -687,6 +687,13 @@ export interface Dict {
   'settings.mcpCopied': string;
   'settings.mcpCopy': string;
   'settings.mcpCursorApproval': string;
+  'settings.mcpCodexOneClickInstall': string;
+  'settings.mcpCodexOneClickUninstall': string;
+  'settings.mcpCodexOneClickUnavailable': string;
+  'settings.mcpCodexInstallSuccess': string;
+  'settings.mcpCodexUninstallSuccess': string;
+  'settings.mcpCodexBusy': string;
+  'settings.mcpCodexInstallError': string;
   'settings.mcpRestartNote': string;
   'settings.mcpRestartDetail': string;
   'settings.mcpCapabilitiesTitle': string;
@@ -1705,6 +1712,8 @@ export interface Dict {
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;
   'chat.amrError.rechargeCta': string;
+  'chat.antigravityError.launchTerminalCta': string;
+  'chat.antigravityError.launchSwitchModelCta': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;
@@ -1733,6 +1742,24 @@ export interface Dict {
   'chat.comments.pinAtCoords': string;
   'chat.comments.capturedItems': string;
   'chat.comments.clear': string;
+  'chat.comments.targetImage': string;
+  'chat.comments.targetControl': string;
+  'chat.comments.targetLink': string;
+  'chat.comments.targetText': string;
+  'chat.comments.targetSection': string;
+  'chat.comments.targetPage': string;
+  'chat.comments.targetArea': string;
+  'chat.annotationNotePlaceholder': string;
+  'chat.annotationQueue': string;
+  'chat.annotationQueueing': string;
+  'chat.annotationSending': string;
+  'chat.annotationSendDisabledReason': string;
+  'chat.annotationPreviewMissing': string;
+  'chat.annotationPreviewMissingInk': string;
+  'chat.annotationTimeout': string;
+  'chat.annotationFailed': string;
+  'chat.annotationProjectCreateFailed': string;
+  'chat.annotationUploadFailed': string;
   'chat.inspect.noEditableTargets': string;
   'chat.inspect.noCommentTargets': string;
   'chat.inspect.editHint': string;
@@ -1773,6 +1800,25 @@ export interface Dict {
   'chat.importFolder': string;
   'chat.importSkills': string;
   'chat.importProject': string;
+  'chat.mentionTabsAria': string;
+  'chat.mentionTabAll': string;
+  'chat.mentionTabPlugins': string;
+  'chat.mentionTabSkills': string;
+  'chat.mentionTabMcp': string;
+  'chat.mentionTabConnectors': string;
+  'chat.mentionTabFiles': string;
+  'chat.mentionNoResults': string;
+  'chat.mentionSearchPrompt': string;
+  'chat.mentionSectionPlugins': string;
+  'chat.mentionSectionSkills': string;
+  'chat.mentionSectionMcp': string;
+  'chat.mentionSectionConnectors': string;
+  'chat.mentionSectionFiles': string;
+  'chat.mentionActiveSkill': string;
+  'chat.mentionUseMcpTitle': string;
+  'chat.mentionUseConnectorTitle': string;
+  'chat.mentionPluginOfficial': string;
+  'chat.mentionPluginMine': string;
   'chat.linkedFolderRemoveAria': string;
   'chat.linkedFolderNotFound': string;
   'chat.linkedFolderAlready': string;
@@ -1824,13 +1870,23 @@ export interface Dict {
   'preview.errorTitle': string;
   'preview.errorBody': string;
   'preview.retry': string;
-  // Friendly placeholder copy for skills whose `od.preview.type` is not
-  // `html` — they ship no fetchable example artifact, so the loading /
-  // error states are misleading. Issue #897.
+  // Friendly placeholder copy for surfaces whose `od.preview.type` is
+  // not `html`, or whose manifest declares a preview entry that doesn't
+  // ship on disk — they have no fetchable example artifact, so the
+  // loading / error states are misleading. Issues #897, #2840, #3216.
+  // Body uses the `{kind}` placeholder (raw `od.preview.type` token,
+  // e.g. "markdown" or "image"); both keys use the `{noun}` placeholder
+  // so the same wording reads correctly on skills, plugins, and design
+  // templates (filled from one of the `preview.noun.*` keys below).
   'preview.unavailableTitle': string;
-  // Body copy uses the `{kind}` placeholder (raw `od.preview.type`
-  // token, e.g. "markdown" or "image") so each kind reads naturally.
   'preview.unavailableBody': string;
+  // Noun variants so the unavailable placeholder reads with the right
+  // word for each surface — Skills tab vs. Community/Plugins vs. deck
+  // design-templates. Keep these short, capitalised by the host
+  // language's conventions, and translatable in every locale.
+  'preview.nounSkill': string;
+  'preview.nounPlugin': string;
+  'preview.nounTemplate': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 
@@ -1986,6 +2042,9 @@ export interface Dict {
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;
   'manualEdit.title': string;
+  'manualEdit.fallbackTitle': string;
+  'manualEdit.movePanel': string;
+  'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;
   'manualEdit.empty': string;
   'manualEdit.noEditableLayers': string;
@@ -2052,6 +2111,19 @@ export interface Dict {
   'fileViewer.presentNewTab': string;
   'fileViewer.exitPresentation': string;
   'fileViewer.shareLabel': string;
+  'fileViewer.shareMenuShareLink': string;
+  'fileViewer.shareMenuPublishOnline': string;
+  'fileViewer.shareMenuDownload': string;
+  'fileViewer.shareMenuPresentation': string;
+  'fileViewer.shareMenuSourceFiles': string;
+  'fileViewer.shareMenuSave': string;
+  'fileViewer.copyProviderLink': string;
+  'fileViewer.copyCloudflareLink': string;
+  'fileViewer.screenshotCopying': string;
+  'fileViewer.screenshotCopied': string;
+  'fileViewer.screenshotClipboardDenied': string;
+  'fileViewer.screenshotPreviewLoading': string;
+  'fileViewer.screenshotCaptureFailed': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;
   'fileViewer.exportPptxBusy': string;
@@ -2064,6 +2136,7 @@ export interface Dict {
   'fileViewer.exportImageFailed': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
+  'fileViewer.exportStarted': string;
   'fileViewer.saveAsTemplate': string;
   'fileViewer.savingTemplate': string;
   'fileViewer.savedTemplate': string;
@@ -2193,6 +2266,8 @@ export interface Dict {
   'fileViewer.deployProviderFailed': string;
   'fileViewer.deployResultLabel': string;
   'fileViewer.deployLinkReady': string;
+  'fileViewer.deploySuccessToast': string;
+  'fileViewer.deploySuccessToastDetails': string;
   'fileViewer.deployLinkPreparingLabel': string;
   'fileViewer.deployLinkDelayed': string;
   'fileViewer.deployLinkFailed': string;

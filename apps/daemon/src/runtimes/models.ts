@@ -25,6 +25,18 @@ export function rememberLiveModels(agentId: string, models: RuntimeModelOption[]
   liveModelOrder.set(agentId, ids);
 }
 
+export function getRememberedLiveModels(agentId: string): RuntimeModelOption[] {
+  const ids = liveModelOrder.get(agentId) ?? [];
+  return ids.map((id) => ({ id, label: id }));
+}
+
+export function preferFreshLiveModels(
+  freshModels: RuntimeModelOption[],
+  rememberedModels: RuntimeModelOption[],
+): RuntimeModelOption[] {
+  return freshModels.length > 0 ? freshModels : rememberedModels;
+}
+
 export function isKnownModel(def: RuntimeAgentDef, modelId: string | null | undefined) {
   if (!modelId) return false;
   const live = liveModelCache.get(def.id);

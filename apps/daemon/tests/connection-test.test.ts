@@ -632,6 +632,103 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('checks SenseAudio non-chat model availability without probing chat completions', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.senseaudio.cn/v1/models') {
+        return jsonResponse({
+          data: [
+            { id: 'doubao-1-5-pro-32k-250115' },
+            { id: 'senseaudio-image-2.0-260319' },
+          ],
+        });
+      }
+      return jsonResponse({ error: { message: 'unexpected endpoint' } }, { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'senseaudio-image-2.0-260319',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+    expect(body.detail).toContain('not chat-testable');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/models',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/chat/completions',
+      expect.anything(),
+    );
+  });
+
+  it('returns not_found_model when a SenseAudio non-chat model is absent from /models', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        expect(url).toBe('https://api.senseaudio.cn/v1/models');
+        return jsonResponse({
+          data: [{ id: 'senseaudio-image-1.0-260319' }],
+        });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'senseaudio-image-2.0-260319',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('not_found_model');
+    expect(body.detail).toContain('not reported by SenseAudio /models');
+  });
+
+  it('keeps SenseAudio chat models on the chat completions smoke test', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+        });
+      }
+      return jsonResponse({ error: { message: 'unexpected endpoint' } }, { status: 500 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'senseaudio',
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sense-key',
+        model: 'doubao-1-5-pro-32k-250115',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.senseaudio.cn/v1/chat/completions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('maps a 404 to not_found_model', async () => {
     vi.stubGlobal(
       'fetch',
@@ -2877,16 +2974,18 @@ process.stdin.on('end', () => {
   });
 
   it('reports an early-phase diagnostics block when the agent CLI is missing (#2248)', async () => {
-    // Clear PATH so the daemon cannot locate `claude`. We restore the
-    // env in `finally` to avoid leaking the empty PATH to later tests.
-    // Depending on whether the resolver short-circuits or the spawn
-    // itself ENOENTs, the kind may be agent_not_installed or
-    // agent_spawn_failed and the phase may be 'binary_resolution' or
-    // 'spawn'. Both are valid "we never reached the smoke test" shapes
-    // — the actionable bit for the UI is that diagnostics arrived at
-    // all and that the phase is one of the two early values.
+    // Isolate every resolver input so the daemon truly cannot locate
+    // `claude`, even on machines that have a pinned CLAUDE_BIN or an
+    // alternate user toolchain home configured. PATH alone is no longer
+    // sufficient because runtime resolution also consults CLI env
+    // overrides and OD_AGENT_HOME-scoped toolchain bins.
     const oldPath = process.env.PATH;
+    const oldClaudeBin = process.env.CLAUDE_BIN;
+    const oldAgentHome = process.env.OD_AGENT_HOME;
+    const emptyHome = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-missing-claude-home-'));
     process.env.PATH = '';
+    delete process.env.CLAUDE_BIN;
+    process.env.OD_AGENT_HOME = emptyHome;
     try {
       const result = await testAgentConnection({ agentId: 'claude' });
       expect(result.ok).toBe(false);
@@ -2895,6 +2994,11 @@ process.stdin.on('end', () => {
       expect(['binary_resolution', 'spawn']).toContain(result.diagnostics?.phase);
     } finally {
       process.env.PATH = oldPath;
+      if (oldClaudeBin === undefined) delete process.env.CLAUDE_BIN;
+      else process.env.CLAUDE_BIN = oldClaudeBin;
+      if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+      else process.env.OD_AGENT_HOME = oldAgentHome;
+      await fsp.rm(emptyHome, { recursive: true, force: true });
     }
   });
 

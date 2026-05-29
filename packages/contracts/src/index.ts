@@ -15,6 +15,7 @@ export * from './api/finalize.js';
 export * from './api/github.js';
 export * from './api/handoff.js';
 export * from './api/live-artifacts.js';
+export * from './api/media.js';
 export * from './api/mcp.js';
 export * from './api/memory.js';
 export * from './api/orbit.js';

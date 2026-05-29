@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
@@ -200,6 +202,39 @@ test('attachAcpSession keeps legacy session/set_model when no model config optio
     modelId: 'legacy-model',
   });
   assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
+});
+
+test('attachAcpSession includes image attachments as ACP resource links', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-acp-image-'));
+  const imagePath = path.join(tmpDir, 'screenshot.png');
+  fs.writeFileSync(imagePath, 'png');
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe this image',
+    cwd: '/tmp/od-project',
+    model: null,
+    imagePaths: [imagePath],
+    mcpServers: [],
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpResult(child, 3, {});
+
+  const requests = parseRpcWrites(writes);
+  const promptRequest = requests.find((entry) => entry.method === 'session/prompt');
+  assert.deepEqual(promptRequest?.params, {
+    sessionId: 'session-1',
+    prompt: [
+      { type: 'text', text: 'describe this image' },
+      { type: 'resource_link', uri: imagePath },
+    ],
+  });
 });
 
 test('attachAcpSession exposes abort and sends session cancel after session creation', () => {

@@ -77,6 +77,24 @@ export interface RoutineRunHandlerStart {
   conversationId: string;
   agentRunId: string;
   completion: Promise<RoutineRunCompletion>;
+  prepare?: (run: RoutineRun) => void | Promise<void>;
+  start?: () => void;
+  // Tear-down for the case where the handler returned a start handle but
+  // `RoutineService` later reached `prepare()` and it failed — i.e. the
+  // routine_run row exists, prepare may have partially mutated project /
+  // conversation / snapshot state, and the in-memory chat run still needs
+  // to terminate as `canceled`. Callers MUST surface failures rather than
+  // swallow them (the loser-retry path depends on it).
+  discard?: () => void;
+  // Tear-down for the case where the run was NEVER durably inserted —
+  // either `insertRun()` threw, or `insertRun()` returned `false` because
+  // a sibling daemon already won the scheduled slot. Prepare has not run,
+  // so no project / conversation / snapshot writes need rolling back. The
+  // in-memory chat run must also be removed from the registry instead of
+  // being finalized as `canceled`, otherwise duplicate-loser slots would
+  // surface phantom canceled runs on `/api/runs`. Falls back to `discard`
+  // when the handler does not distinguish the two cases.
+  discardUnstarted?: () => void;
 }
 
 export interface RoutineRunCompletion {
@@ -95,7 +113,7 @@ export type RoutineRunHandler = (input: {
 
 export interface RoutinePersistence {
   list(): Routine[];
-  insertRun(run: RoutineRun): void;
+  insertRun(run: RoutineRun, options?: { scheduledSlotAt?: number }): boolean | void;
   updateRun(id: string, patch: Partial<RoutineRun>): void;
   getLatestRun(routineId: string): RoutineRun | null;
 }
@@ -104,6 +122,25 @@ interface ScheduledTimer {
   routineId: string;
   timer: NodeJS.Timeout;
   fireAt: Date;
+}
+
+function clearRoutinePlaceholderId(value: string): string {
+  return value.startsWith('routine-pending-') ? '' : value;
+}
+
+class ScheduledRunPersistenceError extends Error {
+  constructor(
+    readonly routineId: string,
+    readonly slotAt: number,
+    readonly originalError: unknown,
+  ) {
+    super(`Routine ${routineId} scheduled slot ${slotAt} could not be persisted`);
+    this.name = 'ScheduledRunPersistenceError';
+  }
+}
+
+function isScheduledRunPersistenceError(error: unknown): error is ScheduledRunPersistenceError {
+  return error instanceof ScheduledRunPersistenceError;
 }
 
 // ---------- timezone math ----------
@@ -458,22 +495,43 @@ export class RoutineService {
     if (!routine.enabled) return;
     const fireAt = nextRunAtForSchedule(routine.schedule);
     if (!fireAt) return;
+    this.scheduleRoutineAt(routine, fireAt);
+  }
+
+  private retryScheduledSlot(routineId: string, fireAt: Date): void {
+    if (!this.started) return;
+    const routine = this.persistence.list().find((candidate) => candidate.id === routineId);
+    if (!routine?.enabled) return;
+    this.scheduleRoutineAt(routine, fireAt);
+  }
+
+  private scheduleRoutineAt(routine: Routine, fireAt: Date): void {
     // setTimeout can't carry past 2^31 ms (~24.8 days); we cap and use
     // a chained re-schedule. Routines fire within hours/days, but a
     // misconfigured "next month" weekly value could otherwise overflow.
     const delay = Math.max(1_000, Math.min(2_000_000_000, fireAt.getTime() - Date.now()));
     const timer = setTimeout(() => {
       this.timers.delete(routine.id);
-      this.start_(routine.id, 'scheduled')
+      const slotAt = fireAt.getTime();
+      this.start_(routine.id, 'scheduled', { scheduledSlotAt: slotAt })
+        .then(() => {
+          // Always reschedule so a single fire keeps the cadence alive.
+          this.rescheduleOne(routine.id);
+        })
         .catch((error) => {
           console.error(
             `[od] routine ${routine.id} scheduled run failed:`,
-            error instanceof Error ? error.message : error,
+            error instanceof ScheduledRunPersistenceError
+              ? error.originalError instanceof Error
+                ? error.originalError.message
+                : error.originalError
+              : error instanceof Error ? error.message : error,
           );
-        })
-        .finally(() => {
-          // Always reschedule so a single fire keeps the cadence alive.
-          this.rescheduleOne(routine.id);
+          if (isScheduledRunPersistenceError(error)) {
+            this.retryScheduledSlot(routine.id, fireAt);
+          } else {
+            this.rescheduleOne(routine.id);
+          }
         });
     }, delay);
     if (typeof timer.unref === 'function') timer.unref();
@@ -491,6 +549,7 @@ export class RoutineService {
   private async start_(
     routineId: string,
     trigger: RoutineRunTrigger,
+    options: { scheduledSlotAt?: number } = {},
   ): Promise<RoutineRunHandlerStart> {
     if (!this.runHandler) throw new Error('Routine run handler is not configured');
     const inflight = this.inflight.get(routineId);
@@ -505,7 +564,7 @@ export class RoutineService {
       const handler = this.runHandler;
       if (!handler) throw new Error('Routine run handler is not configured');
       const handlerStart = await handler({ routine, trigger, startedAt, runId });
-      this.persistence.insertRun({
+      const run: RoutineRun = {
         id: runId,
         routineId: routine.id,
         trigger,
@@ -518,7 +577,106 @@ export class RoutineService {
         summary: null,
         error: null,
         errorCode: null,
-      });
+      };
+      const scheduledSlotAt = options.scheduledSlotAt;
+      const wasScheduled = scheduledSlotAt != null;
+      const publicProjectId = () => clearRoutinePlaceholderId(run.projectId);
+      const publicConversationId = () => clearRoutinePlaceholderId(run.conversationId);
+      const publicAgentRunId = () => clearRoutinePlaceholderId(run.agentRunId);
+      const scrubRoutinePlaceholders = () => {
+        run.projectId = publicProjectId();
+        run.conversationId = publicConversationId();
+        run.agentRunId = publicAgentRunId();
+      };
+      // Tear-down to use when the durable routine_run row was never
+      // inserted (insertRun threw, or another daemon already won the slot).
+      // Prefer the explicit `discardUnstarted` callback when the handler
+      // distinguishes the two cases — that one drops the in-memory chat run
+      // entirely instead of finalizing it as `canceled`, so duplicate
+      // scheduled losers do not surface phantom runs on `/api/runs`.
+      // Handlers that do not implement the split still see `discard`.
+      const discardUnstarted = handlerStart.discardUnstarted ?? handlerStart.discard;
+      let inserted = true;
+      try {
+        inserted = this.persistence.insertRun(run, options) !== false;
+      } catch (error) {
+        try {
+          discardUnstarted?.();
+        } catch (discardError) {
+          if (wasScheduled) {
+            throw new ScheduledRunPersistenceError(routine.id, scheduledSlotAt, discardError);
+          }
+          throw discardError;
+        }
+        if (wasScheduled) {
+          throw new ScheduledRunPersistenceError(routine.id, scheduledSlotAt, error);
+        }
+        throw error;
+      }
+      if (!inserted) {
+        try {
+          discardUnstarted?.();
+        } catch (discardError) {
+          if (wasScheduled) {
+            throw new ScheduledRunPersistenceError(routine.id, scheduledSlotAt, discardError);
+          }
+          throw discardError;
+        }
+        return handlerStart;
+      }
+      try {
+        await handlerStart.prepare?.(run);
+        const preparedIdsChanged =
+          run.projectId !== handlerStart.projectId
+          || run.conversationId !== handlerStart.conversationId
+          || run.agentRunId !== handlerStart.agentRunId;
+        handlerStart.projectId = run.projectId;
+        handlerStart.conversationId = run.conversationId;
+        handlerStart.agentRunId = run.agentRunId;
+        if (wasScheduled || preparedIdsChanged) {
+          this.persistence.updateRun(runId, {
+            projectId: run.projectId,
+            conversationId: run.conversationId,
+            agentRunId: run.agentRunId,
+          });
+        }
+      } catch (error) {
+        // Terminate the in-memory chat run created by `handler(...)` so its
+        // `completion` promise resolves instead of waiting forever on a
+        // run that will never start. Surface any cleanup failure rather
+        // than swallow it, but still finalize the persisted row.
+        let discardError: unknown = null;
+        try {
+          handlerStart.discard?.();
+        } catch (err) {
+          discardError = err;
+        }
+        if (discardError != null) {
+          console.error(
+            `[od] routine ${routine.id} prepare cleanup failed:`,
+            discardError instanceof Error ? discardError.message : discardError,
+          );
+        }
+        // Persist IDs only after `prepare()` has replaced routine
+        // placeholders with real resources. If preparation failed before
+        // enrichment, clear the sentinels so the terminal row does not point
+        // at fabricated project/conversation IDs. For scheduled runs the
+        // slot claim was already accepted at `insertRun()`, so retrying the
+        // same slot is not appropriate — let the error propagate so the
+        // scheduler advances to the next cadence.
+        scrubRoutinePlaceholders();
+        this.persistence.updateRun(runId, {
+          status: 'failed',
+          completedAt: Date.now(),
+          summary: null,
+          error: error instanceof Error ? error.message : String(error),
+          errorCode: null,
+          projectId: run.projectId,
+          conversationId: run.conversationId,
+          agentRunId: run.agentRunId,
+        });
+        throw error;
+      }
       handlerStart.completion
         .then((completion) => {
           this.persistence.updateRun(runId, {
@@ -538,6 +696,18 @@ export class RoutineService {
             errorCode: null,
           });
         });
+      try {
+        handlerStart.start?.();
+      } catch (error) {
+        this.persistence.updateRun(runId, {
+          status: 'failed',
+          completedAt: Date.now(),
+          summary: null,
+          error: error instanceof Error ? error.message : String(error),
+          errorCode: null,
+        });
+        throw error;
+      }
       return handlerStart;
     })();
     this.inflight.set(routineId, promise);

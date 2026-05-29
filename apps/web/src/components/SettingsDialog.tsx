@@ -197,6 +197,16 @@ interface Props {
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onProjectsRefresh?: () => Promise<void> | void;
+  /**
+   * Notified by Settings → Skills after a successful skill registry
+   * mutation (create / edit / delete). App.tsx uses this to drop preview
+   * iframes whose project depends on the affected skill — body-only
+   * edits do not move SkillSummary fields, so ProjectView's signature
+   * path can miss them.
+   */
+  onSkillsChanged?: (affectedSkillId?: string) => void;
+  /** Same channel for design-system registry mutations. */
+  onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
 }
 
 export interface AgentRefreshOptions {
@@ -429,6 +439,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   deepseek: 'DeepSeek terminal UI',
   hermes: 'ACP agent CLI',
   'grok-build': 'xAI coding CLI',
+  reasonix: 'DeepSeek native coding CLI',
 };
 
 function cleanAgentVersionLabel(
@@ -826,6 +837,8 @@ export function SettingsDialog({
   mediaProvidersNotice,
   onReloadMediaProviders,
   onProjectsRefresh,
+  onSkillsChanged,
+  onDesignSystemsChanged,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -2066,7 +2079,12 @@ export function SettingsDialog({
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
-    const allowCustomModel = selected.id !== 'amr';
+    // Adapters opt out via `supportsCustomModel: false` on their
+    // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
+    // upstream issue #35) or when free-text ids silently fail at spawn
+    // (AMR routes through ACP `session/set_model` and validates against
+    // a live catalog). Undefined === allow, matching today's UX.
+    const allowCustomModel = selected.supportsCustomModel !== false;
     const configuredModel =
       typeof choice.model === 'string' && choice.model
         ? choice.model
@@ -3634,11 +3652,16 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               onSkillsRefresh={onSkillsRefresh}
+              onSkillsChanged={onSkillsChanged}
             />
           ) : null}
 
           {activeSection === 'designSystems' ? (
-            <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
+            <DesignSystemsSection
+              cfg={cfg}
+              setCfg={setCfg}
+              onDesignSystemsChanged={onDesignSystemsChanged}
+            />
           ) : null}
 
           {activeSection === 'projectLocations' ? (
@@ -5612,6 +5635,118 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
 }`;
 }
 
+// One-click install toggle for Codex: queries the daemon for whether
+// `codex mcp get open-design` succeeds, and POSTs/DELETEs the install
+// endpoint to call `codex mcp add/remove` on the user's behalf. The
+// copy-snippet path still works for users who prefer to paste manually
+// or whose Codex CLI is not on PATH (button shows a disabled hint in
+// that case).
+function CodexInstallToggle(): JSX.Element | null {
+  const { t } = useI18n();
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [installed, setInstalled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/mcp/install/codex/status');
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as { available: boolean; installed: boolean };
+      setAvailable(Boolean(data.available));
+      setInstalled(Boolean(data.installed));
+    } catch {
+      // Daemon unreachable or endpoint missing — hide the toggle
+      // entirely rather than spook the user with a permanent error.
+      setAvailable(false);
+      setInstalled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const run = useCallback(
+    async (method: 'POST' | 'DELETE', successKey: 'settings.mcpCodexInstallSuccess' | 'settings.mcpCodexUninstallSuccess') => {
+      setBusy(true);
+      setMessage(null);
+      try {
+        const res = await fetch('/api/mcp/install/codex', { method });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+          throw new Error(body?.error?.message || `HTTP ${res.status}`);
+        }
+        setMessage({ kind: 'success', text: t(successKey) });
+        await refresh();
+      } catch (err) {
+        setMessage({
+          kind: 'error',
+          text: t('settings.mcpCodexInstallError', { error: err instanceof Error ? err.message : String(err) }),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh, t],
+  );
+
+  if (available === null) return null;
+
+  if (!available) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          disabled
+          style={{ padding: '6px 14px', fontSize: 13, opacity: 0.6 }}
+        >
+          {t('settings.mcpCodexOneClickInstall')}
+        </button>
+        <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--fg-2, #9aa0a6)' }}>
+          {t('settings.mcpCodexOneClickUnavailable')}
+        </span>
+      </div>
+    );
+  }
+
+  const label = installed
+    ? t('settings.mcpCodexOneClickUninstall')
+    : t('settings.mcpCodexOneClickInstall');
+  const onClick = () => {
+    if (installed) {
+      void run('DELETE', 'settings.mcpCodexUninstallSuccess');
+    } else {
+      void run('POST', 'settings.mcpCodexInstallSuccess');
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <button
+        type="button"
+        className={installed ? '' : 'primary'}
+        disabled={busy}
+        onClick={onClick}
+        style={{ padding: '6px 14px', fontSize: 13 }}
+      >
+        {busy ? t('settings.mcpCodexBusy') : label}
+      </button>
+      {message ? (
+        <span
+          style={{
+            marginLeft: 10,
+            fontSize: 12,
+            color: message.kind === 'error' ? 'var(--danger, #ff6b6b)' : 'var(--fg-2, #9aa0a6)',
+          }}
+        >
+          {message.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function IntegrationsSection() {
   const { t } = useI18n();
 
@@ -5882,6 +6017,8 @@ function IntegrationsSection() {
         {info ? (
           <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
         ) : null}
+
+        {client.id === 'codex' ? <CodexInstallToggle /> : null}
 
         {client.buildDeeplink && info ? (
           <div style={{ marginBottom: 12 }}>

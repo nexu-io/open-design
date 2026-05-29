@@ -759,6 +759,9 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px 4px 0;
+  max-height: min(148px, 22vh);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .staged-chip {
   display: inline-flex;
@@ -814,7 +817,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(17, 24, 39, 0.44);
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(4px);
 }
 .staged-preview-card {
   display: flex;

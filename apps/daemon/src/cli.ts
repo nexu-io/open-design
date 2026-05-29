@@ -11,6 +11,8 @@ import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { requestJsonIpc } from '@open-design/sidecar';
+import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 
 const argv = process.argv.slice(2);
 
@@ -150,6 +152,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'title', 'against',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -193,6 +196,8 @@ const RECOVERABLE_EXIT_CODES = {
   'plugin-requires-daemon':   71,
   'snapshot-stale':           72,
   'genui-surface-awaiting':   73,
+  'desktop-auth-pending':     74,
+  'desktop-import-token-rejected': 75,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -477,7 +482,8 @@ async function runMediaGenerate(rawArgs) {
 
   const daemonUrl = await cliDaemonUrl(flags);
   const projectId = flags.project || process.env.OD_PROJECT_ID;
-  if (!projectId) {
+  const token = process.env.OD_TOOL_TOKEN;
+  if (!projectId && !token) {
     console.error(
       'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
     );
@@ -511,12 +517,17 @@ async function runMediaGenerate(rawArgs) {
   if (flags['prompt-influence'] != null) body.promptInfluence = Number(flags['prompt-influence']);
   if (flags.loop === true) body.loop = true;
 
-  const url = `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
+  const url = token
+    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/generate`
+    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
   let resp;
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch (err) {
@@ -748,6 +759,22 @@ function parseFlags(argv, opts = {}) {
   return out;
 }
 
+function positionalArgs(argv, stringFlags = new Set()) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a) continue;
+    if (!a.startsWith('--')) {
+      out.push(a);
+      continue;
+    }
+    const eq = a.indexOf('=');
+    const key = eq >= 0 ? a.slice(2, eq) : a.slice(2);
+    if (eq < 0 && stringFlags.has(key)) i++;
+  }
+  return out;
+}
+
 async function cliDaemonUrl(flags) {
   return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'] });
 }
@@ -787,7 +814,7 @@ Common options:
                             it, and forwards it to the upstream API.
   --daemon-url <url>
 
-Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}.
+Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}
 
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
@@ -884,19 +911,36 @@ function exitWithStructuredError({ code, message, data }) {
 async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
   let parsed;
   try { parsed = await resp.json(); } catch { parsed = {}; }
-  const errCode = parsed?.error?.code;
+  const errCode = normalizeRecoverableErrorCode(parsed?.error?.code, parsed?.error?.message);
   if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
     exitWithStructuredError({
       code:    errCode,
       message: parsed.error.message ?? `HTTP ${resp.status}`,
-      data:    parsed.error.data,
+      data:    structuredErrorData(parsed.error),
     });
   }
   exitWithStructuredError({
     code:    fallbackCode,
     message: parsed?.error?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
-    data:    parsed?.error?.data,
+    data:    structuredErrorData(parsed?.error),
   });
+}
+
+function normalizeRecoverableErrorCode(code, message) {
+  if (code === 'DESKTOP_AUTH_PENDING') return 'desktop-auth-pending';
+  if (code === 'FORBIDDEN' && /desktop import token rejected/i.test(String(message ?? ''))) {
+    return 'desktop-import-token-rejected';
+  }
+  return code;
+}
+
+function structuredErrorData(error) {
+  if (!error || typeof error !== 'object') return undefined;
+  const data = {};
+  if ('data' in error && error.data !== undefined) Object.assign(data, error.data);
+  if ('details' in error && error.details !== undefined) data.details = error.details;
+  if (typeof error.retryable === 'boolean') data.retryable = error.retryable;
+  return Object.keys(data).length > 0 ? data : undefined;
 }
 
 async function runPlugin(args) {
@@ -4284,6 +4328,7 @@ async function runProject(args) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
+  od project import <baseDir> [--name "<title>"]
   od project list                         List projects.
   od project info <id>                    Print one project.
   od project delete <id>                  Delete a project.
@@ -4388,6 +4433,35 @@ Common options:
       }
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] created ${data.project?.id ?? id} (conversation ${data.conversationId})`);
+      return;
+    }
+    case 'import': {
+      const [baseDir] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const importBaseDir = typeof baseDir === 'string' ? baseDir.trim() : '';
+      if (!importBaseDir) {
+        console.error('Usage: od project import <baseDir> [--name "<title>"]');
+        process.exit(2);
+      }
+      const body = { baseDir: importBaseDir };
+      if (typeof flags.name === 'string' && flags.name.length > 0) body.name = flags.name;
+      if (typeof flags.skill === 'string' && flags.skill.length > 0) body.skillId = flags.skill;
+      if (typeof flags['design-system'] === 'string' && flags['design-system'].length > 0) {
+        body.designSystemId = flags['design-system'];
+      }
+      const headers = { 'content-type': 'application/json' };
+      const importToken = await mintCliImportToken(importBaseDir);
+      if (importToken != null) {
+        headers['x-od-desktop-import-token'] = importToken;
+      }
+      const resp = await fetch(`${base}/api/import/folder`, {
+        method:  'POST',
+        headers,
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] imported ${data.project?.id ?? '-'} (conversation ${data.conversationId ?? '-'})`);
       return;
     }
     case 'delete': {
@@ -4616,6 +4690,8 @@ async function runFiles(args) {
   od files upload <projectId> <localpath> [--as <relpath>]
                                                Upload a local file.
   od files delete <projectId> <name>           Delete a project file.
+  od files diff   <projectId> <relpathA> [<relpathB> | --against -]
+                                               Print a unified diff.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -4728,15 +4804,178 @@ Common options:
       console.log(`[files] deleted ${name}`);
       return;
     }
+    case 'diff': {
+      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const [id, relA, relB] = positional;
+      const against = typeof flags.against === 'string' ? flags.against : null;
+      if (!id || !relA || (!relB && !against) || (relB && against)) {
+        console.error('Usage: od files diff <projectId> <relpathA> [<relpathB> | --against -]');
+        process.exit(2);
+      }
+      const left = await fetchProjectFileText(base, id, relA);
+      const rightLabel = against ?? relB;
+      const right = against === '-'
+        ? await readStdinUtf8()
+        : await fetchProjectFileText(base, id, rightLabel);
+      const diff = createUnifiedDiff(`a/${relA}`, `b/${rightLabel}`, left, right);
+      if (flags.json) return process.stdout.write(JSON.stringify({ diff }, null, 2) + '\n');
+      process.stdout.write(diff);
+      return;
+    }
     default:
       console.error(`unknown subcommand: od files ${sub}`);
       process.exit(2);
   }
 }
 
+function encodeProjectRelpath(rel) {
+  return String(rel).split('/').map(encodeURIComponent).join('/');
+}
+
+async function fetchProjectFileText(base, id, rel) {
+  const resp = await fetch(
+    `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}`,
+  );
+  if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+  const buf = Buffer.from(await resp.arrayBuffer());
+  return buf.toString('utf8');
+}
+
+async function readStdinUtf8() {
+  const fs = await import('node:fs');
+  return fs.readFileSync(0, 'utf8');
+}
+
+async function mintCliImportToken(baseDir) {
+  const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
+  if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
+  let result;
+  try {
+    result = await requestJsonIpc(
+      socketPath,
+      { type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, input: { baseDir } },
+      { timeoutMs: 800 },
+    );
+  } catch {
+    return null;
+  }
+  if (result?.ok === true && typeof result.token === 'string' && result.token.length > 0) {
+    return result.token;
+  }
+  if (result?.ok === false && result.code === 'DESKTOP_AUTH_PENDING') {
+    exitWithStructuredError({
+      code: 'desktop-auth-pending',
+      message: result.message ?? 'desktop auth required but secret not yet registered',
+      data: { retryable: result.retryable === true },
+    });
+  }
+  return null;
+}
+
+function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {
+  if (leftText === rightText) return '';
+  const leftLines = splitDiffLines(leftText);
+  const rightLines = splitDiffLines(rightText);
+  let prefix = 0;
+  while (
+    prefix < leftLines.length
+    && prefix < rightLines.length
+    && leftLines[prefix] === rightLines[prefix]
+  ) {
+    prefix++;
+  }
+  let leftEnd = leftLines.length;
+  let rightEnd = rightLines.length;
+  while (
+    leftEnd > prefix
+    && rightEnd > prefix
+    && leftLines[leftEnd - 1] === rightLines[rightEnd - 1]
+  ) {
+    leftEnd--;
+    rightEnd--;
+  }
+  const oldMid = leftLines.slice(prefix, leftEnd);
+  const newMid = rightLines.slice(prefix, rightEnd);
+  const body = diffLineBody(oldMid, newMid);
+  if (body.length === 0) {
+    body.push(...oldMid.map((line) => diffLine('-', line)), ...newMid.map((line) => diffLine('+', line)));
+  }
+  const oldStart = oldMid.length === 0 ? prefix : prefix + 1;
+  const newStart = newMid.length === 0 ? prefix : prefix + 1;
+  return [
+    `--- ${leftLabel}`,
+    `+++ ${rightLabel}`,
+    `@@ -${formatDiffRange(oldStart, oldMid.length)} +${formatDiffRange(newStart, newMid.length)} @@`,
+    ...body,
+  ].join('\n') + '\n';
+}
+
+function splitDiffLines(text) {
+  const value = String(text);
+  if (value.length === 0) return [];
+  return value.match(/.*?(?:\r\n|\n|\r|$)/gs).filter((line) => line.length > 0);
+}
+
+function formatDiffRange(start, length) {
+  return length === 1 ? String(start) : `${start},${length}`;
+}
+
+function diffLineBody(oldLines, newLines) {
+  if (oldLines.length === 0) return newLines.map((line) => diffLine('+', line));
+  if (newLines.length === 0) return oldLines.map((line) => diffLine('-', line));
+  if (oldLines.length * newLines.length > 1_000_000) {
+    return [...oldLines.map((line) => diffLine('-', line)), ...newLines.map((line) => diffLine('+', line))];
+  }
+  const width = newLines.length + 1;
+  const lcs = Array.from(
+    { length: oldLines.length + 1 },
+    () => new Uint32Array(width),
+  );
+  for (let i = oldLines.length - 1; i >= 0; i--) {
+    for (let j = newLines.length - 1; j >= 0; j--) {
+      lcs[i][j] = oldLines[i] === newLines[j]
+        ? lcs[i + 1][j + 1] + 1
+        : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < oldLines.length && j < newLines.length) {
+    if (oldLines[i] === newLines[j]) {
+      out.push(diffLine(' ', oldLines[i]));
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      out.push(diffLine('-', oldLines[i]));
+      i++;
+    } else {
+      out.push(diffLine('+', newLines[j]));
+      j++;
+    }
+  }
+  while (i < oldLines.length) out.push(diffLine('-', oldLines[i++]));
+  while (j < newLines.length) out.push(diffLine('+', newLines[j++]));
+  return out;
+}
+
+function diffLine(prefix, line) {
+  const value = String(line);
+  if (value.endsWith('\r\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
+  if (value.endsWith('\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
+  if (value.endsWith('\r')) return `${prefix}${renderDiffLineContent(value)}`;
+  return `${prefix}${renderDiffLineContent(value)}\n\\ No newline at end of file`;
+}
+
+function renderDiffLineContent(value) {
+  return String(value).replace(/\r/g, '\\r');
+}
+
 async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
+  od conversation new  <projectId> [--title "<title>"]
+                                           Create a conversation in a project.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
 
@@ -4750,6 +4989,25 @@ Common options:
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
+    case 'new': {
+      const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      if (!id) {
+        console.error('Usage: od conversation new <projectId> [--title "<title>"]');
+        process.exit(2);
+      }
+      const body = {};
+      if (typeof flags.title === 'string') body.title = flags.title;
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[conversation] created ${data.conversation?.id ?? '-'}`);
+      return;
+    }
     case 'list': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {

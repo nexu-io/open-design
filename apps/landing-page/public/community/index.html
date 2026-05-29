@@ -58,7 +58,8 @@
   .nav{position:sticky;top:0;z-index:50;background:rgba(239,231,210,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line-soft)}
   .nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px}
   .brand{display:flex;align-items:center;gap:10px;font:600 14px/1 var(--sans);letter-spacing:-.01em}
-  .brand-mark{width:22px;height:22px;border-radius:50%;background:var(--ink);display:grid;place-items:center;color:var(--bone);font:700 11px/1 var(--sans)}
+  .brand-mark{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center}
+  .brand-mark img{width:100%;height:100%;display:block;object-fit:contain;border-radius:5px}
   .brand .sep{color:var(--ink-faint);margin:0 6px;font-weight:400}
   .brand .crumb{color:var(--ink-mute);font-weight:500}
   .nav-links{display:flex;gap:28px;align-items:center;font:500 13.5px/1 var(--sans)}
@@ -292,7 +293,7 @@
 <nav class="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="https://open-design.ai/">
-      <span class="brand-mark">O</span>
+      <span class="brand-mark"><img src="/logo.webp" alt="" width="22" height="22" /></span>
       Open Design
       <span class="sep">/</span>
       <span class="crumb">Contributors</span>
@@ -300,8 +301,6 @@
     <div class="nav-links">
       <a href="#ambassadors">Ambassadors</a>
       <a href="https://github.com/nexu-io/open-design">GitHub</a>
-      <a href="https://open-design.ai/skills">Skills</a>
-      <a href="https://open-design.ai/design-systems">Design systems</a>
       <a class="pill" href="#discord">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19.27 5.33A18 18 0 0 0 14.72 4l-.2.4a13.7 13.7 0 0 0-5.04 0L9.27 4a18 18 0 0 0-4.54 1.33C2.4 8.94 1.78 12.45 2.09 15.9a18.4 18.4 0 0 0 5.6 2.83l1.13-1.55a11.6 11.6 0 0 1-1.78-.86l.44-.34a13 13 0 0 0 11.04 0l.44.34c-.55.33-1.16.61-1.78.86l1.13 1.55a18.3 18.3 0 0 0 5.6-2.83c.45-4.05-.5-7.53-2.64-10.57ZM9.5 14.07c-1.07 0-1.95-.99-1.95-2.21 0-1.22.86-2.22 1.95-2.22 1.1 0 1.97 1 1.95 2.22 0 1.22-.86 2.21-1.95 2.21Zm5 0c-1.07 0-1.95-.99-1.95-2.21 0-1.22.87-2.22 1.96-2.22 1.1 0 1.96 1 1.95 2.22 0 1.22-.86 2.21-1.96 2.21Z"/></svg>
         Join Discord
@@ -659,11 +658,11 @@
 <!-- ============ FOOTER ============ -->
 <footer class="foot">
   <div class="wrap foot-inner">
-    <span>© 2026 Open Design · MIT-licensed · Built by contributors, in public.</span>
+    <span>© 2026 Open Design · Apache-2.0 · Built by contributors, in public.</span>
     <div class="l">
       <a href="https://github.com/nexu-io/open-design">GitHub</a>
       <a href="https://discord.gg/3C6EWXbdQQ">Discord</a>
-      <a href="https://x.com/nexu_io">X / Twitter</a>
+      <a href="https://x.com/nexudotio">X / Twitter</a>
       <a href="https://open-design.ai/">open-design.ai</a>
     </div>
   </div>

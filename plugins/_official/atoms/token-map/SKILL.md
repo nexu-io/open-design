@@ -35,6 +35,93 @@ project-cwd/
 `unmatched.json` is the audit list a human reviews; the agent must
 not invent target tokens silently.
 
+## Semantic token inference
+
+Figma often exports anonymous source names such as `color-3`,
+`paint/17`, or raw `#5B8DEF`. Do not ask the user to rename those
+before mapping. First infer the semantic role from usage evidence:
+
+- Node path, component name, instance overrides, variant/state labels,
+  frame name, layer name, and nearby text such as `Primary`,
+  `Selected`, `Link`, `Error`, `Focus`, `Nav`, `Button`, or `CTA`.
+- CSS-like position in the rendered tree: background fill, foreground
+  text/icon, border, divider, overlay, shadow tint, focus ring, status
+  badge, chart series, or brand/accent treatment.
+- Contrast relationships: a color paired repeatedly with the main
+  canvas is likely foreground; one paired with foreground inside CTA
+  components is likely primary/accent background; a thin outline around
+  interactive elements is likely border or focus-ring.
+- Reuse topology: a value that appears across primary buttons,
+  selected tabs, and active nav items is stronger evidence for
+  `--ds-color-primary` than a value that appears once in an illustration.
+
+Use that role evidence to choose among existing active design-system
+tokens and to decide whether an anonymous token should be renamed or
+left unmatched before the executable mapping pass. Keep the on-disk
+token-map contract unchanged: the atom still writes the existing bucket
+files, `unmatched.json`, and `meta.json` only.
+
+For example, this is a useful reasoning note for deciding whether
+`color-3` should map to the active primary token:
+
+```jsonc
+{
+  "source": "color-3",
+  "value": "#5B8DEF",
+  "role": "primary",
+  "targetCandidates": ["--ds-color-primary", "--ds-color-link"],
+  "evidence": [
+    "Button/Primary fill",
+    "Selected tab indicator",
+    "Link text in Settings frame"
+  ]
+}
+```
+
+Then map to an active design-system token only when the evidence is
+role-based, not value-only. If the top candidates are too close to
+call, or if the evidence points to conflicting roles (`primary` vs
+`link` vs `focus-ring`), leave the source token unmatched using the
+existing `no-target-equivalent` reason and include the competing
+candidates in the hint. This keeps automation useful for common
+anonymous-token cases while preserving human review for ambiguous
+brand decisions.
+
+### Before / after expectation
+
+Without semantic inference, an anonymous Figma token can only produce
+an uncertain value-level mapping:
+
+```jsonc
+{
+  "source": "color-3",
+  "value": "#5B8DEF",
+  "target": null,
+  "reason": "no-target-equivalent"
+}
+```
+
+With semantic inference, the same token should carry role evidence
+before it is accepted:
+
+```jsonc
+{
+  "source": "color-3",
+  "value": "#5B8DEF",
+  "target": "--ds-color-primary",
+  "via": "name"
+}
+```
+
+This prompt-only v1 atom does not claim a measured accuracy lift by
+itself. Treat the expected improvement as coverage of previously
+manual anonymous-token cases when the Figma tree contains enough role
+evidence. Real accuracy numbers require a fixture suite with known
+source tokens, expected semantic roles, and a before/after agent run.
+See `examples/semantic-inference-before-after.json` for a deterministic
+same-token-batch simulation that compares the old value-level output
+with the semantic inference output.
+
 ## Convergence
 
 The atom completes when every input token is either mapped or

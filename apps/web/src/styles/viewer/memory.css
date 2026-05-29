@@ -656,9 +656,15 @@
   overflow: hidden;
   z-index: 30;
 }
+.manual-edit-workspace > .manual-edit-right.manual-edit-floating {
+  right: auto;
+  bottom: auto;
+  overflow: visible;
+  pointer-events: auto;
+}
 
 /* Claude Code-style edit inspector panel. */
-.cc-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; overflow: auto; background: var(--bg-panel); }
+.cc-panel { display: flex; flex-direction: column; gap: 0; padding: 8px 0; overflow: hidden; background: var(--bg-panel); }
 .cc-inspector { display: flex; flex-direction: column; gap: 12px; padding: 6px 12px; }
 .cc-inspector-nav {
   display: flex;
@@ -920,22 +926,140 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
-  padding-bottom: 72px;
   scrollbar-gutter: stable;
 }
-
-.manual-edit-titlebar {
+.manual-edit-floating .manual-edit-modal.cc-panel {
+  height: 100%;
+  padding-bottom: 10px;
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+}
+.manual-edit-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.manual-edit-footer {
+  flex: 0 0 auto;
+  padding: 8px 12px 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.manual-edit-footer .cc-section {
+  margin: 0;
+}
+.manual-edit-footer .manual-edit-error {
+  margin: 8px 0 0;
+}
+.manual-edit-footer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  min-height: 34px;
+}
+.manual-edit-footer-left,
+.manual-edit-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.manual-edit-footer-left {
+  flex: 1 1 auto;
+}
+.manual-edit-footer-right {
+  flex: 0 0 auto;
+}
+.manual-edit-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+}
+.manual-edit-delete-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.manual-edit-delete-btn:disabled,
+.manual-edit-footer-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.manual-edit-footer-btn {
+  min-width: 62px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: var(--text);
+  background: var(--bg-panel);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+.manual-edit-footer-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.manual-edit-footer-btn.primary {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg-panel);
+}
+.manual-edit-footer-btn.primary:hover:not(:disabled) {
+  background: var(--text-muted);
+}
+.manual-edit-footer-btn.danger {
+  border-color: var(--red-border);
+  color: var(--red);
+  background: var(--red-bg);
+}
+.manual-edit-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.manual-edit-delete-confirm span {
+  max-width: 170px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manual-edit-floating .manual-edit-titlebar {
+  min-height: 42px;
+  padding: 10px 12px 4px;
+}
+.manual-edit-floating .manual-edit-titlebar-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.manual-edit-titlebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-height: 52px;
   padding: 14px 18px 10px;
 }
 
 .manual-edit-titlebar > span {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--text);
@@ -944,6 +1068,39 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.manual-edit-drag-handle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.manual-edit-drag-handle:active {
+  cursor: grabbing;
+}
+
+.manual-edit-drag-handle:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.manual-edit-drag-handle span {
+  width: 14px;
+  height: 18px;
+  background-image: radial-gradient(currentColor 1.5px, transparent 1.6px);
+  background-position: 0 0;
+  background-size: 7px 6px;
 }
 
 .manual-edit-titlebar-close {

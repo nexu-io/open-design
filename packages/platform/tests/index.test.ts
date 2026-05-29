@@ -655,6 +655,17 @@ describe("createPackageManagerInvocation", () => {
     expect(invocation.windowsVerbatimArguments).toBeUndefined();
   });
 
+  it("executes native npm_execpath directly instead of loading it through Node", () => {
+    setPlatform("linux");
+    const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], {
+      npm_execpath: "/home/u/.local/share/pnpm/.tools/@pnpm+linux-x64/10.33.2/node_modules/@pnpm/linux-x64/pnpm",
+    } as NodeJS.ProcessEnv);
+    expect(invocation).toEqual({
+      args: ["--filter", "@open-design/desktop", "build"],
+      command: "/home/u/.local/share/pnpm/.tools/@pnpm+linux-x64/10.33.2/node_modules/@pnpm/linux-x64/pnpm",
+    });
+  });
+
   it("uses binary npm_execpath directly on POSIX", () => {
     setPlatform("linux");
     const invocation = createPackageManagerInvocation(["install"], {

@@ -859,6 +859,118 @@ async function validateLocalOpenAiModel(
   };
 }
 
+function isSenseAudioNonChatModel(model: string): boolean {
+  return (
+    model.startsWith('senseaudio-image-') ||
+    model.startsWith('doubao-seedream-') ||
+    model === 'sensenova-u1-fast' ||
+    model.startsWith('doubao-seedance-') ||
+    model.startsWith('senseaudio-asr-') ||
+    model.startsWith('senseaudio-tts-') ||
+    model.startsWith('senseaudio-music-')
+  );
+}
+
+async function validateSenseAudioNonChatModel(
+  input: ProviderTestRequest,
+  signal: AbortSignal,
+  start: number,
+  requestInit: Pick<RequestInit, 'dispatcher'> = {},
+): Promise<ConnectionTestResponse | null> {
+  if (input.protocol !== 'senseaudio' || !isSenseAudioNonChatModel(input.model)) {
+    return null;
+  }
+
+  const url = appendVersionedApiPath(String(input.baseUrl), '/models');
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...requestInit,
+      method: 'GET',
+      headers: { authorization: `Bearer ${String(input.apiKey)}` },
+      signal,
+      redirect: 'error',
+    });
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    const kind = networkErrorToKind(err);
+    return {
+      ok: false,
+      kind,
+      latencyMs,
+      model: input.model,
+      detail: redactSecrets(err instanceof Error ? err.message : String(err), [
+        input.apiKey,
+      ]),
+    };
+  }
+
+  const latencyMs = Date.now() - start;
+  let rawText = '';
+  let data: unknown = {};
+  let parseError: unknown = null;
+  try {
+    rawText = await response.text();
+  } catch {
+    rawText = '';
+  }
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch (err) {
+    parseError = err;
+  }
+
+  if (parseError && response.ok) {
+    return {
+      ok: false,
+      kind: 'unknown',
+      latencyMs,
+      model: input.model,
+      status: response.status,
+      detail: redactSecrets(
+        parseError instanceof Error ? parseError.message : String(parseError),
+        [input.apiKey],
+      ),
+    };
+  }
+
+  if (!response.ok) {
+    const redactedDetail = redactSecrets(
+      extractProviderErrorDetail(data, rawText).slice(0, 240),
+      [input.apiKey],
+    );
+    return {
+      ok: false,
+      kind: statusToKind(response.status, redactedDetail),
+      latencyMs,
+      model: input.model,
+      status: response.status,
+      detail: redactedDetail,
+    };
+  }
+
+  const modelIds = extractOpenAiModelIds(data);
+  if (!modelIds.includes(input.model)) {
+    return {
+      ok: false,
+      kind: 'not_found_model',
+      latencyMs,
+      model: input.model,
+      status: response.status,
+      detail: `Model "${input.model}" is not reported by SenseAudio /models.`,
+    };
+  }
+
+  return {
+    ok: true,
+    kind: 'success',
+    latencyMs,
+    model: input.model,
+    status: response.status,
+    detail: 'SenseAudio model is available, but this media model is not chat-testable from Settings.',
+  };
+}
+
 interface ProviderCallShape {
   url: string;
   headers: Record<string, string>;
@@ -1083,6 +1195,14 @@ export async function testProviderConnection(
       proxyDispatcher.requestInit,
     );
     if (modelError) return modelError;
+
+    const senseAudioNonChatResult = await validateSenseAudioNonChatModel(
+      input,
+      controller.signal,
+      start,
+      proxyDispatcher.requestInit,
+    );
+    if (senseAudioNonChatResult) return senseAudioNonChatResult;
 
     const requestInit = {
       ...proxyDispatcher.requestInit,
