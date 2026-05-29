@@ -58,7 +58,17 @@ export function createMcpHttpHandler(daemonUrlRef: { current: string }) {
       const t = await ensureServer(daemonUrlRef.current);
       const authStore: Record<string, string> = {};
       const authHeader = req.headers.authorization;
-      if (authHeader) authStore.Authorization = authHeader;
+      if (authHeader) {
+        authStore.Authorization = authHeader;
+      } else {
+        // createAuthMiddleware accepts x-api-key as an alternative to
+        // Authorization; propagate it as a Bearer token so downstream
+        // daemon fetches inside registerMcpHandlers stay authenticated.
+        const xKey = req.headers['x-api-key'];
+        if (typeof xKey === 'string' && xKey.trim()) {
+          authStore.Authorization = `Bearer ${xKey.trim()}`;
+        }
+      }
       await authContext.run(authStore, () => t.handleRequest(req as any, res as any, req.body));
     } catch (err) {
       console.error('[od] mcp-http: error handling request:', err);
