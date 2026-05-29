@@ -3957,6 +3957,29 @@ export async function startServer({
     return { ok: true, id };
   }
 
+  async function validateProjectSkillId(id) {
+    if (id === undefined || id === null || id === '') {
+      return { ok: true, id: null };
+    }
+    if (typeof id !== 'string') {
+      return {
+        ok: false,
+        code: 'INVALID_SKILL_ID',
+        message: 'skillId must be a string or null',
+      };
+    }
+    const skills = await listAllSkillLikeEntries();
+    const resolved = findSkillById(skills, id);
+    if (!resolved) {
+      return {
+        ok: false,
+        code: 'SKILL_NOT_FOUND',
+        message: 'skill not found',
+      };
+    }
+    return { ok: true, id: resolved.id };
+  }
+
   function userDesignSystemWorkspaceProjectId(id) {
     if (typeof id !== 'string' || !id.startsWith('user:')) return null;
     const dirId = id.slice('user:'.length);
@@ -5595,7 +5618,7 @@ export async function startServer({
     EmptyTranscriptError,
     redactSecrets,
   };
-  const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl, validateProjectDesignSystemId };
+  const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl, validateProjectDesignSystemId, validateProjectSkillId };
   const agentDeps = {
     listProviderModels,
     testProviderConnection,
