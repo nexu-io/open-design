@@ -47,6 +47,7 @@ export function normalizeVelaModelId(rawId: string): string | null {
     : withoutProvider;
   if (!withoutPrefix) return null;
   if (/^deepseek_v3_2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
+  if (/^deepseek-v3-2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
   if (/^kimi_k2_6$/i.test(withoutPrefix)) return 'kimi-k2.6';
   if (/^glm_5_1$/i.test(withoutPrefix)) return 'glm-5.1';
   if (/^glm_5$/i.test(withoutPrefix)) return 'glm-5';
@@ -195,6 +196,11 @@ export const amrAgentDef = {
   fallbackModels: [] as RuntimeModelOption[],
   buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
   streamFormat: 'acp-json-rpc',
+  // Vela routes model selection through ACP's `session/set_model` and only
+  // accepts ids that survived the `vela models` preflight check, so a
+  // free-text "Custom" id silently fails at spawn. The model picker
+  // surfaces the live Vela catalog instead.
+  supportsCustomModel: false,
   supportsImagePaths: true,
   // Daemon-process env override for emergency operator pinning. Normal UI
   // selection comes from the live `vela models` catalog and is preflighted

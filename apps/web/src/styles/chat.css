@@ -817,7 +817,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(17, 24, 39, 0.44);
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(4px);
 }
 .staged-preview-card {
   display: flex;

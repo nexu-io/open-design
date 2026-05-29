@@ -34,6 +34,12 @@ import {
   serializeInspectOverrides,
   updateInspectOverride,
 } from '../../src/components/FileViewer';
+import {
+  IframeKeepAliveProvider,
+  PooledIframe,
+  previewIframeKeepAliveKey,
+  useIframeKeepAlivePool,
+} from '../../src/components/IframeKeepAlivePool';
 import type { InspectOverrideMap } from '../../src/components/FileViewer';
 import type { LiveArtifact, LiveArtifactWorkspaceEntry, PreviewComment, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
@@ -375,6 +381,177 @@ describe('FileViewer SVG artifacts', () => {
     expect(sourceMarkup).not.toContain('<img');
   });
 
+  it('keeps a URL-loaded preview iframe alive while the viewer unmounts and remounts', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    function Shell() {
+      const [visible, setVisible] = useState(true);
+      return (
+        <IframeKeepAliveProvider>
+          <button type="button" onClick={() => setVisible((next) => !next)}>
+            {visible ? 'Leave project' : 'Return project'}
+          </button>
+          {visible ? (
+            <FileViewer
+              projectId="project-1"
+              projectKind="prototype"
+              file={file}
+              liveHtml="<html><body>hi</body></html>"
+            />
+          ) : (
+            <div data-testid="home-view" />
+          )}
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { container } = render(<Shell />);
+
+    const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
+
+    expect(screen.queryByTestId('artifact-preview-frame')).toBeNull();
+    expect(screen.getByTestId('home-view')).toBeTruthy();
+    const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
+    expect(parkedFrame).toBe(firstFrame);
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
+
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
+  });
+
+  it('evicts least-recent inactive preview iframes once the pool exceeds its limit', () => {
+    function Harness({ activeKey }: { activeKey: string | null }) {
+      return (
+        <IframeKeepAliveProvider maxEntries={2}>
+          {activeKey ? (
+            <PooledIframe
+              cacheKey={previewIframeKeepAliveKey('project-1', `${activeKey}.html`)}
+              src={`/api/projects/project-1/raw/${activeKey}.html?v=1&r=0`}
+              title={`${activeKey}.html`}
+              sandbox="allow-scripts allow-downloads"
+              data-testid="pooled-frame"
+              data-od-render-mode="url-load"
+              data-od-active="true"
+            />
+          ) : null}
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { container, rerender } = render(<Harness activeKey="one" />);
+    const firstFrame = screen.getByTestId('pooled-frame');
+    rerender(<Harness activeKey={null} />);
+    rerender(<Harness activeKey="two" />);
+    const secondFrame = screen.getByTestId('pooled-frame');
+    rerender(<Harness activeKey={null} />);
+    rerender(<Harness activeKey="three" />);
+    const thirdFrame = screen.getByTestId('pooled-frame');
+    rerender(<Harness activeKey={null} />);
+
+    const parkedFrames = Array.from(
+      container.querySelectorAll<HTMLIFrameElement>('.iframe-keep-alive-pool iframe'),
+    );
+    expect(parkedFrames).toEqual([secondFrame, thirdFrame]);
+    expect(parkedFrames).not.toContain(firstFrame);
+  });
+
+  it('evicts inactive preview iframes for a project when the project is invalidated', () => {
+    function Harness({ active }: { active: boolean }) {
+      const pool = useIframeKeepAlivePool();
+      return (
+        <>
+          <button type="button" onClick={() => pool.evictProject('project-1')}>
+            Invalidate project
+          </button>
+          {active ? (
+            <PooledIframe
+              cacheKey={previewIframeKeepAliveKey('project-1', 'page.html')}
+              src="/api/projects/project-1/raw/page.html?v=1&r=0"
+              title="page.html"
+              sandbox="allow-scripts allow-downloads"
+              data-testid="pooled-frame"
+              data-od-render-mode="url-load"
+              data-od-active="true"
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    const { container, rerender } = render(
+      <IframeKeepAliveProvider>
+        <Harness active />
+      </IframeKeepAliveProvider>,
+    );
+    const firstFrame = screen.getByTestId('pooled-frame');
+
+    rerender(
+      <IframeKeepAliveProvider>
+        <Harness active={false} />
+      </IframeKeepAliveProvider>,
+    );
+    expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBe(firstFrame);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Invalidate project' }));
+
+    expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
+  });
+
+  it('reattaches a fresh visible iframe after active project invalidation', () => {
+    function Harness() {
+      const pool = useIframeKeepAlivePool();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => pool.evictProject('project-1', { includeActive: true })}
+          >
+            Invalidate active project
+          </button>
+          <PooledIframe
+            cacheKey={previewIframeKeepAliveKey('project-1', 'page.html')}
+            src="/api/projects/project-1/raw/page.html?v=1&r=0"
+            title="page.html"
+            sandbox="allow-scripts allow-downloads"
+            data-testid="pooled-frame"
+            data-od-render-mode="url-load"
+            data-od-active="true"
+          />
+        </>
+      );
+    }
+
+    render(
+      <IframeKeepAliveProvider>
+        <Harness />
+      </IframeKeepAliveProvider>,
+    );
+    const firstFrame = screen.getByTestId('pooled-frame');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Invalidate active project' }));
+
+    const secondFrame = screen.getByTestId('pooled-frame');
+    expect(secondFrame).not.toBe(firstFrame);
+    expect(secondFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1&r=0');
+  });
+
   it('URL-loads a plain HTML preview iframe instead of inlining via srcDoc', () => {
     const file = baseFile({
       name: 'page.html',
@@ -617,14 +794,13 @@ describe('FileViewer SVG artifacts', () => {
 
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
-    const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
+    expect(getFrame()?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
 
     const nextFrame = getFrame();
-    expect(nextFrame).toBe(initialFrame);
+    expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
       '/api/projects/project-1/raw/second.html?v=1710000000&r=0',
     );
@@ -1597,7 +1773,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
-  it('lets Draw direct send emit a queued annotation while a task is running', async () => {
+  it('disables Draw direct send during a run but keeps Queue available so the annotation is not lost', async () => {
     const annotationSpy = vi.fn();
     window.addEventListener(ANNOTATION_EVENT, annotationSpy);
 
@@ -1613,17 +1789,22 @@ describe('FileViewer tweaks toolbar', () => {
       target: { value: 'mark this' },
     });
 
+    // While a task is running the primary Send is disabled; Queue stays available
+    // so the annotation is staged for the next turn rather than sent mid-run.
+    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
     const queue = screen.getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
     expect(queue.disabled).toBe(false);
-    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
-    expect(send.disabled).toBe(false);
 
     fireEvent.click(send);
+    expect(annotationSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(queue);
 
     await waitFor(() => expect(annotationSpy).toHaveBeenCalledTimes(1));
     expect(annotationSpy.mock.calls[0]?.[0]).toMatchObject({
       detail: {
-        action: 'send',
+        action: 'queue',
         note: 'mark this',
         filePath: 'preview.html',
       },

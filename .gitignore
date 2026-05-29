@@ -45,6 +45,7 @@ tsconfig.tsbuildinfo
 .claude/
 .codex/
 .deepseek/
+.antigravitycli/
 
 # Commander task scratchpad; keep local task notes out of git by default.
 .task/

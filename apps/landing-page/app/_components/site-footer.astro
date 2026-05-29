@@ -20,6 +20,7 @@ const ui = getLandingUiCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
 const REPO = 'https://github.com/nexu-io/open-design';
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const X_TWITTER = 'https://x.com/nexudotio';
 ---
 
 <footer class='sub-footer' data-od-id='sub-footer'>
@@ -37,16 +38,23 @@ const DISCORD = 'https://discord.gg/9ptkbbqRu';
         </p>
       </div>
       <div class='sub-footer-col'>
+        <h5>{ui.footer.products}</h5>
+        <ul>
+          <li><a href={href('/')}>Open Design</a></li>
+          <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
+        </ul>
+      </div>
+      <div class='sub-footer-col'>
         <h5>{copy.nav.plugins}</h5>
         <ul>
           <li><a href={href('/plugins/templates/')}>{copy.nav.templates}</a></li>
           <li><a href={href('/plugins/skills/')}>{copy.nav.skills}</a></li>
-          <li><a href={href('/plugins/systems/')}>{counts.systems} {copy.nav.systems}</a></li>
-          <li><a href={href('/plugins/craft/')}>{counts.craft} {copy.nav.craft}</a></li>
+          <li><a href={href('/plugins/systems/')}>{copy.nav.systems}</a></li>
+          <li><a href={href('/plugins/craft/')}>{copy.nav.craft}</a></li>
         </ul>
       </div>
       <div class='sub-footer-col'>
-        <h5>{ui.footer.openDesign}</h5>
+        <h5>{ui.footer.resources}</h5>
         <ul>
           <li><a href={href('/official/')}>{ui.footer.official}</a></li>
           <li><a href={href('/quickstart/')}>{ui.footer.quickstart}</a></li>
@@ -62,6 +70,7 @@ const DISCORD = 'https://discord.gg/9ptkbbqRu';
           <li><a href={`${REPO}/issues`} target='_blank' rel='noopener'>{ui.footer.issues}</a></li>
           <li><a href={`${REPO}/releases`} target='_blank' rel='noopener'>{ui.footer.releases}</a></li>
           <li><a href={DISCORD} target='_blank' rel='noopener'>{ui.footer.discord}</a></li>
+          <li><a href={X_TWITTER} target='_blank' rel='noopener'>{ui.footer.xTwitter}</a></li>
           <li><a href='/blog/rss.xml'>{ui.footer.rss}</a></li>
           <li><a href={href('/#contact')}>{copy.nav.contact}</a></li>
         </ul>

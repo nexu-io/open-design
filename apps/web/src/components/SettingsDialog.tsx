@@ -194,6 +194,16 @@ interface Props {
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  /**
+   * Notified by Settings → Skills after a successful skill registry
+   * mutation (create / edit / delete). App.tsx uses this to drop preview
+   * iframes whose project depends on the affected skill — body-only
+   * edits do not move SkillSummary fields, so ProjectView's signature
+   * path can miss them.
+   */
+  onSkillsChanged?: (affectedSkillId?: string) => void;
+  /** Same channel for design-system registry mutations. */
+  onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
 }
 
 export interface AgentRefreshOptions {
@@ -823,6 +833,8 @@ export function SettingsDialog({
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
+  onSkillsChanged,
+  onDesignSystemsChanged,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -2059,7 +2071,12 @@ export function SettingsDialog({
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
-    const allowCustomModel = selected.id !== 'amr';
+    // Adapters opt out via `supportsCustomModel: false` on their
+    // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
+    // upstream issue #35) or when free-text ids silently fail at spawn
+    // (AMR routes through ACP `session/set_model` and validates against
+    // a live catalog). Undefined === allow, matching today's UX.
+    const allowCustomModel = selected.supportsCustomModel !== false;
     const configuredModel =
       typeof choice.model === 'string' && choice.model
         ? choice.model
@@ -3616,11 +3633,16 @@ export function SettingsDialog({
               cfg={cfg}
               setCfg={setCfg}
               onSkillsRefresh={onSkillsRefresh}
+              onSkillsChanged={onSkillsChanged}
             />
           ) : null}
 
           {activeSection === 'designSystems' ? (
-            <DesignSystemsSection cfg={cfg} setCfg={setCfg} />
+            <DesignSystemsSection
+              cfg={cfg}
+              setCfg={setCfg}
+              onDesignSystemsChanged={onDesignSystemsChanged}
+            />
           ) : null}
 
           {activeSection === 'instructions' ? (

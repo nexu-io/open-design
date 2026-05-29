@@ -135,10 +135,50 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
   return history;
 }
 
+// Strip OD-specific markup that the agent emitted on a prior turn but
+// that the model would otherwise pattern-match as a template to echo.
+// Today this is `<question-form>` blocks and the ```json fenced schemas
+// some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
+// them — leaving those literal in the transcript causes weak/medium
+// plain-stream models to re-emit an identical form on the user's
+// follow-up turn, looking like the discovery form loop never breaks
+// (see PR #3157 form-loop investigation).
+//
+// User content is preserved verbatim — a user message that legitimately
+// quotes `<question-form>` (e.g. discussing the markup with the agent)
+// must not be mangled.
+export function sanitizePriorAssistantTurnForTranscript(content: string): string {
+  let sanitized = content.replace(
+    /<question-form\b[^>]*>[\s\S]*?<\/question-form>/g,
+    '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
+  );
+  // Strip ```json (or plain ```) fenced blocks whose body matches the
+  // form schema shape — `"questions": [` is the strongest tell. A
+  // generic JSON snippet without that key (e.g. an API response the
+  // agent shared) is left intact.
+  sanitized = sanitized.replace(
+    /```(?:json)?\s*\n([\s\S]*?)\n```/g,
+    (match, body: string) => {
+      if (/"questions"\s*:\s*\[/.test(body)) {
+        return '[form schema was echoed here on a prior turn; stripped to avoid a loop.]';
+      }
+      return match;
+    },
+  );
+  return sanitized;
+}
+
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
   const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
   const transcript = scopedHistory
-    .map((m) => `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(m.content.trim()))}`)
+    .map((m) => {
+      const trimmed = m.content.trim();
+      const sanitized =
+        m.role === 'assistant'
+          ? sanitizePriorAssistantTurnForTranscript(trimmed)
+          : trimmed;
+      return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
+    })
     .join('\n\n');
   const warning = buildPriorRunContextWarning(scopedHistory);
   return warning ? `${warning}\n\n${transcript}` : transcript;
@@ -399,6 +439,46 @@ export async function submitChatRunToolResult(
     return { ok: resp.ok, status: resp.status };
   } catch {
     return { ok: false };
+  }
+}
+
+// PR #3157: Antigravity's auth banner can offer a one-click "open
+// system terminal with agy" button. The daemon endpoint spawns
+// osascript / x-terminal-emulator / `cmd /c start` for the user; on
+// success the new Terminal window pops up with agy running and the
+// browser opens for OAuth. The Promise resolves once the daemon kicks
+// off the spawn (not when OAuth completes), so the UI can disable the
+// button momentarily and then re-enable for a retry click after the
+// user finishes in the terminal.
+export interface LaunchAntigravityOauthResult {
+  ok: boolean;
+  platform?: string;
+  via?: string;
+  error?: string;
+}
+export async function launchAntigravityOauth(): Promise<LaunchAntigravityOauthResult> {
+  try {
+    const resp = await fetch('/api/agents/antigravity/oauth-launch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const body = (await resp.json().catch(() => null)) as
+      | LaunchAntigravityOauthResult
+      | null;
+    if (!resp.ok) {
+      return {
+        ok: false,
+        error:
+          body?.error ?? `daemon returned ${resp.status} ${resp.statusText}`,
+      };
+    }
+    return body ?? { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

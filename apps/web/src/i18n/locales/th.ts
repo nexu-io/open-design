@@ -13,6 +13,8 @@ export const th: Dict = {
   'chat.amrError.balanceMessage': 'ยอดเงิน AMR ของคุณหมดแล้ว เติมเงินเพื่อดำเนินงานนี้ต่อ',
   'chat.amrError.authorizeCta': 'ให้สิทธิ์และลองใหม่',
   'chat.amrError.rechargeCta': 'เติมเงิน AMR',
+  'chat.antigravityError.launchTerminalCta': 'Sign in via terminal',
+  'chat.antigravityError.launchSwitchModelCta': 'Switch model in terminal',
   'plugins.actions.copyInstallCommand': 'คัดลอกคำสั่งติดตั้ง',
   'plugins.actions.copyPluginId': 'คัดลอก ID ปลั๊กอิน',
   'plugins.actions.copyReadmeBadge': 'คัดลอกแบดจ์ README',

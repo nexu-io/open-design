@@ -136,6 +136,69 @@ test('keyboard chat panel resize persists after reload', async ({ page }) => {
   expect(restoredWidth).toBe(resizedWidth);
 });
 
+test('project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
+  let runCount = 0;
+  await page.route('**/api/runs', async (route) => {
+    runCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `keyboard-run-${runCount}` }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: stdout',
+      `data: ${JSON.stringify({
+        chunk:
+          '<artifact identifier="keyboard-artifact" type="text/html" title="Keyboard Artifact"><!doctype html><html><body><main><h1>Keyboard Artifact</h1></main></body></html></artifact>',
+      })}`,
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  await gotoEntryHome(page);
+  await createProject(page, 'Project chat keyboard send');
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.click();
+  await input.fill('first line');
+  await input.press('Shift+Enter');
+  await input.pressSequentially('second line');
+  await expect(input).toHaveValue('first line\nsecond line');
+  expect(runCount).toBe(0);
+
+  await Promise.all([
+    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    input.press('Enter'),
+  ]);
+
+  expect(runCount).toBe(1);
+  await expect(input).toHaveValue('');
+  await expect(page.locator('.msg.user', { hasText: 'first line' })).toHaveCount(1);
+  await expect(page.locator('.msg.user', { hasText: 'second line' })).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: /keyboard-artifact\.html/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+});
+
 test('quick switcher still activates another file after the project reloads', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher after reload');

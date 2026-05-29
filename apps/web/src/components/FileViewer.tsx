@@ -102,6 +102,11 @@ import {
 } from '../comments';
 import { applyPodMemberRemoval } from '../lib/pod-members';
 import { AnnotationHoverPopover, BoardComposerPopover } from './BoardComposerPopover';
+import {
+  OD_PREVIEW_KEEP_ALIVE,
+  PooledIframe,
+  previewIframeKeepAliveKey,
+} from './IframeKeepAlivePool';
 import type {
   ChatCommentAttachment,
   PreviewComment,
@@ -4524,6 +4529,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
   const [srcDocShellReady, setSrcDocShellReady] = useState(false);
   const wasUrlLoadPreviewRef = useRef(previewUsesUrlTransport);
+  const urlPreviewKeepAliveKey = previewIframeKeepAliveKey(projectId, file.name);
   useEffect(() => {
     if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
   }, [useUrlLoadPreview]);
@@ -7018,28 +7024,54 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   sendDisabledReason={t('chat.annotationSendDisabledReason')}
                 >
                   <div className="artifact-preview-transport-stack">
-                    <iframe
-                      ref={urlPreviewIframeRef}
-                      data-testid={previewUsesUrlTransport ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
-                      data-od-render-mode="url-load"
-                      data-od-active={previewUsesUrlTransport ? 'true' : 'false'}
-                      aria-hidden={previewUsesUrlTransport ? undefined : true}
-                      tabIndex={previewUsesUrlTransport ? 0 : -1}
-                      title={file.name}
-                      sandbox="allow-scripts allow-downloads"
-                      src={urlTransportSrc}
-                      onLoad={() => {
-                        const frame = urlPreviewIframeRef.current;
-                        if (previewUsesUrlTransport) iframeRef.current = frame;
-                        dcViewportRestoreAtRef.current = Date.now();
-                        frame?.contentWindow?.postMessage({
-                          type: '__dc_set_viewport',
-                          ...dcViewportRef.current,
-                        }, '*');
-                        syncBridgeModes(frame);
-                        if (previewUsesUrlTransport) restorePreviewScrollPosition();
-                      }}
-                    />
+                    {OD_PREVIEW_KEEP_ALIVE ? (
+                      <PooledIframe
+                        ref={urlPreviewIframeRef}
+                        cacheKey={urlPreviewKeepAliveKey}
+                        data-testid={previewUsesUrlTransport ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
+                        data-od-render-mode="url-load"
+                        data-od-active={previewUsesUrlTransport ? 'true' : 'false'}
+                        aria-hidden={previewUsesUrlTransport ? undefined : true}
+                        tabIndex={previewUsesUrlTransport ? 0 : -1}
+                        title={file.name}
+                        sandbox="allow-scripts allow-downloads"
+                        src={urlTransportSrc}
+                        onLoad={() => {
+                          const frame = urlPreviewIframeRef.current;
+                          if (previewUsesUrlTransport) iframeRef.current = frame;
+                          dcViewportRestoreAtRef.current = Date.now();
+                          frame?.contentWindow?.postMessage({
+                            type: '__dc_set_viewport',
+                            ...dcViewportRef.current,
+                          }, '*');
+                          syncBridgeModes(frame);
+                          if (previewUsesUrlTransport) restorePreviewScrollPosition();
+                        }}
+                      />
+                    ) : (
+                      <iframe
+                        ref={urlPreviewIframeRef}
+                        data-testid={previewUsesUrlTransport ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
+                        data-od-render-mode="url-load"
+                        data-od-active={previewUsesUrlTransport ? 'true' : 'false'}
+                        aria-hidden={previewUsesUrlTransport ? undefined : true}
+                        tabIndex={previewUsesUrlTransport ? 0 : -1}
+                        title={file.name}
+                        sandbox="allow-scripts allow-downloads"
+                        src={urlTransportSrc}
+                        onLoad={() => {
+                          const frame = urlPreviewIframeRef.current;
+                          if (previewUsesUrlTransport) iframeRef.current = frame;
+                          dcViewportRestoreAtRef.current = Date.now();
+                          frame?.contentWindow?.postMessage({
+                            type: '__dc_set_viewport',
+                            ...dcViewportRef.current,
+                          }, '*');
+                          syncBridgeModes(frame);
+                          if (previewUsesUrlTransport) restorePreviewScrollPosition();
+                        }}
+                      />
+                    )}
                     <iframe
                       key={srcDocTransportResetKey}
                       ref={srcDocPreviewIframeRef}

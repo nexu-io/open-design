@@ -364,6 +364,9 @@ export function PreviewDrawOverlay({
     const shouldCapture = hasInk || hasTarget || captureViewport;
     const canSubmit = shouldCapture || Boolean(note.trim());
     if (sending || !canSubmit) return;
+    // While a task is running the primary Send is disabled (use Queue instead).
+    // The note/attachment is not lost: Queue still stages it for the next turn.
+    if (action === 'send' && sendDisabled) return;
     setCaptureWarning(null);
     setPendingAction(action);
     try {
@@ -425,7 +428,7 @@ export function PreviewDrawOverlay({
   const overlayPointer = active ? 'auto' : 'none';
   const showCanvas = active || hasInk;
   const canSubmit = hasInk || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
-  const canSend = canSubmit;
+  const canSend = canSubmit && !sendDisabled;
   const canUndo = undoCount > 0 && !sending;
   const canRedo = redoCount > 0 && !sending;
 

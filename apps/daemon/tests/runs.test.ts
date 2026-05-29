@@ -35,6 +35,22 @@ describe('chat run service shutdown', () => {
     });
   });
 
+
+
+  it('ignores subsequent finish attempts after the run reaches a terminal state', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+    runs.finish(run, 'failed', 1, 'SIGTERM');
+
+    expect(run.status).toBe('succeeded');
+    expect(run.exitCode).toBe(0);
+    expect(run.signal).toBeNull();
+    expect(run.events.filter((event: { event: string }) => event.event === 'end')).toHaveLength(1);
+    await expect(wait).resolves.toMatchObject({ status: 'succeeded', exitCode: 0, signal: null });
+  });
   it('filters active runs by conversation within the same project', () => {
     const runs = createRuns();
     const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });

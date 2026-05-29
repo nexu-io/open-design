@@ -296,6 +296,199 @@ test.describe('Automations page', () => {
     await expect(page).toHaveURL(/\/projects\/proj-run/);
   });
 
+  test('places a newly created automation at the top of the list and highlights it', async ({ page }) => {
+    await seedAutomationsBase(page);
+
+    const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
+    let routines: Array<Record<string, unknown>> = [
+      {
+        id: 'routine-existing-1',
+        name: 'Older digest',
+        prompt: 'Summarize older activity.',
+        schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+        target: { mode: 'create_each_run' },
+        enabled: true,
+        nextRunAt: Date.now() + 3600_000,
+        lastRun: null,
+        createdAt: Date.now() - 120_000,
+        updatedAt: Date.now() - 120_000,
+      },
+    ];
+
+    await page.route('**/api/projects', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ projects }),
+      });
+    });
+
+    await page.route('**/api/routines', async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ routines }),
+        });
+        return;
+      }
+      if (method === 'POST') {
+        const payload = route.request().postDataJSON() as Record<string, unknown>;
+        const now = Date.now();
+        const routine = {
+          id: 'routine-newest-1',
+          name: payload.name,
+          prompt: payload.prompt,
+          schedule: payload.schedule,
+          target: payload.target,
+          enabled: true,
+          nextRunAt: now + 3600_000,
+          lastRun: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        routines = [...routines, routine];
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ routine }),
+        });
+        return;
+      }
+      await route.fulfill({ status: 404, body: '{}' });
+    });
+
+    await page.route('**/api/automation-templates', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ proposals: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-source-packets?limit=3', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ packets: [] }),
+      });
+    });
+
+    const view = await gotoAutomations(page);
+    await expect(view.getByText('Older digest')).toBeVisible();
+
+    await view.getByRole('button', { name: 'New automation' }).click();
+    const modal = page.getByTestId('automation-modal');
+    await modal.getByLabel('Automation title').fill('Newest digest');
+    await modal.getByTestId('automation-modal-prompt').fill('Summarize the newest activity.');
+    await modal.getByRole('button', { name: 'Create' }).click();
+
+    const rows = view.locator('.automation-row');
+    await expect(rows.first()).toContainText('Newest digest');
+    await expect(view.getByTestId('automation-row-routine-newest-1')).toHaveClass(/is-focused/);
+  });
+
+  test('keeps saved automations ordered by newest createdAt first', async ({ page }) => {
+    await seedAutomationsBase(page);
+
+    const now = Date.now();
+    const routines = [
+      {
+        id: 'routine-oldest-1',
+        name: 'Oldest digest',
+        prompt: 'Summarize the oldest activity.',
+        schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+        target: { mode: 'create_each_run' },
+        enabled: true,
+        nextRunAt: now + 3600_000,
+        lastRun: null,
+        createdAt: now - 300_000,
+        updatedAt: now - 300_000,
+      },
+      {
+        id: 'routine-middle-1',
+        name: 'Middle digest',
+        prompt: 'Summarize the middle activity.',
+        schedule: { kind: 'daily', time: '10:00', timezone: 'UTC' },
+        target: { mode: 'create_each_run' },
+        enabled: true,
+        nextRunAt: now + 7200_000,
+        lastRun: null,
+        createdAt: now - 120_000,
+        updatedAt: now - 120_000,
+      },
+      {
+        id: 'routine-newest-1',
+        name: 'Newest digest',
+        prompt: 'Summarize the newest activity.',
+        schedule: { kind: 'daily', time: '11:00', timezone: 'UTC' },
+        target: { mode: 'create_each_run' },
+        enabled: true,
+        nextRunAt: now + 10_800_000,
+        lastRun: null,
+        createdAt: now - 10_000,
+        updatedAt: now - 10_000,
+      },
+    ];
+
+    await page.route('**/api/projects', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ projects: [] }),
+      });
+    });
+
+    await page.route('**/api/routines', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ routines }),
+      });
+    });
+
+    await page.route('**/api/automation-templates', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ proposals: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-source-packets?limit=3', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ packets: [] }),
+      });
+    });
+
+    const view = await gotoAutomations(page);
+    const rowTitles = view.locator('.automation-row .automation-row__title');
+    await expect(rowTitles).toHaveText([
+      'Newest digest',
+      'Middle digest',
+      'Oldest digest',
+    ]);
+  });
+
   test('keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
@@ -879,5 +1072,78 @@ test.describe('Automations page', () => {
     await tabs.getByRole('tab', { name: /Memory/i }).click();
     await expect(view.getByText(/Refresh project memory from recent work\./i)).toBeVisible();
     await expect(view.getByRole('status')).toHaveCount(0);
+  });
+
+  test('renders the routine target and last-run status in the row summary', async ({ page }) => {
+    await seedAutomationsBase(page);
+
+    const projects = [{ id: 'proj-shared-1', name: 'Shared Release Project' }];
+    const routines = [
+      {
+        id: 'routine-summary-1',
+        name: 'Release digest',
+        prompt: 'Summarize release issues and recent commits.',
+        schedule: { kind: 'weekly', weekday: 3, time: '14:30', timezone: 'UTC' },
+        target: { mode: 'reuse', projectId: 'proj-shared-1' },
+        enabled: true,
+        nextRunAt: Date.now() + 86_400_000,
+        lastRun: {
+          id: 'run-summary-1',
+          status: 'failed',
+          trigger: 'manual',
+          startedAt: Date.now() - 7_200_000,
+          error: 'Provider request timed out after 30s',
+          summary: 'Provider request timed out after 30s',
+        },
+        createdAt: Date.now() - 300_000,
+        updatedAt: Date.now() - 60_000,
+      },
+    ];
+
+    await page.route('**/api/projects', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ projects }),
+      });
+    });
+
+    await page.route('**/api/routines', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ routines }),
+      });
+    });
+
+    await page.route('**/api/automation-templates', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ proposals: [] }),
+      });
+    });
+
+    await page.route('**/api/automation-source-packets?limit=3', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ packets: [] }),
+      });
+    });
+
+    const view = await gotoAutomations(page);
+    const row = view.locator('.automation-row', { hasText: 'Release digest' }).first();
+
+    await expect(row).toContainText('Shared Release Project');
+    await expect(row).toContainText('Failed');
   });
 });

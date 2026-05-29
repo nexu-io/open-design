@@ -114,6 +114,7 @@ const amrAgent: AgentInfo = {
   available: true,
   version: '1.0.0',
   models: [{ id: 'default', label: 'Default' }],
+  supportsCustomModel: false,
 };
 
 type OnRefreshAgents = (

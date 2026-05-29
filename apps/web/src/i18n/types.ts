@@ -1695,6 +1695,8 @@ export interface Dict {
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;
   'chat.amrError.rechargeCta': string;
+  'chat.antigravityError.launchTerminalCta': string;
+  'chat.antigravityError.launchSwitchModelCta': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;
@@ -1781,6 +1783,25 @@ export interface Dict {
   'chat.importFolder': string;
   'chat.importSkills': string;
   'chat.importProject': string;
+  'chat.mentionTabsAria': string;
+  'chat.mentionTabAll': string;
+  'chat.mentionTabPlugins': string;
+  'chat.mentionTabSkills': string;
+  'chat.mentionTabMcp': string;
+  'chat.mentionTabConnectors': string;
+  'chat.mentionTabFiles': string;
+  'chat.mentionNoResults': string;
+  'chat.mentionSearchPrompt': string;
+  'chat.mentionSectionPlugins': string;
+  'chat.mentionSectionSkills': string;
+  'chat.mentionSectionMcp': string;
+  'chat.mentionSectionConnectors': string;
+  'chat.mentionSectionFiles': string;
+  'chat.mentionActiveSkill': string;
+  'chat.mentionUseMcpTitle': string;
+  'chat.mentionUseConnectorTitle': string;
+  'chat.mentionPluginOfficial': string;
+  'chat.mentionPluginMine': string;
   'chat.linkedFolderRemoveAria': string;
   'chat.linkedFolderNotFound': string;
   'chat.linkedFolderAlready': string;
@@ -1832,13 +1853,23 @@ export interface Dict {
   'preview.errorTitle': string;
   'preview.errorBody': string;
   'preview.retry': string;
-  // Friendly placeholder copy for skills whose `od.preview.type` is not
-  // `html` — they ship no fetchable example artifact, so the loading /
-  // error states are misleading. Issue #897.
+  // Friendly placeholder copy for surfaces whose `od.preview.type` is
+  // not `html`, or whose manifest declares a preview entry that doesn't
+  // ship on disk — they have no fetchable example artifact, so the
+  // loading / error states are misleading. Issues #897, #2840, #3216.
+  // Body uses the `{kind}` placeholder (raw `od.preview.type` token,
+  // e.g. "markdown" or "image"); both keys use the `{noun}` placeholder
+  // so the same wording reads correctly on skills, plugins, and design
+  // templates (filled from one of the `preview.noun.*` keys below).
   'preview.unavailableTitle': string;
-  // Body copy uses the `{kind}` placeholder (raw `od.preview.type`
-  // token, e.g. "markdown" or "image") so each kind reads naturally.
   'preview.unavailableBody': string;
+  // Noun variants so the unavailable placeholder reads with the right
+  // word for each surface — Skills tab vs. Community/Plugins vs. deck
+  // design-templates. Keep these short, capitalised by the host
+  // language's conventions, and translatable in every locale.
+  'preview.nounSkill': string;
+  'preview.nounPlugin': string;
+  'preview.nounTemplate': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 
