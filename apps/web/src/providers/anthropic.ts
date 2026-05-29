@@ -67,7 +67,7 @@ export async function streamMessage(
   }
 
   if (cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com') {
-    return streamMessageAnthropicProxy(cfg, system, history, signal, handlers);
+    return streamMessageAnthropicProxy(cfg, system, history, signal, handlers, context);
   }
 
   if (!cfg.apiKey) {
