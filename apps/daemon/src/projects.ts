@@ -974,16 +974,22 @@ async function prepareArtifactManifestRename(dir, oldName, newName) {
     }
   }
 
-  return { oldManifestPath, newManifestPath: targetManifestPath, raw };
+  return { oldManifestPath, newManifestPath: targetManifestPath, raw, oldName };
 }
 
 async function commitArtifactManifestRename(manifestRename, newName) {
   if (!manifestRename) return;
-  const { oldManifestPath, newManifestPath, raw } = manifestRename;
+  const { oldManifestPath, newManifestPath, raw, oldName } = manifestRename;
   await mkdir(path.dirname(newManifestPath), { recursive: true });
   const parsed = parseManifest(raw);
   if (parsed) {
-    const validated = validateArtifactManifestInput(parsed, newName);
+    const parsedEntry = typeof parsed.entry === 'string'
+      ? parsed.entry.replace(/\\/g, '/')
+      : '';
+    const renamedManifest = parsedEntry === oldName
+      ? { ...parsed, entry: newName }
+      : parsed;
+    const validated = validateArtifactManifestInput(renamedManifest, newName);
     if (validated.ok && validated.value) {
       await writeFile(oldManifestPath, JSON.stringify(validated.value, null, 2));
       await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
