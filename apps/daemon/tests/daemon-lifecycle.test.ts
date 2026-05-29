@@ -66,19 +66,14 @@ describe('GET /api/ready', () => {
       ok: boolean;
       ready: boolean;
       version: unknown;
-      dataDir: unknown;
-      sandboxMode: boolean;
-      sandbox: { enabled: boolean };
-      shuttingDown: boolean;
     };
 
     expect(body.ok).toBe(true);
     expect(body.ready).toBe(true);
     expect(typeof body.version === 'string' || typeof body.version === 'object').toBe(true);
-    expect(typeof body.dataDir).toBe('string');
-    expect(body.sandboxMode).toBe(false);
-    expect(body.sandbox).toEqual({ enabled: false });
-    expect(body.shuttingDown).toBe(false);
+    expect(body).not.toHaveProperty('dataDir');
+    expect(body).not.toHaveProperty('sandboxMode');
+    expect(body).not.toHaveProperty('sandbox');
   });
 });
 

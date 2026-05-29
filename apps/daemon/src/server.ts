@@ -3662,8 +3662,9 @@ export async function startServer({
   // Active only when OD_API_TOKEN is set. Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / version / status remain
-  // open so monitoring probes don't need the token.
+  // value matching `OD_API_TOKEN`. Health / readiness / version remain
+  // open so monitoring probes don't need the token. Rich daemon status
+  // stays authenticated because it includes local runtime paths.
   if (apiToken.length > 0) {
     const openProbePaths = new Set([
       '/health',
@@ -3672,8 +3673,6 @@ export async function startServer({
       '/api/ready',
       '/version',
       '/api/version',
-      '/daemon/status',
-      '/api/daemon/status',
     ]);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
@@ -4164,12 +4163,6 @@ export async function startServer({
       ok: ready,
       ready,
       version: versionInfo.version,
-      dataDir: RUNTIME_DATA_DIR,
-      sandboxMode: SANDBOX_RUNTIME.enabled,
-      sandbox: SANDBOX_RUNTIME.enabled
-        ? { enabled: true, roots: SANDBOX_RUNTIME.roots }
-        : { enabled: false },
-      shuttingDown: daemonShuttingDown,
     });
   });
 
