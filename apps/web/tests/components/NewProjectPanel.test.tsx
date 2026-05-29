@@ -95,6 +95,13 @@ const templates: ProjectTemplate[] = [
   },
 ];
 
+const configuredMediaProviders = {
+  openai: { apiKey: 'sk-openai', baseUrl: '' },
+  volcengine: { apiKey: 'ark-key', baseUrl: '' },
+  minimax: { apiKey: 'minimax-key', baseUrl: '' },
+  elevenlabs: { apiKey: 'eleven-key', baseUrl: '' },
+};
+
 afterEach(() => {
   cleanup();
   globalThis.ResizeObserver = originalResizeObserver;
@@ -469,6 +476,7 @@ describe('NewProjectPanel design system defaults', () => {
         onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
+        mediaProviders={configuredMediaProviders}
       />,
     );
 
@@ -504,6 +512,7 @@ describe('NewProjectPanel design system defaults', () => {
         onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
+        mediaProviders={configuredMediaProviders}
       />,
     );
 
@@ -543,6 +552,7 @@ describe('NewProjectPanel design system defaults', () => {
         onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
+        mediaProviders={configuredMediaProviders}
       />,
     );
 
@@ -585,6 +595,7 @@ describe('NewProjectPanel design system defaults', () => {
         onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={onCreate}
+        mediaProviders={configuredMediaProviders}
       />,
     );
 

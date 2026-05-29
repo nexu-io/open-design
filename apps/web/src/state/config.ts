@@ -482,6 +482,17 @@ interface PublicMediaProviderConfigEntry {
   source?: string;
   apiKeyTail?: string;
   baseUrl?: string;
+  enabled?: boolean;
+  model?: string;
+  profiles?: PublicMediaProviderProfileConfigEntry[];
+}
+
+interface PublicMediaProviderProfileConfigEntry {
+  id?: string;
+  label?: string;
+  configured?: boolean;
+  apiKeyTail?: string;
+  baseUrl?: string;
   model?: string;
 }
 
@@ -502,6 +513,17 @@ interface MediaProviderDaemonWriteEntry {
   apiKey?: string;
   preserveApiKey?: boolean;
   baseUrl?: string;
+  enabled?: boolean;
+  model?: string;
+  profiles?: MediaProviderDaemonWriteProfileEntry[];
+}
+
+interface MediaProviderDaemonWriteProfileEntry {
+  id: string;
+  label?: string;
+  apiKey?: string;
+  preserveApiKey?: boolean;
+  baseUrl?: string;
   model?: string;
 }
 
@@ -509,6 +531,8 @@ interface MediaProviderDaemonWriteRequest {
   providers: Record<string, MediaProviderDaemonWriteEntry>;
   force: boolean;
 }
+
+type MediaProviderProfileCredentials = NonNullable<MediaProviderCredentials['profiles']>[number];
 
 function hasAnyDaemonManagedMediaProvider(
   providers: Record<string, MediaProviderCredentials> | null | undefined,
@@ -519,6 +543,17 @@ function hasAnyDaemonManagedMediaProvider(
 
 function hasRecoverableLocalMediaProviderFields(
   entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.baseUrl?.trim()
+    || entry?.model?.trim()
+    || entry?.profiles?.some(hasRecoverableLocalMediaProviderProfileFields),
+  );
+}
+
+function hasRecoverableLocalMediaProviderProfileFields(
+  entry: MediaProviderProfileCredentials,
 ): boolean {
   return Boolean(
     entry?.apiKey?.trim()
@@ -541,6 +576,20 @@ export function isStoredMediaProviderEntryPresent(
     entry?.apiKey?.trim()
     || entry?.baseUrl?.trim()
     || entry?.model?.trim()
+    || entry?.enabled === true
+    || entry?.apiKeyConfigured
+    || entry?.apiKeyTail?.trim()
+    || entry?.profiles?.some(isStoredMediaProviderProfilePresent),
+  );
+}
+
+function isStoredMediaProviderProfilePresent(
+  entry: MediaProviderProfileCredentials,
+): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.baseUrl?.trim()
+    || entry?.model?.trim()
     || entry?.apiKeyConfigured
     || entry?.apiKeyTail?.trim(),
   );
@@ -554,6 +603,48 @@ export function isStoredMediaProviderEntryEmpty(
 
 function defaultBaseUrlForProvider(providerId: string): string {
   return MEDIA_PROVIDERS.find((provider) => provider.id === providerId)?.defaultBaseUrl ?? '';
+}
+
+function buildMediaProviderProfilesForDaemonSave(
+  currentProfiles: MediaProviderProfileCredentials[] | undefined,
+  daemonProfiles: MediaProviderProfileCredentials[] | undefined,
+): MediaProviderDaemonWriteProfileEntry[] {
+  const daemonById = new Map(
+    (daemonProfiles ?? []).map((profile) => [profile.id, profile]),
+  );
+  const out: MediaProviderDaemonWriteProfileEntry[] = [];
+  for (const [index, currentProfile] of (currentProfiles ?? []).entries()) {
+    const id = currentProfile.id?.trim() || `profile-${index + 1}`;
+    const daemonProfile = daemonById.get(id);
+    const apiKey = currentProfile.apiKey?.trim() ?? '';
+    const hasStoredKeyMarker = Boolean(
+      currentProfile.apiKeyTail?.trim()
+      || daemonProfile?.apiKeyTail?.trim(),
+    );
+    const preserveApiKey = !apiKey && Boolean(
+      currentProfile.apiKeyConfigured
+      && hasStoredKeyMarker,
+    );
+    const baseUrl =
+      currentProfile.baseUrl?.trim()
+      || daemonProfile?.baseUrl?.trim()
+      || '';
+    const model =
+      currentProfile.model?.trim()
+      || daemonProfile?.model?.trim()
+      || '';
+    const label = currentProfile.label?.trim() || daemonProfile?.label?.trim() || '';
+    if (!apiKey && !preserveApiKey && !baseUrl && !model && !label) continue;
+    out.push({
+      id,
+      ...(label ? { label } : {}),
+      ...(apiKey ? { apiKey } : {}),
+      ...(preserveApiKey ? { preserveApiKey: true } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(model ? { model } : {}),
+    });
+  }
+  return out;
 }
 
 export function buildMediaProvidersForDaemonSave(
@@ -577,14 +668,21 @@ export function buildMediaProvidersForDaemonSave(
       currentEntry?.baseUrl?.trim()
       || daemonEntry?.baseUrl?.trim()
       || '';
+    const enabled = currentEntry?.enabled === true || daemonEntry?.enabled === true;
     const model = currentEntry?.model?.trim() || daemonEntry?.model?.trim() || '';
-    if (!apiKey && !preserveApiKey && !explicitBaseUrl && !model) continue;
+    const profiles = buildMediaProviderProfilesForDaemonSave(
+      currentEntry?.profiles,
+      daemonEntry?.profiles,
+    );
+    if (!apiKey && !preserveApiKey && !explicitBaseUrl && !model && !enabled && profiles.length === 0) continue;
     const baseUrl = explicitBaseUrl || defaultBaseUrlForProvider(providerId);
     providers[providerId] = {
       ...(apiKey ? { apiKey } : {}),
       ...(preserveApiKey ? { preserveApiKey: true } : {}),
       ...(baseUrl ? { baseUrl } : {}),
+      ...(enabled ? { enabled: true } : {}),
       ...(model ? { model } : {}),
+      ...(profiles.length > 0 ? { profiles } : {}),
     };
   }
   return {
@@ -624,8 +722,26 @@ export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvid
         ...(typeof entry?.source === 'string' && entry.source.trim()
           ? { source: entry.source.trim() }
           : {}),
+        ...(entry?.enabled ? { enabled: true } : {}),
         ...(typeof entry?.model === 'string' && entry.model.trim()
           ? { model: entry.model.trim() }
+          : {}),
+        ...(Array.isArray(entry?.profiles)
+          ? {
+              profiles: entry.profiles
+                .filter((profile) => typeof profile?.id === 'string' && profile.id.trim())
+                .map((profile) => ({
+                  id: profile.id!.trim(),
+                  ...(typeof profile.label === 'string' && profile.label.trim()
+                    ? { label: profile.label.trim() }
+                    : {}),
+                  apiKey: '',
+                  apiKeyConfigured: Boolean(profile.configured),
+                  apiKeyTail: profile.apiKeyTail ?? '',
+                  baseUrl: profile.baseUrl ?? '',
+                  model: profile.model ?? '',
+                })),
+            }
           : {}),
       };
     }
@@ -800,8 +916,13 @@ export function mergeDaemonMediaProviders(
 
   const mediaProviders = { ...(localConfig.mediaProviders ?? {}) };
   for (const [providerId, daemonEntry] of Object.entries(daemonProviders ?? {})) {
-    if (!isStoredMediaProviderEntryPresent(daemonEntry)) continue;
     const localEntry = mediaProviders[providerId];
+    if (!isStoredMediaProviderEntryPresent(daemonEntry)) {
+      if (isMarkerOnlyMediaProviderEntry(localEntry)) {
+        delete mediaProviders[providerId];
+      }
+      continue;
+    }
     const preserveLocalPendingEdit = Boolean(
       options?.preserveLocalProviderIds?.has(providerId)
       && hasRecoverableLocalMediaProviderFields(localEntry),

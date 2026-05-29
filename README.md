@@ -483,6 +483,30 @@ od plugin uninstall od-default       # uninstall
 
 Every command supports `--json`, so you can pipe it through `jq` / `xargs` into automation.
 
+### Google Vertex AI (Imagen) setup
+
+Google Vertex uses Application Default Credentials instead of the Media providers API-key form. Configure it once on the machine that runs the daemon:
+
+```bash
+gcloud auth application-default login
+mkdir -p ~/.config/open-design
+cat > ~/.config/open-design/google-vertex-config.json <<'JSON'
+{
+  "version": 1,
+  "enabled": true,
+  "auth_mode": "adc",
+  "project_id": "your-gcp-project-id",
+  "default_location": "us-central1",
+  "text_location": "global",
+  "image_location": "us-central1"
+}
+JSON
+```
+
+Then restart OD and select `imagen-4` in the image model picker, or call `od media generate --surface image --model imagen-4`. Set `OD_GOOGLE_VERTEX_CONFIG=/path/to/google-vertex-config.json` if you want the config elsewhere. Service-account JSON is also supported through `auth_mode: "service_account"` plus `service_account_key_file`, but ADC is preferred so secrets stay out of the OD UI.
+
+A growing **prompt gallery** at [`prompt-templates/`](prompt-templates/) ships **93 ready-to-replicate prompts** — 43 image (`prompt-templates/image/*.json`), 39 Seedance (`prompt-templates/video/*.json` excluding `hyperframes-*`), 11 HyperFrames (`prompt-templates/video/hyperframes-*.json`). Each carries a preview thumbnail, the prompt body verbatim, the target model, the aspect ratio, and a `source` block for license + attribution. The daemon serves them at `GET /api/prompt-templates`, the web app surfaces them as a card grid in the **Image templates** and **Video templates** tabs of the entry view; one click drops a prompt into the composer with the right model preselected.
+
 ### Building a plugin
 
 A plugin **needs only a `SKILL.md` at minimum**; to list it in the Open Design marketplace, add an `open-design.json`:

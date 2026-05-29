@@ -67,6 +67,8 @@ export interface MediaProvider {
   credentialsRequired?: boolean;
   /** Whether the provider should appear in Settings -> Media. */
   settingsVisible?: boolean;
+  /** Settings UI shape. Defaults to API key + optional base URL. */
+  configKind?: 'api-key' | 'external';
   /** Default base URL the daemon hits when no override is configured. */
   defaultBaseUrl?: string;
   /** Documentation URL for getting an API key. */
@@ -161,7 +163,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
-    customModelPlaceholder: 'my-image-model',
+    customModelPlaceholder: 'wan2.7-image, my-second-image-model',
   },
   {
     id: 'comfyui',
@@ -209,9 +211,10 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'google',
     label: 'Google AI / Vertex',
-    hint: 'Imagen 4 / Veo 3 / Lyria',
-    integrated: false,
-    docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',
+    hint: 'OD config + gcloud ADC · Imagen / Gemini image',
+    integrated: true,
+    configKind: 'external',
+    docsUrl: 'https://cloud.google.com/vertex-ai/generative-ai/docs/image/overview',
   },
   {
     id: 'kling',
@@ -229,9 +232,9 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'minimax',
     label: 'MiniMax',
-    hint: 'TTS / video-01',
+    hint: 'TokenPlan key · image-01 / music-2.6 / TTS; URL optional',
     integrated: true,
-    defaultBaseUrl: 'https://api.minimaxi.chat/v1',
+    defaultBaseUrl: 'https://api.minimaxi.com/v1',
     docsUrl: 'https://platform.minimaxi.com',
   },
   {
@@ -319,6 +322,66 @@ export interface MediaModel {
   caps?: string[];
   /** Marks the default-checked card per surface in the picker. */
   default?: boolean;
+}
+
+export const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
+
+export function parseCustomImageModelList(value: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of (value ?? '').split(/[,\n;]+/)) {
+    const model = raw.trim();
+    if (!model || seen.has(model) || model === CUSTOM_IMAGE_MODEL_ID) continue;
+    seen.add(model);
+    out.push(model);
+  }
+  return out;
+}
+
+export function customImageModelFromId(modelId: string): MediaModel {
+  return {
+    id: modelId,
+    label: modelId,
+    hint: 'Custom Image API · OpenAI-compatible endpoint',
+    provider: 'custom-image',
+    caps: ['t2i'],
+  };
+}
+
+type CustomImageModelSource = {
+  model?: string;
+};
+
+export function configuredCustomImageModelIds(
+  configuredModelList: string | null | undefined,
+  profiles?: CustomImageModelSource[] | null,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const model of [
+    ...parseCustomImageModelList(configuredModelList),
+    ...(profiles ?? []).flatMap((profile) => parseCustomImageModelList(profile.model)),
+  ]) {
+    if (seen.has(model)) continue;
+    seen.add(model);
+    out.push(model);
+  }
+  return out;
+}
+
+export function withConfiguredCustomImageModels(
+  models: MediaModel[],
+  configuredModelList: string | null | undefined,
+  profiles?: CustomImageModelSource[] | null,
+): MediaModel[] {
+  const customModels = configuredCustomImageModelIds(configuredModelList, profiles);
+  if (customModels.length === 0) return models;
+  const dynamicModels = customModels.map(customImageModelFromId);
+  return models.flatMap((model) => (
+    model.id === CUSTOM_IMAGE_MODEL_ID
+      ? dynamicModels
+      : [model]
+  ));
 }
 
 /**
@@ -483,12 +546,15 @@ export const IMAGE_MODELS: MediaModel[] = [
 
   // Custom OpenAI-compatible image generation + edit endpoints.
   {
-    id: 'custom-image',
+    id: CUSTOM_IMAGE_MODEL_ID,
     label: 'custom-image',
     hint: 'Custom · OpenAI-compatible endpoint',
     provider: 'custom-image',
     caps: ['t2i', 'i2i'],
   },
+
+  // MiniMax Token Plan image generation.
+  { id: 'image-01', label: 'image-01', hint: 'MiniMax · Token Plan image', provider: 'minimax', caps: ['t2i'] },
 
   // Black Forest Labs FLUX family.
   { id: 'flux-1.1-pro', label: 'flux-1.1-pro', hint: 'BFL · flagship', provider: 'bfl', caps: ['t2i', 'i2i'] },
@@ -498,9 +564,9 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'flux-kontext-pro', label: 'flux-kontext-pro', hint: 'BFL · in-context edits', provider: 'bfl', caps: ['t2i', 'i2i'] },
 
   // Google.
-  { id: 'imagen-4', label: 'imagen-4', hint: 'Google · latest', provider: 'google', caps: ['t2i'] },
-  { id: 'imagen-3', label: 'imagen-3', hint: 'Google', provider: 'google', caps: ['t2i'] },
-  { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google · Nano Banana Pro', provider: 'google', caps: ['t2i', 'i2i'] },
+  { id: 'imagen-4', label: 'imagen-4', hint: 'Google Vertex ADC · Imagen 4', provider: 'google', caps: ['t2i'] },
+  { id: 'imagen-3', label: 'imagen-3', hint: 'Google Vertex ADC', provider: 'google', caps: ['t2i'] },
+  { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google Vertex ADC · Nano Banana Pro', provider: 'google', caps: ['t2i', 'i2i'] },
 
   // Replicate hosted image models.
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
@@ -637,6 +703,8 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'suno-v5', label: 'suno-v5', hint: 'Suno · default', provider: 'suno', caps: ['music'], default: true },
     { id: 'suno-v4-5', label: 'suno-v4.5', hint: 'Suno', provider: 'suno', caps: ['music'] },
     { id: 'udio-v2', label: 'udio-v2', hint: 'Udio', provider: 'udio', caps: ['music'] },
+    { id: 'music-2.6', label: 'music-2.6', hint: 'MiniMax · Token Plan', provider: 'minimax', caps: ['music'] },
+    { id: 'music-2.6-free', label: 'music-2.6-free', hint: 'MiniMax · free API key', provider: 'minimax', caps: ['music'] },
     { id: 'lyria-2', label: 'lyria-2', hint: 'Google', provider: 'google', caps: ['music'] },
   ],
   speech: [

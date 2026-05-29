@@ -165,6 +165,57 @@ describe('OpenAI-compatible media providers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('accepts configured custom image model ids directly', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          apiKey: 'proxy-test-key',
+          baseUrl: 'https://images.example.test/v1',
+          model: 'acme-image-model',
+          profiles: [{
+            id: 'wan',
+            apiKey: 'wan-profile-key',
+            baseUrl: 'https://wan.example.test/v1',
+            model: 'wan2.7-image',
+          }],
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://wan.example.test/v1/images/generations');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer wan-profile-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        prompt: 'A crisp cyberpunk product poster',
+        model: 'wan2.7-image',
+      });
+      return new Response(JSON.stringify({
+        data: [{ b64_json: PNG_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'wan2.7-image',
+      prompt: 'A crisp cyberpunk product poster',
+      output: 'custom-dynamic.png',
+    });
+
+    expect(result.providerId).toBe('custom-image');
+    expect(result.providerNote).toContain('custom-image/wan2.7-image');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('routes matching OpenAI image catalog ids through the configured custom provider', async () => {
     await writeConfig({
       providers: {

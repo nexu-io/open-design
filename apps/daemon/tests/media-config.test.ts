@@ -19,6 +19,7 @@ const OPENAI_ENV_KEYS = [
   'OPENAI_API_KEY',
   'AZURE_API_KEY',
   'AZURE_OPENAI_API_KEY',
+  'OD_OPENAI_MEDIA_ALLOW_CODEX_OAUTH',
 ];
 
 describe('media-config OpenAI auth-file fallback', () => {
@@ -260,6 +261,53 @@ describe('media-config OpenAI auth-file fallback', () => {
       apiKey: 'stored-openai-key',
       baseUrl: 'https://after.example/v1',
     });
+  });
+
+  it('preserves custom image profile apiKeys when updating profile fields', async () => {
+    await writeConfig(projectRoot, {
+      providers: {
+        'custom-image': {
+          profiles: [{
+            id: 'wan',
+            apiKey: 'stored-wan-key',
+            baseUrl: 'https://before.example/v1',
+            model: 'wan2.7-image',
+          }],
+        },
+      },
+      force: true,
+    });
+
+    await writeConfig(projectRoot, {
+      providers: {
+        'custom-image': {
+          profiles: [{
+            id: 'wan',
+            preserveApiKey: true,
+            baseUrl: 'https://after.example/v1',
+            model: 'wan2.7-image',
+          }],
+        },
+      },
+      force: true,
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'custom-image');
+    expect(resolved.profiles).toEqual([{
+      id: 'wan',
+      apiKey: 'stored-wan-key',
+      baseUrl: 'https://after.example/v1',
+      model: 'wan2.7-image',
+    }]);
+
+    const masked = await readMaskedConfig(projectRoot);
+    expect(masked.providers['custom-image']?.profiles).toEqual([{
+      id: 'wan',
+      configured: true,
+      apiKeyTail: '-key',
+      baseUrl: 'https://after.example/v1',
+      model: 'wan2.7-image',
+    }]);
   });
 
   describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {

@@ -43,6 +43,26 @@ describe('SettingsDialog media providers', () => {
     expect(screen.queryByLabelText('Codex Subscription Base URL')).toBeNull();
   });
 
+  it('renders Google Vertex as an explicit external opt-in instead of an API-key form', () => {
+    renderDialog({
+      ...DEFAULT_CONFIG,
+      mediaProviders: {},
+    });
+
+    const row = screen.getByText('Google AI / Vertex').closest('.media-provider-row') as HTMLElement | null;
+    if (!row) throw new Error('Expected Google media provider row');
+
+    expect(within(row).queryByLabelText('Google AI / Vertex API key')).toBeNull();
+    expect(within(row).queryByLabelText('Google AI / Vertex Base URL')).toBeNull();
+    const toggle = within(row).getByLabelText('Show Google image models in pickers') as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    fireEvent.click(toggle);
+
+    expect(toggle.checked).toBe(true);
+    expect(within(row).getByText('Enabled')).toBeTruthy();
+  });
+
   it('shows daemon fallback notice and reloads media providers from daemon', async () => {
     const reloadMock = vi.fn(async () => ({
       openai: {

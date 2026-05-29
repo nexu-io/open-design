@@ -324,6 +324,7 @@ import {
   MEDIA_PROVIDERS,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
+  withConfiguredCustomImageModels,
 } from './media-models.js';
 import { readMaskedConfig, writeConfig } from './media-config.js';
 import {
@@ -6169,6 +6170,7 @@ export async function startServer({
     MEDIA_ASPECTS,
     VIDEO_LENGTHS_SEC,
     AUDIO_DURATIONS_SEC,
+    withConfiguredCustomImageModels,
     readMaskedConfig,
     writeConfig,
     generateMedia,
@@ -10633,10 +10635,21 @@ export async function startServer({
     }
   });
 
-  app.get('/api/media/models', (_req, res) => {
+  app.get('/api/media/models', async (_req, res) => {
+    let imageModels = IMAGE_MODELS;
+    try {
+      const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
+      imageModels = withConfiguredCustomImageModels(
+        IMAGE_MODELS,
+        mediaConfig.providers['custom-image']?.model,
+        mediaConfig.providers['custom-image']?.profiles,
+      );
+    } catch {
+      imageModels = IMAGE_MODELS;
+    }
     res.json({
       providers: MEDIA_PROVIDERS,
-      image: IMAGE_MODELS,
+      image: imageModels,
       video: VIDEO_MODELS,
       audio: AUDIO_MODELS_BY_KIND,
       aspects: MEDIA_ASPECTS,

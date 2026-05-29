@@ -162,6 +162,112 @@ describe('NewProjectPanel media provider badges', () => {
     expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
   });
 
+  it('does not show API-key providers from a default base URL alone', () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{
+          openai: {
+            apiKey: '',
+            baseUrl: 'https://api.openai.com/v1',
+            source: 'unset',
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    expect(screen.queryByText('OpenAI')).toBeNull();
+    expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
+  });
+
+  it('shows Google Vertex models only after the external provider is enabled', () => {
+    const { rerender } = render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    expect(screen.queryByTestId('model-picker-option-imagen-4')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    rerender(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{ google: { apiKey: '', baseUrl: '', enabled: true } }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    expect(screen.getByTestId('model-picker-option-imagen-4')).toBeTruthy();
+  });
+
+  it('shows each configured Custom Image API model as its own picker option', () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{
+          'custom-image': {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: 'UGYF',
+            baseUrl: 'https://token-plan.cn-beijing.example/v1',
+            model: 'wan2.7-image',
+            profiles: [{
+              id: 'backup',
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '2222',
+              baseUrl: 'https://backup.example/v1',
+              model: 'flux-custom',
+            }],
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    expect(screen.getByTestId('model-picker-option-wan2.7-image')).toBeTruthy();
+    expect(screen.getByTestId('model-picker-option-flux-custom')).toBeTruthy();
+    expect(screen.queryByTestId('model-picker-option-custom-image')).toBeNull();
+  });
+
   it('switches away from the default OpenAI model when only another provider is configured', () => {
     const onCreate = vi.fn();
     render(

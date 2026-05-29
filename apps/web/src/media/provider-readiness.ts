@@ -1,4 +1,3 @@
-import { isStoredMediaProviderEntryPresent } from '../state/config';
 import type { MediaProviderCredentials } from '../types';
 import {
   findMediaModel,
@@ -13,10 +12,12 @@ export function isMediaProviderPickerReady(
   const provider = findProvider(providerId);
   if (!provider?.integrated) return false;
   if (mediaProviders === undefined) return true;
-  if (provider.credentialsRequired === false) return true;
   const entry = mediaProviders?.[provider.id];
+  if (provider.configKind === 'external') return entry?.enabled === true;
+  if (provider.credentialsRequired === false) return true;
   if (provider.id === 'openai' && isOpenAIOAuthOnlyEntry(entry)) return false;
-  return isStoredMediaProviderEntryPresent(entry);
+  if (provider.id === 'custom-image') return hasConfiguredCustomImageEntry(entry);
+  return hasConfiguredApiKeyEntry(entry);
 }
 
 export function isMediaModelPickerReady(
@@ -24,7 +25,7 @@ export function isMediaModelPickerReady(
   mediaProviders?: Record<string, MediaProviderCredentials>,
 ): boolean {
   const model = findMediaModel(modelId);
-  if (!model) return false;
+  if (!model) return true;
   return isMediaProviderPickerReady(model.provider, mediaProviders);
 }
 
@@ -35,4 +36,24 @@ function isOpenAIOAuthOnlyEntry(entry: MediaProviderCredentials | null | undefin
     && !entry?.baseUrl?.trim()
     && !entry?.model?.trim()
     && !entry?.apiKeyTail?.trim();
+}
+
+function hasConfiguredApiKeyEntry(entry: MediaProviderCredentials | null | undefined): boolean {
+  return Boolean(
+    entry?.apiKey?.trim()
+    || entry?.apiKeyConfigured
+    || entry?.apiKeyTail?.trim()
+    || entry?.profiles?.some((profile) => (
+      profile.apiKey?.trim()
+      || profile.apiKeyConfigured
+      || profile.apiKeyTail?.trim()
+    )),
+  );
+}
+
+function hasConfiguredCustomImageEntry(entry: MediaProviderCredentials | null | undefined): boolean {
+  return Boolean(
+    (entry?.baseUrl?.trim() && entry?.model?.trim())
+    || entry?.profiles?.some((profile) => profile.baseUrl?.trim() && profile.model?.trim()),
+  );
 }

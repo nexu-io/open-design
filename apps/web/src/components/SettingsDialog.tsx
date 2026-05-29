@@ -96,6 +96,7 @@ import type {
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
+  MediaProviderCredentials,
   ProviderModelOption,
   ProviderModelsResponse,
   SkillSummary,
@@ -6068,9 +6069,11 @@ function MediaProvidersSection({
     patch: {
       apiKey?: string;
       baseUrl?: string;
+      enabled?: boolean;
       model?: string;
       apiKeyConfigured?: boolean;
       apiKeyTail?: string;
+      profiles?: MediaProviderCredentials['profiles'];
     },
   ) => {
     onChange(provider.id);
@@ -6125,6 +6128,67 @@ function MediaProvidersSection({
         next.add(providerId);
       }
       return next;
+    });
+  };
+  const updateProviderProfile = (
+    provider: MediaProvider,
+    profileId: string,
+    patch: Partial<NonNullable<MediaProviderCredentials['profiles']>[number]>,
+  ) => {
+    onChange(provider.id);
+    setCfg((curr) => {
+      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
+      const profiles = [...(prev.profiles ?? [])];
+      const index = profiles.findIndex((profile) => profile.id === profileId);
+      if (index < 0) return curr;
+      const currentProfile = profiles[index];
+      if (!currentProfile) return curr;
+      profiles[index] = { ...currentProfile, ...patch };
+      const next = { ...prev, profiles: profiles.filter((profile) => !isStoredMediaProviderEntryEmpty(profile)) };
+      const map = { ...(curr.mediaProviders ?? {}) };
+      if (isStoredMediaProviderEntryEmpty(next)) {
+        delete map[provider.id];
+      } else {
+        map[provider.id] = next;
+      }
+      return { ...curr, mediaProviders: map };
+    });
+  };
+  const addProviderProfile = (provider: MediaProvider) => {
+    onChange(provider.id);
+    setCfg((curr) => {
+      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
+      const profiles = [...(prev.profiles ?? [])];
+      profiles.push({
+        id: `profile-${Date.now().toString(36)}-${profiles.length + 1}`,
+        apiKey: '',
+        baseUrl: '',
+        model: '',
+      });
+      return {
+        ...curr,
+        mediaProviders: {
+          ...(curr.mediaProviders ?? {}),
+          [provider.id]: { ...prev, profiles },
+        },
+      };
+    });
+  };
+  const removeProviderProfile = (provider: MediaProvider, profileId: string) => {
+    onChange(provider.id);
+    setCfg((curr) => {
+      const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
+      const next = {
+        ...prev,
+        profiles: (prev.profiles ?? []).filter((profile) => profile.id !== profileId),
+      };
+      const map = { ...(curr.mediaProviders ?? {}) };
+      if (isStoredMediaProviderEntryEmpty(next)) {
+        delete map[provider.id];
+      } else {
+        map[provider.id] = next;
+      }
+      return { ...curr, mediaProviders: map };
     });
   };
 
@@ -6185,7 +6249,14 @@ function MediaProvidersSection({
       <div className="media-provider-list">
         {availableProviders.map((provider) => {
           const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
+          const setupNote = provider.id === 'minimax'
+            ? t('settings.mediaProviderMiniMaxNote')
+            : provider.id === 'google'
+              ? t('settings.mediaProviderGoogleNote')
+            : null;
+          const externalConfig = provider.configKind === 'external';
           const hasPendingEdit = Boolean(entry.apiKey.trim());
+          const isExternalEnabled = externalConfig && entry.enabled === true;
           const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
           const tail = entry.apiKeyTail?.trim();
           // Every provider rendered in the main list is integrated by
@@ -6214,6 +6285,14 @@ function MediaProvidersSection({
                   */}
                   <div className="media-provider-name-row">
                     <span className="media-provider-name">{provider.label}</span>
+                    {isExternalEnabled ? (
+                      <span
+                        className="field-status-badge field-status-badge--inline"
+                        title={t('settings.mediaProviderEnabled')}
+                      >
+                        {t('settings.mediaProviderEnabled')}
+                      </span>
+                    ) : null}
                     {isSavedState ? (
                       <span
                         className="field-status-badge field-status-badge--inline"
@@ -6226,6 +6305,9 @@ function MediaProvidersSection({
                     ) : null}
                   </div>
                   <span className="media-provider-hint">{provider.hint}</span>
+                  {setupNote ? (
+                    <span className="media-provider-note">{setupNote}</span>
+                  ) : null}
                 </div>
                 {/*
                   Right-side badges deliberately omitted now: every row
@@ -6236,7 +6318,207 @@ function MediaProvidersSection({
                 */}
               </div>
               {provider.id === 'grok' ? <XaiOAuthControl /> : null}
-              {requiresCredentials ? (
+              {externalConfig ? (
+                <div className="media-provider-body media-provider-body--external">
+                  <label className="media-provider-toggle">
+                    <span className="media-provider-toggle-copy">
+                      <span className="media-provider-toggle-title">
+                        {t('settings.mediaProviderExternalEnable')}
+                      </span>
+                    </span>
+                    <input
+                      className="media-provider-toggle-input"
+                      type="checkbox"
+                      checked={entry.enabled === true}
+                      onChange={(e) =>
+                        updateProvider(
+                          provider,
+                          e.target.checked
+                            ? { enabled: true }
+                            : { enabled: false, model: '' },
+                        )
+                      }
+                    />
+                    <span className="media-provider-toggle-switch" aria-hidden>
+                      <span />
+                    </span>
+                  </label>
+                  {supportsCustomModel ? (
+                    <input
+                      value={entry.model ?? ''}
+                      placeholder={provider.customModelPlaceholder ?? 'imagen-4.0-fast-generate-001'}
+                      aria-label={`${provider.label} model`}
+                      disabled={disabled || entry.enabled !== true}
+                      onChange={(e) => updateProvider(provider, { model: e.target.value })}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={!clearable}
+                    onClick={() => {
+                      trackSettingsMediaProvidersClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'media_providers',
+                        element: 'clear',
+                        providers_id: provider.id,
+                        is_configured: clearable,
+                      });
+                      if (
+                        !confirm(
+                          t('settings.mediaProviderClearConfirm', {
+                            name: provider.label,
+                          }),
+                        )
+                      ) {
+                        return;
+                      }
+                      updateProvider(provider, {
+                        apiKey: '',
+                        baseUrl: '',
+                        model: '',
+                        enabled: false,
+                        apiKeyConfigured: false,
+                        apiKeyTail: '',
+                      });
+                    }}
+                  >
+                    {t('settings.mediaProviderClear')}
+                  </button>
+                </div>
+              ) : provider.id === 'custom-image' ? (
+                <div className="media-provider-custom-profiles">
+                  <div className="media-provider-body">
+                    <div className="media-provider-secret-field">
+                      <input
+                        type={apiKeyVisible ? 'text' : 'password'}
+                        value={entry.apiKey}
+                        placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
+                        aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
+                        disabled={disabled}
+                        onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="secret-visibility-button"
+                        disabled={disabled}
+                        aria-label={
+                          apiKeyVisible
+                            ? `${provider.label} ${t('settings.hideKey')}`
+                            : `${provider.label} ${t('settings.showKey')}`
+                        }
+                        aria-pressed={apiKeyVisible}
+                        onClick={() => toggleApiKeyVisibility(provider.id)}
+                      >
+                        <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                      </button>
+                    </div>
+                    <input
+                      value={entry.baseUrl}
+                      placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
+                      aria-label={`${provider.label} ${t('settings.mediaProviderBaseUrl')}`}
+                      disabled={disabled}
+                      onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
+                    />
+                    <input
+                      value={entry.model ?? ''}
+                      placeholder={provider.customModelPlaceholder ?? 'wan2.7-image'}
+                      aria-label={`${provider.label} model`}
+                      disabled={disabled}
+                      onChange={(e) => updateProvider(provider, { model: e.target.value })}
+                    />
+                  </div>
+                  {(entry.profiles ?? []).map((profile, index) => {
+                    const profileVisibleKey = `${provider.id}:${profile.id}`;
+                    const profileKeyVisible = visibleApiKeys.has(profileVisibleKey);
+                    const profileSaved = Boolean((profile.apiKey.trim() || profile.apiKeyConfigured) && !profile.apiKey.trim());
+                    return (
+                      <div className="media-provider-body media-provider-profile-row" key={profile.id}>
+                        <div className="media-provider-secret-field">
+                          <input
+                            type={profileKeyVisible ? 'text' : 'password'}
+                            value={profile.apiKey}
+                            placeholder={profileSaved ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
+                            aria-label={`${provider.label} custom ${index + 2} ${t('settings.mediaProviderApiKey')}`}
+                            disabled={disabled}
+                            onChange={(e) => updateProviderProfile(provider, profile.id, { apiKey: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            className="secret-visibility-button"
+                            disabled={disabled}
+                            aria-label={
+                              profileKeyVisible
+                                ? `${provider.label} ${t('settings.hideKey')}`
+                                : `${provider.label} ${t('settings.showKey')}`
+                            }
+                            aria-pressed={profileKeyVisible}
+                            onClick={() => toggleApiKeyVisibility(profileVisibleKey)}
+                          >
+                            <Icon name={profileKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                          </button>
+                        </div>
+                        <input
+                          value={profile.baseUrl}
+                          placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
+                          aria-label={`${provider.label} custom ${index + 2} ${t('settings.mediaProviderBaseUrl')}`}
+                          disabled={disabled}
+                          onChange={(e) => updateProviderProfile(provider, profile.id, { baseUrl: e.target.value })}
+                        />
+                        <input
+                          value={profile.model}
+                          placeholder={provider.customModelPlaceholder ?? 'wan2.7-image'}
+                          aria-label={`${provider.label} custom ${index + 2} model`}
+                          disabled={disabled}
+                          onChange={(e) => updateProviderProfile(provider, profile.id, { model: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className="ghost media-provider-profile-remove"
+                          onClick={() => removeProviderProfile(provider, profile.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div className="media-provider-profile-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => addProviderProfile(provider)}
+                    >
+                      + Add endpoint
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={!clearable}
+                      onClick={() => {
+                        if (
+                          !confirm(
+                            t('settings.mediaProviderClearConfirm', {
+                              name: provider.label,
+                            }),
+                          )
+                        ) {
+                          return;
+                        }
+                        updateProvider(provider, {
+                          apiKey: '',
+                          baseUrl: '',
+                          model: '',
+                          profiles: [],
+                          apiKeyConfigured: false,
+                          apiKeyTail: '',
+                        });
+                      }}
+                    >
+                      {t('settings.mediaProviderClear')}
+                    </button>
+                  </div>
+                </div>
+              ) : requiresCredentials ? (
                 <div className="media-provider-body">
                   <div className="media-provider-secret-field">
                     <input
@@ -6268,9 +6550,9 @@ function MediaProvidersSection({
                       aria-pressed={apiKeyVisible}
                       onClick={() => toggleApiKeyVisibility(provider.id)}
                     >
-                        <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                      </button>
-                    </div>
+                      <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                    </button>
+                  </div>
                   <input
                     value={entry.baseUrl}
                     placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -6290,7 +6572,7 @@ function MediaProvidersSection({
                   {supportsCustomModel ? (
                     <input
                       value={entry.model ?? ''}
-                      placeholder="gemini-3.1-flash-image-preview"
+                      placeholder={provider.customModelPlaceholder ?? 'gemini-3.1-flash-image-preview'}
                       aria-label={`${provider.label} model`}
                       disabled={disabled}
                       onChange={(e) => updateProvider(provider, { model: e.target.value })}
@@ -6330,6 +6612,7 @@ function MediaProvidersSection({
                         apiKey: '',
                         baseUrl: '',
                         model: '',
+                        profiles: [],
                         apiKeyConfigured: false,
                         apiKeyTail: '',
                       });
@@ -6339,6 +6622,7 @@ function MediaProvidersSection({
                   </button>
                 </div>
               ) : null}
+
             </div>
           );
         })}

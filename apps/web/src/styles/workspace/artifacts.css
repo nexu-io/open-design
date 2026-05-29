@@ -437,6 +437,19 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+.media-provider-note {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 5px 7px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .media-provider-badge {
   align-self: flex-start;
   font-size: 10px;
@@ -470,6 +483,92 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 6px;
+}
+.media-provider-custom-profiles {
+  display: grid;
+  gap: 8px;
+}
+.media-provider-profile-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.82fr) auto;
+}
+.media-provider-profile-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.media-provider-profile-remove {
+  min-width: 78px;
+}
+.media-provider-body--external {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.modal .media-provider-toggle {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 44px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.media-provider-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.media-provider-toggle-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.media-provider-toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.media-provider-toggle-switch {
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.media-provider-toggle-switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  transition: transform 160ms ease;
+}
+.media-provider-toggle-input:checked + .media-provider-toggle-switch {
+  background: color-mix(in srgb, var(--accent) 72%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+}
+.media-provider-toggle-input:checked + .media-provider-toggle-switch span {
+  transform: translateX(18px);
+}
+.media-provider-toggle:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 /*
  * "Coming soon" drawer under the media provider list. We render the

@@ -382,6 +382,10 @@ export interface Dict {
   'settings.mediaProviderClearConfirm': string;
   'settings.mediaProviderPlaceholder': string;
   'settings.mediaProviderBaseUrlPlaceholder': string;
+  'settings.mediaProviderMiniMaxNote': string;
+  'settings.mediaProviderGoogleNote': string;
+  'settings.mediaProviderExternalEnable': string;
+  'settings.mediaProviderEnabled': string;
   'settings.mediaProviderReload': string;
   'settings.mediaProviderReloadError': string;
   'settings.mediaProviderReloadSuccess': string;

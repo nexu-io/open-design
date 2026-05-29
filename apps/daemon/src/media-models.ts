@@ -17,6 +17,7 @@ export type MediaProvider = {
   docsUrl?: string;
   credentialsRequired?: boolean;
   settingsVisible?: boolean;
+  configKind?: 'api-key' | 'external';
   supportsCustomModel?: boolean;
   customModelPlaceholder?: string;
 };
@@ -39,16 +40,16 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'nanobanana', label: 'Nano Banana', hint: 'Google official by default; custom gateway configurable', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
   { id: 'imagerouter', label: 'ImageRouter', hint: 'OpenAI-compatible image + video routing', integrated: true, defaultBaseUrl: 'https://api.imagerouter.io/v1/openai', docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video' },
   { id: 'openrouter', label: 'OpenRouter', hint: 'Unified gateway for image + video models', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://openrouter.ai/api/v1', docsUrl: 'https://openrouter.ai/settings/keys' },
-  { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
+  { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'wan2.7-image, my-second-image-model' },
   { id: 'comfyui', label: 'ComfyUI', hint: 'Local JSON workflow server (planned adapter)', integrated: false, defaultBaseUrl: 'http://127.0.0.1:8188', docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow' },
   { id: 'bfl', label: 'Black Forest Labs', hint: 'FLUX 1.1 Pro / FLUX Pro / Dev', integrated: false, defaultBaseUrl: 'https://api.bfl.ai' },
   { id: 'fal', label: 'Fal.ai', hint: 'FLUX / Sora / Veo / Wan / Ideogram / Recraft and any fal-ai/* model', integrated: true, defaultBaseUrl: 'https://fal.run', supportsCustomModel: true },
   { id: 'leonardo', label: 'Leonardo.ai', hint: 'Phoenix / Kino XL / FLUX', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1' },
   { id: 'replicate', label: 'Replicate', hint: 'FLUX / SDXL / Ideogram', integrated: false, defaultBaseUrl: 'https://api.replicate.com' },
-  { id: 'google', label: 'Google AI / Vertex', hint: 'Imagen 4 / Veo 3 / Lyria', integrated: false },
+  { id: 'google', label: 'Google AI / Vertex', hint: 'OD config + gcloud ADC · Imagen / Gemini image', integrated: true, configKind: 'external', docsUrl: 'https://cloud.google.com/vertex-ai/generative-ai/docs/image/overview' },
   { id: 'kling', label: 'Kuaishou Kling', hint: 'Kling 1.6 / 2.0 video', integrated: false },
   { id: 'midjourney', label: 'Midjourney (proxy)', hint: 'midjourney-v7', integrated: false },
-  { id: 'minimax', label: 'MiniMax', hint: 'TTS / video-01', integrated: true, defaultBaseUrl: 'https://api.minimaxi.chat/v1' },
+  { id: 'minimax', label: 'MiniMax', hint: 'TokenPlan key · image-01 / music-2.6 / TTS; URL optional', integrated: true, defaultBaseUrl: 'https://api.minimaxi.com/v1' },
   { id: 'suno', label: 'Suno', hint: 'Music generation', integrated: false },
   { id: 'udio', label: 'Udio', hint: 'Music generation', integrated: false },
   {
@@ -84,6 +85,66 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'stub', label: 'Stub (placeholder)', hint: 'Deterministic local placeholder bytes', integrated: true },
 ];
 
+export const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
+
+export function parseCustomImageModelList(value: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of (value ?? '').split(/[,\n;]+/)) {
+    const model = raw.trim();
+    if (!model || seen.has(model) || model === CUSTOM_IMAGE_MODEL_ID) continue;
+    seen.add(model);
+    out.push(model);
+  }
+  return out;
+}
+
+export function customImageModelFromId(modelId: string): MediaModel {
+  return {
+    id: modelId,
+    label: modelId,
+    hint: 'Custom Image API · OpenAI-compatible endpoint',
+    provider: 'custom-image',
+    caps: ['t2i'],
+  };
+}
+
+type CustomImageModelSource = {
+  model?: string;
+};
+
+export function configuredCustomImageModelIds(
+  configuredModelList: string | null | undefined,
+  profiles?: CustomImageModelSource[] | null,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const model of [
+    ...parseCustomImageModelList(configuredModelList),
+    ...(profiles ?? []).flatMap((profile) => parseCustomImageModelList(profile.model)),
+  ]) {
+    if (seen.has(model)) continue;
+    seen.add(model);
+    out.push(model);
+  }
+  return out;
+}
+
+export function withConfiguredCustomImageModels(
+  models: MediaModel[],
+  configuredModelList: string | null | undefined,
+  profiles?: CustomImageModelSource[] | null,
+): MediaModel[] {
+  const customModels = configuredCustomImageModelIds(configuredModelList, profiles);
+  if (customModels.length === 0) return models;
+  const dynamicModels = customModels.map(customImageModelFromId);
+  return models.flatMap((model) => (
+    model.id === CUSTOM_IMAGE_MODEL_ID
+      ? dynamicModels
+      : [model]
+  ));
+}
+
 export const IMAGE_MODELS: MediaModel[] = [
   { id: 'gpt-image-2', label: 'gpt-image-2', hint: 'OpenAI · 4K, native multimodal', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'], default: true },
   { id: 'gpt-image-1.5', label: 'gpt-image-1.5', hint: 'OpenAI · 4× faster than gpt-image-1', provider: 'openai', caps: ['t2i', 'i2i', 'inpaint'] },
@@ -118,7 +179,9 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
 
-  { id: 'custom-image', label: 'custom-image', hint: 'Custom · OpenAI-compatible endpoint', provider: 'custom-image', caps: ['t2i', 'i2i'] },
+  { id: CUSTOM_IMAGE_MODEL_ID, label: 'custom-image', hint: 'Custom · OpenAI-compatible endpoint', provider: 'custom-image', caps: ['t2i', 'i2i'] },
+
+  { id: 'image-01', label: 'image-01', hint: 'MiniMax · Token Plan image', provider: 'minimax', caps: ['t2i'] },
 
   { id: 'flux-1.1-pro', label: 'flux-1.1-pro', hint: 'BFL · flagship', provider: 'bfl', caps: ['t2i', 'i2i'] },
   { id: 'flux-pro', label: 'flux-pro', hint: 'BFL', provider: 'bfl', caps: ['t2i'] },
@@ -126,9 +189,9 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'flux-schnell', label: 'flux-schnell', hint: 'BFL · fast', provider: 'bfl', caps: ['t2i'] },
   { id: 'flux-kontext-pro', label: 'flux-kontext-pro', hint: 'BFL · in-context edits', provider: 'bfl', caps: ['t2i', 'i2i'] },
 
-  { id: 'imagen-4', label: 'imagen-4', hint: 'Google · latest', provider: 'google', caps: ['t2i'] },
-  { id: 'imagen-3', label: 'imagen-3', hint: 'Google', provider: 'google', caps: ['t2i'] },
-  { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google · Nano Banana Pro', provider: 'google', caps: ['t2i', 'i2i'] },
+  { id: 'imagen-4', label: 'imagen-4', hint: 'Google Vertex ADC · Imagen 4', provider: 'google', caps: ['t2i'] },
+  { id: 'imagen-3', label: 'imagen-3', hint: 'Google Vertex ADC', provider: 'google', caps: ['t2i'] },
+  { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google Vertex ADC · Nano Banana Pro', provider: 'google', caps: ['t2i', 'i2i'] },
 
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
@@ -195,6 +258,8 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'suno-v5', label: 'suno-v5', hint: 'Suno · default', provider: 'suno', caps: ['music'], default: true },
     { id: 'suno-v4-5', label: 'suno-v4.5', hint: 'Suno', provider: 'suno', caps: ['music'] },
     { id: 'udio-v2', label: 'udio-v2', hint: 'Udio', provider: 'udio', caps: ['music'] },
+    { id: 'music-2.6', label: 'music-2.6', hint: 'MiniMax · Token Plan', provider: 'minimax', caps: ['music'] },
+    { id: 'music-2.6-free', label: 'music-2.6-free', hint: 'MiniMax · free API key', provider: 'minimax', caps: ['music'] },
     { id: 'lyria-2', label: 'lyria-2', hint: 'Google', provider: 'google', caps: ['music'] },
   ],
   speech: [

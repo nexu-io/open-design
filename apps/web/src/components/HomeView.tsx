@@ -55,6 +55,7 @@ import { openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from '..
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
+  MediaProviderCredentials,
   Project,
   ProjectMetadata,
   PromptTemplateSummary,
@@ -210,6 +211,7 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  mediaProviders?: Record<string, MediaProviderCredentials>;
   executionSwitcher?: ReactNode;
 }
 
@@ -236,6 +238,7 @@ export function HomeView({
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  mediaProviders,
   executionSwitcher,
 }: Props) {
   const { locale, t } = useI18n();
@@ -1604,6 +1607,7 @@ export function HomeView({
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
         designSystems={designSystemPickerSystems}
+        mediaProviders={mediaProviders}
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}

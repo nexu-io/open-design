@@ -38,6 +38,8 @@
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
+//   * provider 'google'      → Google Vertex AI Imagen/Gemini image via ADC
+//   * provider 'minimax'     → MiniMax Token Plan image/music + TTS APIs
 //
 // The fallback stub handlers are gated behind OD_MEDIA_ALLOW_STUBS=1; in
 // release builds they throw StubProviderDisabledError (mapped to HTTP
@@ -47,6 +49,8 @@
 // so the CLI can exit non-zero and the agent can't silently narrate the
 // placeholder as the final result.
 
+import { createSign } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
@@ -55,14 +59,18 @@ import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
 import {
   AUDIO_DURATIONS_SEC,
+  CUSTOM_IMAGE_MODEL_ID,
   type AudioKind,
   type MediaModel,
   type MediaProvider,
   type MediaSurface,
   VIDEO_LENGTHS_SEC,
+  customImageModelFromId,
   findMediaModel,
   findProvider,
+  configuredCustomImageModelIds,
   modelsForSurface,
+  parseCustomImageModelList,
 } from './media-models.js';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
@@ -85,7 +93,19 @@ import {
 } from './aihubmix.js';
 
 const execFile = promisify(execFileCb);
-type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
+type ProviderConfigProfile = {
+  id?: string;
+  label?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+};
+type ProviderConfig = {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  profiles?: ProviderConfigProfile[];
+};
 type ProgressFn = (message: string) => void;
 type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
 type MediaRequestInit = Pick<RequestInit, 'dispatcher'>;
@@ -152,7 +172,6 @@ const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
 const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
-const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
 const CODEX_IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.5';
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
@@ -352,9 +371,16 @@ export async function generateMedia(args: {
   // catalog so users can reach any model on fal without waiting for a
   // catalog entry. Surface comes from the caller; no cross-surface guard
   // is needed because the fal renderer reads ctx.surface directly.
-  let def = findMediaModel(model);
   let isFalCustomPath = false;
   let isCatalogBypass = false;
+  let customImageCredentialsForDynamicModel: ProviderConfig | null = null;
+  let def = findMediaModel(model);
+  if (!def && surface === 'image') {
+    customImageCredentialsForDynamicModel = await resolveProviderConfig(projectRoot, 'custom-image');
+    if (customImageModelConfigured(model, customImageCredentialsForDynamicModel)) {
+      def = customImageModelFromId(model);
+    }
+  }
   if (!def) {
     if (/^fal-ai\//.test(model)) {
       isFalCustomPath = true;
@@ -396,16 +422,22 @@ export async function generateMedia(args: {
   // Reject cross-surface combinations for catalogued models.
   const resolvedAudioKind =
     surface === 'audio' ? audioKind || 'music' : undefined;
-  if (!isFalCustomPath && !isCatalogBypass) {
-    const allowed = modelsForSurface(surface, resolvedAudioKind);
-    if (!allowed.some((m) => m.id === model)) {
-      const ids = allowed.map((m) => m.id).join(', ');
-      const where =
-        surface === 'audio' ? `audio · ${resolvedAudioKind}` : surface;
-      throw new Error(
-        `model "${model}" is not registered for surface "${where}". Allowed: ${ids}.`,
-      );
-    }
+  const allowed = modelsForSurface(surface, resolvedAudioKind);
+  const isDynamicCustomImageModel = def.provider === 'custom-image'
+    && surface === 'image'
+    && !allowed.some((m) => m.id === model);
+  if (
+    !isFalCustomPath
+    && !isCatalogBypass
+    && !isDynamicCustomImageModel
+    && !allowed.some((m) => m.id === model)
+  ) {
+    const ids = allowed.map((m) => m.id).join(', ');
+    const where =
+      surface === 'audio' ? `audio · ${resolvedAudioKind}` : surface;
+    throw new Error(
+      `model "${model}" is not registered for surface "${where}". Allowed: ${ids}.`,
+    );
   }
 
   // Clamp registry-bound numeric inputs to their allowed buckets so a
@@ -494,7 +526,9 @@ export async function generateMedia(args: {
     projectRoot,
   };
 
-  const credentials = await resolveProviderConfig(projectRoot, def.provider);
+  const credentials = customImageCredentialsForDynamicModel && def.provider === 'custom-image'
+    ? customImageCredentialsForDynamicModel
+    : await resolveProviderConfig(projectRoot, def.provider);
   const customImageCredentials =
     surface === 'image' && def.provider === 'openai'
       ? await resolveProviderConfig(projectRoot, 'custom-image')
@@ -598,6 +632,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'google' && surface === 'image') {
+      const result = await renderGoogleVertexImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'imagerouter' && surface === 'image') {
       const result = await renderImageRouterImage(ctx, credentials);
       bytes = result.bytes;
@@ -662,7 +701,25 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
-    } else if (def.provider === 'minimax' && surface === 'audio') {
+    } else if (def.provider === 'minimax' && surface === 'image') {
+      const result = await renderMinimaxImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'minimax'
+      && surface === 'audio'
+      && ctx.audioKind === 'music'
+    ) {
+      const result = await renderMinimaxMusic(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'minimax'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
       const result = await renderMinimaxTTS(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
@@ -1124,15 +1181,18 @@ async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderCo
 }
 
 async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
-  const baseUrl = (credentials.baseUrl || '').trim();
+  const selectedProfile = selectCustomImageProfile(ctx, credentials);
+  const baseUrl = (selectedProfile.baseUrl || credentials.baseUrl || '').trim();
   if (!baseUrl) {
     throw new Error(
       'Custom Image API base URL required — configure an OpenAI-compatible /v1/images/generations or /v1/images/edits endpoint in Settings',
     );
   }
+  const configuredModels = configuredCustomImageModelIds(credentials.model, credentials.profiles);
   const wireModel = (
-    credentials.model
-    || (ctx.wireModel !== CUSTOM_IMAGE_MODEL_ID ? ctx.wireModel : '')
+    ctx.wireModel !== CUSTOM_IMAGE_MODEL_ID
+      ? ctx.wireModel
+      : configuredModels[0] ?? selectedProfile.model ?? credentials.model ?? ''
   ).trim();
   if (!wireModel) {
     throw new Error(
@@ -1143,8 +1203,9 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
-  if (credentials.apiKey) {
-    headers.authorization = `Bearer ${credentials.apiKey}`;
+  const apiKey = selectedProfile.apiKey || credentials.apiKey || '';
+  if (apiKey) {
+    headers.authorization = `Bearer ${apiKey}`;
   }
   const body: Record<string, unknown> = {
     prompt: ctx.prompt || 'A high-quality reference image.',
@@ -1178,9 +1239,29 @@ function customImageOverridesOpenAIModel(
   credentials: ProviderConfig | null,
 ): credentials is ProviderConfig {
   const baseUrl = credentials?.baseUrl?.trim();
-  const model = credentials?.model?.trim();
-  if (!baseUrl || !model) return false;
-  return model === ctx.model || model === ctx.wireModel;
+  if (!baseUrl) return false;
+  return customImageModelConfigured(ctx.model, credentials)
+    || customImageModelConfigured(ctx.wireModel, credentials);
+}
+
+function customImageModelConfigured(modelId: string, credentials: ProviderConfig | null): boolean {
+  if (!modelId.trim()) return false;
+  return configuredCustomImageModelIds(credentials?.model, credentials?.profiles).includes(modelId.trim());
+}
+
+function selectCustomImageProfile(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+): ProviderConfigProfile {
+  if (ctx.wireModel === CUSTOM_IMAGE_MODEL_ID) {
+    if (credentials.baseUrl || credentials.model) return credentials;
+    return credentials.profiles?.[0] ?? credentials;
+  }
+  const wantedModel = ctx.wireModel !== CUSTOM_IMAGE_MODEL_ID ? ctx.wireModel : ctx.model;
+  const profile = (credentials.profiles ?? []).find((item) => (
+    parseCustomImageModelList(item.model).includes(wantedModel)
+  ));
+  return profile ?? credentials;
 }
 
 async function parseOpenAICompatibleJson(resp: Response, providerTag: string): Promise<any> {
@@ -1821,6 +1902,527 @@ function inlineImageBytesFromGenerateContent(data: any): Buffer {
     }
   }
   throw new Error('nano-banana image response missing candidates[].content.parts[].inlineData.data');
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Google Vertex AI — local ADC-backed Imagen / Gemini image.
+//
+// This is a deliberately narrow bridge for users who already have gcloud
+// Application Default Credentials configured (including impersonated
+// service-account ADC). The upstream-facing path is Open Design's own
+// config file; the agent-soul path remains a compatibility fallback for
+// local users who already had that setup.
+//   OD_GOOGLE_VERTEX_CONFIG /
+//   ~/.config/open-design/google-vertex-config.json /
+//   AGENT_SOUL_GOOGLE_VERTEX_CONFIG /
+//   ~/.config/agent-soul/google-vertex-config.json
+// ---------------------------------------------------------------------------
+
+type GoogleVertexAuthMode = 'service_account' | 'adc';
+type GoogleVertexConfig = {
+  enabled: boolean;
+  auth_mode?: GoogleVertexAuthMode;
+  project_id?: string;
+  default_location?: string;
+  text_location?: string;
+  image_location?: string;
+  service_account_json?: string;
+  service_account_key_file?: string;
+};
+type GoogleVertexAuth = { projectId: string; accessToken: string };
+type GoogleServiceAccountKey = {
+  client_email: string;
+  private_key: string;
+  project_id?: string;
+  token_uri?: string;
+};
+
+const GOOGLE_VERTEX_DEFAULT_LOCATION = 'us-central1';
+const GOOGLE_VERTEX_DEFAULT_TEXT_LOCATION = 'global';
+const GOOGLE_VERTEX_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
+const GOOGLE_VERTEX_TOKEN_URI = 'https://oauth2.googleapis.com/token';
+const GOOGLE_VERTEX_TOKEN_CACHE = new Map<string, { token: string; expiresAt: number }>();
+const GOOGLE_VERTEX_MODEL_MAP: Record<string, string> = {
+  'imagen-4': 'imagen-4.0-fast-generate-001',
+  'imagen-3': 'imagen-3.0-generate-002',
+};
+const GOOGLE_VERTEX_DEFAULT_CONFIG_FILE = 'google-vertex-config.json';
+
+async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  const config = await readGoogleVertexMediaConfig();
+  if (!googleVertexConfigReady(config)) {
+    throw new Error(
+      'Google Vertex is not configured — set OD_GOOGLE_VERTEX_CONFIG or configure ~/.config/open-design/google-vertex-config.json with auth_mode=adc',
+    );
+  }
+  const auth = await googleVertexAuth(config);
+  const configuredModel = credentials.model?.trim();
+  const modelId = googleVertexWireModel(configuredModel || ctx.wireModel || ctx.model);
+  const prompt = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+
+  const data = modelId.startsWith('imagen-')
+    ? await callGoogleVertexImagen(config, auth, modelId, prompt, ctx.aspect)
+    : await callGoogleVertexGeminiImage(config, auth, modelId, prompt);
+  const bytes = googleVertexImageBytes(data, modelId);
+  return {
+    bytes,
+    providerNote: `google-vertex/${modelId} · ${googleVertexAspectFor(ctx.aspect)} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function readGoogleVertexMediaConfig(): Promise<GoogleVertexConfig> {
+  const explicit =
+    process.env.OD_GOOGLE_VERTEX_CONFIG?.trim();
+  const legacyExplicit = process.env.AGENT_SOUL_GOOGLE_VERTEX_CONFIG?.trim();
+  const paths = [
+    ...(explicit ? [expandHomePath(explicit)] : []),
+    googleVertexDefaultConfigPath(),
+    ...(legacyExplicit ? [expandHomePath(legacyExplicit)] : []),
+    path.join(os.homedir(), '.config/agent-soul/google-vertex-config.json'),
+  ];
+  for (const file of paths) {
+    try {
+      const parsed = JSON.parse(await readFile(file, 'utf8')) as unknown;
+      if (isRecord(parsed)) return normalizeGoogleVertexConfig(parsed);
+    } catch (err) {
+      if (errorStringProp(err, 'code') !== 'ENOENT') throw err;
+    }
+  }
+  return {
+    enabled: false,
+    auth_mode: 'adc',
+    default_location: GOOGLE_VERTEX_DEFAULT_LOCATION,
+    text_location: GOOGLE_VERTEX_DEFAULT_TEXT_LOCATION,
+    image_location: GOOGLE_VERTEX_DEFAULT_LOCATION,
+  };
+}
+
+function googleVertexDefaultConfigPath(): string {
+  const configHome = process.env.XDG_CONFIG_HOME?.trim()
+    ? expandHomePath(process.env.XDG_CONFIG_HOME.trim())
+    : path.join(os.homedir(), '.config');
+  return path.join(configHome, 'open-design', GOOGLE_VERTEX_DEFAULT_CONFIG_FILE);
+}
+
+function normalizeGoogleVertexConfig(value: JsonRecord): GoogleVertexConfig {
+  const authMode = value.auth_mode === 'adc' || value.auth_mode === 'service_account'
+    ? value.auth_mode
+    : 'service_account';
+  return {
+    enabled: value.enabled === true,
+    auth_mode: authMode,
+    ...(stringRecordField(value, 'project_id') ? { project_id: stringRecordField(value, 'project_id') } : {}),
+    default_location: cleanGoogleVertexLocation(value.default_location) ?? GOOGLE_VERTEX_DEFAULT_LOCATION,
+    text_location: cleanGoogleVertexLocation(value.text_location) ?? GOOGLE_VERTEX_DEFAULT_TEXT_LOCATION,
+    image_location: cleanGoogleVertexLocation(value.image_location) ?? GOOGLE_VERTEX_DEFAULT_LOCATION,
+    ...(stringRecordField(value, 'service_account_json') ? { service_account_json: stringRecordField(value, 'service_account_json') } : {}),
+    ...(stringRecordField(value, 'service_account_key_file') ? { service_account_key_file: expandHomePath(stringRecordField(value, 'service_account_key_file')) } : {}),
+  };
+}
+
+function googleVertexConfigReady(config: GoogleVertexConfig): boolean {
+  return config.enabled
+    && Boolean(resolveGoogleVertexProjectId(config))
+    && (
+      config.auth_mode === 'adc'
+      || Boolean(config.service_account_json?.trim() || config.service_account_key_file?.trim())
+    );
+}
+
+async function callGoogleVertexImagen(
+  config: GoogleVertexConfig,
+  auth: GoogleVertexAuth,
+  modelId: string,
+  prompt: string,
+  aspect: string | undefined,
+): Promise<JsonRecord> {
+  const body = {
+    instances: [{ prompt }],
+    parameters: {
+      sampleCount: 1,
+      aspectRatio: googleVertexAspectFor(aspect),
+      sampleImageSize: '1K',
+      outputOptions: { mimeType: 'image/png' },
+    },
+  };
+  const location = config.image_location ?? config.default_location ?? GOOGLE_VERTEX_DEFAULT_LOCATION;
+  return postGoogleVertexJson(location, auth, modelId, 'predict', body);
+}
+
+async function callGoogleVertexGeminiImage(
+  config: GoogleVertexConfig,
+  auth: GoogleVertexAuth,
+  modelId: string,
+  prompt: string,
+): Promise<JsonRecord> {
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+  };
+  const location = config.text_location ?? GOOGLE_VERTEX_DEFAULT_TEXT_LOCATION;
+  return postGoogleVertexJson(location, auth, modelId, 'generateContent', body);
+}
+
+async function postGoogleVertexJson(
+  location: string,
+  auth: GoogleVertexAuth,
+  modelId: string,
+  action: string,
+  body: unknown,
+): Promise<JsonRecord> {
+  const resp = await fetch(googleVertexEndpoint(location, auth.projectId, modelId, action), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${auth.accessToken}`,
+      'content-type': 'application/json',
+      'x-goog-user-project': auth.projectId,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`google vertex ${resp.status}: ${truncate(text, 240)}`);
+  }
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (isRecord(parsed)) return parsed;
+  } catch {
+    // handled below
+  }
+  throw new Error(`google vertex non-JSON: ${truncate(text, 200)}`);
+}
+
+function googleVertexImageBytes(data: JsonRecord, modelId: string): Buffer {
+  if (modelId.startsWith('imagen-')) {
+    const first = Array.isArray(data.predictions) && isRecord(data.predictions[0])
+      ? data.predictions[0]
+      : {};
+    const payload =
+      stringRecordField(first, 'bytesBase64Encoded')
+      || stringRecordField(first, 'bytes_base64_encoded');
+    if (!payload) throw new Error('google vertex imagen response missing image bytes');
+    return Buffer.from(payload, 'base64');
+  }
+  const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  for (const candidate of candidates) {
+    const parts = isRecord(candidate) && isRecord(candidate.content) && Array.isArray(candidate.content.parts)
+      ? candidate.content.parts
+      : [];
+    for (const part of parts) {
+      if (!isRecord(part)) continue;
+      const inline = isRecord(part.inlineData)
+        ? part.inlineData
+        : isRecord(part.inline_data)
+          ? part.inline_data
+          : undefined;
+      const payload = inline ? stringRecordField(inline, 'data') : '';
+      if (payload) return Buffer.from(payload, 'base64');
+    }
+  }
+  throw new Error('google vertex gemini image response missing inline image');
+}
+
+function googleVertexWireModel(model: string): string {
+  const trimmed = model.trim();
+  const withoutPrefix = trimmed.startsWith('GoogleAI/') ? trimmed.slice('GoogleAI/'.length) : trimmed;
+  return GOOGLE_VERTEX_MODEL_MAP[withoutPrefix] ?? withoutPrefix;
+}
+
+function googleVertexEndpoint(location: string, projectId: string, modelId: string, action: string): string {
+  const host = location === 'global'
+    ? 'aiplatform.googleapis.com'
+    : `${location}-aiplatform.googleapis.com`;
+  return `https://${host}/v1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(modelId)}:${action}`;
+}
+
+async function googleVertexAuth(config: GoogleVertexConfig): Promise<GoogleVertexAuth> {
+  const projectId = resolveGoogleVertexProjectId(config);
+  if (!projectId) throw new Error('Google Vertex project id is missing');
+  if (config.auth_mode === 'adc') {
+    return { projectId, accessToken: await googleVertexAdcAccessToken() };
+  }
+  const key = await googleVertexServiceAccountKey(config);
+  return { projectId, accessToken: await googleVertexServiceAccountAccessToken(key, `service-account:${key.client_email}`) };
+}
+
+async function googleVertexAdcAccessToken(): Promise<string> {
+  const filePath = googleVertexAdcPath();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
+  } catch (err) {
+    if (errorStringProp(err, 'code') === 'ENOENT') {
+      throw new Error(`Google ADC file not found at ${filePath}`);
+    }
+    throw err;
+  }
+  if (!isRecord(parsed)) throw new Error('Google ADC file is invalid');
+  return googleVertexAdcCredentialAccessToken(parsed, `adc:${filePath}`);
+}
+
+async function googleVertexAdcCredentialAccessToken(
+  credential: JsonRecord,
+  cacheHint: string,
+): Promise<string> {
+  const type = stringRecordField(credential, 'type');
+  if (type === 'authorized_user') return googleVertexAuthorizedUserAccessToken(credential, cacheHint);
+  if (type === 'impersonated_service_account') return googleVertexImpersonatedAccessToken(credential, cacheHint);
+  if (type === 'service_account') {
+    const clientEmail = stringRecordField(credential, 'client_email');
+    const privateKey = stringRecordField(credential, 'private_key');
+    if (!clientEmail || !privateKey) {
+      throw new Error('Google ADC service account credentials must include client_email and private_key');
+    }
+    return googleVertexServiceAccountAccessToken({
+      client_email: clientEmail,
+      private_key: privateKey,
+      ...(stringRecordField(credential, 'project_id') ? { project_id: stringRecordField(credential, 'project_id') } : {}),
+      ...(stringRecordField(credential, 'token_uri') ? { token_uri: stringRecordField(credential, 'token_uri') } : {}),
+    }, `${cacheHint}:service-account:${clientEmail}`);
+  }
+  throw new Error(`Google ADC credential type is not supported: ${type || 'unknown'}`);
+}
+
+async function googleVertexAuthorizedUserAccessToken(
+  credential: JsonRecord,
+  cacheHint: string,
+): Promise<string> {
+  const clientId = stringRecordField(credential, 'client_id');
+  const clientSecret = stringRecordField(credential, 'client_secret');
+  const refreshToken = stringRecordField(credential, 'refresh_token');
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('Google ADC authorized_user credentials must include client_id, client_secret, and refresh_token');
+  }
+  const cacheKey = `${cacheHint}:authorized-user:${clientId}:${GOOGLE_VERTEX_SCOPE}`;
+  const cached = GOOGLE_VERTEX_TOKEN_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt - Date.now() > 120_000) return cached.token;
+  const resp = await fetch(stringRecordField(credential, 'token_uri') || GOOGLE_VERTEX_TOKEN_URI, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+    }),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`google adc refresh ${resp.status}: ${truncate(text, 240)}`);
+  const payload = parseGoogleVertexTokenResponse(text, 'Google ADC refresh token exchange');
+  const token = stringRecordField(payload, 'access_token');
+  if (!token) throw new Error('Google ADC token missing access_token');
+  const expiresIn = numberRecordField(payload, 'expires_in') ?? 3600;
+  GOOGLE_VERTEX_TOKEN_CACHE.set(cacheKey, { token, expiresAt: Date.now() + Math.max(60, expiresIn) * 1000 });
+  return token;
+}
+
+async function googleVertexImpersonatedAccessToken(
+  credential: JsonRecord,
+  cacheHint: string,
+): Promise<string> {
+  const url = stringRecordField(credential, 'service_account_impersonation_url');
+  const source = isRecord(credential.source_credentials) ? credential.source_credentials : null;
+  if (!url || !source) {
+    throw new Error('Google ADC impersonated_service_account credentials must include source_credentials and service_account_impersonation_url');
+  }
+  const cacheKey = `${cacheHint}:impersonated:${url}:${GOOGLE_VERTEX_SCOPE}`;
+  const cached = GOOGLE_VERTEX_TOKEN_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt - Date.now() > 120_000) return cached.token;
+  const sourceToken = await googleVertexAdcCredentialAccessToken(source, `${cacheHint}:source`);
+  const delegates = Array.isArray(credential.delegates)
+    ? credential.delegates.filter((value): value is string => typeof value === 'string')
+    : [];
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${sourceToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      scope: [GOOGLE_VERTEX_SCOPE],
+      lifetime: '3600s',
+      ...(delegates.length ? { delegates } : {}),
+    }),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`google adc impersonation ${resp.status}: ${truncate(text, 240)}`);
+  const payload = parseGoogleVertexTokenResponse(text, 'Google ADC service account impersonation');
+  const token = stringRecordField(payload, 'accessToken') || stringRecordField(payload, 'access_token');
+  if (!token) throw new Error('Google ADC impersonation response missing accessToken');
+  const expireTime = stringRecordField(payload, 'expireTime');
+  const expiresAt = expireTime ? Date.parse(expireTime) : NaN;
+  GOOGLE_VERTEX_TOKEN_CACHE.set(cacheKey, {
+    token,
+    expiresAt: Number.isFinite(expiresAt) ? expiresAt : Date.now() + 3600_000,
+  });
+  return token;
+}
+
+async function googleVertexServiceAccountAccessToken(
+  key: GoogleServiceAccountKey,
+  cacheKeyPrefix: string,
+): Promise<string> {
+  const cacheKey = `${cacheKeyPrefix}:${GOOGLE_VERTEX_SCOPE}`;
+  const cached = GOOGLE_VERTEX_TOKEN_CACHE.get(cacheKey);
+  if (cached && cached.expiresAt - Date.now() > 120_000) return cached.token;
+  const assertion = googleVertexSignJwt(key);
+  const resp = await fetch(key.token_uri ?? GOOGLE_VERTEX_TOKEN_URI, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`google oauth ${resp.status}: ${truncate(text, 240)}`);
+  const payload = parseGoogleVertexTokenResponse(text, 'Google OAuth token exchange');
+  const token = stringRecordField(payload, 'access_token');
+  if (!token) throw new Error('Google OAuth token missing access_token');
+  const expiresIn = numberRecordField(payload, 'expires_in') ?? 3600;
+  GOOGLE_VERTEX_TOKEN_CACHE.set(cacheKey, { token, expiresAt: Date.now() + Math.max(60, expiresIn) * 1000 });
+  return token;
+}
+
+async function googleVertexServiceAccountKey(config: GoogleVertexConfig): Promise<GoogleServiceAccountKey> {
+  const raw = config.service_account_json
+    ?? (config.service_account_key_file ? await readFile(config.service_account_key_file, 'utf8') : '');
+  if (!raw) throw new Error('Google Vertex service account JSON is missing');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error('Google Vertex service account JSON is invalid');
+  }
+  if (!isRecord(parsed)) throw new Error('Google Vertex service account JSON is invalid');
+  const clientEmail = stringRecordField(parsed, 'client_email');
+  const privateKey = stringRecordField(parsed, 'private_key');
+  if (!clientEmail || !privateKey) {
+    throw new Error('Google Vertex service account JSON must include client_email and private_key');
+  }
+  return {
+    client_email: clientEmail,
+    private_key: privateKey,
+    ...(stringRecordField(parsed, 'project_id') ? { project_id: stringRecordField(parsed, 'project_id') } : {}),
+    ...(stringRecordField(parsed, 'token_uri') ? { token_uri: stringRecordField(parsed, 'token_uri') } : {}),
+  };
+}
+
+function googleVertexSignJwt(key: GoogleServiceAccountKey): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlJson({ alg: 'RS256', typ: 'JWT' });
+  const payload = base64UrlJson({
+    iss: key.client_email,
+    scope: GOOGLE_VERTEX_SCOPE,
+    aud: key.token_uri ?? GOOGLE_VERTEX_TOKEN_URI,
+    iat: now,
+    exp: now + 3600,
+  });
+  const signingInput = `${header}.${payload}`;
+  const signer = createSign('RSA-SHA256');
+  signer.update(signingInput);
+  signer.end();
+  return `${signingInput}.${signer.sign(key.private_key).toString('base64url')}`;
+}
+
+function parseGoogleVertexTokenResponse(text: string, label: string): JsonRecord {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (isRecord(parsed)) return parsed;
+  } catch {
+    // handled below
+  }
+  throw new Error(`${label} returned non-JSON response`);
+}
+
+function resolveGoogleVertexProjectId(config: GoogleVertexConfig): string {
+  return cleanString(config.project_id)
+    || cleanString(process.env.GOOGLE_CLOUD_PROJECT)
+    || cleanString(process.env.GCLOUD_PROJECT)
+    || cleanString(process.env.GCP_PROJECT)
+    || googleVertexProjectIdFromAdc()
+    || '';
+}
+
+function googleVertexProjectIdFromAdc(): string {
+  try {
+    const parsed = JSON.parse(readFileSync(googleVertexAdcPath(), 'utf8')) as unknown;
+    return isRecord(parsed) ? googleVertexProjectIdFromCredential(parsed) : '';
+  } catch {
+    return '';
+  }
+}
+
+function googleVertexProjectIdFromCredential(value: JsonRecord): string {
+  return cleanString(stringRecordField(value, 'quota_project_id'))
+    || cleanString(stringRecordField(value, 'project_id'))
+    || googleVertexProjectIdFromServiceAccountRef(stringRecordField(value, 'client_email'))
+    || googleVertexProjectIdFromServiceAccountRef(stringRecordField(value, 'service_account_impersonation_url'))
+    || (isRecord(value.source_credentials) ? googleVertexProjectIdFromCredential(value.source_credentials) : '');
+}
+
+function googleVertexProjectIdFromServiceAccountRef(value: string): string {
+  if (!value) return '';
+  const decoded = safeDecodeURIComponent(value);
+  const match = decoded.match(/@([a-z][a-z0-9-]{4,61}[a-z0-9])\.iam\.gserviceaccount\.com/iu);
+  return match ? match[1] ?? '' : '';
+}
+
+function googleVertexAdcPath(): string {
+  const explicit = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  return explicit ? expandHomePath(explicit) : path.join(os.homedir(), '.config/gcloud/application_default_credentials.json');
+}
+
+function googleVertexAspectFor(aspect?: string): string {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+function cleanGoogleVertexLocation(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim().toLowerCase();
+  return /^[a-z0-9-]+$/u.test(trimmed) ? trimmed : undefined;
+}
+
+function stringRecordField(value: JsonRecord, key: string): string {
+  const raw = value[key];
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+}
+
+function numberRecordField(value: JsonRecord, key: string): number | undefined {
+  const raw = value[key];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+}
+
+function cleanString(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function expandHomePath(filePath: string): string {
+  if (filePath === '~') return os.homedir();
+  if (filePath.startsWith('~/')) return path.join(os.homedir(), filePath.slice(2));
+  return filePath;
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function base64UrlJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
 function sniffImageExt(bytes: Buffer): string {
@@ -2717,17 +3319,20 @@ async function renderElevenLabsSfx(ctx: MediaContext, credentials: ProviderConfi
 }
 
 // ---------------------------------------------------------------------------
-// Provider: MiniMax — Speech-02 family text-to-speech (synchronous).
+// Provider: MiniMax — Token Plan image/music + Speech-02 TTS APIs.
 //
-// Docs: https://platform.minimaxi.com — POST /t2a_v2 with a JSON body
-// describing the voice + audio settings. Response is JSON with the
-// audio bytes hex-encoded under `data.audio`. The MiniMax catalogue we
-// surface as the generic id `minimax-tts` resolves to `speech-02-turbo`
-// (their fast tier). Voice id defaults to a neutral Mandarin voice but
-// the agent can override via the model registry's `voice` slot.
+// Docs: https://platform.minimaxi.com — image generation uses
+// /image_generation with base64 output, music uses /music_generation
+// with hex mp3 output, and TTS uses /t2a_v2 with hex mp3 output.
+// The MiniMax catalogue we surface as the generic id `minimax-tts`
+// resolves to `speech-02-turbo` (their fast tier). Voice id defaults
+// to a neutral Mandarin voice but the agent can override via the model
+// registry's `voice` slot.
 // ---------------------------------------------------------------------------
 
-const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimaxi.chat/v1';
+const MINIMAX_DEFAULT_BASE_URL = 'https://api.minimaxi.com/v1';
+const MINIMAX_MAX_IMAGE_PROMPT_CHARS = 1500;
+const MINIMAX_MAX_MUSIC_PROMPT_CHARS = 2000;
 
 // Map our generic catalogue ids onto MiniMax's actual model ids. The
 // `minimax-tts` slot in src/media/models.ts is shorthand for "their
@@ -2738,16 +3343,183 @@ const MINIMAX_TTS_MODEL_MAP = {
   'minimax-tts': 'speech-02-turbo',
 } as Record<string, string>;
 
+function buildMiniMaxEndpointUrl(baseUrl: string | undefined, endpoint: string): string {
+  const base = (baseUrl || MINIMAX_DEFAULT_BASE_URL).trim().replace(/\/+$/, '');
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return base.endsWith('/v1')
+    ? `${base}${normalizedEndpoint}`
+    : `${base}/v1${normalizedEndpoint}`;
+}
+
+function minimaxAspectFor(aspect?: string): string {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+function firstString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (typeof item === 'string' && item) return item;
+    }
+  }
+  return '';
+}
+
+function decodeMiniMaxBase64Image(value: string): Buffer {
+  const raw = value.includes(',')
+    ? value.slice(value.indexOf(',') + 1)
+    : value;
+  const bytes = Buffer.from(raw, 'base64');
+  if (bytes.length === 0) {
+    throw new Error('minimax image decoded zero bytes');
+  }
+  return bytes;
+}
+
+function decodeMiniMaxHexAudio(value: string, tag: string): Buffer {
+  const raw = value.trim();
+  if (!raw || raw.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(raw)) {
+    throw new Error(`${tag} response contained invalid hex audio`);
+  }
+  const bytes = Buffer.from(raw, 'hex');
+  if (bytes.length === 0) {
+    throw new Error(`${tag} decoded zero bytes`);
+  }
+  return bytes;
+}
+
+async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY / MINIMAX_TOKENPLAN_KEY',
+    );
+  }
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+  const prompt = promptRaw.length > MINIMAX_MAX_IMAGE_PROMPT_CHARS
+    ? promptRaw.slice(0, MINIMAX_MAX_IMAGE_PROMPT_CHARS)
+    : promptRaw;
+  const aspectRatio = minimaxAspectFor(ctx.aspect);
+  const body = {
+    model: ctx.wireModel,
+    prompt,
+    response_format: 'base64',
+    n: 1,
+    aspect_ratio: aspectRatio,
+  };
+
+  const resp = await fetch(buildMiniMaxEndpointUrl(credentials.baseUrl, '/image_generation'), withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
+  }
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const payload = firstString(data?.data?.image_base64);
+  if (!payload) {
+    throw new Error('minimax image response missing data.image_base64');
+  }
+  const bytes = decodeMiniMaxBase64Image(payload);
+  return {
+    bytes,
+    providerNote: `minimax/${ctx.wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderMinimaxMusic(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY / MINIMAX_TOKENPLAN_KEY',
+    );
+  }
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A short original instrumental cue.';
+  const prompt = promptRaw.length > MINIMAX_MAX_MUSIC_PROMPT_CHARS
+    ? promptRaw.slice(0, MINIMAX_MAX_MUSIC_PROMPT_CHARS)
+    : promptRaw;
+  const body = {
+    model: ctx.wireModel,
+    prompt,
+    lyrics: '',
+    lyrics_optimizer: false,
+    is_instrumental: true,
+    output_format: 'hex',
+    audio_setting: {
+      sample_rate: 44100,
+      bitrate: 256000,
+      format: 'mp3',
+    },
+  };
+
+  const resp = await fetch(buildMiniMaxEndpointUrl(credentials.baseUrl, '/music_generation'), withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax music ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax music non-JSON: ${truncate(respText, 200)}`);
+  }
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax music api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const hex = typeof data?.data?.audio === 'string' ? data.data.audio : '';
+  if (!hex) {
+    throw new Error('minimax music response missing data.audio');
+  }
+  const bytes = decodeMiniMaxHexAudio(hex, 'minimax music');
+  const durationMs = typeof data?.extra_info?.music_duration === 'number'
+    ? data.extra_info.music_duration
+    : undefined;
+  const seconds = durationMs ? `${Math.round(durationMs / 1000)}s` : 'instrumental';
+  return {
+    bytes,
+    providerNote: `minimax/${ctx.wireModel} · ${seconds} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
+}
+
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY / MINIMAX_TOKENPLAN_KEY',
     );
   }
-  const baseUrl = (credentials.baseUrl || MINIMAX_DEFAULT_BASE_URL).replace(
-    /\/$/,
-    '',
-  );
   // Precedence: user alias from #1277 (when set) -> project's known
   // MINIMAX legacy rename map -> catalog id. The user knows their
   // deployment name better than our hardcoded table, so an explicit
@@ -2782,7 +3554,7 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
     },
   };
 
-  const resp = await fetch(`${baseUrl}/t2a_v2`, withMediaRequestInit(ctx, {
+  const resp = await fetch(buildMiniMaxEndpointUrl(credentials.baseUrl, '/t2a_v2'), withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${credentials.apiKey}`,

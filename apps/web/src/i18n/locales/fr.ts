@@ -360,6 +360,10 @@ export const fr: Dict = {
   'settings.mediaProviderClearConfirm': 'Effacer les paramètres enregistrés pour {name} ? Vous devrez les saisir à nouveau pour utiliser {name}.',
   'settings.mediaProviderPlaceholder': 'Coller la clé API',
   'settings.mediaProviderBaseUrlPlaceholder': 'Remplacer l\'URL de base par défaut',
+  'settings.mediaProviderMiniMaxNote': 'Use a TokenPlan key. Leave Base URL empty to use https://api.minimaxi.com/v1; only override it for a proxy or custom gateway.',
+  'settings.mediaProviderGoogleNote': 'Configure Vertex ADC in ~/.config/open-design/google-vertex-config.json first. Turning this on only makes Google image models appear in the picker; it does not enable Veo or Lyria yet.',
+  'settings.mediaProviderExternalEnable': 'Show Google image models in pickers',
+  'settings.mediaProviderEnabled': 'Enabled',
   'settings.mediaProviderReload': 'Recharger depuis le daemon',
   'settings.mediaProviderReloadError': 'Impossible de recharger les paramètres des fournisseurs de médias depuis le daemon local.',
   'settings.mediaProviderReloadSuccess': 'Paramètres des fournisseurs de médias rechargés depuis le daemon local.',
@@ -1271,8 +1275,10 @@ export const fr: Dict = {
   'newproj.promptTemplateSearch': 'Rechercher des modèles…',
   'newproj.promptTemplateEmpty': 'Aucun modèle installé pour cette surface pour l\'instant.',
   'newproj.promptTemplateBodyLabel': 'Prompt (vous pouvez l\'ajuster)',
+
   'newproj.promptTemplateOptimizeHint': 'Modifiez ce que vous voulez — vos modifications sont transmises au brief de l\'agent.',
   'newproj.promptTemplateBodyEmpty': 'Corps vide — l\'agent ne recevra aucune référence de modèle.',
+
   'newproj.deleteTemplateTitle': 'Supprimer le modèle',
   'newproj.deleteTemplateConfirm': 'Supprimer « {name} » ? Cette action est irréversible.',
   'newproj.deleteTemplateConfirmCta': 'Supprimer le modèle',

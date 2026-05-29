@@ -45,6 +45,7 @@ import {
   type MediaModel,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
+  withConfiguredCustomImageModels,
 } from '../media/models';
 import {
   mergeAihubmixModels,
@@ -1004,6 +1005,7 @@ export function NewProjectPanel({
             videoLength={videoLength}
             mediaProviders={mediaProviders}
             onVideoModel={handleVideoModel}
+            onVideoModelAuto={setVideoModel}
             onVideoAspect={setVideoAspect}
             onVideoLength={setVideoLength}
           />
@@ -1727,7 +1729,10 @@ function PromptTemplatePicker({
         setLastFailedPick(summary);
         return;
       }
-      onChange({ summary, prompt: detail.prompt });
+      onChange({
+        summary,
+        prompt: detail.prompt,
+      });
       setLastFailedPick(null);
       setOpen(false);
       setQuery('');
@@ -2361,6 +2366,7 @@ function MediaProjectOptions(props:
       videoLength: number;
       mediaProviders?: Record<string, MediaProviderCredentials>;
       onVideoModel: (value: string) => void;
+      onVideoModelAuto: (value: string) => void;
       onVideoAspect: (value: MediaAspect) => void;
       onVideoLength: (value: number) => void;
     }
@@ -2391,6 +2397,7 @@ function MediaProjectOptions(props:
           mediaProviders={props.mediaProviders}
           value={props.imageModel}
           onChange={props.onImageModel}
+          onAutoChange={props.onImageModel}
         />
         <AspectCards
           label={t('newproj.aspectLabel')}
@@ -2410,6 +2417,7 @@ function MediaProjectOptions(props:
           mediaProviders={props.mediaProviders}
           value={props.videoModel}
           onChange={props.onVideoModel}
+          onAutoChange={props.onVideoModelAuto}
         />
         <AspectCards
           label={t('newproj.aspectLabel')}
@@ -2454,6 +2462,7 @@ function MediaProjectOptions(props:
         mediaProviders={props.mediaProviders}
         value={props.audioModel}
         onChange={props.onAudioModel}
+        onAutoChange={props.onAudioModel}
       />
       <label className="newproj-label">
         <span>{t('newproj.audioDurationLabel')}</span>
@@ -2479,7 +2488,21 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
+    image: new Set([
+      'openai',
+      'codex',
+      'volcengine',
+      'grok',
+      'nanobanana',
+      'google',
+      'openrouter',
+      'imagerouter',
+      'custom-image',
+      'leonardo',
+      'minimax',
+      'senseaudio',
+      'aihubmix',
+    ]),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
@@ -2495,12 +2518,14 @@ function MediaModelCards({
   mediaProviders,
   value,
   onChange,
+  onAutoChange,
 }: {
   label: string;
   models: MediaModel[];
   mediaProviders?: Record<string, MediaProviderCredentials>;
   value: string;
   onChange: (value: string) => void;
+  onAutoChange?: (value: string) => void;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -2520,7 +2545,12 @@ function MediaModelCards({
       sortPriority: number;
       models: MediaModel[];
     }> = [];
-    for (const model of models) {
+    const displayModels = withConfiguredCustomImageModels(
+      models,
+      mediaProviders?.['custom-image']?.model,
+      mediaProviders?.['custom-image']?.profiles,
+    );
+    for (const model of displayModels) {
       const provider = findProvider(model.provider);
       const providerId = provider?.id ?? model.provider;
       if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
@@ -2555,15 +2585,19 @@ function MediaModelCards({
     return null;
   }, [groups, value]);
   const firstAvailableModelId = groups[0]?.models[0]?.id ?? null;
+  const customImageFallbackModelId = groups.find((group) => group.providerId === 'custom-image')?.models[0]?.id ?? null;
+  const autoModelId = value === 'custom-image' && customImageFallbackModelId
+    ? customImageFallbackModelId
+    : firstAvailableModelId;
 
   useEffect(() => {
     if (selected) return;
-    if (firstAvailableModelId) {
-      onChange(firstAvailableModelId);
+    if (!autoModelId) {
+      if (value) onChange('');
       return;
     }
-    if (value) onChange('');
-  }, [firstAvailableModelId, onChange, selected, value]);
+    (onAutoChange ?? onChange)(autoModelId);
+  }, [autoModelId, onAutoChange, onChange, selected, value]);
 
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();

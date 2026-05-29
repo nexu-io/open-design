@@ -5,6 +5,11 @@
 // and reads them at generation time. Environment variables override the
 // stored values so power users can keep keys out of the workspace
 // folder altogether (`OD_OPENAI_API_KEY=… node daemon/cli.js`).
+// ChatGPT/Codex OAuth tokens are deliberately not treated as OpenAI
+// Images API credentials: they can authenticate Codex/App sessions
+// without granting image-generation API permissions.
+// Set OD_OPENAI_MEDIA_ALLOW_CODEX_OAUTH=1 to opt into that experimental,
+// best-effort path for local testing.
 //
 // Storage location (precedence high → low):
 //   1. OD_MEDIA_CONFIG_DIR=DIR   → <DIR>/media-config.json
@@ -44,7 +49,21 @@ import { resolveXAIBearer } from './xai-credentials.js';
 import { isSandboxModeEnabled } from './sandbox-mode.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
-type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
+type ProviderProfileEntry = {
+  id?: string;
+  label?: string;
+  apiKey?: string;
+  preserveApiKey?: boolean;
+  baseUrl?: string;
+  model?: string;
+};
+type ProviderEntry = {
+  apiKey?: string;
+  baseUrl?: string;
+  enabled?: boolean;
+  model?: string;
+  profiles?: ProviderProfileEntry[];
+};
 type ProviderMap = Record<string, ProviderEntry>;
 type ModelAliasMap = Record<string, string>;
 type JsonRecord = Record<string, unknown>;
@@ -96,7 +115,12 @@ const ENV_KEYS: Record<string, string[]> = {
   google: ['OD_GOOGLE_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   kling: ['OD_KLING_API_KEY', 'KLING_API_KEY'],
   midjourney: ['OD_MIDJOURNEY_API_KEY'],
-  minimax: ['OD_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
+  minimax: [
+    'OD_MINIMAX_API_KEY',
+    'MINIMAX_TOKENPLAN_KEY',
+    'MINIMAX_TOKEN_PLAN_KEY',
+    'MINIMAX_API_KEY',
+  ],
   suno: ['OD_SUNO_API_KEY'],
   udio: ['OD_UDIO_API_KEY'],
   elevenlabs: ['OD_ELEVENLABS_API_KEY', 'ELEVENLABS_API_KEY'],
@@ -211,6 +235,70 @@ async function writeStored(
     body.aliases = resolvedAliases;
   }
   await writeFile(file, JSON.stringify(body, null, 2), 'utf8');
+}
+
+function cleanString(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function normalizeProviderProfiles(value: unknown): ProviderProfileEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: ProviderProfileEntry[] = [];
+  const seen = new Set<string>();
+  for (const [index, raw] of value.entries()) {
+    if (!isRecord(raw)) continue;
+    const id = cleanString(raw.id) || `profile-${index + 1}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const label = cleanString(raw.label);
+    const apiKey = cleanString(raw.apiKey);
+    const baseUrl = cleanString(raw.baseUrl);
+    const model = cleanString(raw.model);
+    const preserveApiKey = raw.preserveApiKey === true;
+    if (!label && !apiKey && !baseUrl && !model && !preserveApiKey) continue;
+    out.push({
+      id,
+      ...(label ? { label } : {}),
+      ...(apiKey ? { apiKey } : {}),
+      ...(preserveApiKey ? { preserveApiKey: true } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(model ? { model } : {}),
+    });
+  }
+  return out;
+}
+
+function hasProviderProfiles(entry: ProviderEntry | undefined): boolean {
+  return normalizeProviderProfiles(entry?.profiles).some((profile) => (
+    Boolean(profile.label || profile.apiKey || profile.baseUrl || profile.model)
+  ));
+}
+
+function mergeIncomingProviderProfiles(
+  incomingProfiles: unknown,
+  priorProfiles: ProviderProfileEntry[] | undefined,
+): ProviderProfileEntry[] {
+  const priorById = new Map(
+    normalizeProviderProfiles(priorProfiles).map((profile) => [profile.id, profile]),
+  );
+  const out: ProviderProfileEntry[] = [];
+  for (const incoming of normalizeProviderProfiles(incomingProfiles)) {
+    const prior = incoming.id ? priorById.get(incoming.id) : undefined;
+    const apiKey = incoming.apiKey
+      || (incoming.preserveApiKey && prior?.apiKey ? prior.apiKey : '');
+    const baseUrl = incoming.baseUrl || '';
+    const model = incoming.model || '';
+    const label = incoming.label || '';
+    if (!label && !apiKey && !baseUrl && !model) continue;
+    out.push({
+      id: incoming.id || `profile-${out.length + 1}`,
+      ...(label ? { label } : {}),
+      ...(apiKey ? { apiKey } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(model ? { model } : {}),
+    });
+  }
+  return out;
 }
 
 function readEnvAliases(): ModelAliasMap {
@@ -365,9 +453,11 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
         ? await resolveXAIOAuthCredential(projectRoot)
         : null
     : null;
+  const profiles = normalizeProviderProfiles(entry.profiles);
   return {
     apiKey: envKey || entry.apiKey || externalCredential?.apiKey || '',
     baseUrl: entry.baseUrl || '',
+    ...(profiles.length > 0 ? { profiles } : {}),
     ...(typeof entry.model === 'string' && entry.model.trim()
       ? { model: entry.model.trim() }
       : {}),
@@ -380,7 +470,22 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
  * the secret back into the DOM.
  */
 export interface MaskedConfigResponse {
-  providers: Record<string, { configured: boolean; source: string; apiKeyTail: string; baseUrl: string; model?: string }>;
+  providers: Record<string, {
+    configured: boolean;
+    source: string;
+    apiKeyTail: string;
+    baseUrl: string;
+    enabled?: boolean;
+    model?: string;
+    profiles?: Array<{
+      id: string;
+      label?: string;
+      configured: boolean;
+      apiKeyTail: string;
+      baseUrl: string;
+      model?: string;
+    }>;
+  }>;
   /**
    * Effective alias map plus source attribution. The Settings UI can
    * show "from env" vs "from media-config.json" badges next to each
@@ -397,6 +502,9 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
     const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
+    const enabled = entry.enabled === true;
+    const profiles = normalizeProviderProfiles(entry.profiles);
+    const hasProfiles = profiles.length > 0;
     const needsExternalCredential = !envKey && !hasStoredKey;
     const externalCredential = needsExternalCredential
       ? id === 'openai'
@@ -406,15 +514,31 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
           : null
       : null;
     providers[id] = {
-      configured: Boolean(envKey || hasStoredKey || externalCredential?.apiKey),
-      source: envKey ? 'env' : hasStoredKey ? 'stored' : externalCredential?.source || 'unset',
+      configured: Boolean(envKey || hasStoredKey || externalCredential?.apiKey || enabled || hasProfiles),
+      source: envKey ? 'env' : hasStoredKey || enabled || hasProfiles ? 'stored' : externalCredential?.source || 'unset',
       // Show last 4 chars only when stored locally; never echo env-var
       // or borrowed auth-file/OAuth secrets so power users don't
       // accidentally see them in the DOM.
       apiKeyTail: hasStoredKey && entry.apiKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
+      ...(enabled ? { enabled: true } : {}),
       ...(typeof entry.model === 'string' && entry.model.trim()
         ? { model: entry.model.trim() }
+        : {}),
+      ...(profiles.length > 0
+        ? {
+            profiles: profiles.map((profile) => {
+              const profileApiKey = profile.apiKey?.trim() ?? '';
+              return {
+                id: profile.id || '',
+                ...(profile.label ? { label: profile.label } : {}),
+                configured: Boolean(profileApiKey || profile.baseUrl || profile.model),
+                apiKeyTail: profileApiKey ? profileApiKey.slice(-4) : '',
+                baseUrl: profile.baseUrl || '',
+                ...(profile.model ? { model: profile.model } : {}),
+              };
+            }),
+          }
         : {}),
     };
   }
@@ -460,16 +584,25 @@ export async function writeConfig(projectRoot: string, body: unknown) {
       typeof entry.model === 'string' && entry.model.trim()
         ? entry.model.trim()
         : '';
-    if (!apiKey && !baseUrl && !model) continue;
+    const enabled = entry.enabled === true;
+    const profiles = mergeIncomingProviderProfiles(entry.profiles, prior[id]?.profiles);
+    if (!apiKey && !baseUrl && !model && !enabled && profiles.length === 0) continue;
     next[id] = {
       apiKey,
       baseUrl,
+      ...(enabled ? { enabled: true } : {}),
       ...(model ? { model } : {}),
+      ...(profiles.length > 0 ? { profiles } : {}),
     };
   }
   if (Object.keys(next).length === 0) {
     const priorIds = Object.keys(prior).filter(
-      (id) => prior[id] && (prior[id].apiKey || prior[id].baseUrl),
+      (id) => prior[id] && (
+        prior[id].apiKey
+        || prior[id].baseUrl
+        || prior[id].enabled
+        || hasProviderProfiles(prior[id])
+      ),
     );
     if (priorIds.length > 0) {
       if (!force) {

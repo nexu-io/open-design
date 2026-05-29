@@ -8,7 +8,7 @@
 //   - The active + pending UI states light up the right chip and
 //     disable all chips while a plugin is mid-apply.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
@@ -146,6 +146,166 @@ describe('HomeHero intent rail', () => {
     const node = screen.getByTestId('home-hero-active-type-chip');
     expect(node.getAttribute('data-chip-id')).toBe('video');
     expect(node.textContent).toContain('Video');
+  });
+
+  it('filters footer media models to configured providers', async () => {
+    const onPluginInputValuesChange = vi.fn();
+    renderHero({
+      activeChipId: 'image',
+      footerInputNames: ['model'],
+      pluginInputFields: [{
+        name: 'model',
+        label: 'Model',
+        type: 'select',
+        options: ['gpt-image-2', 'image-01', 'imagen-4'],
+      }],
+      pluginInputValues: { model: 'gpt-image-2' },
+      mediaProviders: {
+        minimax: { apiKey: 'tokenplan-key', baseUrl: '' },
+      },
+      onPluginInputValuesChange,
+    });
+
+    await waitFor(() => {
+      expect(onPluginInputValuesChange).toHaveBeenCalledWith({ model: 'image-01' });
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-model'));
+    const menu = screen.getByTestId('home-hero-footer-option-model-menu');
+    expect(within(menu).queryByText('gpt-image-2')).toBeNull();
+    expect(within(menu).getByText('image-01')).toBeTruthy();
+    expect(within(menu).queryByText('imagen-4')).toBeNull();
+    expect(menu.querySelector('.home-hero__model-option-icon--minimax img')).toBeTruthy();
+  });
+
+  it('keeps normal Codex OAuth hidden but allows the explicit experimental OpenAI OAuth source', () => {
+    const props = {
+      activeChipId: 'image',
+      footerInputNames: ['model'],
+      pluginInputFields: [{
+        name: 'model',
+        label: 'Model',
+        type: 'select' as const,
+        options: ['gpt-image-2', 'image-01'],
+      }],
+      pluginInputValues: { model: 'gpt-image-2' },
+      onPluginInputValuesChange: vi.fn(),
+    };
+
+    renderHero({
+      ...props,
+      mediaProviders: {
+        openai: {
+          apiKey: '',
+          baseUrl: '',
+          apiKeyConfigured: true,
+          source: 'oauth-codex',
+        },
+      },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-model'));
+    expect(screen.queryByText('gpt-image-2')).toBeNull();
+    cleanup();
+
+    renderHero({
+      ...props,
+      mediaProviders: {
+        openai: {
+          apiKey: '',
+          baseUrl: '',
+          apiKeyConfigured: true,
+          source: 'oauth-codex-experimental',
+        },
+      },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-model'));
+    const menu = screen.getByTestId('home-hero-footer-option-model-menu');
+    expect(within(menu).getByText('gpt-image-2')).toBeTruthy();
+  });
+
+  it('expands Custom Image API footer options to configured model names', async () => {
+    const onPluginInputValuesChange = vi.fn();
+    renderHero({
+      activeChipId: 'image',
+      footerInputNames: ['model'],
+      pluginInputFields: [{
+        name: 'model',
+        label: 'Model',
+        type: 'select',
+        options: ['gpt-image-2', 'custom-image', 'image-01'],
+      }],
+      pluginInputValues: { model: 'custom-image' },
+      mediaProviders: {
+        openai: {
+          apiKey: 'sk-openai',
+          baseUrl: '',
+        },
+        'custom-image': {
+          apiKey: '',
+          baseUrl: 'https://images.example.test/v1',
+          apiKeyConfigured: true,
+          model: 'wan2.7-image',
+          profiles: [{
+            id: 'backup',
+            apiKey: '',
+            baseUrl: 'https://backup.example.test/v1',
+            apiKeyConfigured: true,
+            model: 'flux-custom',
+          }],
+        },
+      },
+      onPluginInputValuesChange,
+    });
+
+    await waitFor(() => {
+      expect(onPluginInputValuesChange).toHaveBeenCalledWith({ model: 'wan2.7-image' });
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-model'));
+    const menu = screen.getByTestId('home-hero-footer-option-model-menu');
+    expect(within(menu).queryByText('custom-image')).toBeNull();
+    expect(within(menu).getByText('gpt-image-2')).toBeTruthy();
+    expect(within(menu).getByText('wan2.7-image')).toBeTruthy();
+    expect(within(menu).getByText('flux-custom')).toBeTruthy();
+  });
+
+  it('does not treat provider default base URLs as configured image models', async () => {
+    const onPluginInputValuesChange = vi.fn();
+    renderHero({
+      activeChipId: 'image',
+      footerInputNames: ['model'],
+      pluginInputFields: [{
+        name: 'model',
+        label: 'Model',
+        type: 'select',
+        options: ['gpt-image-2', 'custom-image', 'image-01'],
+      }],
+      pluginInputValues: { model: 'custom-image' },
+      mediaProviders: {
+        openai: {
+          apiKey: '',
+          baseUrl: 'https://api.openai.com/v1',
+          source: 'unset',
+        },
+        'custom-image': {
+          apiKey: '',
+          baseUrl: 'https://images.example.test/v1',
+          model: 'wan2.7-image',
+        },
+      },
+      onPluginInputValuesChange,
+    });
+
+    await waitFor(() => {
+      expect(onPluginInputValuesChange).toHaveBeenCalledWith({ model: 'wan2.7-image' });
+    });
+
+    expect(screen.getByTestId('home-hero-footer-option-model').textContent).toContain('wan2.7-image');
+
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-model'));
+    const menu = screen.getByTestId('home-hero-footer-option-model-menu');
+    expect(within(menu).queryByText('gpt-image-2')).toBeNull();
+    expect(within(menu).getByText('wan2.7-image')).toBeTruthy();
   });
 
   it('lets the active creation chip be removed from the composer', () => {

@@ -540,6 +540,50 @@ describe('mergeDaemonMediaProviders', () => {
       },
     });
   });
+
+  it('drops stale marker-only local entries when daemon returns an explicit empty row', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          openai: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '',
+            source: 'oauth-codex',
+            baseUrl: '',
+          },
+          google: {
+            apiKey: '',
+            baseUrl: '',
+            enabled: true,
+          },
+        },
+      },
+      {
+        openai: {
+          apiKey: '',
+          apiKeyConfigured: false,
+          apiKeyTail: '',
+          source: 'unset',
+          baseUrl: '',
+        },
+        google: {
+          apiKey: '',
+          baseUrl: '',
+          enabled: true,
+        },
+      },
+    );
+
+    expect(merged.mediaProviders).toEqual({
+      google: {
+        apiKey: '',
+        baseUrl: '',
+        enabled: true,
+      },
+    });
+  });
 });
 
 describe('media provider entry presence helpers', () => {
@@ -797,6 +841,62 @@ describe('buildMediaProvidersForDaemonSave', () => {
       ),
     ).toEqual({
       providers: {},
+      force: false,
+    });
+  });
+
+  it('preserves stored custom image profile keys while sending per-profile URL and model', () => {
+    expect(
+      buildMediaProvidersForDaemonSave(
+        {
+          'custom-image': {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1111',
+            baseUrl: 'https://main.example/v1',
+            model: 'main-image',
+            profiles: [{
+              id: 'wan',
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '2222',
+              baseUrl: 'https://wan.example/v1',
+              model: 'wan2.7-image',
+            }],
+          },
+        },
+        {
+          'custom-image': {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '1111',
+            baseUrl: 'https://old-main.example/v1',
+            model: 'main-image',
+            profiles: [{
+              id: 'wan',
+              apiKey: '',
+              apiKeyConfigured: true,
+              apiKeyTail: '2222',
+              baseUrl: 'https://old-wan.example/v1',
+              model: 'wan2.7-image',
+            }],
+          },
+        },
+      ),
+    ).toEqual({
+      providers: {
+        'custom-image': {
+          preserveApiKey: true,
+          baseUrl: 'https://main.example/v1',
+          model: 'main-image',
+          profiles: [{
+            id: 'wan',
+            preserveApiKey: true,
+            baseUrl: 'https://wan.example/v1',
+            model: 'wan2.7-image',
+          }],
+        },
+      },
       force: false,
     });
   });

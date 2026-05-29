@@ -350,6 +350,17 @@ path is given.
     tells you the user's pre-selected model, aspect, length, voice, audio
     kind, etc. Treat those as authoritative defaults — only override if
     the user's chat message explicitly contradicts them.
+    For MiniMax image generation, use \`image-01\`; it is text-to-image
+    only in this dispatcher path.
+    For MiniMax music generation, use \`music-2.6\` or
+    \`music-2.6-free\` with \`--audio-kind music\`; the current
+    dispatcher path produces original instrumental MP3 from \`--prompt\`.
+    For Google Vertex image generation, use \`imagen-4\` for the
+    ADC-backed Imagen path; it reads \`OD_GOOGLE_VERTEX_CONFIG\` or
+    \`~/.config/open-design/google-vertex-config.json\` and does not
+    require pasting a service-account JSON key into Settings. The older
+    \`~/.config/agent-soul/google-vertex-config.json\` path is only a
+    compatibility fallback.
     For \`minimax-tts\`, \`voice\` must be a valid MiniMax \`voice_id\`
     (example: \`male-qn-qingse\`). Do not pass natural-language voice
     descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
@@ -428,7 +439,8 @@ path is given.
 Today the dispatcher ships real provider integrations for OpenAI
 (image and speech, with Azure OpenAI auto-detected from the configured
 base URL), Volcengine (Doubao Seedance video / Seedream image), Grok
-image/video, Nano Banana image, HyperFrames video, and the MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations.
+image/video, Nano Banana image, Google Vertex image, HyperFrames video,
+MiniMax image/music/TTS, and the FishAudio and ElevenLabs audio renderers are production integrations.
 Models whose provider path has no renderer still return a configured
 stub/error signal as described below.
 

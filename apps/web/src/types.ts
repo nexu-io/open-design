@@ -225,10 +225,22 @@ export interface LiveArtifactPreviewRequest {
 export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
+  enabled?: boolean;
   model?: string;
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
   source?: string;
+  profiles?: MediaProviderProfileCredentials[];
+}
+
+export interface MediaProviderProfileCredentials {
+  id: string;
+  label?: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured?: boolean;
+  apiKeyTail?: string;
 }
 
 export interface ApiProtocolConfig {

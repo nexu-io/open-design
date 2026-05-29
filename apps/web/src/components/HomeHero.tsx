@@ -31,7 +31,7 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
-import type { SkillSummary } from '../types';
+import type { MediaProviderCredentials, SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -67,6 +67,8 @@ import {
   localizeSkillDescription,
   localizeSkillName,
 } from '../i18n/content';
+import { isMediaModelPickerReady } from '../media/provider-readiness';
+import { configuredCustomImageModelIds } from '../media/models';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
@@ -154,6 +156,7 @@ interface Props {
   inlineEditableInputNames?: string[];
   footerInputNames?: string[];
   designSystems?: DesignSystemSummary[];
+  mediaProviders?: Record<string, MediaProviderCredentials>;
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
@@ -262,6 +265,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPluginInputValuesChange = () => undefined,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystems = EMPTY_DESIGN_SYSTEMS,
+    mediaProviders,
     stagedFiles = EMPTY_STAGED_FILES,
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
@@ -1443,6 +1447,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                     field={field}
                     value={pluginInputValues[field.name]}
                     designSystems={designSystems}
+                    mediaProviders={mediaProviders}
                     onChange={(value) => {
                       onPluginInputValuesChange({
                         ...pluginInputValues,
@@ -1922,12 +1927,14 @@ function FooterInputOption({
   field,
   value,
   designSystems,
+  mediaProviders,
   onChange,
   t,
 }: {
   field: InputFieldSpec;
   value: unknown;
   designSystems: DesignSystemSummary[];
+  mediaProviders?: Record<string, MediaProviderCredentials>;
   onChange: (value: unknown) => void;
   t: ReturnType<typeof useT>;
 }) {
@@ -1972,14 +1979,25 @@ function FooterInputOption({
     );
   }
   if (field.type === 'select' && Array.isArray(field.options)) {
+    const currentValue = value === undefined || value === null ? '' : String(value);
+    const customModelValues = field.name === 'model' && mediaProviders
+      ? configuredCustomImageModelIds(
+        mediaProviders['custom-image']?.model,
+        mediaProviders['custom-image']?.profiles,
+      ).filter((option) => isMediaModelPickerReady(option, mediaProviders))
+      : [];
+    const optionValues = field.name === 'model' && mediaProviders
+      ? expandConfiguredFooterModelOptions(field.options, mediaProviders)
+        .filter((option) => isMediaModelPickerReady(option, mediaProviders))
+      : field.options;
     return (
       <FooterSelectOption
         fieldName={field.name}
         label={label}
-        value={value === undefined || value === null ? '' : String(value)}
+        value={currentValue}
         options={[
           ...(field.placeholder ? [{ value: '', label: field.placeholder }] : []),
-          ...field.options.map((option) => ({
+          ...optionValues.map((option) => ({
             value: option,
             label: footerInputValueLabel(field, option, t),
             icon: footerInputValueIcon(field, option),
@@ -1987,6 +2005,11 @@ function FooterInputOption({
             ratioIcon: field.name === 'ratio' ? ratioOptionIcon(option) : undefined,
           })),
         ]}
+        autoSelectValue={
+          field.name === 'model'
+            ? footerModelAutoSelectValue(currentValue, optionValues, customModelValues)
+            : null
+        }
         onChange={onChange}
       />
     );
@@ -2005,6 +2028,32 @@ function FooterInputOption({
   );
 }
 
+function expandConfiguredFooterModelOptions(
+  options: string[],
+  mediaProviders: Record<string, MediaProviderCredentials>,
+): string[] {
+  const customModels = configuredCustomImageModelIds(
+    mediaProviders['custom-image']?.model,
+    mediaProviders['custom-image']?.profiles,
+  );
+  if (customModels.length === 0) return options;
+  return options.flatMap((option) => (
+    option === 'custom-image' ? customModels : [option]
+  ));
+}
+
+function footerModelAutoSelectValue(
+  currentValue: string,
+  optionValues: string[],
+  customModelValues: string[],
+): string | null {
+  if (optionValues.includes(currentValue)) return null;
+  if (currentValue === 'custom-image') {
+    return customModelValues.find((option) => optionValues.includes(option)) ?? null;
+  }
+  return optionValues[0] ?? null;
+}
+
 function FooterSelectOption({
   fieldName,
   label,
@@ -2012,6 +2061,7 @@ function FooterSelectOption({
   options,
   searchable = false,
   searchPlaceholder,
+  autoSelectValue = null,
   onChange,
 }: {
   fieldName: string;
@@ -2020,6 +2070,7 @@ function FooterSelectOption({
   options: FooterSelectItemOption[];
   searchable?: boolean;
   searchPlaceholder?: string;
+  autoSelectValue?: string | null;
   onChange: (value: unknown) => void;
 }) {
   const t = useT();
@@ -2071,6 +2122,10 @@ function FooterSelectOption({
   useEffect(() => {
     if (!open) setSearch('');
   }, [open]);
+  useEffect(() => {
+    if (!autoSelectValue || autoSelectValue === value) return;
+    onChange(autoSelectValue);
+  }, [autoSelectValue, onChange, value]);
 
   return (
     <div
