@@ -6749,7 +6749,7 @@ function IntegrationsSection() {
       buildSnippetLang: () => 'toml',
       buildRemoteSnippet: (info) => {
         const lines = [`[mcp_servers.open-design]`, `url = ${JSON.stringify(info.remoteUrl ?? '')}`];
-        if (info.remoteMcpKey) {
+        if (info.remoteMcpKey || info.remoteAuthRequired) {
           lines.push(`bearer_token_env_var = "OD_MCP_TOKEN"`);
         }
         return lines.join('\n');
