@@ -150,7 +150,8 @@ const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
-  'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
+  'pending-prompt', 'project', 'conversation', 'message', 'prompt',
+  'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'against',
 ]);
@@ -4323,12 +4324,89 @@ function safeReadJsonFile(p) {
   }
 }
 
+function collectCliPositionals(argv, stringFlags = new Set()) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    const value = argv[i];
+    if (value === '--') {
+      out.push(...argv.slice(i + 1));
+      break;
+    }
+    if (typeof value === 'string' && value.startsWith('--')) {
+      const eq = value.indexOf('=');
+      const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
+      if (eq < 0 && stringFlags.has(key)) i++;
+      continue;
+    }
+    out.push(value);
+  }
+  return out;
+}
+
+async function resolveFolderPathForCli(rawPath) {
+  const path = await import('node:path');
+  const os = await import('node:os');
+  const raw = typeof rawPath === 'string' && rawPath.trim().length > 0
+    ? rawPath.trim()
+    : (process.env.INIT_CWD || process.cwd());
+  const expanded = raw === '~'
+    ? os.homedir()
+    : raw.startsWith(`~${path.sep}`)
+      ? path.join(os.homedir(), raw.slice(2))
+      : raw;
+  return path.resolve(expanded);
+}
+
+async function basenameForCli(folderPath) {
+  const path = await import('node:path');
+  return path.basename(folderPath) || 'Imported project';
+}
+
+async function readRunMessageFromFlags(flags, fallback = null) {
+  if (typeof flags.message === 'string' && flags.message.length > 0) {
+    return flags.message;
+  }
+  const prompt = await readPromptFromFlags(flags);
+  if (typeof prompt === 'string' && prompt.length > 0) return prompt;
+  return fallback;
+}
+
+async function postJsonToDaemon(base, route, body) {
+  let resp;
+  try {
+    resp = await fetch(`${base}${route}`, {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const errCode = data?.error?.code;
+    if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
+      return exitWithStructuredError({
+        code:    errCode,
+        message: data.error.message ?? `HTTP ${resp.status}`,
+        data:    data.error.data,
+      });
+    }
+    console.error(`POST ${route} failed: ${resp.status} ${JSON.stringify(data)}`);
+    process.exit(1);
+  }
+  return data;
+}
+
 async function runProject(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
   od project import <baseDir> [--name "<title>"]
+  od project import-folder <path> [--name "<title>"] [--skill <id>]
+                    [--design-system <id>] [--json]
   od project list                         List projects.
   od project info <id>                    Print one project.
   od project delete <id>                  Delete a project.
@@ -4464,6 +4542,27 @@ Common options:
       console.log(`[project] imported ${data.project?.id ?? '-'} (conversation ${data.conversationId ?? '-'})`);
       return;
     }
+    case 'import-folder': {
+      const parts = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
+      const folderArg = flags.path ?? flags.dir ?? parts[0];
+      if (!folderArg) {
+        console.error('Usage: od project import-folder <path> [--skill <id>] [--design-system <id>]');
+        process.exit(2);
+      }
+      const folderPath = await resolveFolderPathForCli(folderArg);
+      const body = {
+        baseDir:        folderPath,
+        name:           typeof flags.name === 'string' && flags.name.length > 0
+          ? flags.name
+          : await basenameForCli(folderPath),
+        skillId:        flags.skill ?? null,
+        designSystemId: flags['design-system'] ?? null,
+      };
+      const data = await postJsonToDaemon(base, '/api/import/folder', body);
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] imported ${data.project?.id ?? '-'} from ${folderPath} (conversation ${data.conversationId ?? '-'})`);
+      return;
+    }
     case 'delete': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
@@ -4525,6 +4624,8 @@ async function runRun(args) {
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
                [--agent claude|codex|gemini] [--model <id>] [--follow] [--json]
+  od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
+               [--agent claude] [--model <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
   od run list   [--project <id>]            List recent runs.
@@ -4586,6 +4687,63 @@ Common options:
       await streamRunEvents(base, id);
       return;
     }
+    case 'redesign': {
+      const parts = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
+      const promptFromArgs = parts.join(' ').trim();
+      const defaultMessage =
+        'Use the redesign-existing-projects skill. Audit the current UI first, then redesign it to premium quality without breaking functionality. Preserve the existing product structure, routes, and behavior.';
+      const message = await readRunMessageFromFlags(
+        flags,
+        promptFromArgs || defaultMessage,
+      );
+      const skillId = flags.skill ?? 'redesign-existing-projects';
+      const designSystemId = flags['design-system'] ?? 'default';
+      let projectId = flags.project;
+      let conversationId = flags.conversation;
+      let imported = null;
+
+      if (!projectId) {
+        const folderPath = await resolveFolderPathForCli(flags.path ?? flags.dir);
+        imported = await postJsonToDaemon(base, '/api/import/folder', {
+          baseDir:        folderPath,
+          name:           typeof flags.name === 'string' && flags.name.length > 0
+            ? flags.name
+            : await basenameForCli(folderPath),
+          skillId,
+          designSystemId,
+        });
+        projectId = imported.project?.id;
+        conversationId = conversationId ?? imported.conversationId;
+        if (!projectId) {
+          console.error('POST /api/import/folder did not return project.id');
+          process.exit(1);
+        }
+        if (!flags.json || flags.follow) {
+          console.log(`[project] imported ${projectId} from ${folderPath} (conversation ${conversationId ?? '-'})`);
+        }
+      }
+
+      const body = {
+        projectId,
+        ...(conversationId ? { conversationId } : {}),
+        ...(message ? { message } : {}),
+        skillId,
+        designSystemId,
+        ...(flags.agent ? { agentId: flags.agent } : {}),
+        ...(flags.model ? { model: flags.model } : {}),
+      };
+      const data = await postJsonToDaemon(base, '/api/runs', body);
+      if (flags.json && !flags.follow) {
+        return process.stdout.write(JSON.stringify({
+          ...data,
+          project: imported?.project ?? null,
+          conversationId: conversationId ?? null,
+        }, null, 2) + '\n');
+      }
+      console.log(`[run] started ${data.runId}`);
+      if (flags.follow) await streamRunEvents(base, data.runId);
+      return;
+    }
     case 'start': {
       if (!flags.project) {
         console.error('--project <projectId> is required');
@@ -4593,8 +4751,11 @@ Common options:
       }
       const body = { projectId: flags.project };
       if (flags.conversation) body.conversationId = flags.conversation;
-      if (flags.message) body.message = flags.message;
+      const message = await readRunMessageFromFlags(flags);
+      if (message) body.message = message;
       if (flags.plugin) body.pluginId = flags.plugin;
+      if (flags.skill) body.skillId = flags.skill;
+      if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
       if (flags.inputs) {

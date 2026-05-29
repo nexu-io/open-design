@@ -47,6 +47,7 @@ import {
   rememberLiveModels,
   resolveModelForAgent,
 } from './runtimes/models.js';
+import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import {
   cancelVelaLogin,
   forgetVelaLogin,
@@ -11207,6 +11208,18 @@ export async function startServer({
       configuredAgentEnv = {};
     }
 
+    let mmdRouteLaunchEnv = null;
+    if (def.id === 'claude' && safeModel) {
+      mmdRouteLaunchEnv = await loadMmdRouteLaunchEnv(
+        {
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        },
+        safeModel,
+      ).catch(() => null);
+    }
+
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
 
@@ -11656,6 +11669,7 @@ export async function startServer({
           : 'ignore';
       const env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
+        ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the

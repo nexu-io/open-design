@@ -9,17 +9,19 @@ import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
 
-// Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
-// credentials, silently billing API usage. Strip it for the claude
+// Issue #398: Claude Code prefers Anthropic API credentials over `claude login`
+// credentials, silently billing API usage. Strip them for the claude
 // adapter so the user's subscription wins.
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY for the claude adapter', () => {
+test('spawnEnvForAgent strips Anthropic API credentials for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
     PATH: '/usr/bin',
     OD_DAEMON_URL: 'http://127.0.0.1:7456',
   });
 
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
 });
@@ -29,6 +31,7 @@ test('spawnEnvForAgent applies configured Claude Code env before auth stripping'
     'claude',
     {
       ANTHROPIC_API_KEY: 'sk-leak',
+      ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
       PATH: '/usr/bin',
     },
     {
@@ -38,6 +41,7 @@ test('spawnEnvForAgent applies configured Claude Code env before auth stripping'
 
   assert.equal(env.CLAUDE_CONFIG_DIR, '/Users/test/.claude-2');
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -833,30 +837,37 @@ test('antigravity auth matcher covers agy print-mode + log-file auth signals', a
 // spreading process.env into a plain object loses Node's case-insensitive
 // accessor — a `Anthropic_Api_Key` key would survive a literal
 // `delete env.ANTHROPIC_API_KEY` and still reach Claude Code on Windows.
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY case-insensitively for the claude adapter', () => {
+test('spawnEnvForAgent strips Anthropic credentials case-insensitively for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     Anthropic_Api_Key: 'sk-mixed-case',
     anthropic_api_key: 'sk-lower-case',
+    Anthropic_Auth_Token: 'sk-token-mixed-case',
     PATH: '/usr/bin',
   });
 
   const remaining = Object.keys(env).filter(
-    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY',
+    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY' || k.toUpperCase() === 'ANTHROPIC_AUTH_TOKEN',
   );
   assert.deepEqual(remaining, []);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () => {
+test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters', () => {
   for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {
       ANTHROPIC_API_KEY: 'sk-keep',
+      ANTHROPIC_AUTH_TOKEN: 'sk-token-keep',
       PATH: '/usr/bin',
     });
     assert.equal(
       env.ANTHROPIC_API_KEY,
       'sk-keep',
       `expected ${agentId} to preserve ANTHROPIC_API_KEY`,
+    );
+    assert.equal(
+      env.ANTHROPIC_AUTH_TOKEN,
+      'sk-token-keep',
+      `expected ${agentId} to preserve ANTHROPIC_AUTH_TOKEN`,
     );
   }
 });
@@ -1016,37 +1027,43 @@ test('spawnEnvForAgent strips stale configured OPENAI_API_KEY when configured ba
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is set', () => {
+test('spawnEnvForAgent preserves Anthropic API credentials when ANTHROPIC_BASE_URL is set', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-kimi',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token',
     ANTHROPIC_BASE_URL: 'https://api.moonshot.cn/v1',
     PATH: '/usr/bin',
   });
 
   assert.equal(env.ANTHROPIC_API_KEY, 'sk-kimi');
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token');
   assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.moonshot.cn/v1');
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is empty', () => {
+test('spawnEnvForAgent strips Anthropic API credentials when ANTHROPIC_BASE_URL is empty', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
     ANTHROPIC_BASE_URL: '',
     PATH: '/usr/bin',
   });
 
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is whitespace', () => {
+test('spawnEnvForAgent strips Anthropic API credentials when ANTHROPIC_BASE_URL is whitespace', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
     ANTHROPIC_BASE_URL: '   ',
     PATH: '/usr/bin',
   });
 
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
