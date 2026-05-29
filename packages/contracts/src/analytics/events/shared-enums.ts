@@ -216,7 +216,8 @@ export type TrackingExportFormat =
   | 'share_page'
   | 'vercel'
   | 'cloudflare_pages'
-  | 'netlify';
+  | 'netlify'
+  | 'render';
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';

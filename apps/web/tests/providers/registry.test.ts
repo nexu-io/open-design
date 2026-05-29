@@ -1854,10 +1854,11 @@ describe('deploy provider registry helpers', () => {
     vi.unstubAllGlobals();
   });
 
-  it('recognizes Vercel and Cloudflare Pages provider ids only', () => {
+  it('recognizes valid deploy provider ids', () => {
     expect(isDeployProviderId(DEFAULT_DEPLOY_PROVIDER_ID)).toBe(true);
     expect(isDeployProviderId(CLOUDFLARE_PAGES_PROVIDER_ID)).toBe(true);
-    expect(isDeployProviderId('netlify')).toBe(false);
+    expect(isDeployProviderId('netlify')).toBe(true);
+    expect(isDeployProviderId('render')).toBe(true);
     expect(isDeployProviderId(null)).toBe(false);
   });
 

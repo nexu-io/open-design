@@ -5,20 +5,24 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import JSZip from 'jszip';
-import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
+import { listFiles, readProjectFile, validateProjectPath, resolveProjectDir } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const NETLIFY_PROVIDER_ID = 'netlify';
+export const RENDER_PROVIDER_ID = 'render';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
 export const SAVED_NETLIFY_TOKEN_MASK = 'saved-netlify-token';
+export const SAVED_RENDER_TOKEN_MASK = 'saved-render-token';
+export const SAVED_GITHUB_TOKEN_MASK = 'saved-github-token';
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof NETLIFY_PROVIDER_ID;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof NETLIFY_PROVIDER_ID | typeof RENDER_PROVIDER_ID;
 type DeployErrorDetails = JsonObject | string | undefined;
 type DeployConfig = {
   token: string;
+  githubToken?: string | undefined;
   teamId?: string | undefined;
   teamSlug?: string | undefined;
   accountId?: string | undefined;
@@ -81,6 +85,7 @@ export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
   if (providerId === NETLIFY_PROVIDER_ID) return path.join(base, 'netlify.json');
+  if (providerId === RENDER_PROVIDER_ID) return path.join(base, 'render.json');
   return path.join(base, 'vercel.json');
 }
 
@@ -124,6 +129,20 @@ export async function readNetlifyConfig(): Promise<DeployConfig> {
     };
   } catch (err) {
     if (isErrnoException(err) && err.code === 'ENOENT') return { token: '' };
+    throw err;
+  }
+}
+
+export async function readRenderConfig(): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(RENDER_PROVIDER_ID), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+      githubToken: typeof parsed.githubToken === 'string' ? parsed.githubToken : '',
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', githubToken: '' };
     throw err;
   }
 }
@@ -180,6 +199,24 @@ export async function writeNetlifyConfig(input: Partial<DeployConfig>) {
   return publicNetlifyConfig(next);
 }
 
+export async function writeRenderConfig(input: Partial<DeployConfig>) {
+  const current = await readRenderConfig();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  const githubTokenInput = typeof input?.githubToken === 'string' ? input.githubToken.trim() : '';
+  const next = {
+    token:
+      tokenInput && tokenInput !== SAVED_RENDER_TOKEN_MASK
+        ? tokenInput
+        : current.token,
+    githubToken:
+      githubTokenInput && githubTokenInput !== SAVED_GITHUB_TOKEN_MASK
+        ? githubTokenInput
+        : current.githubToken,
+  };
+  await writeDeployConfigFile(deployConfigPath(RENDER_PROVIDER_ID), next);
+  return publicRenderConfig(next);
+}
+
 async function writeDeployConfigFile(file: string, config: DeployConfig) {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
@@ -228,26 +265,41 @@ export function publicNetlifyConfig(config: Partial<DeployConfig>) {
   };
 }
 
+export function publicRenderConfig(config: Partial<DeployConfig>) {
+  return {
+    providerId: RENDER_PROVIDER_ID,
+    configured: Boolean(config?.token && config?.githubToken),
+    tokenMask: config?.token ? SAVED_RENDER_TOKEN_MASK : '',
+    githubTokenMask: config?.githubToken ? SAVED_GITHUB_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    target: 'preview',
+  };
+}
+
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
   if (providerId === NETLIFY_PROVIDER_ID) return readNetlifyConfig();
+  if (providerId === RENDER_PROVIDER_ID) return readRenderConfig();
   return readVercelConfig();
 }
 
 export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
   if (providerId === NETLIFY_PROVIDER_ID) return writeNetlifyConfig(input);
+  if (providerId === RENDER_PROVIDER_ID) return writeRenderConfig(input);
   return writeVercelConfig(input);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
   if (providerId === NETLIFY_PROVIDER_ID) return publicNetlifyConfig(config);
+  if (providerId === RENDER_PROVIDER_ID) return publicRenderConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === NETLIFY_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === NETLIFY_PROVIDER_ID || value === RENDER_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
@@ -583,6 +635,258 @@ export async function deployToNetlify({ config, files, projectId, priorMetadata 
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
     providerMetadata: { siteId },
+  };
+}
+
+async function createOrUpdateGitHubFile(
+  username: string,
+  repo: string,
+  token: string,
+  filePath: string,
+  content: Buffer | Uint8Array | string
+) {
+  const base64Content = Buffer.from(content).toString('base64');
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${filePath}`;
+
+  let sha: string | undefined;
+  const getResp = await fetch(url, {
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (getResp.ok) {
+    const json = (await getResp.json()) as any;
+    sha = json.sha;
+  }
+
+  const putResp = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+    body: JSON.stringify({
+      message: `deploy: sync ${filePath}`,
+      content: base64Content,
+      ...(sha ? { sha } : {}),
+    }),
+  });
+
+  if (!putResp.ok) {
+    const errBody = (await putResp.json().catch(() => null)) as any;
+    throw new Error(errBody?.message || `Failed to upload ${filePath} to GitHub.`);
+  }
+}
+
+export async function deployToRender({
+  config,
+  files,
+  projectId,
+  projectsRoot,
+  projectMetadata,
+  priorMetadata,
+}: {
+  config: DeployConfig;
+  files: DeployFile[];
+  projectId: string;
+  projectsRoot: string;
+  projectMetadata?: JsonObject | undefined;
+  priorMetadata?: JsonObject | undefined;
+}) {
+  if (!config?.token) {
+    throw new DeployError('Render API key is required.', 400);
+  }
+  if (!config?.githubToken) {
+    throw new DeployError('GitHub PAT is required.', 400);
+  }
+
+  // 1. Get user details from GitHub
+  const userResp = await fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `token ${config.githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (!userResp.ok) {
+    const errText = await userResp.text();
+    throw new DeployError(`Failed to fetch GitHub user details: ${errText}`, 502);
+  }
+  const githubUser = (await userResp.json()) as any;
+  const username = githubUser.login;
+
+  // 2. Resolve project directory and write render.yaml file
+  const yamlContent = `services:
+  - type: web
+    name: od-${projectId}
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: "."
+`;
+
+  const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
+  const yamlPath = path.join(projectDir, 'render.yaml');
+  try {
+    await writeFile(yamlPath, yamlContent, 'utf8');
+  } catch (err) {
+    // Best effort on read-only environments
+  }
+
+  // Add render.yaml to files array if not present
+  if (!files.some((f) => f.file === 'render.yaml')) {
+    files.push({
+      file: 'render.yaml',
+      data: yamlContent,
+      contentType: 'text/yaml',
+    });
+  }
+
+  // 3. Ensure GitHub repository exists
+  const repoName = `od-${projectId}`;
+  const repoUrl = `https://api.github.com/repos/${username}/${repoName}`;
+  const repoCheck = await fetch(repoUrl, {
+    headers: {
+      Authorization: `token ${config.githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+
+  if (repoCheck.status === 404) {
+    // Create the repository
+    const createResp = await fetch('https://api.github.com/user/repos', {
+      method: 'POST',
+      headers: {
+        Authorization: `token ${config.githubToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Open-Design-Daemon',
+      },
+      body: JSON.stringify({
+        name: repoName,
+        private: false,
+        auto_init: true, // Automatically initialize with a README so we have a main branch
+      }),
+    });
+    if (!createResp.ok) {
+      const errText = await createResp.text();
+      throw new DeployError(`Failed to create GitHub repository: ${errText}`, 502);
+    }
+    // Wait a brief moment for repository initialization
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+
+  // 4. Sync files to the GitHub repository using the GitHub API
+  for (const file of files) {
+    await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
+  }
+
+  // 5. Get Owner ID from Render
+  const RENDER_API = 'https://api.render.com/v1';
+  const ownersResp = await fetch(`${RENDER_API}/owners`, {
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!ownersResp.ok) {
+    const errText = await ownersResp.text();
+    throw new DeployError(`Failed to fetch Render owner details: ${errText}`, 502);
+  }
+  const owners = (await ownersResp.json()) as any[];
+  if (!Array.isArray(owners) || owners.length === 0) {
+    throw new DeployError('No owners found for Render API key.', 400);
+  }
+  const ownerId = owners[0].owner.id;
+
+  // 6. Find or Create Render static site service
+  let serviceId = priorMetadata?.serviceId;
+  let serviceUrl = priorMetadata?.serviceUrl;
+
+  const listResp = await fetch(`${RENDER_API}/services?limit=100&name=${repoName}`, {
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      Accept: 'application/json',
+    },
+  });
+  if (listResp.ok) {
+    const services = (await listResp.json()) as any[];
+    if (Array.isArray(services)) {
+      const existing = services.find((s) => {
+        const item = s.service || s;
+        return item.name === repoName && item.type === 'static_site';
+      });
+      if (existing) {
+        const item = existing.service || existing;
+        serviceId = item.id;
+        serviceUrl = item.url;
+      }
+    }
+  }
+
+  if (!serviceId) {
+    // Create new service
+    const createServiceResp = await fetch(`${RENDER_API}/services`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'static_site',
+        name: repoName,
+        ownerId,
+        repo: `https://github.com/${username}/${repoName}`,
+        branch: 'main',
+        autoDeploy: 'yes',
+        serviceDetails: {
+          buildCommand: '',
+          publishPath: '.',
+        },
+      }),
+    });
+    if (!createServiceResp.ok) {
+      const errText = await createServiceResp.text();
+      throw new DeployError(`Failed to create Render service: ${errText}`, 502);
+    }
+    const created = (await createServiceResp.json()) as any;
+    const item = created.service || created;
+    serviceId = item.id;
+    serviceUrl = item.url;
+  } else {
+    // Service already exists, trigger a fresh deploy
+    const triggerResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    if (!triggerResp.ok) {
+      const errText = await triggerResp.text();
+      throw new DeployError(`Failed to trigger Render deploy: ${errText}`, 502);
+    }
+  }
+
+  // 7. Wait for URL to be reachable
+  const link = await waitForReachableDeploymentUrl([serviceUrl!], { providerLabel: 'Render' });
+
+  return {
+    providerId: RENDER_PROVIDER_ID,
+    url: link.url || serviceUrl,
+    deploymentId: serviceId,
+    target: 'preview',
+    status: link.status,
+    statusMessage: link.statusMessage,
+    reachableAt: link.reachableAt,
+    providerMetadata: { serviceId, serviceUrl },
   };
 }
 
