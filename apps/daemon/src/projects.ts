@@ -71,7 +71,10 @@ function usesExternalProjectRoot(metadata?) {
 // Returns the folder a project's files live in. For git-linked projects
 // (metadata.baseDir set), this is the user's own folder. Otherwise falls
 // back to the standard computed path under projectsRoot.
-export function resolveProjectDir(projectsRoot, projectId, metadata?) {
+export function resolveProjectDir(projectsRoot, projectId, metadata?, opts = {}) {
+  if (!opts.allowUnavailableSandboxImportedProject) {
+    assertSandboxProjectRootAvailable(metadata);
+  }
   if (usesExternalProjectRoot(metadata)) {
     return path.normalize(metadata.baseDir);
   }

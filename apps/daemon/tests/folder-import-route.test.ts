@@ -151,6 +151,22 @@ describe('POST /api/import/folder', () => {
     });
   });
 
+  it('rejects imported-folder project file listing in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const resp = await fetch(`${baseUrl}/api/projects/${project.id}/files`);
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+    });
+  });
+
   it('auto-detects the entry file when present', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '');

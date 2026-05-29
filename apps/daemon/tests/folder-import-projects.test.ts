@@ -68,12 +68,12 @@ describe('resolveProjectDir', () => {
     ).not.toThrow();
   });
 
-  it('routes metadata.baseDir to the managed root but leaves a run-start guard in sandbox mode', () => {
+  it('rejects metadata.baseDir in sandbox mode before resolving a project file root', () => {
     withSandboxMode(() => {
       const baseDir = '/Users/me/projects/site';
       expect(
-        resolveProjectDir(projectsRoot, projectId, { kind: 'prototype', baseDir }),
-      ).toBe(path.join(projectsRoot, projectId));
+        () => resolveProjectDir(projectsRoot, projectId, { kind: 'prototype', baseDir }),
+      ).toThrowError(SandboxImportedProjectError);
       expect(() =>
         assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
       ).toThrowError(SandboxImportedProjectError);
