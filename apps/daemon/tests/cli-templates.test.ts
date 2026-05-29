@@ -491,21 +491,4 @@ describe('od templates CLI', () => {
     const envelope = JSON.parse(result.stderr.trim());
     expect(envelope.error.code).toBe('missing-input');
   });
-
-  it('reports template-not-found (not daemon-not-running) when `templates delete` gets 404', async () => {
-    stub.setResponder(() => ({
-      status: 404,
-      body: { error: { code: 'TEMPLATE_NOT_FOUND', message: 'template not found' } },
-    }));
-    const result = await runCli([
-      'templates',
-      'delete',
-      'gone',
-      '--daemon-url',
-      stub.baseUrl,
-    ]);
-    expect(result.code).toBe(76);
-    const envelope = JSON.parse(result.stderr.trim());
-    expect(envelope.error.code).toBe('template-not-found');
-  });
 });

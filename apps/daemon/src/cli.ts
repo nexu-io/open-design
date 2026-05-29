@@ -206,11 +206,6 @@ const RECOVERABLE_EXIT_CODES = {
   'genui-surface-awaiting':   73,
   'desktop-auth-pending':     74,
   'desktop-import-token-rejected': 75,
-  // `od templates delete <id>` returns 404 from the daemon when the
-  // template id is unknown. Share the same exit-code lane as the
-  // other "thing-not-found" classes so agents can branch on the
-  // exit number alone without parsing the error envelope.
-  'template-not-found':       76,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -5126,15 +5121,13 @@ Common options:
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      // DELETE /api/templates/:id returns 404 when the template id is
-      // unknown — that's a stable user-error class agents can act on
-      // (don't retry, surface to the user) so route it to
-      // `template-not-found` rather than the default
-      // `daemon-not-running`.
-      if (!resp.ok) {
-        if (resp.status === 404) return structuredHttpFailure(resp, 'template-not-found');
-        return structuredHttpFailure(resp);
-      }
+      // The daemon route `DELETE /api/templates/:id` is intentionally
+      // idempotent (returns `{ ok: true }` for unknown ids), so this
+      // CLI verb mirrors that contract instead of inventing a
+      // template-not-found exit code the production route never emits.
+      // Any unexpected non-2xx still falls through to the generic
+      // structured-failure envelope.
+      if (!resp.ok) return structuredHttpFailure(resp);
       if (flags.json) {
         const data = await resp.json().catch(() => ({ ok: true }));
         return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
