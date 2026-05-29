@@ -179,17 +179,20 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
   // into the UI / app.sqlite before we could classify it. See review
   // r3324277xxx.
   let pending = '';
-  // Tracks whether any byte has been EMITTED to the consumer yet.
-  // While `tail` is empty (no bytes pushed), the conceptual message
-  // start is still upstream of anything the consumer has seen — `^`
-  // in the canonical regex is a legitimate anchor. Once we emit any
-  // byte, `^` of subsequent buffers no longer represents the message
-  // start and we switch to the newline-only variants so a sliding
-  // window cannot manufacture a match from prose. Importantly:
-  // `firstChunk` stays true even when an entire feed is deferred to
-  // `pending`, because no bytes have crossed the emission boundary
-  // yet (e.g. a message that starts with `## system` followed by a
-  // separate `\n` chunk).
+  // Tracks whether `tail` still represents the ENTIRE emission so
+  // far — i.e. no slicing has occurred yet and `^` in the canonical
+  // regex genuinely anchors at byte 0 of the message stream. While
+  // this holds, the `^|\n` alternation safely catches a role marker
+  // that arrives at the start of the stream even if its prefix is
+  // split across multiple chunks (`## ` | `user\n…`, `## us` | `er\n…`,
+  // `##` | ` user\n…`). The moment `tail` would exceed
+  // TAIL_BUFFER_SIZE, the slice turns `tail` into a mid-stream
+  // window and `^` no longer represents the stream start — we then
+  // switch to the newline-only variants so a sliding window cannot
+  // manufacture a match from prose. The transition is on slicing,
+  // not on first emission: earlier definitions ("any byte emitted",
+  // "newline emitted") both had failure modes — see PR #3303 reviews
+  // r3324060995 and r3324xxxxxx, and the regression tests below.
   let firstChunk = true;
   let _contaminated = false;
   let markerText: string | null = null;
@@ -254,13 +257,30 @@ export function createRoleMarkerGuard(messageId: string): RoleMarkerGuard {
 
       // Roll the emitted-bytes tail forward.
       const fullEmitted = tail + safeToEmit;
-      tail = fullEmitted.length > TAIL_BUFFER_SIZE
+      const willSlice = fullEmitted.length > TAIL_BUFFER_SIZE;
+      tail = willSlice
         ? fullEmitted.slice(fullEmitted.length - TAIL_BUFFER_SIZE)
         : fullEmitted;
-      // Only transition firstChunk once a byte has actually crossed
-      // the emission boundary. If everything was deferred to pending,
-      // the `^` anchor is still valid for the next call.
-      if (safeToEmit.length > 0) firstChunk = false;
+      // `firstChunk` is true exactly while `tail` still represents the
+      // entire emission so far — i.e. no slice has occurred and `^` in
+      // the canonical regex genuinely anchors at byte 0 of the stream.
+      // The moment we slice (emitted bytes exceed TAIL_BUFFER_SIZE),
+      // `tail` becomes a mid-stream window, `^` becomes meaningless,
+      // and we switch to the newline-only variants.
+      //
+      // Earlier iterations of this code used "any byte emitted" or
+      // "newline emitted" as the transition trigger. Both were wrong:
+      //   - "any byte" lost the `^` anchor before a chunk-split
+      //     message-start marker (e.g. `## ` | `user\n…`,
+      //     `## us` | `er\n…`) could finish arriving — see PR #3303
+      //     review r3324xxxxxx, and the new tests below.
+      //   - "newline emitted" left `^` valid on a sliced buffer for
+      //     streams that hadn't yet emitted a newline, which then
+      //     false-positived the rolling-tail mid-stream case from
+      //     review r3324060995.
+      // Slice-based is the invariant that satisfies both: while we
+      // haven't sliced, `^` is correct; once we slice, it isn't.
+      if (willSlice) firstChunk = false;
 
       return safeToEmit;
     },
