@@ -19,7 +19,7 @@ Parameters:
     AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'    
     ConstraintDescription: 'Must be a valid IPv4 CIDR range with a subnet mask between /16 and /32 (e.g., 192.168.1.0/24 or 10.0.0.1/32).'
     MinLength: 1
-    Description: 'REQUIRED: The CIDR block allowed to access the ALB (e.g., your VPN or office IP. Must end in /32 for a single IP).'
+    Description: 'REQUIRED: The specific IPv4 CIDR block allowlisted to access the ALB. Ensure this is your VPN or corporate range to avoid unintended public exposure. Accepts any valid IPv4 range with a subnet mask between /16 and /32.'
   ProxyPort:
     Type: Number
     Default: 8080
@@ -47,10 +47,10 @@ Parameters:
     Type: String
     Default: '10.42.3.0/24'
     Description: 'The CIDR block for Public Subnet 2 (AZ2)'
-  PrivateSubnetCidr:
+  PrivateSubnet1Cidr:
     Type: String
     Default: '10.42.2.0/24'
-    Description: 'The CIDR block for the Private Subnet'
+    Description: 'The CIDR block for Private Subnet 1 (AZ1)'
   PrivateSubnet2Cidr:
     Type: String
     Default: '10.42.4.0/24'
@@ -60,6 +60,11 @@ Parameters:
     Default: small
     AllowedValues: [small, medium, large]
     Description: 'The compute size for the Open Design application.'
+  TaskCpuArchitecture:
+    Type: String
+    Default: X86_64
+    AllowedValues: [ARM64, X86_64]
+    Description: 'The CPU architecture for the Fargate task. Must match how your DockerImage was built (e.g., use X86_64 for standard linux/amd64 images).'
 
 Mappings:
   TaskSizes:
@@ -123,11 +128,11 @@ Resources:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable
 
-  PrivateSubnet:
+  PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: !Ref PrivateSubnetCidr
+      CidrBlock: !Ref PrivateSubnet1Cidr
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
 
   PrivateSubnet2:
@@ -187,7 +192,7 @@ Resources:
   PrivateSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PrivateSubnet
+      SubnetId: !Ref PrivateSubnet1
       RouteTableId: !Ref PrivateRouteTable
 
   PrivateRouteTable2:
@@ -257,7 +262,7 @@ Resources:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref FileSystem
-      SubnetId: !Ref PrivateSubnet
+      SubnetId: !Ref PrivateSubnet1
       SecurityGroups:
         - !Ref EfsSecurityGroup
 
@@ -401,7 +406,7 @@ Resources:
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
       TaskRoleArn: !GetAtt TaskRole.Arn
       RuntimePlatform:
-        CpuArchitecture: ARM64
+        CpuArchitecture: !Ref TaskCpuArchitecture
         OperatingSystemFamily: LINUX
       Volumes:
         - Name: efs-storage
@@ -502,11 +507,12 @@ Resources:
       TaskDefinition: !Ref TaskDefinition
       LaunchType: FARGATE
       DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 60
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
           Subnets:
-            - !Ref PrivateSubnet
+            - !Ref PrivateSubnet1
             - !Ref PrivateSubnet2
           SecurityGroups:
             - !Ref FargateSecurityGroup
