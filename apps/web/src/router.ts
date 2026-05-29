@@ -3,7 +3,7 @@
 // we want a single source of truth for "what file is open" — encoding
 // that in the URL is the simplest way to make it deep-linkable.
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 // Entry-shell sub-views. The home/project landing renders one of three
 // columns and each sub-view now owns a top-level path so the browser
@@ -159,12 +159,23 @@ export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
   });
 }
 
+let cachedPathname: string | null = null;
+let cachedRoute: Route | null = null;
+
+function getRouteSnapshot(): Route {
+  const pathname = window.location.pathname;
+  if (cachedPathname !== pathname || cachedRoute === null) {
+    cachedPathname = pathname;
+    cachedRoute = parseRoute(pathname);
+  }
+  return cachedRoute;
+}
+
+function subscribeToRouteChanges(onStoreChange: () => void): () => void {
+  window.addEventListener('popstate', onStoreChange);
+  return () => window.removeEventListener('popstate', onStoreChange);
+}
+
 export function useRoute(): Route {
-  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
-  useEffect(() => {
-    const onPop = () => setRoute(parseRoute(window.location.pathname));
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
-  return route;
+  return useSyncExternalStore(subscribeToRouteChanges, getRouteSnapshot, getRouteSnapshot);
 }
