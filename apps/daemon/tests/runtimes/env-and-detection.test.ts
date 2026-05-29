@@ -111,6 +111,30 @@ test('spawnEnvForAgent reapplies sandbox state roots after configured env overri
   }
 });
 
+test('spawnEnvForAgent keeps sandbox roots pinned to the base OD_DATA_DIR', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-base-'));
+  try {
+    const env = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+        OD_DATA_DIR: '/host/path/.od',
+      },
+    );
+
+    assert.equal(env.OD_DATA_DIR, dataDir);
+    assert.equal(env.CODEX_HOME, join(dataDir, 'sandbox', 'agent-home', '.codex'));
+    assert.equal(env.HOME, join(dataDir, 'sandbox', 'agent-home'));
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
   const env = spawnEnvForAgent(
     'gemini',

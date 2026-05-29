@@ -8,6 +8,7 @@ import {
   applySandboxRuntimeEnv,
   isSandboxModeEnabled,
   resolveSandboxRuntimeConfig,
+  type SandboxRuntimeConfig,
 } from '../sandbox-mode.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
@@ -44,6 +45,7 @@ export function spawnEnvForAgent(
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
 ): NodeJS.ProcessEnv {
+  const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const env = mergeProxyAwareEnv(
     process.platform,
     systemProxyEnv,
@@ -63,30 +65,37 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return reapplySandboxRuntimeEnv(env);
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
     stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
-    return reapplySandboxRuntimeEnv(env);
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
     stripUnlessCustomBaseUrl(env, 'OPENAI_BASE_URL', [
       'OPENAI_API_KEY',
       'CODEX_API_KEY',
     ]);
-    return reapplySandboxRuntimeEnv(env);
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
-  return reapplySandboxRuntimeEnv(env);
+  return reapplySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
-function reapplySandboxRuntimeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (!isSandboxModeEnabled(env)) return env;
-  const dataDir = env.OD_DATA_DIR?.trim();
-  if (!dataDir) return env;
-  return applySandboxRuntimeEnv(
-    env,
-    resolveSandboxRuntimeConfig(true, dataDir),
-  );
+function sandboxRuntimeConfigForBaseEnv(
+  baseEnv: RuntimeEnvMap,
+): SandboxRuntimeConfig | null {
+  if (!isSandboxModeEnabled(baseEnv)) return null;
+  const dataDir = baseEnv.OD_DATA_DIR?.trim();
+  if (!dataDir) return null;
+  return resolveSandboxRuntimeConfig(true, dataDir);
+}
+
+function reapplySandboxRuntimeEnv(
+  env: NodeJS.ProcessEnv,
+  sandboxRuntime: SandboxRuntimeConfig | null,
+): NodeJS.ProcessEnv {
+  if (!sandboxRuntime) return env;
+  return applySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
 // Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty
