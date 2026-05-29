@@ -79,6 +79,12 @@ function makeTestApp(port: number, host = '127.0.0.1') {
     }
     res.json({ active: true });
   });
+  app.post('/api/dialog/open-folder', (req, res) => {
+    if (!isLocalSameOrigin(req, port, undefined, '127.0.0.1')) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    res.json({ path: '/tmp/test-folder' });
+  });
   app.get('/api/projects/:id/raw/:name', (req, res) => {
     // Mimics the real raw-file route that sets CORS for Origin: null
     if (req.headers.origin === 'null') {
@@ -640,5 +646,60 @@ describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin G
       },
     };
     expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+});
+
+describe('dialog/open-folder: cross-site form POST regression', () => {
+  let server: http.Server;
+  let port: number;
+
+  beforeAll(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const tempApp = makeTestApp(0);
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = getListeningPort(tempServer);
+          tempServer.close(() => {
+            const realApp = makeTestApp(port);
+            server = realApp.listen(port, '127.0.0.1', (err?: Error) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+      }),
+  );
+
+  afterAll(() => closeServer(server));
+
+  it('rejects cross-site form POST with external Origin', async () => {
+    const res = await request(port, 'POST', '/api/dialog/open-folder', {
+      origin: 'https://evil.example.com',
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects cross-site form POST with null Origin', async () => {
+    const res = await request(port, 'POST', '/api/dialog/open-folder', {
+      origin: 'null',
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows same-origin POST', async () => {
+    const res = await request(port, 'POST', '/api/dialog/open-folder', {
+      origin: `http://127.0.0.1:${port}`,
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows POST without Origin (CLI/curl)', async () => {
+    const res = await request(port, 'POST', '/api/dialog/open-folder', {
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    expect(res.status).toBe(200);
   });
 });

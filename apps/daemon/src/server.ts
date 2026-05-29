@@ -10815,7 +10815,7 @@ export async function startServer({
 
   // Native OS folder picker dialog. Returns { path: string | null }.
   app.post('/api/dialog/open-folder', async (req, res) => {
-    if (!isLocalManagementRequest(req)) {
+    if (!isLocalSameOrigin(req, resolvedPort, undefined, effectiveHost)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
