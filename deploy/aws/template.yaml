@@ -541,3 +541,6 @@ Outputs:
       - UseCustomDomain
       - !Sub 'https://${CustomDomainName}'
       - !Sub 'http://${LoadBalancer.DNSName}'
+  AlbDnsName:
+    Description: 'The raw DNS name of the Application Load Balancer (use as the target for custom domain CNAME/Alias records).'
+    Value: !GetAtt LoadBalancer.DNSName
