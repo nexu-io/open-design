@@ -310,6 +310,27 @@ describe('media-config OpenAI auth-file fallback', () => {
     }]);
   });
 
+  it('refuses to wipe model-only provider overrides without force', async () => {
+    await writeStoredMediaConfig({
+      providers: {
+        nanobanana: {
+          model: 'gemini-custom-image-preview',
+        },
+      },
+    });
+
+    await expect(writeConfig(projectRoot, { providers: {} })).rejects.toMatchObject({
+      status: 409,
+    });
+
+    const onDisk = JSON.parse(
+      await readFile(path.join(projectRoot, '.od', 'media-config.json'), 'utf8'),
+    );
+    expect(onDisk.providers.nanobanana).toEqual({
+      model: 'gemini-custom-image-preview',
+    });
+  });
+
   describe('OD_MEDIA_CONFIG_DIR / OD_DATA_DIR storage routing', () => {
     let overrideRoot: string;
     let originalMediaConfigDir: string | undefined;

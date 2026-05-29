@@ -1,7 +1,9 @@
 import type { MediaProviderCredentials } from '../types';
 import {
+  configuredCustomImageModelIds,
   findMediaModel,
   findProvider,
+  parseCustomImageModelList,
   type MediaProviderId,
 } from './models';
 
@@ -24,6 +26,14 @@ export function isMediaModelPickerReady(
   modelId: string,
   mediaProviders?: Record<string, MediaProviderCredentials>,
 ): boolean {
+  const customImageEntry = mediaProviders?.['custom-image'];
+  if (customImageModelConfigured(modelId, customImageEntry)) {
+    if (hasConfiguredCustomImageModelEntry(customImageEntry, modelId)) return true;
+    const fallbackModel = findMediaModel(modelId);
+    return fallbackModel
+      ? isMediaProviderPickerReady(fallbackModel.provider, mediaProviders)
+      : false;
+  }
   const model = findMediaModel(modelId);
   if (!model) return true;
   return isMediaProviderPickerReady(model.provider, mediaProviders);
@@ -56,4 +66,24 @@ function hasConfiguredCustomImageEntry(entry: MediaProviderCredentials | null | 
     (entry?.baseUrl?.trim() && entry?.model?.trim())
     || entry?.profiles?.some((profile) => profile.baseUrl?.trim() && profile.model?.trim()),
   );
+}
+
+function customImageModelConfigured(
+  modelId: string,
+  entry: MediaProviderCredentials | null | undefined,
+): boolean {
+  return configuredCustomImageModelIds(entry?.model, entry?.profiles).includes(modelId);
+}
+
+function hasConfiguredCustomImageModelEntry(
+  entry: MediaProviderCredentials | null | undefined,
+  modelId: string,
+): boolean {
+  if (!modelId.trim()) return false;
+  if (entry?.baseUrl?.trim() && parseCustomImageModelList(entry.model).includes(modelId)) {
+    return true;
+  }
+  return Boolean(entry?.profiles?.some((profile) => (
+    profile.baseUrl?.trim() && parseCustomImageModelList(profile.model).includes(modelId)
+  )));
 }

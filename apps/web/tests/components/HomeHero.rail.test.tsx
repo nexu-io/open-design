@@ -269,6 +269,50 @@ describe('HomeHero intent rail', () => {
     expect(within(menu).getByText('flux-custom')).toBeTruthy();
   });
 
+  it('hides incomplete Custom Image API profile models beside configured profiles', async () => {
+    const onPluginInputValuesChange = vi.fn();
+    renderHero({
+      activeChipId: 'image',
+      footerInputNames: ['model'],
+      pluginInputFields: [{
+        name: 'model',
+        label: 'Model',
+        type: 'select',
+        options: ['custom-image'],
+      }],
+      pluginInputValues: { model: 'custom-image' },
+      mediaProviders: {
+        'custom-image': {
+          apiKey: '',
+          baseUrl: '',
+          model: '',
+          profiles: [{
+            id: 'ready',
+            apiKey: '',
+            baseUrl: 'https://ready.example.test/v1',
+            model: 'wan2.7-image',
+          }, {
+            id: 'incomplete',
+            apiKey: '',
+            baseUrl: '',
+            model: 'flux-custom',
+          }],
+        },
+      },
+      onPluginInputValuesChange,
+    });
+
+    await waitFor(() => {
+      expect(onPluginInputValuesChange).toHaveBeenCalledWith({ model: 'wan2.7-image' });
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-model'));
+    const menu = screen.getByTestId('home-hero-footer-option-model-menu');
+    expect(within(menu).queryByText('custom-image')).toBeNull();
+    expect(within(menu).getByText('wan2.7-image')).toBeTruthy();
+    expect(within(menu).queryByText('flux-custom')).toBeNull();
+  });
+
   it('does not treat provider default base URLs as configured image models', async () => {
     const onPluginInputValuesChange = vi.fn();
     renderHero({

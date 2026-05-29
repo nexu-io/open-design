@@ -600,6 +600,7 @@ export async function writeConfig(projectRoot: string, body: unknown) {
       (id) => prior[id] && (
         prior[id].apiKey
         || prior[id].baseUrl
+        || prior[id].model
         || prior[id].enabled
         || hasProviderProfiles(prior[id])
       ),
