@@ -7,6 +7,10 @@ import {
   type MediaProviderId,
 } from './models';
 
+const RUNNABLE_EXTERNAL_MODEL_IDS: Partial<Record<MediaProviderId, Set<string>>> = {
+  google: new Set(['imagen-4', 'imagen-3', 'gemini-3-pro-image-preview']),
+};
+
 export function isMediaProviderPickerReady(
   providerId: MediaProviderId,
   mediaProviders?: Record<string, MediaProviderCredentials>,
@@ -36,6 +40,7 @@ export function isMediaModelPickerReady(
   }
   const model = findMediaModel(modelId);
   if (!model) return true;
+  if (!isRunnableExternalModel(model.provider, model.id)) return false;
   return isMediaProviderPickerReady(model.provider, mediaProviders);
 }
 
@@ -66,6 +71,11 @@ function hasConfiguredCustomImageEntry(entry: MediaProviderCredentials | null | 
     (entry?.baseUrl?.trim() && entry?.model?.trim())
     || entry?.profiles?.some((profile) => profile.baseUrl?.trim() && profile.model?.trim()),
   );
+}
+
+function isRunnableExternalModel(providerId: MediaProviderId, modelId: string): boolean {
+  const runnable = RUNNABLE_EXTERNAL_MODEL_IDS[providerId];
+  return !runnable || runnable.has(modelId);
 }
 
 function customImageModelConfigured(
