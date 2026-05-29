@@ -295,6 +295,84 @@ describe('chooseExecutableByMinVersion (#978: skip stale binaries that fail the 
       rmSync(ok, { recursive: true, force: true });
     }
   });
+
+  fsTest('second call reuses the cached pick without re-probing every PATH candidate (mrcfps review on PR #2797)', async () => {
+    // Background: chooseExecutableByMinVersion enumerates every PATH
+    // candidate and runs `--version` on each in parallel. Without a
+    // cached fast path, a stale `.cmd` shim that hangs to the probe
+    // timeout (1.5 s) would add that delay to every chat-run /
+    // connection-test / memory-extract launch instead of only the
+    // first cold lookup. The fix consults the version-aware cache
+    // before re-probing, and the regression below proves a second
+    // call uses zero `runVersion` invocations.
+    const flaky = mkdtempSync(join(tmpdir(), 'od-cache-flaky-'));
+    const ok = mkdtempSync(join(tmpdir(), 'od-cache-ok-'));
+    try {
+      writeFileSync(join(flaky, 'gemini'), '');
+      writeFileSync(join(ok, 'gemini'), '');
+      chmodSync(join(flaky, 'gemini'), 0o755);
+      chmodSync(join(ok, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = flaky;
+      process.env.PATH = `${flaky}${delimiter}${ok}`;
+
+      const def = minimalAgentDef({ id: 'gemini', bin: 'gemini', minVersion: '0.30.0' });
+      let probes = 0;
+      const runVersion = async (p: string) => {
+        probes += 1;
+        if (p === join(flaky, 'gemini')) return '0.1.12';
+        return '0.40.1';
+      };
+
+      // First call: cold cache — probes every candidate (>= 2 here).
+      const firstChosen = await chooseExecutableByMinVersion(def, {}, { runVersion });
+      expect(firstChosen).toBe(join(ok, 'gemini'));
+      const probesAfterCold = probes;
+      expect(probesAfterCold).toBeGreaterThanOrEqual(2);
+
+      // Second call: warm cache — must not invoke runVersion at all.
+      const secondChosen = await chooseExecutableByMinVersion(def, {}, { runVersion });
+      expect(secondChosen).toBe(join(ok, 'gemini'));
+      expect(probes).toBe(probesAfterCold);
+    } finally {
+      rmSync(flaky, { recursive: true, force: true });
+      rmSync(ok, { recursive: true, force: true });
+    }
+  });
+
+  fsTest('cached pick that no longer exists on disk is re-probed instead of returned stale', async () => {
+    // existsSync gate on the cached value: if the user removed or
+    // moved the binary between launches, the cache must NOT serve a
+    // dangling path. Re-probe and re-cache instead.
+    const oldDir = mkdtempSync(join(tmpdir(), 'od-cache-old-'));
+    const newDir = mkdtempSync(join(tmpdir(), 'od-cache-new-'));
+    try {
+      writeFileSync(join(oldDir, 'gemini'), '');
+      chmodSync(join(oldDir, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = oldDir;
+      process.env.PATH = oldDir;
+
+      const def = minimalAgentDef({ id: 'gemini', bin: 'gemini', minVersion: '0.30.0' });
+      const firstChosen = await chooseExecutableByMinVersion(def, {}, {
+        runVersion: async () => '0.40.1',
+      });
+      expect(firstChosen).toBe(join(oldDir, 'gemini'));
+
+      // User moves the binary: cached path no longer exists.
+      rmSync(join(oldDir, 'gemini'));
+      writeFileSync(join(newDir, 'gemini'), '');
+      chmodSync(join(newDir, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = newDir;
+      process.env.PATH = newDir;
+
+      const secondChosen = await chooseExecutableByMinVersion(def, {}, {
+        runVersion: async () => '0.40.1',
+      });
+      expect(secondChosen).toBe(join(newDir, 'gemini'));
+    } finally {
+      rmSync(oldDir, { recursive: true, force: true });
+      rmSync(newDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('inspectAgentExecutableResolution + minVersion cache wiring (#978)', () => {

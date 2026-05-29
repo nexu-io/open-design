@@ -412,6 +412,21 @@ export async function chooseExecutableByMinVersion(
   const override = configuredExecutableOverride(def, configuredEnv);
   if (override) return override;
 
+  // Cached fast path: reuse the resolution from a prior call without
+  // re-probing every PATH candidate. `probeVersionWithTimeout` has a
+  // ~1.5 s timeout per candidate and the enumeration below waits on
+  // `Promise.all`, so a stale `.cmd` shim or a hung wrapper would add
+  // that delay to every chat-run / connection-test / memory-extract
+  // launch instead of only the first cold lookup (#2797 mrcfps review
+  // on `launch.ts:30`). The cache is cleared on negative resolution
+  // (line ~390 below) and via `clearVersionAwareResolutionCache()`, so
+  // a missing or relocated cached pick still gets re-probed at the
+  // next launch.
+  const cached = versionAwareCache.get(def.id);
+  if (cached && existsSync(cached)) {
+    return cached;
+  }
+
   // Enumerate every match for def.bin and (if declared) any fallback
   // bins, in the same order resolveOnPath would walk.
   const candidates: string[] = [];
