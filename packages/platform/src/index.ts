@@ -945,16 +945,15 @@ export function wellKnownUserToolchainBins(
 
   // Mise shims: makes every tool installed with `mise install` visible to
   // GUI-launched daemons even when the process inherits a stripped PATH.
-  // Respect MISE_DATA_DIR (the official way to relocate the whole mise tree)
-  // and fall back to the standard location. Also cover the legacy
-  // ~/.mise/shims path when it differs.
-  const miseData = resolveUserScopedHome(env.MISE_DATA_DIR, home) || join(home, ".local", "share", "mise");
-  const miseShims = join(miseData, "shims");
-  dirs.push(miseShims);
+  // Respect MISE_DATA_DIR (the official way to relocate the whole mise tree).
+  // We only fall back to the legacy ~/.mise/shims path when no explicit
+  // MISE_DATA_DIR override is provided.
+  const miseDataOverride = resolveUserScopedHome(env.MISE_DATA_DIR, home);
+  const miseData = miseDataOverride || join(home, ".local", "share", "mise");
+  dirs.push(join(miseData, "shims"));
 
-  const legacyShims = join(home, ".mise", "shims");
-  if (legacyShims !== miseShims) {
-    dirs.push(legacyShims);
+  if (!miseDataOverride) {
+    dirs.push(join(home, ".mise", "shims"));
   }
 
   if (includeSystemBins) {

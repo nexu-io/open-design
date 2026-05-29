@@ -867,6 +867,9 @@ describe("wellKnownUserToolchainBins", () => {
       // Default-root paths must not leak in when MISE_DATA_DIR is set
       expect(dirs).not.toContain(join(home, ".local", "share", "mise", "shims"));
       expect(dirs).not.toContain(join(home, ".local", "share", "mise", "installs", "node", "24.16.0", "bin"));
+
+      // Legacy ~/.mise/shims must also be excluded when an explicit override is present
+      expect(dirs).not.toContain(join(home, ".mise", "shims"));
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(customMise, { recursive: true, force: true });
