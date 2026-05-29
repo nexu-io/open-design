@@ -842,14 +842,31 @@ describe("wellKnownUserToolchainBins", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-mise-data-"));
     const customMise = mkdtempSync(join(tmpdir(), "wkutb-custom-mise-"));
     try {
+      // Create fixture install trees under the custom root so the installs
+      // scanning logic is exercised (this catches regressions that only
+      // affect shims but not the Node / npm-openai-codex install paths).
+      const customNodeBin = join(customMise, "installs", "node", "24.16.0", "bin");
+      mkdirSync(customNodeBin, { recursive: true });
+      writeFileSync(join(customNodeBin, "marker"), "");
+
+      const customCodexBin = join(customMise, "installs", "npm-openai-codex", "latest", "bin");
+      mkdirSync(customCodexBin, { recursive: true });
+      writeFileSync(join(customCodexBin, "codex"), "");
+
       const dirs = wellKnownUserToolchainBins({
         home,
         env: { MISE_DATA_DIR: customMise },
         includeSystemBins: false,
       });
+
       expect(dirs).toContain(join(customMise, "shims"));
-      // Should not contain the default when override is present
+      // Install paths under custom root should be discovered
+      expect(dirs).toContain(customNodeBin);
+      expect(dirs).toContain(customCodexBin);
+
+      // Default-root paths must not leak in when MISE_DATA_DIR is set
       expect(dirs).not.toContain(join(home, ".local", "share", "mise", "shims"));
+      expect(dirs).not.toContain(join(home, ".local", "share", "mise", "installs", "node", "24.16.0", "bin"));
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(customMise, { recursive: true, force: true });
