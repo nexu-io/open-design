@@ -261,6 +261,7 @@ import {
   type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
+  mergeNoProxyWithLoopbackDefaults,
   redactSecrets,
   testAgentConnection,
   testProviderConnection,
@@ -1650,6 +1651,11 @@ export function createAgentRuntimeEnv(
   const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
   if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
     env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
+  }
+  const noProxy = mergeNoProxyWithLoopbackDefaults(env.NO_PROXY ?? env.no_proxy);
+  if (noProxy) {
+    env.NO_PROXY = noProxy;
+    if (process.platform !== 'win32') env.no_proxy = noProxy;
   }
 
   // Ensure the node binary directory is on PATH so agent sub-processes —

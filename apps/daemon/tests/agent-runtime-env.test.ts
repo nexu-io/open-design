@@ -87,6 +87,23 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
   });
 
+  it('keeps loopback daemon tool requests off inherited HTTP proxies', () => {
+    const env = createAgentRuntimeEnv(
+      { PATH: '/bin', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: '' },
+      'http://127.0.0.1:7456',
+      { token: 'fresh-token' },
+      '/opt/open-design/bin/node',
+    );
+
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:9');
+    expect(env.NO_PROXY?.split(',')).toEqual(
+      expect.arrayContaining(['localhost', '127.0.0.1', '[::1]']),
+    );
+    if (process.platform !== 'win32') {
+      expect(env.no_proxy).toBe(env.NO_PROXY);
+    }
+  });
+
   it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },
