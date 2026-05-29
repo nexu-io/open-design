@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -194,6 +195,131 @@ describe('Google Vertex media generation', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.providerNote).toContain('google-vertex/imagen-3.0-generate-002');
+  });
+
+  it('derives the Vertex project id from service-account key files', async () => {
+    const serviceAccountPath = path.join(root, 'vertex-service-account.json');
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    await writeFile(serviceAccountPath, JSON.stringify({
+      type: 'service_account',
+      project_id: PROJECT_ID,
+      client_email: `vertex-test@${PROJECT_ID}.iam.gserviceaccount.com`,
+      private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+      token_uri: 'https://oauth2.googleapis.com/token',
+    }), 'utf8');
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'service_account',
+      service_account_key_file: serviceAccountPath,
+      image_location: 'us-central1',
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === 'https://oauth2.googleapis.com/token') {
+        expect(init?.method).toBe('POST');
+        const body = String(init?.body);
+        expect(body).toContain('grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer');
+        expect(body).toContain('assertion=');
+        return jsonResponse({ access_token: 'vertex-service-account-token', expires_in: 3600 });
+      }
+      if (url === `https://us-central1-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/us-central1/publishers/google/models/imagen-4.0-fast-generate-001:predict`) {
+        expect(init?.headers).toMatchObject({
+          authorization: 'Bearer vertex-service-account-token',
+          'x-goog-user-project': PROJECT_ID,
+        });
+        return jsonResponse({ predictions: [{ bytesBase64Encoded: PNG_BASE64 }] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'A service-account poster',
+      output: 'vertex-service-account.png',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.providerNote).toContain('google-vertex/imagen-4.0-fast-generate-001');
+  });
+
+  it('sends reference images as inline data for Vertex Gemini image generation', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      project_id: PROJECT_ID,
+      text_location: 'global',
+    });
+    await writeAdc({
+      type: 'authorized_user',
+      client_id: 'gemini-client-id',
+      client_secret: 'gemini-client-secret',
+      refresh_token: 'gemini-refresh-token',
+    });
+    const projectDir = path.join(projectsRoot, 'project-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(
+      path.join(projectDir, 'reference.png'),
+      Buffer.from(PNG_BASE64, 'base64'),
+    );
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === 'https://oauth2.googleapis.com/token') {
+        expect(init?.method).toBe('POST');
+        return jsonResponse({ access_token: 'vertex-gemini-token', expires_in: 3600 });
+      }
+      if (url === `https://aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/global/publishers/google/models/gemini-3-pro-image-preview:generateContent`) {
+        expect(init?.method).toBe('POST');
+        expect(init?.headers).toMatchObject({
+          authorization: 'Bearer vertex-gemini-token',
+          'content-type': 'application/json',
+          'x-goog-user-project': PROJECT_ID,
+        });
+        expect(JSON.parse(String(init?.body))).toEqual({
+          contents: [{
+            role: 'user',
+            parts: [
+              { text: 'Restyle this reference into a polished landing-page hero' },
+              { inlineData: { mimeType: 'image/png', data: PNG_BASE64 } },
+            ],
+          }],
+          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+        });
+        return jsonResponse({
+          candidates: [{
+            content: {
+              parts: [{ inlineData: { mimeType: 'image/png', data: PNG_BASE64 } }],
+            },
+          }],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gemini-3-pro-image-preview',
+      prompt: 'Restyle this reference into a polished landing-page hero',
+      image: 'reference.png',
+      output: 'vertex-gemini-i2i.png',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.providerNote).toContain('google-vertex/gemini-3-pro-image-preview · i2i');
+    const bytes = await readFile(path.join(projectDir, 'vertex-gemini-i2i.png'));
+    expect(bytes.length).toBeGreaterThan(0);
   });
 
   it('errors clearly when the Vertex config is not enabled', async () => {

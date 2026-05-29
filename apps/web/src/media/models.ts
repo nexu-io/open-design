@@ -566,7 +566,7 @@ export const IMAGE_MODELS: MediaModel[] = [
   // Google.
   { id: 'imagen-4', label: 'imagen-4', hint: 'Google Vertex ADC · Imagen 4', provider: 'google', caps: ['t2i'] },
   { id: 'imagen-3', label: 'imagen-3', hint: 'Google Vertex ADC', provider: 'google', caps: ['t2i'] },
-  { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google Vertex ADC · Nano Banana Pro', provider: 'google', caps: ['t2i'] },
+  { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google Vertex ADC · Nano Banana Pro', provider: 'google', caps: ['t2i', 'i2i'] },
 
   // Replicate hosted image models.
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },

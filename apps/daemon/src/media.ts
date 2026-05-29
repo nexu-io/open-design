@@ -1200,30 +1200,33 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
     );
   }
 
-  const headers: Record<string, string> = {
-    'content-type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
   const apiKey = selectedProfile.apiKey || credentials.apiKey || '';
   if (apiKey) {
     headers.authorization = `Bearer ${apiKey}`;
   }
+  const size = openaiSizeFor('gpt-image-1', ctx.aspect);
   const body: Record<string, unknown> = {
     prompt: ctx.prompt || 'A high-quality reference image.',
     model: wireModel,
     n: 1,
-    size: openaiSizeFor('gpt-image-1', ctx.aspect),
+    size,
   };
   let url = buildOpenAIImageUrl(baseUrl, false);
+  let requestBody: RequestInit['body'];
   if (ctx.imageRef?.dataUrl) {
-    body.response_format = 'b64_json';
-    body.images = [{ image_url: ctx.imageRef.dataUrl }];
+    const form = await customImageEditForm(ctx, wireModel, size);
     url = buildOpenAIImageEditUrl(baseUrl);
+    requestBody = form;
+  } else {
+    headers['content-type'] = 'application/json';
+    requestBody = JSON.stringify(body);
   }
 
   const resp = await fetch(url, withMediaRequestInit(ctx, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: requestBody,
   }));
   const data = await parseOpenAICompatibleJson(resp, 'custom image');
   const bytes = await bytesFromOpenAICompatibleData(data, 'custom image', ctx.requestInit);
@@ -1232,6 +1235,27 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
     providerNote: `custom-image/${wireModel} · ${body.size} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
+}
+
+async function customImageEditForm(
+  ctx: MediaContext,
+  wireModel: string,
+  size: string,
+): Promise<FormData> {
+  if (!ctx.imageRef) throw new Error('Custom Image API image edit requires a reference image');
+  const form = new FormData();
+  form.set('prompt', ctx.prompt || 'A high-quality reference image.');
+  form.set('model', wireModel);
+  form.set('n', '1');
+  form.set('size', size);
+  form.set('response_format', 'b64_json');
+  const bytes = await readFile(ctx.imageRef.abs);
+  form.set(
+    'image',
+    new Blob([new Uint8Array(bytes)], { type: ctx.imageRef.mime }),
+    path.basename(ctx.imageRef.path) || 'image.png',
+  );
+  return form;
 }
 
 function customImageOverridesOpenAIModel(
@@ -1952,7 +1976,7 @@ const GOOGLE_VERTEX_DEFAULT_CONFIG_FILE = 'google-vertex-config.json';
 
 async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   const config = await readGoogleVertexMediaConfig();
-  if (!googleVertexConfigReady(config)) {
+  if (!(await googleVertexConfigReady(config))) {
     throw new Error(
       'Google Vertex is not configured — set OD_GOOGLE_VERTEX_CONFIG or configure ~/.config/open-design/google-vertex-config.json with auth_mode=adc',
     );
@@ -1964,11 +1988,12 @@ async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderC
 
   const data = modelId.startsWith('imagen-')
     ? await callGoogleVertexImagen(config, auth, modelId, prompt, ctx.aspect)
-    : await callGoogleVertexGeminiImage(config, auth, modelId, prompt);
+    : await callGoogleVertexGeminiImage(config, auth, modelId, prompt, ctx.imageRef);
   const bytes = googleVertexImageBytes(data, modelId);
+  const mode = ctx.imageRef ? 'i2i' : 't2i';
   return {
     bytes,
-    providerNote: `google-vertex/${modelId} · ${googleVertexAspectFor(ctx.aspect)} · ${bytes.length} bytes`,
+    providerNote: `google-vertex/${modelId} · ${mode} · ${googleVertexAspectFor(ctx.aspect)} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
@@ -2023,9 +2048,9 @@ function normalizeGoogleVertexConfig(value: JsonRecord): GoogleVertexConfig {
   };
 }
 
-function googleVertexConfigReady(config: GoogleVertexConfig): boolean {
+async function googleVertexConfigReady(config: GoogleVertexConfig): Promise<boolean> {
   return config.enabled
-    && Boolean(resolveGoogleVertexProjectId(config))
+    && Boolean(await resolveGoogleVertexProjectId(config))
     && (
       config.auth_mode === 'adc'
       || Boolean(config.service_account_json?.trim() || config.service_account_key_file?.trim())
@@ -2057,13 +2082,30 @@ async function callGoogleVertexGeminiImage(
   auth: GoogleVertexAuth,
   modelId: string,
   prompt: string,
+  imageRef: ImageRef | null,
 ): Promise<JsonRecord> {
+  const parts: JsonRecord[] = [{ text: prompt }];
+  const imagePart = googleVertexInlineImagePart(imageRef);
+  if (imagePart) parts.push(imagePart);
   const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    contents: [{ role: 'user', parts }],
     generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
   };
   const location = config.text_location ?? GOOGLE_VERTEX_DEFAULT_TEXT_LOCATION;
   return postGoogleVertexJson(location, auth, modelId, 'generateContent', body);
+}
+
+function googleVertexInlineImagePart(imageRef: ImageRef | null): JsonRecord | null {
+  if (!imageRef?.dataUrl) return null;
+  const comma = imageRef.dataUrl.indexOf(',');
+  const data = comma >= 0 ? imageRef.dataUrl.slice(comma + 1) : '';
+  if (!data) return null;
+  return {
+    inlineData: {
+      mimeType: imageRef.mime,
+      data,
+    },
+  };
 }
 
 async function postGoogleVertexJson(
@@ -2139,7 +2181,7 @@ function googleVertexEndpoint(location: string, projectId: string, modelId: stri
 }
 
 async function googleVertexAuth(config: GoogleVertexConfig): Promise<GoogleVertexAuth> {
-  const projectId = resolveGoogleVertexProjectId(config);
+  const projectId = await resolveGoogleVertexProjectId(config);
   if (!projectId) throw new Error('Google Vertex project id is missing');
   if (config.auth_mode === 'adc') {
     return { projectId, accessToken: await googleVertexAdcAccessToken() };
@@ -2338,13 +2380,25 @@ function parseGoogleVertexTokenResponse(text: string, label: string): JsonRecord
   throw new Error(`${label} returned non-JSON response`);
 }
 
-function resolveGoogleVertexProjectId(config: GoogleVertexConfig): string {
+async function resolveGoogleVertexProjectId(config: GoogleVertexConfig): Promise<string> {
   return cleanString(config.project_id)
     || cleanString(process.env.GOOGLE_CLOUD_PROJECT)
     || cleanString(process.env.GCLOUD_PROJECT)
     || cleanString(process.env.GCP_PROJECT)
+    || (config.auth_mode === 'service_account' ? await googleVertexProjectIdFromConfiguredServiceAccount(config) : '')
     || googleVertexProjectIdFromAdc()
     || '';
+}
+
+async function googleVertexProjectIdFromConfiguredServiceAccount(config: GoogleVertexConfig): Promise<string> {
+  if (!config.service_account_json?.trim() && !config.service_account_key_file?.trim()) return '';
+  try {
+    const key = await googleVertexServiceAccountKey(config);
+    return cleanString(key.project_id)
+      || googleVertexProjectIdFromServiceAccountRef(key.client_email);
+  } catch {
+    return '';
+  }
 }
 
 function googleVertexProjectIdFromAdc(): string {

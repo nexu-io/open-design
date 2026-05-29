@@ -22,8 +22,8 @@ describe('media model picker readiness', () => {
     expect(isMediaModelPickerReady('lyria-2', GOOGLE_ENABLED)).toBe(false);
   });
 
-  it('does not advertise Gemini Vertex image as image-conditioned until i2i is wired', () => {
+  it('advertises Gemini Vertex image as image-conditioned once i2i is wired', () => {
     expect(IMAGE_MODELS.find((model) => model.id === 'gemini-3-pro-image-preview')?.caps)
-      .toEqual(['t2i']);
+      .toEqual(['t2i', 'i2i']);
   });
 });

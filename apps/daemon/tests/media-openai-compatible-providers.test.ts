@@ -382,16 +382,20 @@ describe('OpenAI-compatible media providers', () => {
       expect(init?.method).toBe('POST');
       expect(init?.headers).toMatchObject({
         authorization: 'Bearer proxy-test-key',
-        'content-type': 'application/json',
       });
-      const body = JSON.parse(String(init?.body));
-      expect(body.prompt).toBe('Turn this reference into a blueprint-style UI illustration');
-      expect(body.model).toBe('acme-image-edit-model');
-      expect(body.n).toBe(1);
-      expect(body.size).toBe('1024x1024');
-      expect(body.response_format).toBe('b64_json');
-      expect(body.images).toHaveLength(1);
-      expect(body.images[0]?.image_url).toMatch(/^data:image\/png;base64,/);
+      expect(init?.headers).not.toHaveProperty('content-type');
+      expect(init?.body).toBeInstanceOf(FormData);
+      const body = init?.body as FormData;
+      expect(body.get('prompt')).toBe('Turn this reference into a blueprint-style UI illustration');
+      expect(body.get('model')).toBe('acme-image-edit-model');
+      expect(body.get('n')).toBe('1');
+      expect(body.get('size')).toBe('1024x1024');
+      expect(body.get('response_format')).toBe('b64_json');
+      const image = body.get('image');
+      expect(image).toBeInstanceOf(Blob);
+      expect((image as Blob).type).toBe('image/png');
+      expect((image as { name?: string }).name).toBe('reference.png');
+      expect(Buffer.from(await (image as Blob).arrayBuffer()).toString('base64')).toBe(PNG_BASE64);
       return new Response(JSON.stringify({
         data: [{ b64_json: PNG_BASE64 }],
       }), {
