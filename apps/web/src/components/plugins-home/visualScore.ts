@@ -32,6 +32,7 @@
 // surfaced as a chip in the card chrome instead.
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { curatedPluginPriority } from './curatedPriority';
 
 interface PreviewBlock {
   type?: unknown;
@@ -148,11 +149,21 @@ export function sortByVisualAppeal<T extends InstalledPluginRecord>(
 ): T[] {
   const annotated = records.map((r, idx) => ({
     record: r,
+    curatedPriority: curatedPluginPriority(r),
     rank: featuredRank(r),
     score: pluginVisualScore(r),
     idx,
   }));
   annotated.sort((a, b) => {
+    const aCurated = a.curatedPriority !== null;
+    const bCurated = b.curatedPriority !== null;
+    if (aCurated || bCurated) {
+      if (aCurated && !bCurated) return -1;
+      if (!aCurated && bCurated) return 1;
+      if (a.curatedPriority !== b.curatedPriority) {
+        return (a.curatedPriority ?? 0) - (b.curatedPriority ?? 0);
+      }
+    }
     const aFeatured = a.rank !== null;
     const bFeatured = b.rank !== null;
     if (aFeatured || bFeatured) {

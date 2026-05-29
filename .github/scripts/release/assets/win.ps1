@@ -8,21 +8,37 @@ foreach ($name in @("CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN", "RELEASE_CHANNEL", "
 
 $assetSuffix = if ($null -eq $env:WINDOWS_ASSET_SUFFIX) { "" } else { $env:WINDOWS_ASSET_SUFFIX }
 $versionPathSuffix = if ($null -eq $env:ASSET_VERSION_SUFFIX) { "" } else { $env:ASSET_VERSION_SUFFIX }
+$includeZip = if ([string]::IsNullOrWhiteSpace($env:WINDOWS_INCLUDE_ZIP)) { $true } else { $env:WINDOWS_INCLUDE_ZIP -ne "false" }
 $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets"
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
-$sourceInstaller = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/${env:TOOLS_PACK_NAMESPACE}/builder/Open Design-${env:TOOLS_PACK_NAMESPACE}-setup.exe"
+$builderDir = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/${env:TOOLS_PACK_NAMESPACE}/builder"
+$sourceInstaller = Join-Path $builderDir "Open Design-${env:TOOLS_PACK_NAMESPACE}-setup.exe"
+$sourceZip = Join-Path $builderDir "Open Design-${env:TOOLS_PACK_NAMESPACE}-portable.zip"
 if (!(Test-Path $sourceInstaller)) {
   throw "expected installer not found at $sourceInstaller"
 }
+if ($includeZip -and !(Test-Path $sourceZip)) {
+  throw "expected portable zip not found at $sourceZip (build with --to all or --to zip, or set WINDOWS_INCLUDE_ZIP=false to skip)"
+}
 
 $versionedInstaller = "open-design-${env:RELEASE_VERSION}$assetSuffix-win-x64-setup.exe"
-$checksumFile = "$versionedInstaller.sha256"
-Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
+$versionedZip = "open-design-${env:RELEASE_VERSION}$assetSuffix-win-x64-portable.zip"
+$installerChecksumFile = "$versionedInstaller.sha256"
+$zipChecksumFile = "$versionedZip.sha256"
 
+Copy-Item $sourceInstaller (Join-Path $releaseDir $versionedInstaller)
 $installerPath = Join-Path $releaseDir $versionedInstaller
-$hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  $versionedInstaller" | Set-Content -Path (Join-Path $releaseDir $checksumFile)
+$installerHash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+"$installerHash  $versionedInstaller" | Set-Content -Path (Join-Path $releaseDir $installerChecksumFile)
+
+if ($includeZip) {
+  Copy-Item $sourceZip (Join-Path $releaseDir $versionedZip)
+  $zipPath = Join-Path $releaseDir $versionedZip
+  $zipHash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  "$zipHash  $versionedZip" | Set-Content -Path (Join-Path $releaseDir $zipChecksumFile)
+}
+
 $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
 $installerSha512 = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::Create().ComputeHash($installerBytes))
 $installerSize = (Get-Item $installerPath).Length
@@ -39,6 +55,9 @@ $releaseNotes = if ([string]::IsNullOrWhiteSpace($env:RELEASE_NOTES)) {
 } else {
   $env:RELEASE_NOTES
 }
+# latest.yml is the electron-updater auto-update feed; it only references the
+# NSIS installer because the portable zip is a manual-download convenience and
+# is not consumed by the in-app updater.
 @(
   "version: `"${env:RELEASE_VERSION}`""
   'files:'

@@ -5,21 +5,53 @@ import {
   appendStartupLogDiagnostics,
   createStartupLogDiagnostics,
   detectLogDiagnostics,
+  formatUnsupportedNodeRuntimeMessage,
+  isSupportedNodeRuntime,
 } from "../src/diagnostics.js";
 
 describe("tools-dev diagnostics", () => {
   it("detects native addon ABI mismatches", () => {
-    const diagnostics = detectLogDiagnostics([
-      "Error: The module '/repo/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
-      "was compiled against a different Node.js version using",
-      "NODE_MODULE_VERSION 127. This version of Node.js requires",
-      "NODE_MODULE_VERSION 137. Please try re-compiling or re-installing",
-    ]);
+    const diagnostics = detectLogDiagnostics(
+      [
+        "Error: The module '/repo/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
+        "was compiled against a different Node.js version using",
+        "NODE_MODULE_VERSION 127. This version of Node.js requires",
+        "NODE_MODULE_VERSION 137. Please try re-compiling or re-installing",
+      ],
+      { nodeModuleVersion: "137", nodeVersion: "v24.15.0" },
+    );
 
     assert.equal(diagnostics.length, 1);
     assert.match(diagnostics[0].message, /native Node addon ABI mismatch/);
-    assert.match(diagnostics[0].recommendation, /rebuild better-sqlite3 --pending/);
-    assert.match(diagnostics[0].recommendation, /pnpm install/);
+    assert.match(diagnostics[0].recommendation, /active Node 24 runtime/);
+    assert.match(diagnostics[0].recommendation, /corepack pnpm --filter @open-design\/daemon rebuild better-sqlite3 --pending/);
+    assert.match(diagnostics[0].recommendation, /corepack pnpm install --frozen-lockfile/);
+  });
+
+  it("points ABI mismatches under unsupported Node at Node 24 first", () => {
+    const diagnostics = detectLogDiagnostics(
+      [
+        "Error: better_sqlite3.node was compiled against a different Node.js version using",
+        "NODE_MODULE_VERSION 137. This version of Node.js requires",
+        "NODE_MODULE_VERSION 127.",
+      ],
+      { nodeModuleVersion: "127", nodeVersion: "v22.22.3" },
+    );
+
+    assert.equal(diagnostics.length, 1);
+    assert.match(diagnostics[0].recommendation, /Current tools-dev runtime: Node v22\.22\.3/);
+    assert.match(diagnostics[0].recommendation, /Switch to Node 24 first/);
+    assert.match(diagnostics[0].recommendation, /nvm use 24/);
+  });
+
+  it("formats unsupported Node runtime errors before startup", () => {
+    assert.equal(isSupportedNodeRuntime("v24.15.0"), true);
+    assert.equal(isSupportedNodeRuntime("v22.22.3"), false);
+
+    const message = formatUnsupportedNodeRuntimeMessage({ nodeModuleVersion: "127", nodeVersion: "v22.22.3" });
+    assert.match(message, /tools-dev must run with Node ~24/);
+    assert.match(message, /Current runtime: Node v22\.22\.3 \(NODE_MODULE_VERSION 127\)/);
+    assert.match(message, /corepack pnpm install --frozen-lockfile/);
   });
 
   it("detects missing Next.js package resolution during web startup", () => {
@@ -62,6 +94,6 @@ describe("tools-dev diagnostics", () => {
     assert.match(error.message, /daemon did not expose status in time/);
     assert.match(error.message, /daemon log tail \(\/tmp\/daemon\.log\)/);
     assert.match(error.message, /better_sqlite3\.node/);
-    assert.match(error.message, /pnpm --filter @open-design\/daemon rebuild better-sqlite3 --pending/);
+    assert.match(error.message, /corepack pnpm --filter @open-design\/daemon rebuild better-sqlite3 --pending/);
   });
 });

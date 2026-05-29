@@ -37,6 +37,7 @@ export const INTERNAL_PACKAGES = [
   { directory: "packages/platform", name: "@open-design/platform" },
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },

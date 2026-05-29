@@ -56,16 +56,32 @@ export type ToolsDevCheckResult = {
 
 export type ToolsDevRuntime = {
   daemonPort: number;
+  release: () => Promise<void>;
   webPort: number;
 };
 
 export async function allocateToolsDevRuntime(): Promise<ToolsDevRuntime> {
-  const [daemonPort, webPort] = await Promise.all([findFreePort(), findFreePort()]);
-  if (daemonPort === webPort) return await allocateToolsDevRuntime();
-  return { daemonPort, webPort };
+  const [daemonPort, webPort] = await Promise.all([reserveFreePort(), reserveFreePort()]);
+  if (daemonPort.port === webPort.port) {
+    await Promise.all([daemonPort.release(), webPort.release()]);
+    return await allocateToolsDevRuntime();
+  }
+  let released = false;
+  return {
+    daemonPort: daemonPort.port,
+    webPort: webPort.port,
+    async release() {
+      if (released) return;
+      released = true;
+      await Promise.all([daemonPort.release(), webPort.release()]);
+    },
+  };
 }
 
 export async function startToolsDevWeb(suite: SmokeSuite, runtime: ToolsDevRuntime): Promise<ToolsDevStartResult> {
+  // Keep both ports reserved until immediately before tools-dev starts so
+  // parallel Vitest workers do not race each other for the same "free" port.
+  await runtime.release();
   return await runToolsDevJson<ToolsDevStartResult>(
     suite,
     [
@@ -141,6 +157,13 @@ export async function readToolsDevLogs(suite: SmokeSuite): Promise<Record<string
   );
 }
 
+export function isToolsDevPortConflict(error: unknown): boolean {
+  const text = error instanceof Error
+    ? `${error.message}\n${error.stack ?? ''}`
+    : String(error);
+  return text.includes('EADDRINUSE');
+}
+
 async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T> {
   const useNpmExecPathWithNode = process.env.OD_E2E_PNPM_COMMAND == null
     && pnpmExecPath != null
@@ -179,18 +202,28 @@ function parseJsonOutput<T>(stdout: string): T {
   return JSON.parse(stdout.slice(jsonStart + 1)) as T;
 }
 
-async function findFreePort(): Promise<number> {
+async function reserveFreePort(): Promise<{ port: number; release: () => Promise<void> }> {
   const server = createServer();
   await new Promise<void>((resolveListen, rejectListen) => {
     server.once('error', rejectListen);
     server.listen(0, '127.0.0.1', () => resolveListen());
   });
   const address = server.address();
-  await new Promise<void>((resolveClose, rejectClose) => {
-    server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
-  });
   if (address == null || typeof address === 'string') {
+    await new Promise<void>((resolveClose, rejectClose) => {
+      server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
+    });
     throw new Error('failed to allocate a local TCP port');
   }
-  return address.port;
+  let released = false;
+  return {
+    port: address.port,
+    async release() {
+      if (released) return;
+      released = true;
+      await new Promise<void>((resolveClose, rejectClose) => {
+        server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
+      });
+    },
+  };
 }

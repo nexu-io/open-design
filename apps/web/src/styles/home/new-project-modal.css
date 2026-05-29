@@ -66,6 +66,10 @@
   background: var(--bg-subtle);
   color: var(--text);
 }
+.new-project-modal__close:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
 .new-project-modal__body {
   flex: 1 1 auto;
   min-height: 0;
@@ -81,4 +85,19 @@
   flex: 1 1 auto;
   min-height: 0;
   padding-top: 0;
+}
+.new-project-modal__status {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.new-project-modal__status.error {
+  border-color: color-mix(in oklab, var(--danger, #d4543b) 45%, var(--border));
+  background: color-mix(in oklab, var(--danger, #d4543b) 10%, var(--bg-panel));
+  color: var(--danger, #d4543b);
 }

@@ -51,7 +51,7 @@ function makeDaemonApp(opts: DaemonAppOpts = {}): Express {
 
   app.get('/api/projects/:id/files', (_req, res) => res.json({ files }));
 
-  app.get('/api/projects/:id/raw/*', (_req, res) => {
+  app.get('/api/projects/:id/raw/*splat', (_req, res) => {
     const headers: Record<string, string> = { 'content-type': contentType };
     if (contentLength != null) headers['content-length'] = String(contentLength);
     res.set(headers).send(fileContent);

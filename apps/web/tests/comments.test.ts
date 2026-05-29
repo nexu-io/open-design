@@ -23,11 +23,21 @@ describe('preview comment attachment helpers', () => {
       text: `  ${'Title '.repeat(80)}  `,
       htmlHint: `<h1 class="hero-title" data-od-id="hero-title">${'x'.repeat(240)}</h1>`,
       position: { x: 10.4, y: 20.5, width: 300.2, height: 88.8 },
+      style: {
+        color: 'rgb(26, 25, 22)',
+        fontSize: '13.5px',
+        fontFamily: 'Inter, sans-serif',
+      },
     });
 
     expect(target.text.length).toBeLessThanOrEqual(160);
     expect(target.htmlHint.length).toBeLessThanOrEqual(180);
     expect(target.position).toEqual({ x: 10, y: 21, width: 300, height: 89 });
+    expect(target.style).toMatchObject({
+      color: 'rgb(26, 25, 22)',
+      fontSize: '13.5px',
+      fontFamily: 'Inter, sans-serif',
+    });
   });
 
   it('creates ordered compact send payloads from attached comments', () => {
@@ -233,7 +243,18 @@ describe('preview comment attachment helpers', () => {
 
   it('serializes selected comments into API-mode prompt context without visible input', () => {
     const attachments = commentsToAttachments([
-      comment({ id: 'c1', elementId: 'hero-title', note: 'Only shorten this title' }),
+      comment({
+        id: 'c1',
+        elementId: 'hero-title',
+        note: 'Only shorten this title',
+        style: {
+          color: 'rgb(26, 25, 22)',
+          backgroundColor: 'rgba(255, 255, 255, 0)',
+          fontSize: '13.5px',
+          fontWeight: '500',
+          fontFamily: 'Inter, sans-serif',
+        },
+      }),
     ]);
 
     const content = messageContentWithCommentAttachments('', attachments);
@@ -241,6 +262,8 @@ describe('preview comment attachment helpers', () => {
     expect(content).toContain('(No extra typed instruction.)');
     expect(content).toContain('<attached-preview-comments>');
     expect(content).toContain('selector: [data-od-id="hero-title"]');
+    expect(content).toContain('computedStyle: color: rgb(26, 25, 22)');
+    expect(content).toContain('fontSize: 13.5px');
     expect(content).toContain('comment: Only shorten this title');
   });
 

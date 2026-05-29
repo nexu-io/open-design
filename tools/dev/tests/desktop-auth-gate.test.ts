@@ -33,7 +33,7 @@ type CallRecord =
   | { kind: "inspectDaemon" }
   | { kind: "inspectWeb" }
   | { kind: "stopApp"; app: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB }
-  | { kind: "startDaemonGated"; port: number | null }
+  | { kind: "startDaemonGated"; port: number | null; webPort: number | null }
   | { kind: "startWeb"; port: number | null }
   | { kind: "log"; msg: string };
 
@@ -54,8 +54,8 @@ function makeRecorder(setup: {
     stopApp: async (app) => {
       calls.push({ kind: "stopApp", app });
     },
-    startDaemonGated: async ({ port }) => {
-      calls.push({ kind: "startDaemonGated", port });
+    startDaemonGated: async ({ port, webPort }) => {
+      calls.push({ kind: "startDaemonGated", port, webPort });
     },
     startWeb: async ({ port }) => {
       calls.push({ kind: "startWeb", port });
@@ -126,7 +126,7 @@ describe("ensureDaemonGateForDesktop", () => {
     assert.match((calls[1] as { msg: string }).msg, /restarting daemon/);
     assert.equal(calls[2].kind, "inspectWeb");
     assert.deepEqual(calls[3], { kind: "stopApp", app: APP_KEYS.DAEMON });
-    assert.deepEqual(calls[4], { kind: "startDaemonGated", port: 7456 });
+    assert.deepEqual(calls[4], { kind: "startDaemonGated", port: 7456, webPort: null });
     // Defensive: ensure no web spawn happened.
     assert.equal(calls.find((c) => c.kind === "startWeb"), undefined);
     assert.equal(calls.find((c) => c.kind === "stopApp" && c.app === APP_KEYS.WEB), undefined);
@@ -147,7 +147,7 @@ describe("ensureDaemonGateForDesktop", () => {
     assert.equal(calls[2].kind, "inspectWeb");
     assert.deepEqual(calls[3], { kind: "stopApp", app: APP_KEYS.WEB });
     assert.deepEqual(calls[4], { kind: "stopApp", app: APP_KEYS.DAEMON });
-    assert.deepEqual(calls[5], { kind: "startDaemonGated", port: 7456 });
+    assert.deepEqual(calls[5], { kind: "startDaemonGated", port: 7456, webPort: 5173 });
     assert.deepEqual(calls[6], { kind: "startWeb", port: 5173 });
   });
 
@@ -169,7 +169,7 @@ describe("ensureDaemonGateForDesktop", () => {
     await ensureDaemonGateForDesktop(deps);
     const restart = calls.find((c) => c.kind === "startDaemonGated");
     assert.notEqual(restart, undefined);
-    assert.deepEqual(restart, { kind: "startDaemonGated", port: 17456 });
+    assert.deepEqual(restart, { kind: "startDaemonGated", port: 17456, webPort: null });
   });
 
   it("preserves the running web port across the hardening restart when web is alive", async () => {
@@ -192,7 +192,7 @@ describe("ensureDaemonGateForDesktop", () => {
     assert.notEqual(webRestart, undefined);
     assert.deepEqual(webRestart, { kind: "startWeb", port: 17573 });
     const daemonRestart = calls.find((c) => c.kind === "startDaemonGated");
-    assert.deepEqual(daemonRestart, { kind: "startDaemonGated", port: 17456 });
+    assert.deepEqual(daemonRestart, { kind: "startDaemonGated", port: 17456, webPort: 17573 });
   });
 
   it("falls back to caller options (port:null) when the running URL has no port", async () => {
@@ -209,7 +209,7 @@ describe("ensureDaemonGateForDesktop", () => {
     const { calls, deps } = makeRecorder({ daemon: ungatedNullishUrl, web: null });
     await ensureDaemonGateForDesktop(deps);
     const restart = calls.find((c) => c.kind === "startDaemonGated");
-    assert.deepEqual(restart, { kind: "startDaemonGated", port: null });
+    assert.deepEqual(restart, { kind: "startDaemonGated", port: null, webPort: null });
   });
 
   it("logs a single warn line that names both daemon and web in the restart message", async () => {

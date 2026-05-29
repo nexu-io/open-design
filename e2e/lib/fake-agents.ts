@@ -26,15 +26,15 @@ export type FakeAgentRuntimeOptions = {
 };
 
 const AGENT_BIN_NAMES: Record<FakeAgentId, string> = {
-  claude: 'claude-e2e.js',
-  codex: 'codex-e2e.js',
-  copilot: 'copilot-e2e.js',
-  'cursor-agent': 'cursor-agent-e2e.js',
-  deepseek: 'deepseek-e2e.js',
-  gemini: 'gemini-e2e.js',
-  opencode: 'opencode-e2e.js',
-  qoder: 'qodercli-e2e.js',
-  qwen: 'qwen-e2e.js',
+  claude: 'claude-e2e.cjs',
+  codex: 'codex-e2e.cjs',
+  copilot: 'copilot-e2e.cjs',
+  'cursor-agent': 'cursor-agent-e2e.cjs',
+  deepseek: 'deepseek-e2e.cjs',
+  gemini: 'gemini-e2e.cjs',
+  opencode: 'opencode-e2e.cjs',
+  qoder: 'qodercli-e2e.cjs',
+  qwen: 'qwen-e2e.cjs',
 };
 
 const AGENT_BIN_ENV_KEYS: Record<FakeAgentId, string> = {
@@ -79,12 +79,13 @@ export async function createFakeAgentRuntimes(
   const runtimes = {} as Record<FakeAgentId, FakeAgentRuntime>;
   for (const agentId of runtimeIds) {
     const script = path.join(root, AGENT_BIN_NAMES[agentId]);
+    const parsedScript = path.parse(script);
     const bin = process.platform === 'win32'
-      ? script.replace(/\.js$/i, '.cmd')
+      ? path.join(parsedScript.dir, `${parsedScript.name}.cmd`)
       : script;
     await writeFile(script, renderFakeAgentScript(agentId), 'utf8');
     if (process.platform === 'win32') {
-      await writeFile(bin, '@echo off\r\nnode "%~dp0%~n0.js" %*\r\n', 'utf8');
+      await writeFile(bin, '@echo off\r\nnode "%~dp0%~n0.cjs" %*\r\n', 'utf8');
     } else {
       await chmod(bin, 0o755);
     }
@@ -98,6 +99,8 @@ function renderFakeAgentScript(agentId: FakeAgentId): string {
   return `#!/usr/bin/env node
 const agentId = ${JSON.stringify(agentId)};
 const args = process.argv.slice(2);
+const { mkdir, writeFile: writeFileFs } = require('node:fs/promises');
+const { join } = require('node:path');
 
 if (args.includes('--version')) {
   process.stdout.write(agentId + '-e2e 0.0.0\\n');
@@ -138,6 +141,18 @@ async function emitRun(promptText) {
     emitFailure();
     return;
   }
+  if (promptText.includes('Return an empty daemon smoke response')) {
+    emitEmptySuccess();
+    return;
+  }
+  if (
+    promptText.includes('Create an Open Design plugin for:') &&
+    promptText.includes('produce a folder named generated-plugin')
+  ) {
+    await emitPluginAuthoringRun();
+    return;
+  }
+  const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
   const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
   const isFollowUp = promptText.includes('Create a follow-up deterministic smoke artifact');
   const isDefaultSmoke = promptText.includes('Create a deterministic smoke artifact');
@@ -148,12 +163,55 @@ async function emitRun(promptText) {
   }
   const isRuntime = promptText.match(/Fake runtime smoke for ([a-z0-9-]+)/i);
   const runtimeId = isRuntime ? isRuntime[1] : agentId;
-  const heading = isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
-  const identifier = isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
-  const text = isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
+  const heading = isDelayed ? 'Delayed Daemon Smoke' : isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
+  const identifier = isDelayed ? 'delayed-daemon-smoke' : isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
+  const text = isDelayed ? 'Generated after a delayed daemon turn.' : isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
   const html = '<!doctype html><html><body><main><h1>' + heading + '</h1><p>' + text + '</p></main></body></html>';
   const artifact = '<artifact identifier="' + identifier + '" type="text/html" title="' + heading + '">' + html + '</artifact>';
-  emitSuccess(artifact, isChunked);
+  const assistantText = isDelayed
+    ? 'I recovered the delayed reasoning path and will persist the artifact now.\\n\\n' + artifact
+    : artifact;
+  if (isDelayed) {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+  emitSuccess(assistantText, isChunked, isDelayed);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitPluginAuthoringRun() {
+  const folder = join(process.cwd(), 'generated-plugin');
+  await mkdir(join(folder, 'examples'), { recursive: true });
+  await writeFileFs(
+    join(folder, 'open-design.json'),
+    JSON.stringify({
+      specVersion: 1,
+      name: 'generated-plugin',
+      version: '0.1.0',
+      description: 'Fake plugin authoring smoke scaffold.',
+      mode: 'agent',
+      taskKind: 'new-generation',
+      inputs: [{ id: 'prompt', type: 'string', label: 'Prompt' }],
+    }, null, 2) + '\\n',
+    'utf8',
+  );
+  await writeFileFs(
+    join(folder, 'SKILL.md'),
+    '# Generated Plugin\\n\\nThis fake plugin exists for plugin authoring smoke coverage.\\n',
+    'utf8',
+  );
+  await writeFileFs(
+    join(folder, 'examples', 'demo.md'),
+    '# Demo\\n\\nGenerated by the fake plugin authoring runtime.\\n',
+    'utf8',
+  );
+  const summary = [
+    'Created generated-plugin with open-design.json, SKILL.md, and examples/demo.md.',
+    'od plugin validate: passed',
+    'od plugin pack: generated-plugin-0.1.0.tgz',
+    'od plugin install --source: passed',
+  ].join('\\n');
+  emitSuccess(summary, false, false);
   process.exitCode = 0;
   exitSoon(0);
 }
@@ -166,7 +224,7 @@ function exitSoon(code) {
   setTimeout(() => process.exit(code), 10);
 }
 
-function emitSuccess(artifact, isChunked) {
+function emitSuccess(artifact, isChunked, includeThinking) {
   const first = artifact.slice(0, Math.ceil(artifact.length / 2));
   const second = artifact.slice(Math.ceil(artifact.length / 2));
   switch (agentId) {
@@ -183,7 +241,16 @@ function emitSuccess(artifact, isChunked) {
       return;
     case 'claude':
       writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
-      writeJson({ type: 'assistant', message: { id: 'msg-1', content: [{ type: 'text', text: artifact }] } });
+      writeJson({
+        type: 'assistant',
+        message: {
+          id: 'msg-1',
+          content: [
+            ...(includeThinking ? [{ type: 'thinking', thinking: 'Recovered delayed reasoning trace.' }] : []),
+            { type: 'text', text: artifact },
+          ],
+        },
+      });
       writeJson({ type: 'result', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, duration_ms: 1, stop_reason: 'end_turn' });
       return;
     case 'gemini':
@@ -312,6 +379,21 @@ function emitFailure() {
       process.stderr.write('intentional fake ' + agentId + ' failure\\n');
       process.exitCode = 1;
       exitSoon(1);
+  }
+}
+
+function emitEmptySuccess() {
+  switch (agentId) {
+    case 'codex':
+      writeJson({ type: 'thread.started' });
+      writeJson({ type: 'turn.started' });
+      writeJson({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 0 } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    default:
+      process.exitCode = 0;
+      exitSoon(0);
   }
 }
 }

@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { projectFileUrl } from '../providers/registry';
+import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import { buildSrcdoc } from '../runtime/srcdoc';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import {
+  createFileSystemReadError,
+  FILE_SYSTEM_READ_ERROR_MESSAGE,
+  isFileSystemReadError,
+} from '../utils/fileSystemErrors';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -30,7 +38,14 @@ interface Props {
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
+}
+
+interface ActionNotice {
+  message: string;
+  url?: string;
 }
 
 type DesignFilesGroupMode = 'kind' | 'modified';
@@ -65,6 +80,35 @@ const MODIFIED_SECTION_LABEL_KEY: Record<ModifiedSection, keyof Dict> = {
   older: 'designFiles.modifiedOlder',
 };
 
+function buildActionNotice(message: string, url?: string): ActionNotice {
+  const trimmedMessage = message.trim();
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl) return { message: trimmedMessage };
+  const normalizedMessage = trimmedMessage.replace(new RegExp(`\\s*${escapeRegExp(trimmedUrl)}\\s*$`), '');
+  return { message: normalizedMessage.trim() || trimmedUrl, url: trimmedUrl };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
+  if (!notice) return null;
+  return (
+    <>
+      <span>{notice.message}</span>
+      {notice.url ? (
+        <>
+          {' '}
+          <a href={notice.url} target="_blank" rel="noreferrer">
+            {notice.url}
+          </a>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
  * Claude Design's "Design Files" surface: grouped sections, hover-revealed
@@ -88,10 +132,14 @@ export function DesignFilesPanel({
   uploadError = null,
   onClearUploadError,
   onPluginFolderAgentAction,
+  activePluginActionPaths = new Set(),
+  hiddenPluginActionPaths = new Set(),
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
@@ -105,7 +153,7 @@ export function DesignFilesPanel({
   const [deleting, setDeleting] = useState(false);
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
-  const [installNotice, setInstallNotice] = useState<string | null>(null);
+  const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [groupMode, setGroupMode] = useState<DesignFilesGroupMode>('kind');
   const [collapsedModifiedSections, setCollapsedModifiedSections] = useState<
     Set<ModifiedSection>
@@ -115,12 +163,36 @@ export function DesignFilesPanel({
   const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const [currentDir, setCurrentDir] = useState<string>('');
+
+  // Derive immediate subdirectories and files at the current directory level
+  // from the flat files list. Files with names like "a/b/c.html" contribute
+  // "a" as a directory when currentDir is '' and "b" when currentDir is "a".
+  const { dirsAtCurrentDir, filesAtCurrentDir } = useMemo(() => {
+    const prefix = currentDir === '' ? '' : `${currentDir}/`;
+    const dirs = new Set<string>();
+    const localFiles: ProjectFile[] = [];
+    for (const f of files) {
+      if (!f.name.startsWith(prefix)) continue;
+      const remainder = f.name.slice(prefix.length);
+      const slashIdx = remainder.indexOf('/');
+      if (slashIdx === -1) {
+        localFiles.push(f);
+      } else {
+        dirs.add(remainder.slice(0, slashIdx));
+      }
+    }
+    return {
+      dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
+      filesAtCurrentDir: localFiles,
+    };
+  }, [files, currentDir]);
 
   const kindCounts = useMemo(() => {
     const counts = new Map<ProjectFileKind, number>();
-    for (const f of files) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
+    for (const f of filesAtCurrentDir) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
     return counts;
-  }, [files]);
+  }, [filesAtCurrentDir]);
 
   const availableKinds = useMemo(
     () =>
@@ -148,9 +220,9 @@ export function DesignFilesPanel({
   }, [availableKinds]);
 
   const filteredFiles = useMemo(() => {
-    if (kindFilter.size === 0) return files;
-    return files.filter((f) => kindFilter.has(f.kind));
-  }, [files, kindFilter]);
+    if (kindFilter.size === 0) return filesAtCurrentDir;
+    return filesAtCurrentDir.filter((f) => kindFilter.has(f.kind));
+  }, [filesAtCurrentDir, kindFilter]);
 
   const sortedFiles = useMemo(() => {
     return [...filteredFiles].sort((a, b) => {
@@ -195,7 +267,7 @@ export function DesignFilesPanel({
   );
   const rangeStart = safePage * effectivePageSize + 1;
   const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
-  const allPageSelected = pageFiles.every((f) => selected.has(f.name));
+  const allPageSelected = pageFiles.length > 0 && pageFiles.every((f) => selected.has(f.name));
   const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
   const hasMultiplePages = totalPages > 1;
   const showListControls = sortedFiles.length > 15 || selected.size > 0;
@@ -229,6 +301,31 @@ export function DesignFilesPanel({
       return changed ? next : prev;
     });
   }, [filteredFiles, kindFilter]);
+
+  // Reset page, selection, and renaming state when the user navigates
+  // into or out of a directory.
+  useEffect(() => {
+    setPage(0);
+    setSelected(new Set());
+    setRenaming(null);
+  }, [currentDir]);
+
+  // Navigate up to the nearest ancestor that still exists when files under
+  // currentDir disappear (e.g. after deleting the last file in a subfolder).
+  useEffect(() => {
+    if (currentDir === '') return;
+    const prefix = `${currentDir}/`;
+    if (files.some((f) => f.name.startsWith(prefix))) return;
+    const parts = currentDir.split('/');
+    for (let i = parts.length - 1; i > 0; i--) {
+      const ancestor = parts.slice(0, i).join('/');
+      if (files.some((f) => f.name.startsWith(`${ancestor}/`))) {
+        setCurrentDir(ancestor);
+        return;
+      }
+    }
+    setCurrentDir('');
+  }, [files, currentDir]);
 
   // Outside-click + escape to close the filter popover. Stops short of a
   // full focus trap because the popover hosts only checkboxes plus a
@@ -397,12 +494,18 @@ export function DesignFilesPanel({
   function startRename(name: string) {
     setMenuPos(null);
     setPreview(name);
-    setRenaming({ name, draft: name, saving: false });
+    const draft = currentDir === '' ? name : name.slice(currentDir.length + 1);
+    setRenaming({ name, draft, saving: false });
   }
 
   async function commitRename(name: string, draft: string) {
-    const nextName = draft.trim();
-    if (!nextName || nextName === name) {
+    const nextBasename = draft.trim();
+    if (!nextBasename) {
+      setRenaming(null);
+      return;
+    }
+    const nextName = currentDir === '' ? nextBasename : `${currentDir}/${nextBasename}`;
+    if (nextName === name) {
       setRenaming(null);
       return;
     }
@@ -550,7 +653,7 @@ export function DesignFilesPanel({
               }}
             >
               <span className="df-row-name-wrap">
-                <span className="df-row-name">{f.name}</span>
+                <span className="df-row-name">{currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}</span>
                 <span className="df-row-sub">{humanBytes(f.size)}</span>
               </span>
             </button>
@@ -597,8 +700,38 @@ export function DesignFilesPanel({
     );
   }
 
+  function renderDirRow(dirName: string) {
+    const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
+    const prefix = `${fullPath}/`;
+    const count = files.filter((f) => f.name.startsWith(prefix)).length;
+    return (
+      <tr key={`dir:${fullPath}`} className="df-file-row df-dir-row">
+        <td className="df-cell-check" />
+        <td className="df-cell-icon df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <span className="df-row-icon" data-kind="folder" aria-hidden>
+            <Icon name="folder" size={14} />
+          </span>
+        </td>
+        <td className="df-cell-name df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <button type="button" className="df-row-name-btn" onClick={() => setCurrentDir(fullPath)}>
+            <span className="df-row-name-wrap">
+              <span className="df-row-name">{dirName}</span>
+              <span className="df-row-sub">{t('designFiles.folderCount', { n: count })}</span>
+            </span>
+          </button>
+        </td>
+        <td className="df-cell-kind df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <span className="df-kind-label">{t('designFiles.kindFolder')}</span>
+        </td>
+        <td className="df-cell-time df-cell-openable" onClick={() => setCurrentDir(fullPath)} />
+        <td className="df-cell-menu" />
+      </tr>
+    );
+  }
+
   function renderModifiedSections() {
-    return visibleModifiedSections.flatMap((section) => {
+    const dirRows = dirsAtCurrentDir.map((d) => renderDirRow(d));
+    const sectionRows = visibleModifiedSections.flatMap((section) => {
       const sectionFiles = modifiedGroups[section];
       const collapsed = collapsedModifiedSections.has(section);
       const label = t(MODIFIED_SECTION_LABEL_KEY[section]);
@@ -621,9 +754,11 @@ export function DesignFilesPanel({
         ...(collapsed ? [] : sectionFiles.map(renderFileRow)),
       ];
     });
+    return [...dirRows, ...sectionRows];
   }
 
   function renderKindSections() {
+    const dirRows = dirsAtCurrentDir.map((d) => renderDirRow(d));
     const grouped = new Map<ProjectFileKind, ProjectFile[]>();
     for (const file of pageFiles) {
       const next = grouped.get(file.kind) ?? [];
@@ -631,7 +766,7 @@ export function DesignFilesPanel({
       grouped.set(file.kind, next);
     }
 
-    return [...grouped.entries()]
+    const kindRows = [...grouped.entries()]
       .sort(([a], [b]) => kindSortPriority(a) - kindSortPriority(b))
       .flatMap(([kind, kindFiles]) => [
         <tr className="df-section-row" key={`${kind}-label`}>
@@ -644,6 +779,7 @@ export function DesignFilesPanel({
         </tr>,
         ...kindFiles.map(renderFileRow),
       ]);
+    return [...dirRows, ...kindRows];
   }
 
   async function handleBatchDownload() {
@@ -687,8 +823,14 @@ export function DesignFilesPanel({
     ev.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
-    const dropped = await filesFromDataTransfer(ev.dataTransfer);
-    if (dropped.length > 0) onUploadFiles(dropped);
+    setDropReadError(null);
+    try {
+      const dropped = await filesFromDataTransfer(ev.dataTransfer);
+      if (dropped.length > 0) onUploadFiles(dropped);
+    } catch (error) {
+      if (!isFileSystemReadError(error)) throw error;
+      setDropReadError(FILE_SYSTEM_READ_ERROR_MESSAGE);
+    }
   }
 
   async function handlePluginFolderAgentAction(
@@ -703,8 +845,16 @@ export function DesignFilesPanel({
       setSharingFolder(`${action}:${relativePath}`);
     }
     try {
-      await onPluginFolderAgentAction(relativePath, action);
-      setInstallNotice('Sent to the agent. The CLI run will continue in chat.');
+      const outcome = await onPluginFolderAgentAction(relativePath, action);
+      const url = outcome && typeof outcome === 'object' && typeof outcome.url === 'string'
+        ? outcome.url
+        : '';
+      const message = outcome && typeof outcome === 'object' && typeof outcome.message === 'string'
+        ? outcome.message
+        : '';
+      if (message || url) setInstallNotice(buildActionNotice(message || url, url));
+    } catch (err) {
+      setInstallNotice({ message: err instanceof Error ? err.message : String(err) });
     } finally {
       setInstallingFolder(null);
       setSharingFolder(null);
@@ -729,7 +879,14 @@ export function DesignFilesPanel({
       <div className="df-actions">
         <button
           type="button"
-          onClick={() => void handleBatchDownload()}
+          onClick={() => {
+            trackFileManagerClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'file_manager',
+              element: 'download_as_zip',
+            });
+            void handleBatchDownload();
+          }}
           title={t('designFiles.downloadSelected', { n: selected.size })}
         >
           <Icon name="download" size={13} />
@@ -874,18 +1031,23 @@ export function DesignFilesPanel({
       </div>
     ) : null;
 
+  const visibleUploadError = uploadError ?? dropReadError;
+
   return (
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
         <div className="df-body">
-          {uploadError && !preview ? (
+          {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
-              <span>{uploadError}</span>
-              {onClearUploadError ? (
+              <span>{visibleUploadError}</span>
+              {onClearUploadError || dropReadError ? (
                 <button
                   type="button"
                   data-testid="upload-error-dismiss"
-                  onClick={onClearUploadError}
+                  onClick={() => {
+                    setDropReadError(null);
+                    onClearUploadError?.();
+                  }}
                 >
                   Dismiss
                 </button>
@@ -898,6 +1060,37 @@ export function DesignFilesPanel({
             {kindFilterControl}
             {fileActions}
           </div>
+          {currentDir !== '' ? (
+            <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
+              <button
+                type="button"
+                className="df-breadcrumb-btn"
+                onClick={() => setCurrentDir('')}
+              >
+                {t('designFiles.crumbs')}
+              </button>
+              {currentDir.split('/').map((segment, idx, parts) => {
+                const path = parts.slice(0, idx + 1).join('/');
+                const isLast = idx === parts.length - 1;
+                return (
+                  <span key={path} className="df-breadcrumb-segment">
+                    <span className="df-breadcrumb-sep" aria-hidden>/</span>
+                    {isLast ? (
+                      <span className="df-breadcrumb-current">{segment}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="df-breadcrumb-btn"
+                        onClick={() => setCurrentDir(path)}
+                      >
+                        {segment}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+          ) : null}
           {files.length === 0 && liveArtifacts.length === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
@@ -958,9 +1151,13 @@ export function DesignFilesPanel({
                     <span className="df-section-count">{pluginFolders.length}</span>
                   </div>
                   {installNotice ? (
-                    <div className="df-inline-notice" role="status">{installNotice}</div>
+                    <div className="df-inline-notice" role="status">
+                      <ActionNoticeView notice={installNotice} />
+                    </div>
                   ) : null}
-                  {pluginFolders.map((folder) => (
+                  {pluginFolders.filter((folder) => !hiddenPluginActionPaths.has(folder.path)).map((folder) => {
+                    const actionBusy = activePluginActionPaths.has(folder.path);
+                    return (
                     <div
                       key={folder.path}
                       className="df-row df-row-plugin-folder"
@@ -988,7 +1185,7 @@ export function DesignFilesPanel({
                             type="button"
                             className="df-plugin-install"
                             data-testid={`design-plugin-folder-install-${folder.path}`}
-                            disabled={installingFolder !== null || sharingFolder !== null}
+                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
                             onClick={() =>
                               void handlePluginFolderAgentAction(folder.path, 'install')
                             }
@@ -999,7 +1196,7 @@ export function DesignFilesPanel({
                             type="button"
                             className="df-plugin-install"
                             data-testid={`design-plugin-folder-publish-${folder.path}`}
-                            disabled={installingFolder !== null || sharingFolder !== null}
+                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
                             onClick={() =>
                               void handlePluginFolderAgentAction(folder.path, 'publish')
                             }
@@ -1010,7 +1207,7 @@ export function DesignFilesPanel({
                             type="button"
                             className="df-plugin-install"
                             data-testid={`design-plugin-folder-contribute-${folder.path}`}
-                            disabled={installingFolder !== null || sharingFolder !== null}
+                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
                             onClick={() =>
                               void handlePluginFolderAgentAction(folder.path, 'contribute')
                             }
@@ -1020,10 +1217,10 @@ export function DesignFilesPanel({
                         </div>
                       ) : null}
                     </div>
-                  ))}
+                  )})}
                 </div>
               ) : null}
-              {sortedFiles.length > 0 ? (
+              {(sortedFiles.length > 0 || dirsAtCurrentDir.length > 0) ? (
                 <>
                   {showListControls ? (
                     <div className="df-pagination df-pagination-start">
@@ -1121,7 +1318,7 @@ export function DesignFilesPanel({
                         ? renderModifiedSections()
                         : groupMode === 'kind'
                           ? renderKindSections()
-                          : pageFiles.map(renderFileRow)}
+                          : [...dirsAtCurrentDir.map(renderDirRow), ...pageFiles.map(renderFileRow)]}
                     </tbody>
                   </table>
                   {hasMultiplePages ? (
@@ -1192,7 +1389,14 @@ export function DesignFilesPanel({
         </div>
       </div>
       {preview && previewFile ? (
+        // Key on the file name so React unmounts the previous DfPreview
+        // (and its iframe / image element) when the user clicks a
+        // different file. Without this, React diffing reuses the same
+        // iframe DOM node and the browser keeps showing the first
+        // file's contents — only the `src` prop changes but the iframe
+        // never actually navigates.
         <DfPreview
+          key={previewFile.name}
           projectId={projectId}
           file={previewFile}
           onOpen={() => onOpenFile(previewFile.name)}
@@ -1295,7 +1499,7 @@ function DfPreview({
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
-          <iframe title={file.name} src={url} sandbox="allow-scripts" />
+          <HtmlPreviewThumbnail projectId={projectId} file={file} />
         ) : file.kind === 'video' ? (
           <video
             src={`${url}?v=${Math.round(file.mtime)}`}
@@ -1358,6 +1562,46 @@ function DfPreview({
   );
 }
 
+function HtmlPreviewThumbnail({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: ProjectFile;
+}) {
+  const url = projectFileUrl(projectId, file.name);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`${url}?v=${Math.round(file.mtime)}`)
+      .then((response) => (response.ok ? response.text() : null))
+      .then((html) => {
+        if (cancelled || html === null) return;
+        setSrcDoc(buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) }));
+      })
+      .catch(() => {
+        if (!cancelled) setSrcDoc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.mtime, file.name, projectId, url]);
+
+  return (
+    <iframe
+      title={file.name}
+      src={srcDoc ? undefined : url}
+      srcDoc={srcDoc ?? undefined}
+      sandbox="allow-scripts allow-downloads"
+    />
+  );
+}
+
+function baseDirForFile(name: string): string {
+  const index = name.lastIndexOf('/');
+  return index >= 0 ? name.slice(0, index + 1) : '';
+}
+
 function kindSortPriority(kind: ProjectFileKind): number {
   if (kind === 'html') return 0;
   if (kind === 'text') return 1;
@@ -1408,11 +1652,17 @@ function dateDaysBefore(date: Date, days: number): Date {
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
   const items = Array.from(dataTransfer.items ?? []);
-  if (items.length === 0) return Array.from(dataTransfer.files ?? []);
+  const fallbackFiles = Array.from(dataTransfer.files ?? []);
+  if (items.length === 0) return fallbackFiles;
 
-  const files = await Promise.all(items.map(filesFromDataTransferItem));
-  const flattened = files.flat();
-  return flattened.length > 0 ? flattened : Array.from(dataTransfer.files ?? []);
+  const results = await Promise.allSettled(items.map(filesFromDataTransferItem));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) {
+    if (fallbackFiles.length > 0) return fallbackFiles;
+    throw rejected.reason;
+  }
+  const files = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return files.length > 0 ? files : fallbackFiles;
 }
 
 async function filesFromDataTransferItem(item: DataTransferItem): Promise<File[]> {
@@ -1442,11 +1692,19 @@ async function filesFromFileSystemEntry(entry: FileSystemEntry): Promise<File[]>
 }
 
 function fileFromEntry(entry: FileSystemFileEntryWithFile): Promise<File> {
-  return new Promise((resolve, reject) => entry.file(resolve, reject));
+  return new Promise((resolve, reject) => {
+    entry.file(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped file', error));
+    });
+  });
 }
 
 function readEntryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
-  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+  return new Promise((resolve, reject) => {
+    reader.readEntries(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped folder', error));
+    });
+  });
 }
 
 function kindGlyph(kind: ProjectFileKind): string {

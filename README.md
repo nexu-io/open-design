@@ -1,15 +1,15 @@
-# Open Design
+# Open Design — the open-source Claude Design alternative
+
+> **Open Design is the open-source, local-first alternative to [Claude Design][cd].** Web-deployable, BYOK at every layer — **16 coding-agent CLIs** auto-detected on your `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) become the design engine, driven by **137 composable Skills** and **150 brand-grade Design Systems**. No CLI? An OpenAI-compatible BYOK proxy is the same loop minus the spawn.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` is here. Design's old world ends here.
 >
-> An open, agent-native alternative to Claude Design / Figma — 40k stars in two weeks got us this far. **We need you to push the rest of the way.**
+> The open-source alternative to Claude Design / Figma — 40k stars in two weeks got us this far. **We need you to push the rest of the way.**
 >
 > **Iterating fast on `main`** — 0.8.0 is the next phase of Open Design. Ship a PR, drop a wild idea, file a bug — what you bring is what this movement becomes.
 >
 > → [**Read the announcement, grab the installer, join the movement**](https://github.com/nexu-io/open-design/discussions/1727) · runs side-by-side with your current 0.7.
-
-> **The open-source alternative to [Claude Design][cd].** Local-first, web-deployable, BYOK at every layer — **16 coding-agent CLIs** auto-detected on your `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) become the design engine, driven by **31 composable Skills** and **72 brand-grade Design Systems**. No CLI? An OpenAI-compatible BYOK proxy is the same loop minus the spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
@@ -30,8 +30,8 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#supported-coding-agents"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
-  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
+  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-150-orange?style=flat-square" /></a>
+  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-137-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="https://x.com/nexudotio"><img alt="Follow @nexudotio on X" src="https://img.shields.io/badge/follow-%40nexudotio-1DA1F2?style=flat-square&logo=x&logoColor=white" /></a>
   <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
@@ -63,10 +63,10 @@ OD stands on four open-source shoulders:
 | | What you get |
 |---|---|
 | **Coding-agent CLIs (16)** | Claude Code · Codex CLI · Devin for Terminal · Cursor Agent · Gemini CLI · OpenCode · Qwen Code · Qoder CLI · GitHub Copilot CLI · Hermes (ACP) · Kimi CLI (ACP) · Pi (RPC) · Kiro CLI (ACP) · Kilo (ACP) · Mistral Vibe CLI (ACP) · DeepSeek TUI — auto-detected on `PATH`, swap with one click |
-| **BYOK fallback** | Protocol-specific API proxy at `/api/proxy/{anthropic,openai,azure,google}/stream` — paste `baseUrl` + `apiKey` + `model`, choose Anthropic / OpenAI / Azure OpenAI / Google Gemini, and the daemon normalizes SSE back to the same chat stream. Internal-IP/SSRF blocked at the daemon edge. |
-| **Design systems built-in** | **129** — 2 hand-authored starters + 70 product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) from [`awesome-design-md`][acd2], plus 57 design skills from [`awesome-design-skills`][ads] added directly under `design-systems/` |
-| **Skills built-in** | **31** — 27 in `prototype` mode (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …) + 4 in `deck` mode (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`). Grouped in the picker by `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
-| **Media generation** | Image · video · audio surfaces ship alongside the design loop. **gpt-image-2** (Azure / OpenAI) for posters, avatars, infographics, illustrated maps · **Seedance 2.0** (ByteDance) for cinematic 15s text-to-video and image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) for HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). **93** ready-to-replicate prompts gallery — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — under [`prompt-templates/`](prompt-templates/), with preview thumbnails and source attribution. Same chat surface as code; outputs a real `.mp4` / `.png` chip into the project workspace. |
+| **BYOK fallback** | Protocol-specific API proxy at `/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` — paste `baseUrl` + `apiKey` + `model`, choose Anthropic / OpenAI / Azure OpenAI / Google Gemini / Ollama Cloud / SenseAudio, and the daemon normalizes SSE back to the same chat stream. SenseAudio chat additionally exposes `generate_image` and `generate_video` tools so the model can write rendered artifacts straight into the active project's folder. Internal-IP/SSRF blocked at the daemon edge. |
+| **Design systems built-in** | **150** — hand-authored starters plus product systems (Linear, Stripe, Vercel, Airbnb, Tesla, Notion, Anthropic, Apple, Cursor, Supabase, Figma, Xiaohongshu, …) from [`awesome-design-md`][acd2], with curated entries from [`awesome-design-skills`][ads] added directly under `design-systems/` |
+| **Skills built-in** | **137** — across `prototype` (web-prototype, saas-landing, dashboard, mobile-app, gamified-app, social-carousel, magazine-poster, dating-web, sprite-animation, motion-frames, critique, tweaks, wireframe-sketch, pm-spec, eng-runbook, finance-report, hr-onboarding, invoice, kanban-board, team-okrs, …), `deck` (`guizang-ppt` · `simple-deck` · `replit-deck` · `weekly-update`), and `image` / `video` / `audio` / `template` / `design-system` / `utility` modes. Grouped in the picker by `scenario`: design / marketing / operation / engineering / product / finance / hr / sale / personal. |
+| **Media generation** | Image · video · audio surfaces ship alongside the design loop. **gpt-image-2** (Azure / OpenAI) for posters, avatars, infographics, illustrated maps · **Seedance 2.0** (ByteDance) for cinematic 15s text-to-video and image-to-video · **HyperFrames** ([heygen-com/hyperframes](https://github.com/heygen-com/hyperframes)) for HTML→MP4 motion graphics (product reveals, kinetic typography, data charts, social overlays, logo outros). Other image generators can already plug in through **Custom Image API** / **ImageRouter** when they expose an OpenAI-compatible image endpoint; workflow-first local runtimes such as **ComfyUI** are tracked separately as planned adapters. **93** ready-to-replicate prompts gallery — 43 gpt-image-2 + 39 Seedance + 11 HyperFrames — under [`prompt-templates/`](prompt-templates/), with preview thumbnails and source attribution. Same chat surface as code; outputs a real `.mp4` / `.png` chip into the project workspace. |
 | **Visual directions** | 5 curated schools (Editorial Monocle · Modern Minimal · Warm Soft · Tech Utility · Brutalist Experimental) — each ships a deterministic OKLch palette + font stack ([`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/directions.ts)) |
 | **Device frames** | iPhone 15 Pro · Pixel · iPad Pro · MacBook · Browser Chrome — pixel-accurate, shared across skills under [`assets/frames/`](assets/frames/) |
 | **Agent runtime** | Local daemon spawns the CLI in your project folder — agent gets real `Read`, `Write`, `Bash`, `WebFetch` against a real on-disk environment, with Windows `ENAMETOOLONG` fallbacks (stdin / prompt-file) on every adapter |
@@ -111,8 +111,8 @@ Linux AppImage packaging is available through the optional release lane and is c
 <sub><b>Sandboxed preview</b> — every <code>&lt;artifact&gt;</code> renders in a clean srcdoc iframe. Editable in place via the file workspace; downloadable as HTML, PDF, ZIP.</sub>
 </td>
 <td width="50%">
-<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 72-system library" /><br/>
-<sub><b>72-system library</b> — every product system shows its 4-color signature. Click for the full <code>DESIGN.md</code>, swatch grid, and live showcase.</sub>
+<img src="docs/screenshots/06-design-systems-library.png" alt="06 · 150-system library" /><br/>
+<sub><b>150-system library</b> — every product system shows its 4-color signature. Click for the full <code>DESIGN.md</code>, swatch grid, and live showcase.</sub>
 </td>
 </tr>
 <tr>
@@ -129,9 +129,9 @@ Linux AppImage packaging is available through the optional release lane and is c
 
 ## Skills
 
-**31 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
+**137 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
-Two top-level **modes** carry the catalog: **`prototype`** (27 skills — anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (4 skills — horizontal-swipe presentations with deck-framework chrome). The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+Two **modes** anchor the interactive catalog: **`prototype`** (anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (horizontal-swipe presentations with deck-framework chrome). The catalog also ships `image`, `video`, `audio`, `template`, `design-system`, and `utility` modes for media generation, catalog updaters, and post-export audit helpers. The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
 ### Showcase examples
 
@@ -259,8 +259,8 @@ What you compose at send time isn't "system + user". It's:
 ```
 DISCOVERY directives  (turn-1 form, turn-2 brand branch, TodoWrite, 5-dim critique)
   + identity charter   (OFFICIAL_DESIGNER_PROMPT, anti-AI-slop, junior-pass)
-  + active DESIGN.md   (72 systems available)
-  + active SKILL.md    (31 skills available)
+  + active DESIGN.md   (150 systems available)
+  + active SKILL.md    (137 skills available)
   + project metadata   (kind, fidelity, speakerNotes, animations, inspiration ids)
   + skill side files   (auto-injected pre-flight: read assets/template.html + references/*.md)
   + (deck kind, no skill seed) DECK_FRAMEWORK_DIRECTIVE   (nav / counter / scroll / print)
@@ -304,7 +304,7 @@ Every layer is composable. Every layer is a file you can edit. Read [`apps/daemo
 | Frontend | Next.js 16 App Router + React 18 + TypeScript, Vercel-deployable |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3`; tables: `projects` · `conversations` · `messages` · `tabs` · `templates` |
 | Agent transport | `child_process.spawn`; typed-event parsers for `claude-stream-json` (Claude Code), `qoder-stream-json` (Qoder CLI), `copilot-stream-json` (Copilot), `json-event-stream` per-CLI parsers (Codex / Gemini / OpenCode / Cursor Agent), `acp-json-rpc` (Devin / Hermes / Kimi / Kiro / Kilo / Mistral Vibe via Agent Client Protocol), `pi-rpc` (Pi via stdio JSON-RPC), `plain` (Qwen Code / DeepSeek TUI) |
-| BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google}/stream` → provider-specific upstream APIs, normalized `delta/end/error` SSE; allows loopback local LLM providers, rejects non-loopback private/link-local/CGNAT/multicast/reserved hosts, and disables upstream redirects at the daemon edge |
+| BYOK proxy | `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` → provider-specific upstream APIs, normalized `delta/end/error` SSE; allows loopback local LLM providers, rejects non-loopback private/link-local/CGNAT/multicast/reserved hosts, and disables upstream redirects at the daemon edge |
 | Storage | Plain files in `.od/projects/<id>/` + SQLite at `.od/app.sqlite` + credentials at `.od/media-config.json` (gitignored, auto-created). `OD_DATA_DIR=<dir>` relocates all daemon data (used for test isolation and read-only-install setups); `OD_MEDIA_CONFIG_DIR=<dir>` further narrows the override to just `media-config.json` for setups that want to keep API keys outside the data dir |
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
 | Export | HTML (inline assets) · PDF (browser print, deck-aware) · PPTX (agent-driven via skill) · ZIP (archiver) · Markdown |
@@ -338,9 +338,25 @@ docker compose version
 
 #### Start Open Design
 
-```bash id="m9w43w"
-git clone https://github.com/nexu-io/open-design.git
-cd open-design/deploy
+1. Clone the repository, change to the deploy directory, and copy the environment template:
+
+   ```bash
+   git clone https://github.com/nexu-io/open-design.git
+   cd open-design/deploy
+   cp .env.example .env
+   ```
+
+2. Generate a secure token:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+
+Then start the service:
+
+```bash
 docker compose up -d
 ```
 
@@ -392,7 +408,7 @@ For desktop/background startup, fixed-port restarts, and media generation dispat
 The first load:
 
 1. Detects which agent CLIs you have on `PATH` and picks one automatically.
-2. Loads 31 skills + 72 design systems.
+2. Loads 137 skills + 150 design systems.
 3. Pops the welcome dialog so you can paste an Anthropic key (only needed for the BYOK fallback path).
 4. **Auto-creates `./.od/`** — the local runtime folder for the SQLite project DB, per-project artifacts, and saved renders. There is no `od init` step; the daemon `mkdir`s everything it needs on boot.
 
@@ -693,7 +709,7 @@ open-design/
 │   ├── sidecar/                   ← generic sidecar runtime primitives
 │   └── platform/                  ← generic process/platform primitives
 │
-├── skills/                        ← 31 SKILL.md skill bundles (27 prototype + 4 deck)
+├── skills/                        ← 137 SKILL.md skill bundles (prototype, deck, image, video, audio, template, design-system, utility)
 │   ├── web-prototype/             ← default for prototype mode
 │   ├── saas-landing/  dashboard/  pricing-page/  docs-page/  blog-post/
 │   ├── mobile-app/  mobile-onboarding/  gamified-app/
@@ -708,7 +724,7 @@ open-design/
 │       ├── assets/template.html   ← seed
 │       └── references/{themes,layouts,components,checklist}.md
 │
-├── design-systems/                ← 72 DESIGN.md systems
+├── design-systems/                ← 150 DESIGN.md systems
 │   ├── default/                   ← Neutral Modern (starter)
 │   ├── warm-editorial/            ← Warm Editorial (starter)
 │   ├── linear-app/  vercel/  stripe/  airbnb/  notion/  cursor/  apple/  …
@@ -750,10 +766,10 @@ open-design/
 ## Design Systems
 
 <p align="center">
-  <img src="docs/assets/design-systems-library.png" alt="The 72 design systems library — style guide spread" width="100%" />
+  <img src="docs/assets/design-systems-library.png" alt="The 150 design systems library — style guide spread" width="100%" />
 </p>
 
-72 systems out of the box, each as a single [`DESIGN.md`](design-systems/README.md):
+150 systems out of the box, each as a single [`DESIGN.md`](design-systems/README.md):
 
 <details>
 <summary><b>Full catalog</b> (click to expand)</summary>
@@ -798,13 +814,19 @@ Full spec → [`apps/daemon/src/prompts/directions.ts`](apps/daemon/src/prompts/
 
 OD doesn't stop at code. The same chat surface that produces `<artifact>` HTML also drives **image**, **video**, and **audio** generation, with model adapters wired into the daemon's media pipeline ([`apps/daemon/src/media-models.ts`](apps/daemon/src/media-models.ts), [`apps/web/src/media/models.ts`](apps/web/src/media/models.ts)). Every render lands as a real file in the project workspace — `.png` for image, `.mp4` for video — and shows up as a download chip when the turn ends.
 
-Three model families carry the load today:
+Three flagship paths carry the load today:
 
 | Surface | Model | Provider | What it's for |
 |---|---|---|---|
 | **Image** | `gpt-image-2` | Azure / OpenAI | Posters, profile avatars, illustrated maps, infographics, magazine-style social cards, photo restoration, exploded-view product art |
 | **Video** | `seedance-2.0` | ByteDance Volcengine | 15s cinematic t2v + i2v with audio — narrative shorts, character close-ups, product films, MV-style choreography |
 | **Video** | `hyperframes-html` | [HeyGen / OSS](https://github.com/heygen-com/hyperframes) | HTML→MP4 motion graphics — product reveals, kinetic typography, data charts, social overlays, logo outros, TikTok-style verticals with karaoke captions |
+
+Other generators are possible, but the path depends on the API shape:
+
+- **Today:** use **Settings → Media providers → Custom Image API** for any local or hosted image generator that exposes an OpenAI-compatible `POST /v1/images/generations` endpoint. **ImageRouter** covers the same contract for routed image and video backends.
+- **Not wired yet:** workflow-first local runtimes such as **ComfyUI**. OD now lists ComfyUI in the Media providers “Coming soon” drawer to make that gap explicit, but direct JSON-workflow execution still needs a dedicated adapter.
+- **Still provider-specific:** arbitrary non-OpenAI-compatible video APIs. Those need a first-class daemon integration rather than just a base URL swap.
 
 A growing **prompt gallery** at [`prompt-templates/`](prompt-templates/) ships **93 ready-to-replicate prompts** — 43 image (`prompt-templates/image/*.json`), 39 Seedance (`prompt-templates/video/*.json` excluding `hyperframes-*`), 11 HyperFrames (`prompt-templates/video/hyperframes-*.json`). Each carries a preview thumbnail, the prompt body verbatim, the target model, the aspect ratio, and a `source` block for license + attribution. The daemon serves them at `GET /api/prompt-templates`, the web app surfaces them as a card grid in the **Image templates** and **Video templates** tabs of the entry view; one click drops a prompt into the composer with the right model preselected.
 
@@ -872,8 +894,8 @@ Pattern is the same as the rest: pick a template, edit the brief, send. The agen
 The chat / artifact loop gets the spotlight, but a handful of less-visible capabilities are already wired and worth knowing before you compare OD to anything else:
 
 - **Claude Design ZIP import.** Drop an export from claude.ai onto the welcome dialog. `POST /api/import/claude-design` extracts it into a real `.od/projects/<id>/`, opens the entry file as a tab, and stages a continue-where-Anthropic-left-off prompt for your local agent. No re-prompting, no "ask the model to re-create what we just had". ([`apps/daemon/src/server.ts`](apps/daemon/src/server.ts) — `/api/import/claude-design`)
-- **Multi-provider BYOK proxy.** `POST /api/proxy/{anthropic,openai,azure,google}/stream` takes `{ baseUrl, apiKey, model, messages }`, builds the provider-specific upstream request, normalizes SSE chunks into `delta/end/error`, and allows loopback local LLM providers while rejecting non-loopback private, link-local, CGNAT, multicast, reserved, and redirect targets to head off SSRF. OpenAI-compatible covers OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter, Ollama, LM Studio, and self-hosted vLLM; Azure OpenAI adds deployment URL + `api-version`; Google uses Gemini `:streamGenerateContent`.
-- **User-saved templates.** Once you like a render, `POST /api/templates` snapshots the HTML + metadata into the SQLite `templates` table. The next project picks it from a "your templates" row in the picker — same surface as the shipped 31, but yours.
+- **Multi-provider BYOK proxy.** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` takes `{ baseUrl, apiKey, model, messages }`, builds the provider-specific upstream request, normalizes SSE chunks into `delta/end/error`, and allows loopback local LLM providers while rejecting non-loopback private, link-local, CGNAT, multicast, reserved, and redirect targets to head off SSRF. OpenAI-compatible covers OpenAI, Azure AI Foundry `/openai/v1`, DeepSeek, Groq, MiMo, OpenRouter, Ollama, LM Studio, and self-hosted vLLM; Azure OpenAI adds deployment URL + `api-version`; Google uses Gemini `:streamGenerateContent`.
+- **User-saved templates.** Once you like a render, `POST /api/templates` snapshots the HTML + metadata into the SQLite `templates` table. The next project picks it from a "your templates" row in the picker — same surface as the shipped 137, but yours.
 - **Tab persistence.** Every project remembers its open files and active tab in the `tabs` table. Reopen the project tomorrow and the workspace looks exactly the way you left it.
 - **Artifact lint API.** `POST /api/artifacts/lint` runs structural checks on a generated artifact (broken `<artifact>` framing, missing required side files, stale palette tokens) and returns findings the agent can read back into its next turn. The five-dim self-critique uses this to ground its score in real evidence, not vibes.
 - **Sidecar protocol + desktop automation.** Daemon, web, and desktop processes carry typed five-field stamps (`app · mode · namespace · ipc · source`) and expose a JSON-RPC IPC channel at `/tmp/open-design/ipc/<namespace>/<app>.sock`. `tools-dev inspect desktop status \| eval \| screenshot` drives that channel, so headless E2E works against a real Electron shell without bespoke harnesses ([`packages/sidecar-proto/`](packages/sidecar-proto/), [`apps/desktop/src/main/`](apps/desktop/src/main/)).
@@ -899,8 +921,8 @@ The whole machinery below is the [`huashu-design`](https://github.com/alchaincyf
 | Form factor | Web (claude.ai) | Desktop (Electron) | **Web app + local daemon** |
 | Deployable on Vercel | ❌ | ❌ | **✅** |
 | Agent runtime | Bundled (Opus 4.7) | Bundled ([`pi-ai`][piai]) | **Delegated to user's existing CLI** |
-| Skills | Proprietary | 12 custom TS modules + `SKILL.md` | **31 file-based [`SKILL.md`][skill] bundles, droppable** |
-| Design system | Proprietary | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 129 systems shipped** |
+| Skills | Proprietary | 12 custom TS modules + `SKILL.md` | **137 file-based [`SKILL.md`][skill] bundles, droppable** |
+| Design system | Proprietary | `DESIGN.md` (v0.2 roadmap) | **`DESIGN.md` × 150 systems shipped** |
 | Provider flexibility | Anthropic only | 7+ via [`pi-ai`][piai] | **16 CLI adapters + OpenAI-compatible BYOK proxy** |
 | Init question form | ❌ | ❌ | **✅ Hard rule, turn 1** |
 | Direction picker | ❌ | ❌ | **✅ 5 deterministic directions** |
@@ -972,9 +994,9 @@ Long-form provenance write-up — what we take from each, what we deliberately d
 
 - [x] Daemon + agent detection (16 CLI adapters) + skill registry + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 31 skills + 72 design systems + 5 visual directions + 5 device frames
+- [x] 137 skills + 150 design systems + 5 visual directions + 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
-- [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google}/stream`) with SSRF guard
+- [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) with SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)
 - [x] Sidecar protocol + Electron desktop with IPC automation (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN)
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
@@ -1018,7 +1040,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-28" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -1035,9 +1057,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 

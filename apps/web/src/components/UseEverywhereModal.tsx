@@ -9,6 +9,8 @@
 // modal only owns rendering + clipboard interactions.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackIntegrationsUseEverywhereTabClick } from '../analytics/events';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -21,6 +23,20 @@ import {
   type CodeSnippet,
   type GuideSection,
 } from './use-everywhere/sections';
+
+// Map GuideSection.id ('cli' / 'mcp' / 'http' / 'skills') to the analytics
+// element vocabulary defined in `IntegrationsUseEverywhereTabClickProps`.
+function useEverywhereSectionToElement(
+  id: 'overview' | 'cli' | 'mcp' | 'http' | 'skills',
+): 'overview' | 'cli_od' | 'mcp_server' | 'http_api' | 'skills_headless' {
+  switch (id) {
+    case 'overview': return 'overview';
+    case 'cli': return 'cli_od';
+    case 'mcp': return 'mcp_server';
+    case 'http': return 'http_api';
+    case 'skills': return 'skills_headless';
+  }
+}
 
 interface Props {
   onClose: () => void;
@@ -115,6 +131,7 @@ export function UseEverywhereGuidePanel({
   versionHint,
 }: Omit<Props, 'onClose'>) {
   const t = useT();
+  const analytics = useAnalytics();
   const [activeId, setActiveId] = useState<GuideSection['id']>('overview');
   const [guideCopy, setGuideCopy] = useState<CopyState>('idle');
   const [snippetCopy, setSnippetCopy] = useState<{ key: string; state: CopyState } | null>(null);
@@ -156,6 +173,11 @@ export function UseEverywhereGuidePanel({
   }
 
   async function onCopySnippet(key: string, snippet: CodeSnippet) {
+    trackIntegrationsUseEverywhereTabClick(analytics.track, {
+      page_name: 'integrations',
+      area: 'use_everywhere_tab',
+      element: 'copy',
+    });
     const text = applyDaemonUrl(snippet.body, daemonUrl);
     const state = await copyText(text);
     setSnippetCopy({ key, state });
@@ -176,7 +198,14 @@ export function UseEverywhereGuidePanel({
               role="tab"
               aria-selected={active}
               className={`use-everywhere-modal__tab${active ? ' is-active' : ''}`}
-              onClick={() => setActiveId(section.id)}
+              onClick={() => {
+                trackIntegrationsUseEverywhereTabClick(analytics.track, {
+                  page_name: 'integrations',
+                  area: 'use_everywhere_tab',
+                  element: useEverywhereSectionToElement(section.id),
+                });
+                setActiveId(section.id);
+              }}
               data-testid={`use-everywhere-tab-${section.id}`}
             >
               {section.tabLabel}
@@ -206,7 +235,14 @@ export function UseEverywhereGuidePanel({
             <button
               type="button"
               className="use-everywhere-modal__secondary"
-              onClick={onOpenSettings}
+              onClick={() => {
+                trackIntegrationsUseEverywhereTabClick(analytics.track, {
+                  page_name: 'integrations',
+                  area: 'use_everywhere_tab',
+                  element: 'configure_mcp_server',
+                });
+                onOpenSettings();
+              }}
               data-testid="use-everywhere-open-settings"
             >
               <Icon name="settings" size={13} />
@@ -216,7 +252,14 @@ export function UseEverywhereGuidePanel({
           <button
             type="button"
             className="use-everywhere-modal__primary"
-            onClick={onCopyGuide}
+            onClick={() => {
+              trackIntegrationsUseEverywhereTabClick(analytics.track, {
+                page_name: 'integrations',
+                area: 'use_everywhere_tab',
+                element: 'copy_guide_for_agent',
+              });
+              void onCopyGuide();
+            }}
             data-testid="use-everywhere-copy-guide"
           >
             <Icon name="copy" size={13} />

@@ -1,6 +1,6 @@
 # Open Design — blog topic backlog
 
-_Last reviewed: 2026-05-14 (Claude Design cluster scoring pass)_
+_Last reviewed: 2026-05-22 (0.8.0 release scoring pass)_
 
 This file is the single source of truth for what we're considering, drafting, and have shipped on the Open Design blog. The leading underscore keeps Astro's content collection from treating it as a post.
 
@@ -31,7 +31,7 @@ Scored, not yet drafting. Sorted by total descending. Pick from the top when sta
 | 6 | **Claude Design vs Figma Make vs Open Design** (A3) | Guides (comparison) | 4 | 5 | 4 | 4 | **17** | strong existing SERP for "claude design vs figma make" (Magic Patterns / XDA / CreateWith / claude-codex.fr); no vs-Open-Design content yet | Three-way comparison piggybacking on existing search heat. Use the existing comparison tables as evidence. |
 | 7 | What an agent-native design system looks like (a DESIGN.md walkthrough) | Guides (how it works) | 5 | 3 | 4 | 4 | **16** | own framework | Sibling to the "31 skills, 72 systems" post but at the system layer. Useful for design-system-curious readers. |
 | 8 | Inside Atelier Zero — designing the Open Design landing page with the agent that ships it | Use cases | 5 | 3 | 4 | 4 | **16** | own dogfooding | Meta in the right way: the page you're reading was built this way. Hero = a real screen recording still. |
-| 9 | We just shipped in-app auto-update on Windows + Linux (no code signing required) | Product (announcement) | 5 | 3 | 4 | 4 | **16** | gh issue #1613 (closed 2026-05-13) | Reactive announcement — the closing PR is the artefact. CTA = `Download desktop`. Pair with the #1612 "worried about updating" thread for empathy beat. |
+| ~~9~~ | ~~We just shipped in-app auto-update on Windows + Linux~~ | ~~Product (announcement)~~ | ~~5~~ | ~~3~~ | ~~4~~ | ~~4~~ | ~~**16**~~ | gh issue #1613 (closed 2026-05-13) | **Folded into the 0.8.0 release announcement (shipped 2026-05-22). Auto-update lands as one of the three architectural plates in that post.** |
 | 10 | 96 contributors in our first month — what the Synclo bot taught us about open-source onboarding | Community (essay) | 4 | 3 | 4 | 5 | **16** | bot leveling cards across all issues + #1605 #1637 examples | Meta-essay about how the project runs. Easy to write — the data is already in the bot card images. CTA = `Contribute a skill`. |
 | 11 | Inside the Skill protocol — how @-mention skills compose, and the regression we just fixed | Guides (how it works) | 5 | 3 | 4 | 4 | **16** | gh issue #1635 + PR #1636 | Pull a real bug-and-fix into a "how the system actually works" piece. Sibling to the seed post `31-skills-72-systems-how-the-library-works`. Wait until #1636 merges to publish. |
 | 12 | **What Claude Design actually is — a designer-engineer's read of the launch** (B1) | Product (essay) | 4 | 4 | 4 | 4 | **16** | Anthropic launch April 2026 + first-hand use | Top-of-funnel explainer; high AI-Overviews citation potential. Pair with A1 (comparison) and A2 (pricing). |
@@ -52,6 +52,24 @@ Currently being written. Move rows here from Active backlog before starting Pipe
 | Topic | Slug | Owner | Started | Target ship |
 |---|---|---|---|---|
 | _(none — A1 shipped 2026-05-14, see Shipped table)_ | | | | |
+
+### 0.8.0 release fast-track context
+
+Re-scored 2026-05-22 against the live tag `open-design-v0.8.0` (305 PRs · 75 contributors · 7 days; `c20d156`, published 22 May 12:43 UTC). The release supersedes the previously-queued #9 "auto-update on Windows + Linux" row — that announcement is now folded into the broader 0.8.0 plate.
+
+| Dim | Score | Why |
+|---|---|---|
+| Fit | 5 | Every claim in the post maps to a real PR or skill folder shipping in 0.8.0 |
+| Intent | 5 | "Open Design 0.8.0 release notes / what's new" is a direct search intent |
+| Timing | 5 | Reactive — within hours of the tag dropping; no third-party coverage yet |
+| Effort | 4 | Release notes already structured; just needs editorial pass + hero plate |
+| **Total** | **19** | Fast-track |
+
+Title chosen (Step 2.5 fast-track): **"Open Design 0.8.0: everything is a plugin"** — declarative, hits the search intent, ≤ 60 chars.
+
+Alternates considered:
+- "Open Design 0.8.0 ships the plugin engine, headless CLI, and auto-update" (subhead-shaped, too long for a slug)
+- "The 0.8.0 rebuild — and what it changes about agent-native design" (essay-shaped, less search-friendly)
 
 ### A1 fast-track context
 
@@ -96,6 +114,7 @@ Posts that are live. The right-hand columns get filled by the GSC review automat
 | 2026-05-14 | open-source-alternative-to-claude-design | Guides (comparison) | 19 | pending (just shipped) | pending | — | 2026-06-14 | A1, anchor of the Claude Design keyword cluster (A1–A4 / B1–B3 / C1–C2). Fast-tracked off live SERP intel: opendesigner.io already #2 for "claude design open source alternative"; this post targets the #1 slot. 1446 words. Title alternates: "Open Design vs Claude Design — and which one to pick this quarter" / "If you can't use Claude Design, what do you use instead?". Honest read on Anthropic's Claude Design (Opus 4.7, April 2026), `OpenCoworkAI/open-codesign` (MIT competitor), and Open Design with a who-picks-which table. CTA = `Try the open-source workflow`. Next step: ship A2 (pricing) + B1 (explainer) to thicken the cluster, then cross-post A1 to dev.to / Medium / HN. |
 | 2026-05-18 | layout-layer-canvas-used-to-hide | Community | 16 | pending (just shipped) | pending | — | 2026-06-18 | Community post from GitHub Discussion #1727. Uses the "Layout Understanding Layer" reply as a product-community signal without promising implementation. CTA = `Contribute a skill`. |
 | 2026-05-18 | port-figma-workflow-open-design-plugin | Use cases | 17 | pending (just shipped) | pending | — | 2026-06-18 | Use-case post from the 0.8.0-preview plugin call. Turns "port a Figma workflow" into a concrete `SKILL.md` + `open-design.json` + validate/pack/publish path. CTA = `Try this workflow`. |
+| 2026-05-22 | open-design-0-8-0-everything-is-a-plugin | Product (announcement) | 19 | pending (just shipped) | pending | — | 2026-06-22 | Release announcement for `open-design-v0.8.0` (tag `c20d156`, 305 PRs · 75 contributors · 7 days). Covers the three architectural shifts (plugin engine, headless-by-default, plugins create plugins) and the packaged-auto-update + design-system + media-provider plate. CTA = `Download desktop`. Supersedes queued #9 "auto-update on Windows + Linux" — that row is dropped now that the broader plate is live. hero: plate-15-plugin-engine-modular.png · gpt-image-2 via cursor-builtin |
 
 ## Dropped (with reason)
 

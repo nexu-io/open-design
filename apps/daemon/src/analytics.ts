@@ -5,14 +5,14 @@
 // Web-side captures (apps/web/src/analytics) carry the matching identity in
 // HTTP headers (see x-od-analytics-* constants in @open-design/contracts);
 // daemon reads those headers off the request and reuses the same
-// anonymous_id as the PostHog distinct_id so events from both sides land on
-// the same person.
+// device_id as the PostHog distinct_id so events from both sides land on
+// the same person. (v2: renamed from `anonymous_id`.)
 
 import crypto from 'node:crypto';
 import { PostHog } from 'posthog-node';
 import type { Request } from 'express';
 import {
-  ANALYTICS_HEADER_ANONYMOUS_ID,
+  ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
   ANALYTICS_HEADER_LOCALE,
   ANALYTICS_HEADER_REQUEST_ID,
@@ -27,7 +27,7 @@ import { readAppConfig } from './app-config.js';
 const DEFAULT_HOST = 'https://us.i.posthog.com';
 
 export interface AnalyticsContext {
-  anonymousId: string;
+  deviceId: string;
   sessionId: string;
   clientType: AnalyticsClientType;
   locale: string;
@@ -39,15 +39,15 @@ export interface AnalyticsContext {
 // web side too). Daemon-internal capture sites (e.g. background sweeps with
 // no request) should not invoke this path.
 export function readAnalyticsContext(req: Request): AnalyticsContext | null {
-  const anonymousId = headerString(req, ANALYTICS_HEADER_ANONYMOUS_ID);
-  if (!anonymousId) return null;
-  const sessionId = headerString(req, ANALYTICS_HEADER_SESSION_ID) ?? anonymousId;
+  const deviceId = headerString(req, ANALYTICS_HEADER_DEVICE_ID);
+  if (!deviceId) return null;
+  const sessionId = headerString(req, ANALYTICS_HEADER_SESSION_ID) ?? deviceId;
   const clientHeader = headerString(req, ANALYTICS_HEADER_CLIENT_TYPE);
   const clientType: AnalyticsClientType =
     clientHeader === 'desktop' ? 'desktop' : 'web';
   const locale = headerString(req, ANALYTICS_HEADER_LOCALE) ?? 'en';
   const requestId = headerString(req, ANALYTICS_HEADER_REQUEST_ID);
-  return { anonymousId, sessionId, clientType, locale, requestId };
+  return { deviceId, sessionId, clientType, locale, requestId };
 }
 
 function headerString(req: Request, name: string): string | null {
@@ -90,11 +90,35 @@ export interface AnalyticsService {
     properties: Record<string, unknown>;
     insertId: string;
   }): void;
+  /**
+   * Safety / reliability events (renderer crashes, daemon uncaught errors,
+   * SSE health, etc.) that intentionally BYPASS the user's analytics
+   * consent toggle. The product policy is: we always retain ground-truth
+   * stability data even for opted-out users — the user-facing consent copy
+   * in Settings → Privacy must call this out.
+   *
+   * Falls back to a synthetic distinctId when the installationId is not
+   * yet stamped (first-launch or fork builds without an app-config file).
+   *
+   * Returns a Promise that resolves AFTER the event has been enqueued in
+   * posthog-node's local buffer. Fire-and-forget callers (e.g. the
+   * /api/observability/event endpoint) can `void` it; fatal-exit paths
+   * MUST await before calling `shutdown()` so the crash event actually
+   * makes it into the flush.
+   */
+  captureSafety(args: {
+    eventName: string;
+    distinctId?: string;
+    appVersion: string;
+    properties: Record<string, unknown>;
+    insertId?: string;
+  }): Promise<void>;
   shutdown(): Promise<void>;
 }
 
 const NOOP_SERVICE: AnalyticsService = {
   capture: () => undefined,
+  captureSafety: async () => undefined,
   shutdown: async () => undefined,
 };
 
@@ -140,7 +164,7 @@ export function createAnalyticsService(args: {
           const appCfg = await readAppConfig(args.dataDir);
           if (appCfg.telemetry?.metrics !== true) return;
           client.capture({
-            distinctId: context.anonymousId,
+            distinctId: context.deviceId,
             event: eventName,
             properties: {
               ...properties,
@@ -149,7 +173,8 @@ export function createAnalyticsService(args: {
               ui_version: appVersion,
               app_version: appVersion,
               session_id: context.sessionId,
-              anonymous_id: context.anonymousId,
+              // v2 rename: was `anonymous_id`. Value unchanged.
+              device_id: context.deviceId,
               client_type: context.clientType,
               locale: context.locale,
               ...(context.requestId ? { request_id: context.requestId } : {}),
@@ -164,6 +189,44 @@ export function createAnalyticsService(args: {
         }
       })();
     },
+    captureSafety: async ({ eventName, distinctId, appVersion, properties, insertId }) => {
+      // No consent re-check here — that's the entire point of this surface.
+      // We still fall back gracefully when the installationId is missing
+      // (cold start before the daemon has stamped one in app-config) by
+      // synthesizing an anonymous distinct id rooted at the process boot.
+      //
+      // Returns a Promise that resolves AFTER `client.capture()` has run.
+      // The fatal-shutdown path in server.ts awaits this before invoking
+      // `shutdown()` so the event is guaranteed to be in posthog-node's
+      // local queue when the flush starts — otherwise a fast `shutdown()`
+      // would drain an empty queue and the crash signal would be lost.
+      // See codex review on PR #2527 (Siri-Ray) for the original race.
+      const resolvedInsertId = insertId ?? randomInsertId();
+      try {
+        const resolvedDistinctId =
+          distinctId && distinctId.length > 0
+            ? distinctId
+            : await readInstallationIdSafe(args.dataDir);
+        client.capture({
+          distinctId: resolvedDistinctId,
+          event: eventName,
+          properties: {
+            ...properties,
+            event_id: resolvedInsertId,
+            event_schema_version: EVENT_SCHEMA_VERSION,
+            ui_version: appVersion,
+            app_version: appVersion,
+            device_id: resolvedDistinctId,
+            client_type: 'daemon',
+            capture_source: 'daemon/safety',
+            $insert_id: resolvedInsertId,
+          },
+        });
+      } catch {
+        // Capture failures must never propagate. The whole point of this
+        // path is best-effort observability into a degraded state.
+      }
+    },
     shutdown: async () => {
       try {
         await client.shutdown();
@@ -172,6 +235,24 @@ export function createAnalyticsService(args: {
       }
     },
   };
+}
+
+const SYNTHETIC_DISTINCT_ID = `daemon-anon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+async function readInstallationIdSafe(dataDir: string): Promise<string> {
+  try {
+    const cfg = await readAppConfig(dataDir);
+    if (typeof cfg.installationId === 'string' && cfg.installationId.length > 0) {
+      return cfg.installationId;
+    }
+  } catch {
+    // fall through to synthetic id
+  }
+  return SYNTHETIC_DISTINCT_ID;
+}
+
+function randomInsertId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // Re-export so server.ts and route handlers don't need a second import

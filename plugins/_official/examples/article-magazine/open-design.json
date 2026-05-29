@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-article-magazine",
-  "title": "杂志文章",
+  "title": "Magazine Article",
+  "title_i18n": {
+    "en": "Magazine Article",
+    "zh-CN": "杂志文章",
+    "zh-TW": "雜誌文章",
+    "ja": "マガジン記事",
+    "ko": "매거진 기사",
+    "de": "Magazinartikel",
+    "fr": "Article de magazine",
+    "ru": "Журнальная статья",
+    "es": "Artículo de revista",
+    "pt-BR": "Artigo de revista",
+    "it": "Articolo di rivista",
+    "vi": "Bài báo tạp chí",
+    "pl": "Artykuł czasopisma",
+    "id": "Artikel Majalah",
+    "nl": "Tijdschriftartikel",
+    "ar": "مقال مجلة",
+    "tr": "Dergi Makalesi",
+    "uk": "Журнальна стаття"
+  },
   "version": "0.1.0",
   "description": "Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay.",
+  "description_i18n": {
+    "en": "Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay.",
+    "zh-CN": "Huashu / huashu-md-html 风格杂志文章版式, 将 Markdown 或笔记转成精排长文 HTML。",
+    "zh-TW": "Huashu / huashu-md-html 風格的雜誌文章版面，可將 Markdown 或筆記轉換為精緻的長篇 HTML 文章。",
+    "ja": "Huashu / huashu-md-html にインスパイアされたマガジン記事レイアウト。Markdown やメモを洗練された長文 HTML エッセイに変換します。",
+    "ko": "Huashu / huashu-md-html 스타일의 매거진 기사 레이아웃으로 Markdown 또는 노트를 세련된 장문의 HTML 에세이로 변환합니다.",
+    "de": "Von Huashu / huashu-md-html inspiriertes Magazinartikel-Layout zum Umwandeln von Markdown oder Notizen in einen ausgefeilten HTML-Langformartikel.",
+    "fr": "Mise en page d'article de magazine inspirée de Huashu / huashu-md-html pour transformer vos notes ou Markdown en essai HTML long format soigné.",
+    "ru": "Макет журнальной статьи в стиле Huashu / huashu-md-html для преобразования Markdown или заметок в отполированное длинное HTML-эссе.",
+    "es": "Diseño de artículo de revista inspirado en Huashu / huashu-md-html para convertir Markdown o notas en un ensayo HTML largo y pulido.",
+    "pt-BR": "Layout de artigo de revista inspirado em Huashu / huashu-md-html para transformar Markdown ou notas em um ensaio HTML longo e refinado.",
+    "it": "Layout per articolo di rivista ispirato a Huashu / huashu-md-html per trasformare Markdown o note in un articolo HTML lungo e raffinato.",
+    "vi": "Bố cục bài báo tạp chí lấy cảm hứng từ Huashu / huashu-md-html để chuyển đổi Markdown hoặc ghi chú thành bài viết HTML dài chuyên nghiệp.",
+    "pl": "Układ artykułu czasopisma inspirowany Huashu / huashu-md-html do przekształcania Markdown lub notatek w dopracowany długi esej HTML.",
+    "id": "Tata letak artikel majalah terinspirasi Huashu / huashu-md-html untuk mengubah Markdown atau catatan menjadi esai HTML panjang yang rapi.",
+    "nl": "Magazine-artikelindeling geïnspireerd door Huashu / huashu-md-html om Markdown of notities om te zetten in een gepolijst long-form HTML-essay.",
+    "ar": "تخطيط مقال مجلة مستوحى من Huashu / huashu-md-html لتحويل Markdown أو الملاحظات إلى مقال HTML طويل ومصقول.",
+    "tr": "Markdown veya notları cilalı uzun biçimli HTML makalesine dönüştürmek için Huashu / huashu-md-html'den ilham alan dergi makalesi düzeni.",
+    "uk": "Макет журнальної статті, натхненний Huashu / huashu-md-html, для перетворення Markdown або нотаток у відшліфоване довге HTML-есе."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -42,11 +82,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「杂志文章」模板把我的内容做成一份「Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Magazine Article template to turn my content into a Huashu / huashu-md-html-inspired long-form HTML essay. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「杂志文章」模板把我的内容做成一份「Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "杂志文章"
+          "title": "Magazine Article",
+          "title_i18n": {
+            "en": "Magazine Article",
+            "zh-CN": "杂志文章"
+          }
         }
       ]
     },

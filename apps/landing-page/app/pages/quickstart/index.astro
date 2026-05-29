@@ -1,0 +1,171 @@
+---
+/*
+ * /quickstart/ — install-and-run intent.
+ *
+ * Captures "open design install", "open design quickstart",
+ * "open-design getting started", "od cli" queries and lands them
+ * directly on a page that gives commands, expected output, and the
+ * troubleshooting checklist most users need.
+ *
+ * HowTo JSON-LD describes the three visible install steps; the rest
+ * of the page is reference material that complements the GitHub
+ * README without duplicating it.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getGithubRepoMeta } from '../../_lib/github';
+import { getInfoPageCopy } from '../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../i18n';
+import { heroImage } from '../../image-assets';
+
+const github = await getGithubRepoMeta();
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const page = copy.quickstart;
+const common = copy.common;
+
+// Derive SITE from Astro.site so preview/staging JSON-LD matches the
+// layout's canonical link. Falls back to the production origin.
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const QUICKSTART_DOC = `${REPO}/blob/main/QUICKSTART.md`;
+
+// Google's HowTo rich result is image-biased: a HowTo with no images is
+// near-invisible in the SERP. We attach the canonical homepage hero as
+// the top-level HowTo image and reuse it per-step as a fallback until
+// we render per-step screenshots through `scripts/generate-previews.ts`.
+const HOWTO_IMAGE = heroImage;
+
+const title = page.title;
+const description = page.description;
+const steps = page.steps;
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}quickstart/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: page.heading,
+    description,
+    totalTime: 'PT5M',
+    // Google's HowTo rich result requires an image at the top level
+    // for SERP eligibility. Until per-step screenshots ship, we attach
+    // the canonical hero image at both the root and each step.
+    image: { '@type': 'ImageObject', url: HOWTO_IMAGE },
+    tool: [
+      { '@type': 'HowToTool', name: 'Node.js 24' },
+      { '@type': 'HowToTool', name: 'pnpm 10.33.2 (Corepack)' },
+      { '@type': 'HowToTool', name: 'git' },
+    ],
+    step: steps.map((s, idx) => ({
+      '@type': 'HowToStep',
+      position: idx + 1,
+      name: s.name,
+      text: s.text,
+      image: { '@type': 'ImageObject', url: HOWTO_IMAGE },
+      url: `${SITE}quickstart/#commands`,
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">{page.label}</span>
+      <h1 class="display">{page.heading}</h1>
+      <p class="lead">
+        {page.lead} {page.latestRelease}{' '}
+        <a class="inline-link" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{github.versionLabel}</a>.
+      </p>
+    </header>
+
+    <section class="info-section" id="requirements">
+      <h2>{page.requirementsTitle}</h2>
+      <ul>
+        {page.requirements.map((item) => (
+          <li><strong>{item.label}</strong> — {item.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="commands">
+      <h2>{page.commandsTitle}</h2>
+      <p>{page.commandsLead}</p>
+      <ol>
+        {steps.map((s) => (
+          <li>
+            <strong>{s.name}.</strong> {s.text}
+            <pre class="code-block"><code>{s.code}</code></pre>
+          </li>
+        ))}
+      </ol>
+      <p>
+        <a class="inline-link" href={QUICKSTART_DOC} target="_blank" rel="noreferrer noopener">{page.fullNotes}</a>
+      </p>
+    </section>
+
+    <section class="info-section" id="expected-output">
+      <h2>{page.expectedTitle}</h2>
+      <p>{page.expectedBody}</p>
+      <pre class="code-block"><code><span class="comment"># tools-dev — startup</span>
+<span class="prompt">→</span> daemon  listening on http://127.0.0.1:17456 (namespace tools-dev/main)
+<span class="prompt">→</span> web     listening on http://127.0.0.1:17573 (proxy → daemon)
+<span class="prompt">→</span> sidecar /tmp/open-design/ipc/tools-dev-main/daemon.sock
+<span class="prompt">→</span> ready in 1.4s</code></pre>
+      <p>{page.expectedPorts}</p>
+    </section>
+
+    <section class="info-section" id="troubleshooting">
+      <h2>{page.troubleshootingTitle}</h2>
+      <ul>
+        {page.troubleshooting.map((item) => (
+          <li><strong>{item.label}:</strong> {item.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="next">
+      <h2>{page.nextTitle}</h2>
+      <ul>
+        <li><a class="inline-link" href={href('/skills/')}>{page.nextItems[0].label}</a> — {page.nextItems[0].body}</li>
+        <li><a class="inline-link" href={href('/systems/')}>{page.nextItems[1].label}</a> — {page.nextItems[1].body}</li>
+        <li><a class="inline-link" href={href('/compare/')}>{page.nextItems[2].label}</a> — {page.nextItems[2].body}</li>
+        <li><a class="inline-link" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{page.nextItems[3].label}</a> — {page.nextItems[3].body}</li>
+      </ul>
+    </section>
+
+    {/* Closing CTA — keeps the documentation-heavy page from ending in
+     * silence and gives Google a clear conversion signal. */}
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{page.ctaTitle}</h2>
+        <p>{page.ctaBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-ghost" href="https://discord.gg/9ptkbbqRu" target="_blank" rel="noreferrer noopener">{common.joinDiscord}</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● {common.live}</span>
+        <span>{github.versionLabel} · Apache-2.0</span>
+        <span>{common.macWinLinux}</span>
+      </div>
+    </section>
+  </article>
+</Layout>

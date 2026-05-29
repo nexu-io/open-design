@@ -105,6 +105,12 @@ describe('listFiles with metadata.baseDir', () => {
     await writeFile(path.join(baseDir, '.git', 'HEAD'), 'ref: refs/heads/main');
     await mkdir(path.join(baseDir, 'dist'));
     await writeFile(path.join(baseDir, 'dist', 'bundle.js'), '/*compiled*/');
+    await mkdir(path.join(baseDir, 'Build', 'DerivedData-KeeTests'), { recursive: true });
+    await writeFile(path.join(baseDir, 'Build', 'DerivedData-KeeTests', 'index-store'), '');
+    await mkdir(path.join(baseDir, 'vendor', 'package'), { recursive: true });
+    await writeFile(path.join(baseDir, 'vendor', 'package', 'generated.js'), '');
+    await mkdir(path.join(baseDir, 'Rust', 'KeePassCore', 'target', 'release'), { recursive: true });
+    await writeFile(path.join(baseDir, 'Rust', 'KeePassCore', 'target', 'release', 'libkeepass.a'), '');
     await mkdir(path.join(baseDir, 'src'));
     await writeFile(path.join(baseDir, 'src', 'app.ts'), 'export {}');
   });
@@ -150,6 +156,9 @@ describe('listFiles with metadata.baseDir', () => {
     expect(paths.some((p) => p.startsWith('node_modules/'))).toBe(false);
     expect(paths.some((p) => p.startsWith('.git/'))).toBe(false);
     expect(paths.some((p) => p.startsWith('dist/'))).toBe(false);
+    expect(paths.some((p) => p.startsWith('Build/'))).toBe(false);
+    expect(paths.some((p) => p.startsWith('vendor/'))).toBe(false);
+    expect(paths.some((p) => p.includes('/target/'))).toBe(false);
   });
 
   it('does not skip those dirs for non-baseDir projects (back-compat)', async () => {

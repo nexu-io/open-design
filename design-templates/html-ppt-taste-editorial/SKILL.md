@@ -9,7 +9,7 @@ A 16:9 deck for the briefs that hate neon: investor updates, design reviews, int
 
 ## Source
 
-Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) — `skills/minimalist-skill/SKILL.md`. The deck system follows the existing project convention from `skills/html-ppt-pitch-deck/example.html` (each `.slide` is a `100vw × 100vh` section; opened directly, slides stack vertically). See `example.html` in this directory.
+Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) — `skills/minimalist-skill/SKILL.md`. The deck system follows the project deck convention: each `.slide` is a `100vw × 100vh` section, the active slide carries `.active` / `.is-active`, and the baked example owns keyboard, wheel, touch, and dot navigation inside the gallery iframe. No-script and print fallbacks keep every slide visible. See `example.html` in this directory.
 
 ## Hard rules
 
@@ -47,7 +47,8 @@ Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) �
 
 ## Motion
 
-- Static-preview fallback: keep every slide visible (already wired by the deck base). When run as a real deck, fade-in at `400ms cubic-bezier(0.16, 1, 0.3, 1)` is plenty.
+- Runtime navigation: keyboard, wheel / trackpad, touch swipe, and dot buttons must all update the same active slide state. Keep the fade at roughly `400ms cubic-bezier(0.16, 1, 0.3, 1)`.
+- Static / print fallback: keep every slide visible when the runtime has not booted or the document is printed.
 - No translate, no blur, no auto-advance.
 
 ## Pre-flight
@@ -58,3 +59,4 @@ Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) �
 - [ ] Every slide has eyebrow + section number + page number
 - [ ] At least one hairline-grid table or comparison module
 - [ ] No drop shadows, no gradients, no emojis, no banned fonts
+- [ ] Keyboard, wheel / trackpad, touch swipe, and dot navigation all move one slide and keep the active dot / active slide in sync

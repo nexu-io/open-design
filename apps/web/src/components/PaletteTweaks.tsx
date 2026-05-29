@@ -69,9 +69,9 @@ export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: 
   const isOriginal = selected === null;
 
   return (
-    <div className="palette-tweaks" ref={rootRef} role="dialog" aria-label="Tweaks">
+    <div className="palette-tweaks" ref={rootRef} role="dialog" aria-label="Themes">
       <div className="palette-tweaks-header">
-        <span className="palette-tweaks-title">Tweaks panel</span>
+        <span className="palette-tweaks-title">Themes</span>
         <span className="palette-tweaks-sub">5 curated theme palettes</span>
       </div>
       <ul className="palette-tweaks-list" role="listbox">

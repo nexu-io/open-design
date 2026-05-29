@@ -140,6 +140,70 @@ all `transition-duration` / `animation-duration` declarations:
 Respect `prefers-reduced-motion`: default to *Off* if the user has
 that set, regardless of stored preference.
 
+## Host integration contract (REQUIRED)
+
+The Open Design viewer toolbar has a **Tweaks** toggle that drives panel
+visibility from outside the iframe. For the toggle to bind to your panel,
+your artifact **must** speak one of these two protocols (pick one; don't
+mix). The toolbar enables itself the moment it sees either signal.
+
+### Protocol A — postMessage (recommended for agent-generated artifacts)
+
+Use this when the panel mounts via JS (React, vanilla, anything dynamic).
+
+**Artifact → host:**
+- On mount, post `{ type: '__edit_mode_available', visible?: boolean }` to
+  `window.parent`. Tells the toolbar a panel exists; the optional `visible`
+  reports the panel's initial state so the toolbar toggle starts in sync.
+  Omit `visible` for the common "panel is already on screen" case (the host
+  treats a missing field as `true` so the legacy zero-arg message keeps
+  working). Pass `visible: false` to declare a default-closed panel.
+- When the user closes the panel locally (× button, Esc, etc.), post
+  `{ type: '__edit_mode_dismissed' }`. Toolbar flips to "off".
+
+**Host → artifact:**
+- `{ type: '__activate_edit_mode' }` — open the panel (`setOpen(true)`).
+- `{ type: '__deactivate_edit_mode' }` — close the panel (`setOpen(false)`).
+
+Minimal listener:
+
+```js
+window.addEventListener('message', (e) => {
+  const t = e?.data?.type;
+  if (t === '__activate_edit_mode') setOpen(true);
+  else if (t === '__deactivate_edit_mode') setOpen(false);
+});
+// Or, for a default-closed panel:
+//   window.parent.postMessage({ type: '__edit_mode_available', visible: open }, '*');
+window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+// in your close handler:
+const dismiss = () => {
+  setOpen(false);
+  window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+};
+```
+
+Panel may default to open or closed — the host syncs its toggle to
+whichever state the artifact reports.
+
+### Protocol B — class-based (used by `assets/wrap.html`)
+
+Use this only when you wrap the template verbatim. The artifact ships a
+`.tw-panel` element and toggles a `.tw-hidden` class for visibility. The
+viewer's iframe bridge (in `apps/web/src/runtime/srcdoc.ts`) hides the
+panel on initial paint, watches the class via `MutationObserver`, and
+relays state both directions. No JS required in the artifact beyond what
+the template already includes.
+
+Selectors are fixed: `.tw-panel` (the panel root) and `.tw-hidden` (the
+hidden state). If you rename either, the bridge can't find it.
+
+### Anti-pattern
+
+Don't invent a third protocol or rename either set of identifiers. The
+toolbar toggle only binds to A or B. Custom panels with custom classes
+and no postMessage will leave the toolbar greyed out.
+
 ## Implementation primitives
 
 Read `assets/wrap.html` — it ships the panel + bridge as an

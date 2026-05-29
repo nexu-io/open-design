@@ -2,17 +2,12 @@
 // and live artifact refreshers. The daemon still stores these as routines;
 // the UI presents them as scheduled agent conversations.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  AutomationContentPacket,
   AutomationEvolutionProposal,
   AutomationEvolutionProposalListResponse,
-  AutomationSourceIngestionResponse,
-  AutomationSourceKind,
-  AutomationSourcePacketListResponse,
   AutomationTemplate as ContractAutomationTemplate,
   AutomationTemplateListResponse,
-  AutomationTokenCompressionMode,
   ConnectorDetail,
   Routine,
   RoutineRun,
@@ -22,6 +17,8 @@ import type {
 import { Icon, type IconName } from './Icon';
 import { navigate } from '../router';
 import type { SkillSummary } from '../types';
+import { useAnalytics } from '../analytics/provider';
+import { trackAutomationsClick, trackPageView } from '../analytics/events';
 import {
   NewAutomationModal,
   describeScheduleSummary,
@@ -159,41 +156,6 @@ const TEMPLATE_FILTERS: ReadonlyArray<{ id: TemplateFilter; label: string }> = [
   { id: 'release', label: 'Release' },
   { id: 'quality', label: 'Quality' },
 ];
-
-const SOURCE_KIND_OPTIONS: ReadonlyArray<{ id: AutomationSourceKind; label: string }> = [
-  { id: 'connector', label: 'Connector' },
-  { id: 'url', label: 'URL' },
-  { id: 'repo', label: 'Repo' },
-  { id: 'artifact', label: 'Artifact' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'upload', label: 'Upload' },
-];
-
-const COMPRESSION_OPTIONS: ReadonlyArray<{ id: AutomationTokenCompressionMode; label: string }> = [
-  { id: 'balanced', label: 'Balanced' },
-  { id: 'aggressive', label: 'Aggressive' },
-  { id: 'off', label: 'Off' },
-];
-
-type SourceIngestionForm = {
-  templateId: string;
-  sourceKind: AutomationSourceKind;
-  sourceRef: string;
-  title: string;
-  bodyMarkdown: string;
-  connectorId: string;
-  tokenCompression: AutomationTokenCompressionMode;
-};
-
-const DEFAULT_SOURCE_FORM: SourceIngestionForm = {
-  templateId: 'ingest-source-memory-tree',
-  sourceKind: 'connector',
-  sourceRef: '',
-  title: '',
-  bodyMarkdown: '',
-  connectorId: '',
-  tokenCompression: 'balanced',
-};
 
 function scheduleStatusLabel(routine: Routine): string {
   if (!routine.enabled) return 'Paused';
@@ -385,6 +347,15 @@ function proposalActionLabel(action: AutomationEvolutionProposal['action']): str
 }
 
 export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
+  const analytics = useAnalytics();
+  // P2 page_view page_name=automations. Ref-keyed so re-renders don't
+  // double-fire while the user is on the page.
+  const pageViewFiredRef = useState<{ fired: boolean }>(() => ({ fired: false }))[0];
+  useEffect(() => {
+    if (pageViewFiredRef.fired) return;
+    pageViewFiredRef.fired = true;
+    trackPageView(analytics.track, { page_name: 'automations' });
+  }, [analytics.track, pageViewFiredRef]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -394,12 +365,11 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
   const [templateFilter, setTemplateFilter] = useState<TemplateFilter>('all');
   const [automationCatalog, setAutomationCatalog] = useState<ContractAutomationTemplate[]>([]);
   const [proposals, setProposals] = useState<AutomationEvolutionProposal[]>([]);
-  const [sourcePackets, setSourcePackets] = useState<AutomationContentPacket[]>([]);
-  const [sourceForm, setSourceForm] = useState<SourceIngestionForm>(DEFAULT_SOURCE_FORM);
   const [proposalBusyId, setProposalBusyId] = useState<string | null>(null);
-  const [ingestingSource, setIngestingSource] = useState(false);
   const [crystallizingRunId, setCrystallizingRunId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [focusRoutineId, setFocusRoutineId] = useState<string | null>(null);
+  const routineRowRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const [historyTick, setHistoryTick] = useState(0);
 
   const templates = useMemo(
@@ -425,18 +395,11 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           return (await res.json()) as AutomationEvolutionProposalListResponse;
         })
         .catch(() => null);
-      const sourcePacketRequest = fetch('/api/automation-source-packets?limit=3')
-        .then(async (res) => {
-          if (!res.ok) return null;
-          return (await res.json()) as AutomationSourcePacketListResponse;
-        })
-        .catch(() => null);
-      const [rRes, pRes, tJson, proposalJson, sourcePacketJson] = await Promise.all([
+      const [rRes, pRes, tJson, proposalJson] = await Promise.all([
         fetch('/api/routines'),
         fetch('/api/projects'),
         templateRequest,
         proposalRequest,
-        sourcePacketRequest,
       ]);
       if (!rRes.ok) throw new Error(`routines: ${rRes.status}`);
       const rJson = await rRes.json();
@@ -456,9 +419,6 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       if (proposalJson) {
         setProposals(Array.isArray(proposalJson.proposals) ? proposalJson.proposals : []);
       }
-      if (sourcePacketJson) {
-        setSourcePackets(Array.isArray(sourcePacketJson.packets) ? sourcePacketJson.packets : []);
-      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -477,63 +437,22 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     return map;
   }, [projects]);
 
-  const activeCount = routines.filter((routine) => routine.enabled).length;
-  const pausedCount = routines.length - activeCount;
-  const sourceIngestionTemplates = useMemo(
-    () =>
-      automationCatalog.filter((template) =>
-        template.stages.some((stage) => stage.kind === 'ingest' || stage.kind === 'propose'),
-      ),
-    [automationCatalog],
+  // Sort routines by creation time, newest first
+  const sortedRoutines = useMemo(
+    () => sortRoutinesNewestFirst(routines),
+    [routines],
   );
 
-  const patchSourceForm = (patch: Partial<SourceIngestionForm>) => {
-    setSourceForm((current) => ({ ...current, ...patch }));
-  };
+  useEffect(() => {
+    if (!focusRoutineId) return;
+    const node = routineRowRefs.current[focusRoutineId];
+    node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const timer = window.setTimeout(() => setFocusRoutineId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [focusRoutineId, sortedRoutines]);
 
-  const submitSourceIngestion = async () => {
-    if (!sourceForm.bodyMarkdown.trim()) {
-      setError('Paste source content before ingesting it.');
-      return;
-    }
-    setIngestingSource(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/automation-ingestions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          templateId: sourceForm.templateId || undefined,
-          sourceKind: sourceForm.sourceKind,
-          sourceRef: sourceForm.sourceRef || undefined,
-          title: sourceForm.title || undefined,
-          bodyMarkdown: sourceForm.bodyMarkdown,
-          connectorId:
-            sourceForm.sourceKind === 'connector' && sourceForm.connectorId
-              ? sourceForm.connectorId
-              : undefined,
-          tokenCompression: sourceForm.tokenCompression,
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `ingestion failed: ${res.status}`);
-      }
-      const json = (await res.json()) as AutomationSourceIngestionResponse;
-      setSourcePackets((current) => [json.packet, ...current].slice(0, 3));
-      setSourceForm((current) => ({
-        ...current,
-        title: '',
-        sourceRef: '',
-        bodyMarkdown: '',
-      }));
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIngestingSource(false);
-    }
-  };
+  const activeCount = sortedRoutines.filter((routine) => routine.enabled).length;
+  const pausedCount = sortedRoutines.length - activeCount;
 
   const reviewProposal = async (id: string, action: 'apply' | 'reject') => {
     setProposalBusyId(id);
@@ -596,8 +515,6 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `crystallize failed: ${res.status}`);
       }
-      const json = (await res.json()) as RoutineRunCrystallizeResponse;
-      setSourcePackets((current) => [json.packet, ...current].slice(0, 3));
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -686,7 +603,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           <h2 className="automations-section__label">Your automations</h2>
           {loading ? <span className="automations-section__meta">Loading</span> : null}
         </div>
-        {!loading && routines.length === 0 ? (
+        {!loading && sortedRoutines.length === 0 ? (
           <button
             type="button"
             className="automation-empty"
@@ -701,9 +618,9 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
             </span>
           </button>
         ) : null}
-        {routines.length > 0 ? (
+        {sortedRoutines.length > 0 ? (
           <ul className="automations-saved__list">
-            {routines.map((r) => {
+            {sortedRoutines.map((r) => {
               const isBusy = busyId === r.id;
               const targetLabel =
                 r.target.mode === 'reuse'
@@ -713,7 +630,11 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               return (
                 <li
                   key={r.id}
-                  className={`automation-row${r.enabled ? '' : ' is-paused'}`}
+                  ref={(node) => {
+                    routineRowRefs.current[r.id] = node;
+                  }}
+                  data-testid={`automation-row-${r.id}`}
+                  className={`automation-row${r.enabled ? '' : ' is-paused'}${focusRoutineId === r.id ? ' is-focused' : ''}`}
                 >
                   <div className="automation-row__main">
                     <span className="automation-row__icon">
@@ -820,138 +741,6 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         ) : null}
       </section>
 
-      <section className="automations-ingest" aria-label="Source ingestion">
-        <div className="automations-section-head">
-          <div>
-            <h2 className="automations-section__label">Ingest source</h2>
-            <p className="automations-section__sub">
-              Turn connector, repo, artifact, or chat context into reviewable evolution proposals.
-            </p>
-          </div>
-          <span className="automations-section__meta">{sourcePackets.length} recent</span>
-        </div>
-        <div className="automation-ingest-panel">
-          <div className="automation-ingest-controls">
-            <label className="automation-ingest-field">
-              <span>Template</span>
-              <select
-                value={sourceForm.templateId}
-                onChange={(event) => patchSourceForm({ templateId: event.currentTarget.value })}
-              >
-                {sourceIngestionTemplates.length === 0 ? (
-                  <option value={sourceForm.templateId}>{sourceForm.templateId}</option>
-                ) : null}
-                {sourceIngestionTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="automation-ingest-field">
-              <span>Source</span>
-              <select
-                value={sourceForm.sourceKind}
-                onChange={(event) =>
-                  patchSourceForm({ sourceKind: event.currentTarget.value as AutomationSourceKind })
-                }
-              >
-                {SOURCE_KIND_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="automation-ingest-field">
-              <span>Compression</span>
-              <select
-                value={sourceForm.tokenCompression}
-                onChange={(event) =>
-                  patchSourceForm({
-                    tokenCompression: event.currentTarget.value as AutomationTokenCompressionMode,
-                  })
-                }
-              >
-                {COMPRESSION_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {sourceForm.sourceKind === 'connector' ? (
-              <label className="automation-ingest-field">
-                <span>Connector</span>
-                <select
-                  value={sourceForm.connectorId}
-                  onChange={(event) => patchSourceForm({ connectorId: event.currentTarget.value })}
-                >
-                  <option value="">Any connected source</option>
-                  {connectors.map((connector) => (
-                    <option key={connector.id} value={connector.id}>
-                      {connector.name}
-                      {connector.accountLabel ? ` · ${connector.accountLabel}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
-          <div className="automation-ingest-fields">
-            <label className="automation-ingest-field">
-              <span>Title</span>
-              <input
-                value={sourceForm.title}
-                onChange={(event) => patchSourceForm({ title: event.currentTarget.value })}
-                placeholder="Decision, brand notes, workflow pattern..."
-              />
-            </label>
-            <label className="automation-ingest-field">
-              <span>Source ref</span>
-              <input
-                value={sourceForm.sourceRef}
-                onChange={(event) => patchSourceForm({ sourceRef: event.currentTarget.value })}
-                placeholder="URL, repo path, connector event id, artifact id..."
-              />
-            </label>
-          </div>
-          <label className="automation-ingest-field automation-ingest-field--body">
-            <span>Content</span>
-            <textarea
-              value={sourceForm.bodyMarkdown}
-              onChange={(event) => patchSourceForm({ bodyMarkdown: event.currentTarget.value })}
-              placeholder="Paste the content to canonicalize into a source packet and proposals."
-            />
-          </label>
-          <div className="automation-ingest-footer">
-            {sourcePackets.length > 0 ? (
-              <ul className="automation-ingest-recent" aria-label="Recent source packets">
-                {sourcePackets.map((packet) => (
-                  <li key={packet.id}>
-                    <span>{packet.title}</span>
-                    <small>
-                      {packet.sourceKind} · {packet.tokenStats.originalTokens} tokens
-                    </small>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span className="automation-ingest-empty">No source packets yet.</span>
-            )}
-            <button
-              type="button"
-              className="automations-view__new"
-              onClick={submitSourceIngestion}
-              disabled={ingestingSource}
-            >
-              <Icon name="sparkles" size={14} />
-              <span>{ingestingSource ? 'Ingesting' : 'Ingest'}</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
       {proposals.length > 0 ? (
         <section className="automations-saved" aria-label="Automation evolution proposals">
           <div className="automations-section-head">
@@ -1019,29 +808,52 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       ) : null}
 
       <section className="automations-templates" aria-label="Automation templates">
-        <div className="automations-section-head">
-          <div>
+        <div className="automations-templates__head">
+          <div className="automations-templates__head-copy">
             <h2 className="automations-section__label">Templates</h2>
             <p className="automations-section__sub">
               Orbit and live artifacts are templates inside the same automation flow.
             </p>
           </div>
-          <div className="automations-template-tabs" role="tablist" aria-label="Template filters">
-            {TEMPLATE_FILTERS.map((filter) => (
+          <span className="automations-section__meta">
+            {filteredTemplates.length} of {templates.length}
+          </span>
+        </div>
+        <div
+          className="automations-template-tabs"
+          role="tablist"
+          aria-label="Template filters"
+        >
+          {TEMPLATE_FILTERS.map((filter) => {
+            const count = filterTemplates(templates, filter.id).length;
+            const isActive = templateFilter === filter.id;
+            return (
               <button
                 key={filter.id}
                 type="button"
                 role="tab"
-                aria-selected={templateFilter === filter.id}
-                className={`automations-template-tab${templateFilter === filter.id ? ' is-active' : ''}`}
+                aria-selected={isActive}
+                className={`automations-template-tab${isActive ? ' is-active' : ''}`}
                 onClick={() => setTemplateFilter(filter.id)}
               >
-                {filter.label}
+                <span className="automations-template-tab__label">{filter.label}</span>
+                <span className="automations-template-tab__count">{count}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
+        {filteredTemplates.length === 0 ? (
+          <div className="automations-templates__empty" role="status">
+            <span className="automations-templates__empty-icon" aria-hidden="true">
+              <Icon name="sparkles" size={16} />
+            </span>
+            <div>
+              <strong>No templates in this category yet.</strong>
+              <p>Try a different filter, or start from a blank automation.</p>
+            </div>
+          </div>
+        ) : null}
         <div className="automations-templates__grid">
           {filteredTemplates.map((template) => (
             <button
@@ -1084,12 +896,20 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         skills={skills}
         connectors={connectors}
         onClose={() => setModal(null)}
-        onSaved={() => {
-          void refresh();
+        onSaved={(routine) => {
+          void (async () => {
+            await refresh();
+            setExpandedId(routine.id);
+            setFocusRoutineId(routine.id);
+          })();
         }}
       />
     </section>
   );
+}
+
+export function sortRoutinesNewestFirst(routines: Routine[]): Routine[] {
+  return [...routines].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

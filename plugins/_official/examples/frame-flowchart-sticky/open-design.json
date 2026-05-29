@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-flowchart-sticky",
-  "title": "便利贴流程图帧",
+  "title": "Sticky Flowchart Frame",
+  "title_i18n": {
+    "en": "Sticky Flowchart Frame",
+    "zh-CN": "便利贴流程图帧",
+    "zh-TW": "粘性流程圖框架",
+    "ja": "付箋フローチャートフレーム",
+    "ko": "스티키 플로차트 프레임",
+    "de": "Sticky-Flussdiagramm-Rahmen",
+    "fr": "Cadre d'organigramme adhésif",
+    "ru": "Липкая блок-схема",
+    "es": "Marco de diagrama de flujo adhesivo",
+    "pt-BR": "Quadro de fluxograma adesivo",
+    "it": "Cornice diagramma di flusso adesivo",
+    "vi": "Khung sơ đồ luồng dính",
+    "pl": "Ramka schematu blokowego z karteczkami",
+    "id": "Bingkai diagram alur lengket",
+    "nl": "Plaknotitie-stroomschema",
+    "ar": "إطار مخطط انسيابي لاصق",
+    "tr": "Yapışkan akış şeması çerçevesi",
+    "uk": "Липка блок-схема"
+  },
   "version": "0.1.0",
-  "description": "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm",
+  "description": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
+  "description_i18n": {
+    "en": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
+    "zh-CN": "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm",
+    "zh-TW": "提供 SVG 曲線連接器、便籤式節點和游標互動，營造白板腦力激盪氛圍。",
+    "ja": "SVG曲線コネクタ、付箋ノード、カーソル操作でホワイトボードブレストの雰囲気を再現。",
+    "ko": "SVG 곡선 커넥터, 포스트잇 노드, 커서 인터랙션으로 화이트보드 브레인스토밍 분위기를 제공합니다.",
+    "de": "SVG-Kurvenverbinder, Haftnotiz-Knoten und Cursor-Interaktion mit Whiteboard-Brainstorming-Atmosphäre.",
+    "fr": "Connecteurs courbes SVG, nœuds post-it et interaction curseur pour une ambiance brainstorming sur tableau blanc.",
+    "ru": "SVG-соединители кривых, узлы-стикеры и взаимодействие с курсором в стиле мозгового штурма на доске.",
+    "es": "Conectores de curvas SVG, nodos tipo notas adhesivas e interacción con cursor para un ambiente de lluvia de ideas en pizarra.",
+    "pt-BR": "Conectores de curva SVG, nós estilo post-it e interação com cursor para uma atmosfera de brainstorm em quadro branco.",
+    "it": "Connettori curvi SVG, nodi stile post-it e interazione col cursore per un'atmosfera brainstorming da lavagna.",
+    "vi": "Trình kết nối đường cong SVG, nút ghi chú dán và tương tác con trỏ với cảm giác brainstorm bảng trắng.",
+    "pl": "Łączniki krzywych SVG, węzły typu karteczki samoprzylepne i interakcja kursora w stylu burzy mózgów na tablicy.",
+    "id": "Konektor kurva SVG, node catatan tempel, dan interaksi kursor dengan nuansa brainstorming papan tulis.",
+    "nl": "SVG-curve-connectoren, plaknotitie-knooppunten en cursorinteractie met een whiteboard-brainstormgevoel.",
+    "ar": "موصلات منحنيات SVG، عقد ملاحظات لاصقة، وتفاعل المؤشر بأسلوب العصف الذهني على السبورة البيضاء.",
+    "tr": "SVG eğri bağlayıcılar, yapışkan not düğümleri ve beyaz tahta beyin fırtınası hissiyle imleç etkileşimi.",
+    "uk": "SVG-з'єднувачі кривих, вузли-стікери та взаємодія з курсором у стилі мозкового штурму на дошці."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -40,11 +80,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Sticky Flowchart Frame template to turn my content into a whiteboard-brainstorm frame with SVG curve connectors, sticky-note nodes, and cursor interaction. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "便利贴流程图帧"
+          "title": "Sticky Flowchart Frame",
+          "title_i18n": {
+            "en": "Sticky Flowchart Frame",
+            "zh-CN": "便利贴流程图帧"
+          }
         }
       ]
     },

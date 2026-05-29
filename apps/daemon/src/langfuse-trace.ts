@@ -151,6 +151,29 @@ export interface ReportRunOpts {
   fetchImpl?: typeof fetch;
 }
 
+/**
+ * Payload sent to Langfuse when a user thumbs-up/down's an assistant turn.
+ *
+ * The `runId` doubles as the Langfuse trace id (same convention used by
+ * buildTracePayload), so the score lands on the existing trace if the run
+ * was previously reported. If the run wasn't reported (e.g. content
+ * consent was off at run completion, then turned on before the user
+ * scored), Langfuse will accept the score anyway and the trace will
+ * materialize when/if the daemon backfills it.
+ */
+export interface FeedbackReportContext {
+  runId: string;
+  installationId: string | null;
+  prefs: TelemetryPrefs;
+  rating: 'positive' | 'negative';
+  reasonCodes: string[];
+  /** Raw "other" free text the user typed. Trimmed; empty string when absent. */
+  customReason: string;
+  hasCustomReason: boolean;
+  /** Optional context bag that ends up in Langfuse score metadata. */
+  metadata?: Record<string, unknown>;
+}
+
 export function readLangfuseConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): LangfuseConfig | null {
@@ -647,6 +670,108 @@ export async function reportRunCompleted(
   if (serializedBytes > HARD_BATCH_MAX_BYTES) {
     console.warn(
       `[langfuse-trace] Batch too large (${serializedBytes}B > ${HARD_BATCH_MAX_BYTES}B), dropping trace ${ctx.run.runId}`,
+    );
+    return;
+  }
+
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  if (config.kind === 'relay') {
+    await postRelayBatch(config, serialized, fetchImpl);
+    return;
+  }
+  await postLangfuseBatch(config, batch, fetchImpl);
+}
+
+// Build a Langfuse `score-create` batch for a user-supplied turn rating.
+//
+// Langfuse scores let evals filter traces by user feedback. We emit one
+// NUMERIC score (`user_rating`, +1 / -1) plus optional CATEGORICAL scores
+// for each reason code, so the Langfuse UI's score filters work out of
+// the box. Raw custom-reason text rides in the score metadata when the
+// user opted into telemetry.content; the consent gate lives in
+// reportRunFeedback below, so this builder stays content-agnostic.
+//
+// Limitation: stable score ids (`${traceId}-rating`, `${traceId}-reason-${code}`)
+// mean re-submission overwrites cleanly, but reason codes the user removes
+// in a follow-up submission do not get a tombstone. A future change can
+// thread `removedReasonCodes` through and emit overwriting "cleared"
+// scores for them; not done here to keep this PR scoped to the bridge.
+export function buildFeedbackPayload(ctx: FeedbackReportContext): unknown[] {
+  const traceId = ctx.runId;
+  const nowIso = new Date().toISOString();
+  const batch: unknown[] = [];
+
+  const ratingMetadata: Record<string, unknown> = {
+    reasonCodes: ctx.reasonCodes,
+    reasonCount: ctx.reasonCodes.length,
+    hasCustomReason: ctx.hasCustomReason,
+    // Raw text — gated upstream by telemetry.content consent.
+    customReason: ctx.customReason || undefined,
+    installationId: ctx.installationId ?? undefined,
+    ...(ctx.metadata ?? {}),
+  };
+
+  batch.push({
+    id: randomUUID(),
+    type: 'score-create',
+    timestamp: nowIso,
+    body: {
+      id: `${traceId}-rating`,
+      traceId,
+      name: 'user_rating',
+      value: ctx.rating === 'positive' ? 1 : -1,
+      dataType: 'NUMERIC',
+      comment: ctx.rating,
+      metadata: ratingMetadata,
+    },
+  });
+
+  for (const code of ctx.reasonCodes) {
+    batch.push({
+      id: randomUUID(),
+      type: 'score-create',
+      timestamp: nowIso,
+      body: {
+        // Stable per (run, code) so re-submission overwrites cleanly.
+        id: `${traceId}-reason-${code}`,
+        traceId,
+        name: 'user_rating_reason',
+        value: code,
+        dataType: 'CATEGORICAL',
+        // Group the reason under the rating it was submitted with so a
+        // "matched_request" tag on a thumbs-down run is still visibly
+        // negative in the Langfuse UI.
+        comment: ctx.rating,
+      },
+    });
+  }
+
+  return batch;
+}
+
+export async function reportRunFeedback(
+  ctx: FeedbackReportContext,
+  opts: ReportRunOpts = {},
+): Promise<void> {
+  if (ctx.prefs.metrics !== true) return;
+  if (ctx.prefs.content !== true) return;
+
+  const config = resolveReportConfig(opts);
+  if (!config) return;
+
+  let batch: unknown[];
+  try {
+    batch = buildFeedbackPayload(ctx);
+  } catch (error) {
+    console.warn(`[langfuse-trace] Feedback payload build error: ${String(error)}`);
+    return;
+  }
+
+  const serialized = JSON.stringify({ batch });
+  const serializedBytes = Buffer.byteLength(serialized, 'utf8');
+  if (serializedBytes > HARD_BATCH_MAX_BYTES) {
+    console.warn(
+      `[langfuse-trace] Feedback batch too large (${serializedBytes}B > ${HARD_BATCH_MAX_BYTES}B), dropping feedback for ${ctx.runId}`,
     );
     return;
   }

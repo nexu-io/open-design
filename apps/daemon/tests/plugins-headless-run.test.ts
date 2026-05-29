@@ -305,7 +305,15 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
       ?.trim();
     expect(realGit).toBeTruthy();
     const previousRealGit = process.env.OD_REAL_GIT;
+    const previousGitAuthorName = process.env.GIT_AUTHOR_NAME;
+    const previousGitAuthorEmail = process.env.GIT_AUTHOR_EMAIL;
+    const previousGitCommitterName = process.env.GIT_COMMITTER_NAME;
+    const previousGitCommitterEmail = process.env.GIT_COMMITTER_EMAIL;
     process.env.OD_REAL_GIT = realGit;
+    process.env.GIT_AUTHOR_NAME = 'Open Design Test';
+    process.env.GIT_AUTHOR_EMAIL = 'open-design-test@example.com';
+    process.env.GIT_COMMITTER_NAME = 'Open Design Test';
+    process.env.GIT_COMMITTER_EMAIL = 'open-design-test@example.com';
     try {
       await withFakeAgent(
         'gh',
@@ -319,10 +327,21 @@ function ok(text) {
   process.exit(0);
 }
 if (args[0] === '--version') ok('gh version 2.0.0');
-if (args[0] === 'auth' && args[1] === 'status') ok('Logged in to github.com as test-user');
+if (args[0] === 'auth' && args[1] === 'status') ok('Logged in to github.com account test-user');
 if (args[0] === 'api' && args[1] === 'user') ok('test-user');
 if (args[0] === 'repo' && args[1] === 'create') ok('https://github.com/test-user/' + args[2]);
-if (args[0] === 'repo' && args[1] === 'view') ok('https://github.com/test-user/' + path.basename(process.cwd()));
+if (args[0] === 'repo' && args[1] === 'view') {
+  const repo = args[2] || '';
+  if (!args.includes('--json') && (repo === 'test-user/sample-plugin' || repo.endsWith('/sample-plugin'))) {
+    console.error('GraphQL: Could not resolve to a Repository with the name "' + repo + '".');
+    process.exit(1);
+  }
+  if (args.includes('--json')) {
+    const fullName = repo || 'test-user/sample-plugin';
+    ok(JSON.stringify({ nameWithOwner: fullName, url: 'https://github.com/' + fullName }));
+  }
+  ok('https://github.com/test-user/' + path.basename(process.cwd()));
+}
 if (args[0] === 'repo' && args[1] === 'fork') ok('forked nexu-io/open-design');
 if (args[0] === 'repo' && args[1] === 'clone') {
   const dest = args[3] || path.basename(args[2]);
@@ -338,10 +357,28 @@ process.exit(1);
           await withFakeAgent(
             'git',
             `
+const fs = require('node:fs');
+const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const args = process.argv.slice(2);
 if (args[0] === 'push') {
   console.log('pushed');
+  process.exit(0);
+}
+if (args[0] === 'clone') {
+  const dest = args[args.length - 1];
+  fs.mkdirSync(dest, { recursive: true });
+  const init = spawnSync(process.env.OD_REAL_GIT, ['init', '-b', 'main'], { cwd: dest, encoding: 'utf8' });
+  if (init.status !== 0) {
+    if (init.stderr) process.stderr.write(init.stderr);
+    process.exit(init.status ?? 1);
+  }
+  const remote = args.find((arg) => String(arg).startsWith('https://')) || 'https://github.com/test-user/open-design.git';
+  const remoteAdd = spawnSync(process.env.OD_REAL_GIT, ['remote', 'add', 'origin', remote], { cwd: dest, encoding: 'utf8' });
+  if (remoteAdd.status !== 0) {
+    if (remoteAdd.stderr) process.stderr.write(remoteAdd.stderr);
+    process.exit(remoteAdd.status ?? 1);
+  }
   process.exit(0);
 }
 const result = spawnSync(process.env.OD_REAL_GIT, args, {
@@ -395,8 +432,28 @@ process.exit(result.status ?? 0);
       } else {
         process.env.OD_REAL_GIT = previousRealGit;
       }
+      if (previousGitAuthorName === undefined) {
+        delete process.env.GIT_AUTHOR_NAME;
+      } else {
+        process.env.GIT_AUTHOR_NAME = previousGitAuthorName;
+      }
+      if (previousGitAuthorEmail === undefined) {
+        delete process.env.GIT_AUTHOR_EMAIL;
+      } else {
+        process.env.GIT_AUTHOR_EMAIL = previousGitAuthorEmail;
+      }
+      if (previousGitCommitterName === undefined) {
+        delete process.env.GIT_COMMITTER_NAME;
+      } else {
+        process.env.GIT_COMMITTER_NAME = previousGitCommitterName;
+      }
+      if (previousGitCommitterEmail === undefined) {
+        delete process.env.GIT_COMMITTER_EMAIL;
+      } else {
+        process.env.GIT_COMMITTER_EMAIL = previousGitCommitterEmail;
+      }
     }
-  });
+  }, 120_000);
 
   it('runs the CLI install → project create → plugin run path with query and local SKILL.md in the agent prompt', async () => {
     const pluginRoot = await mkdtemp(path.join(tmpdir(), 'od-headless-cli-plugin-'));

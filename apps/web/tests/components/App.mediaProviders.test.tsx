@@ -218,11 +218,12 @@ describe('App media provider sync flows', () => {
   it('forces a media provider sync when settings are saved', async () => {
     mockedLoadConfig.mockReturnValue({
       ...baseConfig,
-      onboardingCompleted: false,
+      onboardingCompleted: true,
       privacyDecisionAt: 1778244000000,
     });
 
     render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open media settings' }));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: 'Settings dialog' })).toBeTruthy();
@@ -245,7 +246,7 @@ describe('App media provider sync flows', () => {
 
     expect(mockedSaveConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        onboardingCompleted: false,
+        onboardingCompleted: true,
         mediaProviders: {
           openai: {
             apiKey: 'media-key',
@@ -257,7 +258,7 @@ describe('App media provider sync flows', () => {
     );
     expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
       expect.objectContaining({
-        onboardingCompleted: false,
+        onboardingCompleted: true,
         mediaProviders: {
           openai: {
             apiKey: 'media-key',

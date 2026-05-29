@@ -20,6 +20,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  "e2e/scripts/visual-report.ts",
 ]);
 
 type GuardCheck = {
@@ -57,6 +58,8 @@ const residualAllowedExactPaths = new Set([
   // dist output exists.
   "packages/agui-adapter/esbuild.config.mjs",
   "packages/contracts/esbuild.config.mjs",
+  "packages/diagnostics/esbuild.config.mjs",
+  "packages/download/esbuild.config.mjs",
   "packages/host/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
@@ -76,12 +79,18 @@ const residualAllowedExactPaths = new Set([
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",
+  // AMR (vela) verifier: ad-hoc dev runner that imports the daemon's compiled
+  // `dist/acp.js` and drives a real `vela agent run` against a live model.
+  // Kept as .mjs so it can be invoked directly via Node without any transform.
+  "apps/daemon/scripts/verify-amr-real-vela.mjs",
+  // Fake `vela agent run --runtime opencode` ACP stdio stub used by the AMR
+  // integration tests. The Vitest test spawns it via `child_process.spawn`,
+  // which needs a directly-executable file (shebang + .mjs).
+  "apps/daemon/tests/fixtures/fake-vela.mjs",
   "tools/dev/bin/tools-dev.mjs",
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
-  "tools/pr/bin/tools-pr.mjs",
-  "tools/pr/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
@@ -108,6 +117,17 @@ const residualAllowedPathPrefixes = [
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
+  // Replay-based mock CLIs that impersonate the agent CLIs OD spawns
+  // (opencode/claude/codex/gemini/cursor-agent + ACP family). Need to
+  // be directly executable via Node so `child_process.spawn` from test
+  // harnesses and PATH-overlay shells work without any transform step.
+  // `mocks/scripts/` holds the maintainer-facing helpers (manifest math,
+  // fetch from R2) which are also pure-node single-file modules — same
+  // precedent as `apps/daemon/tests/fixtures/fake-vela.mjs` (an ACP
+  // stdio stub, allowlisted individually above). See `mocks/README.md`.
+  "mocks/lib/",
+  "mocks/mock-agent.mjs",
+  "mocks/scripts/",
   "test-results/",
   "vendor/",
 ];
@@ -492,6 +512,7 @@ async function checkE2eLayout(): Promise<boolean> {
       repositoryPath === "e2e/tsconfig.json" ||
       repositoryPath === "e2e/vitest.config.ts" ||
       repositoryPath === "e2e/playwright.config.ts" ||
+      repositoryPath === "e2e/playwright.visual.config.ts" ||
       repositoryPath === "e2e/AGENTS.md"
     ) {
       continue;
@@ -587,7 +608,6 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
-  ["pr", "directory"],
   ["serve", "directory"],
 ]);
 
@@ -602,7 +622,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, pr/, and serve/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and serve/`);
       continue;
     }
 

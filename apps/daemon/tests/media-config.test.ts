@@ -8,6 +8,7 @@ import {
   readMaskedConfig,
   resolveModelAlias,
   resolveProviderConfig,
+  seedProviderIfMissing,
   writeConfig,
 } from '../src/media-config.js';
 
@@ -866,5 +867,161 @@ describe('media-config model alias resolution (issue #1277)', () => {
     expect(
       await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
     ).toBe('doubao-seedream-5-0');
+  });
+});
+
+describe('seedProviderIfMissing', () => {
+  let projectRoot: string;
+  const SENSEAUDIO_ENV_KEYS = ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'];
+  const originalEnv = Object.fromEntries(
+    SENSEAUDIO_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-seed-'));
+    for (const key of SENSEAUDIO_ENV_KEYS) {
+      delete process.env[key];
+    }
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
+  });
+
+  afterEach(async () => {
+    for (const key of SENSEAUDIO_ENV_KEYS) {
+      if (originalEnv[key] == null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
+    }
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  async function writeStored(data: unknown) {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
+  async function readStoredJson(): Promise<unknown> {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const raw = await readFile(file, 'utf8');
+    return JSON.parse(raw);
+  }
+
+  it('writes a fresh entry when the slot is empty', async () => {
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-test-key',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(true);
+    const stored = await readStoredJson();
+    expect(stored).toEqual({
+      providers: {
+        senseaudio: {
+          apiKey: 'sa-test-key',
+          baseUrl: 'https://api.senseaudio.cn',
+        },
+      },
+    });
+  });
+
+  it('no-ops and preserves the stored key when one is already configured', async () => {
+    await writeStored({
+      providers: {
+        senseaudio: { apiKey: 'pre-existing-key', baseUrl: 'https://existing.example' },
+      },
+    });
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'newer-byok-key',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(false);
+    const stored = (await readStoredJson()) as { providers: Record<string, unknown> };
+    expect(stored.providers.senseaudio).toEqual({
+      apiKey: 'pre-existing-key',
+      baseUrl: 'https://existing.example',
+    });
+  });
+
+  it('preserves every other provider and aliases when seeding', async () => {
+    await writeStored({
+      providers: {
+        openai: { apiKey: 'sk-openai', baseUrl: 'https://api.openai.com/v1' },
+        volcengine: { apiKey: 'ark-key', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
+      },
+      aliases: { 'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0' },
+    });
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-new',
+    });
+    expect(wrote).toBe(true);
+    const stored = (await readStoredJson()) as {
+      providers: Record<string, unknown>;
+      aliases: Record<string, string>;
+    };
+    expect(stored.providers.openai).toEqual({
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+    expect(stored.providers.volcengine).toEqual({
+      apiKey: 'ark-key',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    });
+    expect(stored.providers.senseaudio).toEqual({ apiKey: 'sa-new' });
+    expect(stored.aliases).toEqual({
+      'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
+    });
+  });
+
+  it('no-ops when an env var resolves a key for the provider', async () => {
+    process.env.OD_SENSEAUDIO_API_KEY = 'env-key';
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-byok-key',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(false);
+    await expect(readStoredJson()).rejects.toThrow();
+  });
+
+  it('no-ops on empty apiKey', async () => {
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: '',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(false);
+    await expect(readStoredJson()).rejects.toThrow();
+  });
+
+  it('no-ops for unknown provider ids', async () => {
+    const wrote = await seedProviderIfMissing(projectRoot, 'not-a-provider', {
+      apiKey: 'whatever',
+    });
+    expect(wrote).toBe(false);
+    await expect(readStoredJson()).rejects.toThrow();
+  });
+
+  it('resolves the seeded key through resolveProviderConfig', async () => {
+    await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-final',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    const resolved = await resolveProviderConfig(projectRoot, 'senseaudio');
+    expect(resolved).toEqual({
+      apiKey: 'sa-final',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
   });
 });

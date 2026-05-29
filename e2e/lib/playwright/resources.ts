@@ -10,6 +10,12 @@ export interface MockArtifactScenario {
   heading: string;
 }
 
+export interface ExpectedScenarioFile {
+  kind?: string;
+  name: string;
+  previewText?: string;
+}
+
 export interface UiScenario {
   id: string;
   title: string;
@@ -52,6 +58,10 @@ export interface UiScenario {
   prompt: string;
   secondaryPrompt?: string;
   mockArtifact?: MockArtifactScenario;
+  expectedProjectMetadata?: Record<string, unknown>;
+  expectedRunRequest?: Record<string, unknown>;
+  expectedFiles?: ExpectedScenarioFile[];
+  expectedPreviewText?: string;
   notes?: string[];
 }
 

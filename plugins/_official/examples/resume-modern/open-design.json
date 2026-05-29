@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-resume-modern",
-  "title": "极简简历",
+  "title": "Modern Resume",
+  "title_i18n": {
+    "en": "Modern Resume",
+    "zh-CN": "极简简历",
+    "zh-TW": "現代履歷",
+    "ja": "モダン履歴書",
+    "ko": "모던 이력서",
+    "de": "Moderner Lebenslauf",
+    "fr": "CV Moderne",
+    "ru": "Современное резюме",
+    "es": "Currículum Moderno",
+    "pt-BR": "Currículo Moderno",
+    "it": "CV Moderno",
+    "vi": "Hồ Sơ Hiện Đại",
+    "pl": "Nowoczesne CV",
+    "id": "Resume Modern",
+    "nl": "Modern CV",
+    "ar": "السيرة الذاتية الحديثة",
+    "tr": "Modern Özgeçmiş",
+    "uk": "Сучасне резюме"
+  },
   "version": "0.1.0",
-  "description": "现代极简简历, A4 单页, 适合打印或导出 PDF",
+  "description": "Modern minimal resume, single A4 page, ready for print or PDF export.",
+  "description_i18n": {
+    "en": "Modern minimal resume, single A4 page, ready for print or PDF export.",
+    "zh-CN": "现代极简简历, A4 单页, 适合打印或导出 PDF",
+    "zh-TW": "現代簡約風格履歷，單頁 A4 格式，可列印或匯出 PDF。",
+    "ja": "モダンでミニマルな履歴書、A4サイズ1ページ、印刷またはPDF出力に対応。",
+    "ko": "모던 미니멀 이력서, A4 단일 페이지, 인쇄 또는 PDF 내보내기 가능.",
+    "de": "Moderner minimalistischer Lebenslauf, einzelne A4-Seite, druckfertig oder als PDF-Export.",
+    "fr": "CV moderne et minimaliste, format A4 une page, prêt pour l'impression ou l'export PDF.",
+    "ru": "Современное минималистичное резюме, одна страница A4, готово к печати или экспорту в PDF.",
+    "es": "Currículum moderno y minimalista, una página A4, listo para imprimir o exportar a PDF.",
+    "pt-BR": "Currículo moderno e minimalista, página A4 única, pronto para impressão ou exportação em PDF.",
+    "it": "CV moderno e minimalista, singola pagina A4, pronto per la stampa o l'esportazione PDF.",
+    "vi": "Hồ sơ xin việc hiện đại tối giản, một trang A4, sẵn sàng in hoặc xuất PDF.",
+    "pl": "Nowoczesne minimalistyczne CV, jedna strona A4, gotowe do druku lub eksportu do PDF.",
+    "id": "Resume modern minimalis, satu halaman A4, siap cetak atau ekspor PDF.",
+    "nl": "Modern minimalistisch CV, enkele A4-pagina, klaar voor afdrukken of PDF-export.",
+    "ar": "سيرة ذاتية حديثة وبسيطة، صفحة A4 واحدة، جاهزة للطباعة أو التصدير إلى PDF.",
+    "tr": "Modern minimalist özgeçmiş, tek sayfa A4, yazdırmaya veya PDF olarak dışa aktarmaya hazır.",
+    "uk": "Сучасне мінімалістичне резюме, одна сторінка A4, готове до друку або експорту в PDF."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -41,11 +81,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Modern Resume template to turn my content into a modern minimal single-page A4 resume ready for print or PDF export. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "极简简历"
+          "title": "Modern Resume",
+          "title_i18n": {
+            "en": "Modern Resume",
+            "zh-CN": "极简简历"
+          }
         }
       ]
     },

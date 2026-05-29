@@ -29,9 +29,13 @@ async function cleanArtifacts(): Promise<void> {
     path.join(uiDir, '.od-data'),
     path.join(uiDir, 'test-results'),
     path.join(uiDir, 'reports', 'test-results'),
+    path.join(uiDir, 'reports', 'visual-test-results'),
     path.join(uiDir, 'reports', 'html'),
     path.join(uiDir, 'reports', 'playwright-html-report'),
     path.join(uiDir, 'reports', 'results.json'),
+    path.join(uiDir, 'reports', 'visual-results.json'),
+    path.join(uiDir, 'reports', 'visual-screenshots'),
+    path.join(uiDir, 'reports', 'visual-report'),
     path.join(uiDir, 'reports', 'junit.xml'),
     path.join(uiDir, '.DS_Store'),
   ];

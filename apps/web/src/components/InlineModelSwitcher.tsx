@@ -8,14 +8,29 @@
 // upward through the same callbacks `AvatarMenu` already uses, so the
 // switcher inherits autosave + daemon sync without re-implementing it.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { KNOWN_PROVIDERS } from '../state/config';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
+import {
+  cancelVelaLogin,
+  fetchVelaLoginStatus,
+  startVelaLogin,
+  type VelaLoginStatus,
+} from '../providers/daemon';
+import type { AgentInfo, ApiProtocol, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
-import { renderModelOptions } from './modelOptions';
+import {
+  AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STARTUP_SETTLE_MS,
+  amrLoginPollOutcome,
+  amrLoginStatusEventReason,
+  notifyAmrLoginStatusChanged,
+} from './amrLoginPolling';
+import { normalizeAgentModelChoice } from './agentModelSelection';
+import { SearchableModelSelect } from './modelOptions';
 
 interface Props {
   config: AppConfig;
@@ -29,6 +44,7 @@ interface Props {
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
   onOpenSettings: (
     section?:
       | 'execution'
@@ -49,6 +65,41 @@ const API_PROTOCOL_TABS: Array<{ id: ApiProtocol; title: string }> = [
   { id: 'google', title: 'Google' },
 ];
 
+const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
+let amrReminderSeenFallback = false;
+
+function readAmrReminderSeen(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage
+      ? window.localStorage.getItem(AMR_REMINDER_SEEN_KEY) === '1'
+      : amrReminderSeenFallback;
+  } catch {
+    return amrReminderSeenFallback;
+  }
+}
+
+function markAmrReminderSeen(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.localStorage) {
+      window.localStorage.setItem(AMR_REMINDER_SEEN_KEY, '1');
+      return;
+    }
+  } catch {
+    // Ignore storage failures; the reminder is purely advisory UI.
+  }
+  amrReminderSeenFallback = true;
+}
+
+function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+}
+
+function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
+  return agent.id === 'amr' ? 'AMR' : displayAgentName(agent);
+}
+
 export function InlineModelSwitcher({
   config,
   agents,
@@ -58,11 +109,123 @@ export function InlineModelSwitcher({
   onAgentModelChange,
   onApiProtocolChange,
   onApiModelChange,
+  providerModelsCache,
   onOpenSettings,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
+  const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState(false);
+  const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
+  const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
+    useState(false);
+  const amrPollRef = useRef<number | null>(null);
+  const amrLoginStartedAtRef = useRef<number | null>(null);
+
+  const stopAmrPolling = useCallback(() => {
+    if (amrPollRef.current !== null) {
+      window.clearInterval(amrPollRef.current);
+      amrPollRef.current = null;
+    }
+  }, []);
+
+  const refreshAmrStatus = useCallback(async () => {
+    const next = await fetchVelaLoginStatus();
+    if (next) {
+      setAmrStatus(next);
+      const pendingStartup =
+        amrLoginStartedAtRef.current !== null &&
+        Date.now() - amrLoginStartedAtRef.current < AMR_LOGIN_STARTUP_SETTLE_MS;
+      if (next.loggedIn) {
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+      } else if (next.loginInFlight) {
+        setAmrLoginPending(true);
+      } else if (!pendingStartup) {
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+      }
+    }
+    return next;
+  }, []);
+
+  const startAmrPolling = useCallback((startedAt = Date.now()) => {
+    stopAmrPolling();
+    amrLoginStartedAtRef.current = startedAt;
+    const tick = async () => {
+      const next = await refreshAmrStatus();
+      const outcome = amrLoginPollOutcome(next, startedAt);
+      if (outcome === 'signed-in') {
+        stopAmrPolling();
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        return;
+      }
+      if (outcome === 'stopped' || outcome === 'timed-out') {
+        stopAmrPolling();
+        if (outcome === 'timed-out') {
+          void cancelVelaLogin().then(() =>
+            notifyAmrLoginStatusChanged('login-canceled'),
+          );
+        }
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        setAmrLoginError(true);
+      }
+    };
+    amrPollRef.current = window.setInterval(() => {
+      void tick();
+    }, AMR_LOGIN_POLL_INTERVAL_MS);
+  }, [refreshAmrStatus, stopAmrPolling]);
+
+  const handleAmrSignIn = useCallback(async () => {
+    const startedAt = Date.now();
+    amrLoginStartedAtRef.current = startedAt;
+    setAmrLoginError(false);
+    setAmrLoginPending(true);
+    const result = await startVelaLogin();
+    if (!result.ok && !result.alreadyRunning) {
+      amrLoginStartedAtRef.current = null;
+      setAmrLoginPending(false);
+      setAmrLoginError(true);
+      return;
+    }
+    notifyAmrLoginStatusChanged('login-started');
+    startAmrPolling(startedAt);
+  }, [startAmrPolling]);
+
+  const handleAmrCancelLogin = useCallback(async () => {
+    stopAmrPolling();
+    amrLoginStartedAtRef.current = null;
+    setAmrLoginError(false);
+    setAmrLoginPending(false);
+    await cancelVelaLogin();
+    notifyAmrLoginStatusChanged('login-canceled');
+    await refreshAmrStatus();
+  }, [refreshAmrStatus, stopAmrPolling]);
+
+  const handleAgentButtonClick = useCallback(
+    async (agentId: string) => {
+      onAgentChange?.(agentId);
+      if (agentId !== 'amr') return;
+      if (amrLoginPending) {
+        await handleAmrCancelLogin();
+        return;
+      }
+      const latest = await refreshAmrStatus();
+      if (latest?.loggedIn) return;
+      await handleAmrSignIn();
+    },
+    [
+      amrLoginPending,
+      handleAmrCancelLogin,
+      handleAmrSignIn,
+      onAgentChange,
+      refreshAmrStatus,
+    ],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -81,6 +244,42 @@ export function InlineModelSwitcher({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (open && agents.some((agent) => agent.id === 'amr' && agent.available)) {
+      void refreshAmrStatus();
+    }
+    return () => stopAmrPolling();
+  }, [agents, open, refreshAmrStatus, stopAmrPolling]);
+
+  useEffect(() => {
+    const onStatusChange = (event: Event) => {
+      const reason = amrLoginStatusEventReason(event);
+      if (reason === 'login-started') {
+        const startedAt = Date.now();
+        amrLoginStartedAtRef.current = startedAt;
+        setAmrLoginError(false);
+        setAmrLoginPending(true);
+        startAmrPolling(startedAt);
+      } else if (reason === 'login-canceled') {
+        amrLoginStartedAtRef.current = null;
+        stopAmrPolling();
+        setAmrLoginPending(false);
+      }
+      void refreshAmrStatus().then((next) => {
+        if (next?.loggedIn) {
+          amrLoginStartedAtRef.current = null;
+          stopAmrPolling();
+          return;
+        }
+        if (next?.loginInFlight) startAmrPolling();
+      });
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    return () => {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    };
+  }, [refreshAmrStatus, startAmrPolling, stopAmrPolling]);
+
   const installedAgents = useMemo(
     () => agents.filter((a) => a.available),
     [agents],
@@ -89,15 +288,74 @@ export function InlineModelSwitcher({
     () => agents.find((a) => a.id === config.agentId) ?? null,
     [agents, config.agentId],
   );
+  const amrInstalled = installedAgents.some((a) => a.id === 'amr');
+  const shouldOfferAmrReminder =
+    config.mode === 'daemon' && config.agentId !== 'amr' && amrInstalled;
+  const showAmrReminder = shouldOfferAmrReminder && !amrReminderSeen;
 
   const currentChoice =
     (config.agentId && config.agentModels?.[config.agentId]) || {};
+  const normalizedCurrentChoice = normalizeAgentModelChoice(
+    currentAgent,
+    currentChoice,
+  );
+  const currentAgentId = currentAgent?.id ?? null;
+  const normalizedCurrentModelId = normalizedCurrentChoice?.model ?? null;
+  const normalizedCurrentReasoning = normalizedCurrentChoice?.reasoning;
+  const currentAgentModelIds = currentAgent?.models?.map((m) => m.id) ?? [];
+  const configuredModelId =
+    typeof currentChoice.model === 'string' && currentChoice.model
+      ? currentChoice.model
+      : null;
   const currentModelId =
-    currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
+    currentAgent?.id === 'amr' &&
+    configuredModelId &&
+    !currentAgentModelIds.includes(configuredModelId)
+      ? currentAgent?.models?.[0]?.id ?? null
+      : configuredModelId ?? currentAgent?.models?.[0]?.id ?? null;
+
+  useEffect(() => {
+    if (!currentAgentId || !normalizedCurrentModelId) return;
+    onAgentModelChange(currentAgentId, {
+      model: normalizedCurrentModelId,
+      reasoning: normalizedCurrentReasoning,
+    });
+  }, [
+    currentAgentId,
+    normalizedCurrentModelId,
+    normalizedCurrentReasoning,
+    onAgentModelChange,
+  ]);
+
   const currentModelLabel =
     currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
+  const amrLoggedIn = amrStatus?.loggedIn === true;
+  const amrActionLabel = amrLoginPending
+    ? t('settings.amrSigningIn')
+    : amrLoggedIn
+      ? t('settings.amrSignedIn')
+      : t('settings.amrSignIn');
+  const amrPendingHoverLabel = t('settings.amrCancelSignIn');
+  const amrInlineStatus = amrLoginError
+    ? t('settings.amrLoginErrorCompact')
+    : amrLoggedIn
+      ? t('settings.amrSignedIn')
+      : amrLoginPending
+        ? t('settings.amrSigningIn')
+        : t('settings.amrSignIn');
+  const amrStatusIconName = amrLoggedIn
+      ? 'check'
+      : amrLoginPending
+        ? 'spinner'
+        : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const providerModelsInputKey = [
+    apiProtocol,
+    config.baseUrl.trim().replace(/\/+$/, ''),
+    config.apiKey.trim(),
+    config.apiVersion?.trim() ?? '',
+  ].join('\n');
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -109,7 +367,18 @@ export function InlineModelSwitcher({
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
-  const apiModelOptions = providerForProtocol?.models ?? [];
+  const fetchedProviderModels = providerModelsCache?.[providerModelsInputKey] ?? [];
+  const apiModelOptions = useMemo(() => {
+    const discovered = fetchedProviderModels.map((model) => model.id);
+    const staticOptions = providerForProtocol?.models ?? [];
+    const merged = new Set<string>([...discovered, ...staticOptions]);
+    if (config.model.trim()) merged.add(config.model.trim());
+    return Array.from(merged);
+  }, [config.model, fetchedProviderModels, providerForProtocol?.models]);
+  const apiModelChoices = useMemo(
+    () => apiModelOptions.map((id) => ({ id, label: id })),
+    [apiModelOptions],
+  );
 
   // Chip text — keep it tight so the pill doesn't wrap on small viewports.
   // CLI: "Claude · Sonnet 4.5"; BYOK: "Anthropic · sonnet-4.5".
@@ -119,7 +388,9 @@ export function InlineModelSwitcher({
       : t('inlineSwitcher.chipByok');
   const chipPrimary =
     config.mode === 'daemon'
-      ? currentAgent?.name ?? t('inlineSwitcher.noAgent')
+      ? currentAgent
+        ? displayAgentChipName(currentAgent)
+        : t('inlineSwitcher.noAgent')
       : apiProtocolLabel(apiProtocol);
   const chipModel =
     config.mode === 'daemon'
@@ -127,6 +398,24 @@ export function InlineModelSwitcher({
         ? currentModelLabel
         : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
+
+  const handleChipClick = useCallback(() => {
+    const nextOpen = !open;
+    if (nextOpen && showAmrReminder) {
+      setShowAmrReminderInPopover(true);
+      setAmrReminderSeen(true);
+      markAmrReminderSeen();
+    } else if (!nextOpen) {
+      setShowAmrReminderInPopover(false);
+    }
+    setOpen(nextOpen);
+  }, [open, showAmrReminder]);
+
+  useEffect(() => {
+    if (!open || config.mode !== 'daemon' || config.agentId === 'amr') {
+      setShowAmrReminderInPopover(false);
+    }
+  }, [config.agentId, config.mode, open]);
 
   return (
     <div
@@ -136,13 +425,23 @@ export function InlineModelSwitcher({
     >
       <button
         type="button"
-        className="inline-switcher__chip"
+        className={
+          'inline-switcher__chip' +
+          (showAmrReminder ? ' has-amr-reminder' : '')
+        }
         data-testid="inline-model-switcher-chip"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
         title={t('inlineSwitcher.chipTitle')}
       >
+        {showAmrReminder ? (
+          <span
+            className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
+            data-testid="inline-model-switcher-amr-reminder"
+            aria-hidden="true"
+          />
+        ) : null}
         <span className="inline-switcher__chip-icon" aria-hidden="true">
           {config.mode === 'daemon' && currentAgent ? (
             <AgentIcon id={currentAgent.id} size={18} />
@@ -244,25 +543,87 @@ export function InlineModelSwitcher({
                   >
                     {installedAgents.map((a) => {
                       const active = config.agentId === a.id;
+                      const agentName = displayAgentChipName(a);
+                      const showAgentReminder =
+                        a.id === 'amr' &&
+                        showAmrReminderInPopover &&
+                        config.agentId !== 'amr';
                       return (
-                        <button
+                        <div
                           key={a.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          className={
-                            'inline-switcher__agent' +
-                            (active ? ' is-active' : '')
-                          }
-                          data-testid={`inline-model-switcher-agent-${a.id}`}
-                          onClick={() => onAgentChange?.(a.id)}
-                          title={a.version ? `${a.name} · ${a.version}` : a.name}
+                          className="inline-switcher__agent-row"
                         >
-                          <AgentIcon id={a.id} size={20} />
-                          <span className="inline-switcher__agent-name">
-                            {a.name}
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            aria-label={
+                              a.id === 'amr'
+                                ? `${agentName} ${amrInlineStatus}`
+                                : agentName
+                            }
+                            className={
+                              'inline-switcher__agent' +
+                              (active ? ' is-active' : '') +
+                              (showAgentReminder ? ' has-amr-reminder' : '')
+                            }
+                            data-testid={`inline-model-switcher-agent-${a.id}`}
+                            onClick={() => void handleAgentButtonClick(a.id)}
+                            title={
+                              a.id === 'amr' && amrLoginPending
+                                ? amrPendingHoverLabel
+                                : a.id !== 'amr' && a.version
+                                  ? `${agentName} · ${a.version}`
+                                  : agentName
+                            }
+                          >
+                            <AgentIcon id={a.id} size={20} />
+                            {showAgentReminder ? (
+                              <span
+                                className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--agent"
+                                data-testid="inline-model-switcher-agent-amr-reminder"
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                            <span className="inline-switcher__agent-name">
+                              {agentName}
+                            </span>
+                            {a.id === 'amr' ? (
+                              <span className="inline-switcher__agent-status">
+                                {amrStatusIconName ? (
+                                  <span
+                                    className={
+                                      'inline-switcher__agent-status-icon' +
+                                      (amrLoginPending ? ' is-pending' : '') +
+                                      (amrLoggedIn ? ' is-signed-in' : '') +
+                                      (!amrLoginPending && !amrLoggedIn ? ' is-signed-out' : '')
+                                    }
+                                  >
+                                    <Icon name={amrStatusIconName} size={13} />
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={
+                                    'inline-switcher__agent-action-label' +
+                                    (amrLoginPending ? ' is-cancelable' : '')
+                                  }
+                                >
+                                  <span className="inline-switcher__agent-action-default">
+                                    {amrActionLabel}
+                                  </span>
+                                  {amrLoginPending ? (
+                                    <span
+                                      className="inline-switcher__agent-action-hover"
+                                      aria-hidden="true"
+                                    >
+                                      {amrPendingHoverLabel}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </span>
+                            ) : null}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -276,24 +637,33 @@ export function InlineModelSwitcher({
                   <span className="inline-switcher__label">
                     {t('inlineSwitcher.modelLabel')}
                   </span>
-                  <select
+                  <SearchableModelSelect
                     className="inline-switcher__select"
                     data-testid="inline-model-switcher-agent-model"
+                    searchInputTestId="inline-model-switcher-agent-model-search"
+                    popoverTestId="inline-model-switcher-agent-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={currentAgent.models}
                     value={currentModelId ?? ''}
-                    onChange={(e) =>
+                    onChange={(nextValue) =>
                       onAgentModelChange?.(currentAgent.id, {
-                        model: e.target.value,
+                        model: nextValue,
                       })
                     }
-                  >
-                    {renderModelOptions(currentAgent.models)}
-                    {currentModelId &&
-                    !currentAgent.models.some((m) => m.id === currentModelId) ? (
-                      <option value={currentModelId}>
-                        {currentModelId} {t('inlineSwitcher.customSuffix')}
-                      </option>
-                    ) : null}
-                  </select>
+                    additionalOptions={
+                      currentAgent.id !== 'amr' &&
+                      currentModelId &&
+                      !currentAgent.models.some((m) => m.id === currentModelId)
+                        ? [
+                            {
+                              value: currentModelId,
+                              label: `${currentModelId} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
                 </div>
               ) : null}
             </>
@@ -331,24 +701,27 @@ export function InlineModelSwitcher({
                   {t('inlineSwitcher.modelLabel')}
                 </span>
                 {apiModelOptions.length > 0 ? (
-                  <select
+                  <SearchableModelSelect
                     className="inline-switcher__select"
                     data-testid="inline-model-switcher-api-model"
+                    searchInputTestId="inline-model-switcher-api-model-search"
+                    popoverTestId="inline-model-switcher-api-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={apiModelChoices}
                     value={config.model}
-                    onChange={(e) => onApiModelChange?.(e.target.value)}
-                  >
-                    {apiModelOptions.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
-                      </option>
-                    ))}
-                    {config.model &&
-                    !apiModelOptions.includes(config.model) ? (
-                      <option value={config.model}>
-                        {config.model} {t('inlineSwitcher.customSuffix')}
-                      </option>
-                    ) : null}
-                  </select>
+                    onChange={(nextValue) => onApiModelChange?.(nextValue)}
+                    additionalOptions={
+                      config.model && !apiModelOptions.includes(config.model)
+                        ? [
+                            {
+                              value: config.model,
+                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
                 ) : (
                   <span className="inline-switcher__hint">
                     {t('inlineSwitcher.openSettingsForModel')}

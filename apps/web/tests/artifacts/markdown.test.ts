@@ -69,6 +69,28 @@ describe('renderMarkdownToSafeHtml', () => {
     expect(out).not.toContain('<a ');
   });
 
+  it('strips trailing punctuation from URLs', () => {
+    // Common cases: URL followed by ", }, ), ., ,, ;
+    const cases: [string, string][] = [
+      ['[Link](https://example.com")', 'https://example.com'],
+      ['[Link](https://example.com}")', 'https://example.com'],
+      ['[Link](https://example.com")} )', 'https://example.com'],
+      ['[Link](https://example.com.)', 'https://example.com'],
+      ['[Link](https://example.com,)', 'https://example.com'],
+      ['[Link](https://example.com;)', 'https://example.com'],
+      ['[Link](https://example.com:8080/path)",', 'https://example.com:8080/path'],
+      // URLs inside JSON-like output
+      ['[Link](https://github.com/user/repo")}', 'https://github.com/user/repo'],
+      ['[Link](https://github.com/user/repo.git")}', 'https://github.com/user/repo.git'],
+      // Realistic sentence
+      ['Check out [the repo](https://github.com/nexu-io/open-design).', 'https://github.com/nexu-io/open-design'],
+    ];
+    for (const [md, expectedHref] of cases) {
+      const out = renderMarkdownToSafeHtml(md);
+      expect(out).toContain(`href="${expectedHref}"`);
+    }
+  });
+
   it('renders a GFM pipe table with header and body rows', () => {
     const md = [
       '| 字段 | 类型 | 说明 |',

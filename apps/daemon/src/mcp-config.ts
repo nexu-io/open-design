@@ -404,6 +404,87 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
   return out;
 }
 
+/**
+ * OpenCode merges its config from multiple sources at boot — global
+ * `~/.config/opencode/opencode.json`, the `OPENCODE_CONFIG` file path, the
+ * project `opencode.json`, and the `OPENCODE_CONFIG_CONTENT` env var (an
+ * inline JSON string). The env-var path is what lets a launcher like the
+ * Open Design daemon hand servers to a single `opencode run` invocation
+ * without writing into the user's global config or leaving a temp file
+ * around on crash.
+ *
+ * Schema (verified against the dev branch of `sst/opencode`'s
+ * `packages/opencode/src/config/config.ts` and the public docs at
+ * <https://opencode.ai/docs/mcp-servers>):
+ *
+ *   {
+ *     "mcp": {
+ *       "<id>": {
+ *         "type": "local",
+ *         "command": ["<cmd>", "<arg1>", ...],
+ *         "environment"?: { ... },
+ *         "enabled": true
+ *       },
+ *       "<id>": {
+ *         "type": "remote",
+ *         "url": "...",
+ *         "headers"?: { ... },
+ *         "enabled": true
+ *       }
+ *     }
+ *   }
+ *
+ * Returns `null` when nothing would be emitted — the caller must NOT set
+ * `OPENCODE_CONFIG_CONTENT` to `null`/empty in that case, because doing so
+ * would override the user's saved global config with an empty object. A
+ * null return means "leave the env untouched and let OpenCode read the
+ * user's home-dir config as-is."
+ *
+ * The OAuth Bearer merge mirrors `buildClaudeMcpJson` so a remote MCP
+ * server the daemon already authenticated against (Higgsfield etc.)
+ * works the same way for OpenCode users without forcing them to
+ * re-authenticate inside OpenCode.
+ */
+export function buildOpenCodeMcpConfigContent(
+  servers: McpServerConfig[],
+  tokens: Record<string, string> = {},
+): string | null {
+  const enabled = servers.filter((s) => s.enabled);
+  if (enabled.length === 0) return null;
+  const mcp: Record<string, Record<string, unknown>> = {};
+  for (const s of enabled) {
+    if (s.transport === 'stdio') {
+      const cmd = typeof s.command === 'string' ? s.command.trim() : '';
+      if (!cmd) continue;
+      const entry: Record<string, unknown> = {
+        type: 'local',
+        command: [cmd, ...(Array.isArray(s.args) ? s.args : [])],
+      };
+      if (s.env && Object.keys(s.env).length > 0) {
+        entry.environment = { ...s.env };
+      }
+      entry.enabled = true;
+      mcp[s.id] = entry;
+    } else {
+      const url = typeof s.url === 'string' ? s.url.trim() : '';
+      if (!url) continue;
+      const entry: Record<string, unknown> = {
+        type: 'remote',
+        url: s.url,
+      };
+      const headers = mergeAuthHeader(
+        s.headers,
+        effectiveMcpAuthMode(s) === 'oauth' ? tokens[s.id] : undefined,
+      );
+      if (headers && Object.keys(headers).length > 0) entry.headers = headers;
+      entry.enabled = true;
+      mcp[s.id] = entry;
+    }
+  }
+  if (Object.keys(mcp).length === 0) return null;
+  return JSON.stringify({ mcp });
+}
+
 // ───────────────────────────────────────────────────────────────────────
 // Built-in templates surfaced in the Settings "Add MCP server" picker.
 // Picking one fills the form with defaults; the resulting McpServerConfig

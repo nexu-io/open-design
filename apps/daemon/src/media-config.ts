@@ -521,3 +521,53 @@ export async function writeConfig(projectRoot: string, body: unknown) {
   await writeStored(projectRoot, next);
   return readMaskedConfig(projectRoot);
 }
+
+/**
+ * Idempotent "seed if empty" write for a single provider slot. The chat
+ * proxy uses this to mirror a BYOK key into media-config so the agent's
+ * image / TTS path picks up the same credential without the user having
+ * to paste it twice. Strict rules:
+ *   * No-op when an apiKey is ALREADY stored for `providerId` (the user
+ *     may have configured Media independently and we never overwrite).
+ *   * No-op when an env-var key resolves for `providerId` (env wins
+ *     regardless of disk state — seeding would be invisible).
+ *   * No-op when the incoming `apiKey` is empty (we only seed values
+ *     the chat layer has just verified upstream).
+ *   * Otherwise merge `{ [providerId]: entry }` into the existing
+ *     provider map and persist. All other provider slots and aliases
+ *     are preserved byte-for-byte.
+ *
+ * Returns `true` when a write happened (caller can log), `false` when
+ * the call was a no-op. Errors are surfaced — the caller decides
+ * whether to swallow them (fire-and-forget) or propagate.
+ */
+export async function seedProviderIfMissing(
+  projectRoot: string,
+  providerId: string,
+  entry: { apiKey?: string; baseUrl?: string; model?: string },
+): Promise<boolean> {
+  if (!PROVIDER_IDS.includes(providerId)) return false;
+  const apiKey = entry.apiKey?.trim() ?? '';
+  if (!apiKey) return false;
+  // Env var wins at resolution time, so seeding when env is set would
+  // be invisible to the user. Skip to avoid confusing on-disk state.
+  if (readEnvKey(providerId)) return false;
+
+  const prior = await readStored(projectRoot);
+  const priorApiKey =
+    typeof prior[providerId]?.apiKey === 'string' && prior[providerId].apiKey.trim()
+      ? prior[providerId].apiKey.trim()
+      : '';
+  if (priorApiKey) return false;
+
+  const baseUrl = entry.baseUrl?.trim() ?? '';
+  const model = entry.model?.trim() ?? '';
+  const next: ProviderMap = { ...prior };
+  next[providerId] = {
+    apiKey,
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(model ? { model } : {}),
+  };
+  await writeStored(projectRoot, next);
+  return true;
+}

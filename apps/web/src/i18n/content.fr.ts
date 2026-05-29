@@ -319,6 +319,7 @@ export const FR_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   'Media & Consumer': 'Médias & grand public',
   'Social & Messaging': 'Réseaux sociaux & messageries',
   Automotive: 'Automobile',
+  Product: 'Produit',
   'Editorial & Print': 'Éditorial & print',
   'Editorial · Studio': 'Éditorial · Studio',
   'Retro & Nostalgic': 'Rétro & nostalgique',

@@ -79,11 +79,11 @@ const HIDDEN_DEFAULT_PLUGIN = {
   },
 };
 
-// The Prototype / Live-artifact chips now bind to the bundled
-// `example-web-prototype` plugin (which ships its own seed +
-// layouts + checklist) instead of the generic od-new-generation
-// router. Mirror that here so the chip-applies test can find a
-// matching plugin record and the apply call resolves to the new id.
+// The Prototype chip binds to the bundled `example-web-prototype`
+// plugin (which ships its own seed + layouts + checklist) instead of
+// the generic od-new-generation router. Mirror that here so the
+// chip-applies test can find a matching plugin record and the apply
+// call resolves to the new id.
 const WEB_PROTOTYPE_PLUGIN = {
   ...DEFAULT_PLUGIN,
   id: 'example-web-prototype',
@@ -141,10 +141,137 @@ const WEB_PROTOTYPE_PLUGIN = {
   },
 };
 
+const SIMPLE_DECK_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'example-simple-deck',
+  title: 'Simple Deck',
+  source: '/tmp/simple-deck',
+  fsPath: '/tmp/simple-deck',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'example-simple-deck',
+    title: 'Simple Deck',
+    description: 'Single-file horizontal-swipe HTML deck.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      useCase: {
+        query: 'Create a {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}. Speaker notes: {{speakerNotes}}. Use {{designSystem}}.',
+      },
+      inputs: [
+        {
+          name: 'deckType',
+          type: 'select',
+          required: true,
+          options: ['pitch deck', 'product overview', 'study deck'],
+          default: 'pitch deck',
+          label: 'Deck type',
+        },
+        {
+          name: 'topic',
+          type: 'string',
+          required: true,
+          default: 'the user brief',
+          label: 'Topic',
+        },
+        {
+          name: 'audience',
+          type: 'string',
+          required: true,
+          default: 'decision makers',
+          label: 'Audience',
+        },
+        {
+          name: 'slideCount',
+          type: 'select',
+          required: true,
+          options: ['5-10 pages', '10-15 pages', '15-20 pages', '20-25 pages', '25-30 pages'],
+          default: '10-15 pages',
+          label: 'Pages',
+        },
+        {
+          name: 'speakerNotes',
+          type: 'select',
+          options: ['include speaker notes', 'no speaker notes'],
+          default: 'include speaker notes',
+          label: 'Speaker notes',
+        },
+        {
+          name: 'designSystem',
+          type: 'string',
+          default: 'the active project design system',
+          label: 'Design system',
+        },
+      ],
+    },
+  },
+};
+
+const LIVE_ARTIFACT_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'example-live-artifact',
+  title: 'Live Artifact',
+  source: '/tmp/live-artifact',
+  fsPath: '/tmp/live-artifact',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'example-live-artifact',
+    title: 'Live Artifact',
+    description: 'Create refreshable, auditable Open Design artifacts.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      mode: 'prototype',
+      scenario: 'live',
+      useCase: {
+        query: 'Create refreshable, auditable Open Design artifacts backed by connector or local data.',
+      },
+      context: {
+        skills: [{ path: './SKILL.md' }],
+      },
+      pipeline: {
+        stages: [{ id: 'generate', atoms: ['file-write', 'live-artifact'] }],
+      },
+    },
+  },
+};
+
+const LIVE_ARTIFACT_IMAGE_TEMPLATE_PLUGIN = {
+  ...LIVE_ARTIFACT_PLUGIN,
+  id: 'image-template-notion-team-dashboard-live-artifact',
+  title: 'Notion live artifact',
+  source: '/tmp/notion-live-artifact',
+  fsPath: '/tmp/notion-live-artifact',
+  manifest: {
+    ...LIVE_ARTIFACT_PLUGIN.manifest,
+    name: 'image-template-notion-team-dashboard-live-artifact',
+    title: 'Notion live artifact',
+    description: 'Create a live Notion dashboard artifact.',
+    od: {
+      ...LIVE_ARTIFACT_PLUGIN.manifest.od,
+      mode: 'image',
+      surface: 'image',
+      useCase: {
+        query: 'Create a refreshable Notion dashboard live artifact.',
+      },
+    },
+  },
+};
+
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
   artifactKind: 'Open Design plugin',
   audience: 'Open Design plugin authors',
   topic: 'packaging a reusable workflow as an Open Design plugin',
+};
+
+const REFLY_DESIGN_SYSTEM = {
+  id: 'ds-refly',
+  title: 'Refly Design System',
+  category: 'Productivity & SaaS',
+  summary: 'Refly defaults',
+  source: 'user' as const,
+  status: 'published' as const,
+  isEditable: true,
 };
 
 const AUTHORING_APPLY_RESULT = {
@@ -205,6 +332,50 @@ const WEB_PROTOTYPE_APPLY_RESULT = {
   },
 };
 
+const SIMPLE_DECK_APPLY_RESULT = {
+  ...AUTHORING_APPLY_RESULT,
+  query: SIMPLE_DECK_PLUGIN.manifest.od.useCase.query,
+  inputs: SIMPLE_DECK_PLUGIN.manifest.od.inputs,
+  appliedPlugin: {
+    ...AUTHORING_APPLY_RESULT.appliedPlugin,
+    snapshotId: 'snap-simple-deck',
+    pluginId: 'example-simple-deck',
+    inputs: {
+      deckType: 'pitch deck',
+      topic: 'the user brief',
+      audience: 'decision makers',
+      slideCount: '10-15 pages',
+      speakerNotes: 'include speaker notes',
+      designSystem: 'the active project design system',
+    },
+  },
+};
+
+const LIVE_ARTIFACT_APPLY_RESULT = {
+  ...AUTHORING_APPLY_RESULT,
+  query: LIVE_ARTIFACT_PLUGIN.manifest.od.useCase.query,
+  inputs: [],
+  appliedPlugin: {
+    ...AUTHORING_APPLY_RESULT.appliedPlugin,
+    snapshotId: 'snap-live-artifact',
+    pluginId: 'example-live-artifact',
+    inputs: {},
+  },
+  projectMetadata: {
+    skillId: 'live-artifact',
+  },
+};
+
+function stubAnimationFrame() {
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    const id = window.setTimeout(() => cb(window.performance.now()), 0);
+    return id;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+    window.clearTimeout(id);
+  });
+}
+
 describe('HomeView prompt handoff', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -212,16 +383,24 @@ describe('HomeView prompt handoff', () => {
   });
 
   it('consumes a plugin authoring handoff once and focuses the textarea', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => (
-      new Response(JSON.stringify({ plugins: [] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    )));
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
+    let resolveApply: (response: Response) => void = () => undefined;
+    const applyResponse = new Promise<Response>((resolve) => {
+      resolveApply = resolve;
     });
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN, WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/od-plugin-authoring/apply')) {
+        return applyResponse;
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
 
     const { rerender } = render(
       <HomeView
@@ -237,6 +416,21 @@ describe('HomeView prompt handoff', () => {
     await waitFor(() => {
       expect((input as HTMLTextAreaElement).value).toBe(PLUGIN_AUTHORING_PROMPT);
       expect(document.activeElement).toBe(input);
+    });
+    const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
+    expect(inputCard?.classList.contains('home-hero__input-card--compact-authoring')).toBe(true);
+    expect(inputCard?.style.getPropertyValue('--home-hero-prompt-max-height')).toBe('132px');
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/od-plugin-authoring/apply',
+      expect.anything(),
+    ));
+    resolveApply(new Response(JSON.stringify(AUTHORING_APPLY_RESULT), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
     });
 
     fireEvent.change(input, { target: { value: 'User edited prompt' } });
@@ -255,16 +449,22 @@ describe('HomeView prompt handoff', () => {
   });
 
   it('uses the same authoring prompt from the Home rail chip', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => (
-      new Response(JSON.stringify({ plugins: [] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    )));
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN, WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/od-plugin-authoring/apply')) {
+        return new Response(JSON.stringify(AUTHORING_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+    stubAnimationFrame();
 
     render(
       <HomeView
@@ -275,7 +475,8 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clearActiveTypeChip();
+    await clickHomeShortcut('create-plugin');
 
     const input = await screen.findByTestId('home-hero-input');
     await waitFor(() => {
@@ -296,10 +497,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
 
     render(
       <HomeView
@@ -372,10 +570,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
     const onSubmit = vi.fn();
 
     render(
@@ -387,7 +582,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-new-generation/apply',
       expect.anything(),
@@ -423,7 +618,7 @@ describe('HomeView prompt handoff', () => {
     }));
   });
 
-  it('applies Home rail Prototype chip against the bundled web-prototype scenario plugin', async () => {
+  it('binds the Home rail Prototype chip locally and applies it on submit', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -440,21 +635,46 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
 
     render(
       <HomeView
         projects={[]}
-        onSubmit={() => undefined}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId="ds-refly"
+        onSubmit={onSubmit}
         onOpenProject={() => undefined}
         onViewAllProjects={() => undefined}
       />,
     );
 
+    await clearActiveTypeChip();
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ))).toBe(false);
+    expect(
+      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+    ).toContain('Refly Design System');
+    expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Build a pricing-page prototype.' },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/example-web-prototype/apply',
@@ -468,21 +688,325 @@ describe('HomeView prompt handoff', () => {
         artifactKind: 'web prototype',
         fidelity: 'high-fidelity',
         audience: 'product evaluators',
-        designSystem: 'the active project design system',
+        designSystem: 'Refly Design System',
         template: 'the bundled web prototype seed',
       },
     });
-    expect(screen.getByTestId('home-hero-prompt-slot-fidelity')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-artifactKind')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-designSystem')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy();
-    // Template-backed inputs are represented inline in the prompt, so
-    // the structured form below should not duplicate the same fields.
-    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      prompt: 'Build a pricing-page prototype.',
+      designSystemId: 'ds-refly',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+      }),
+    })));
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('applies output-type chips immediately when replacing an existing prompt', async () => {
+  it('uses example preset cards as plain-text prompt fillers while preserving selected chip inputs', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId="ds-refly"
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await screen.findByTestId('home-hero-plugin-preset'));
+
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toBe(
+        'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+      );
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ))).toBe(false);
+    expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    expect(
+      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+    ).toContain('Refly Design System');
+    expect(screen.getByTestId('home-hero-footer-option-fidelity').textContent).toContain('High fidelity');
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ));
+    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
+      inputs: {
+        artifactKind: 'web prototype',
+        fidelity: 'high-fidelity',
+        audience: 'product evaluators',
+        designSystem: 'Refly Design System',
+        template: 'the bundled web prototype seed',
+      },
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      prompt: 'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+      designSystemId: 'ds-refly',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+      }),
+    })));
+  });
+
+  it('submits live-artifact example presets with chip metadata while keeping them plain-text only', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({
+          plugins: [LIVE_ARTIFACT_PLUGIN, LIVE_ARTIFACT_IMAGE_TEMPLATE_PLUGIN],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(LIVE_ARTIFACT_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-live-artifact'));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('home-hero-plugin-preset').length).toBeGreaterThan(0);
+    });
+    const liveArtifactTemplatePreset = screen.getAllByTestId('home-hero-plugin-preset')
+      .find((item) => item.getAttribute('data-plugin-id') === LIVE_ARTIFACT_IMAGE_TEMPLATE_PLUGIN.id);
+    if (!liveArtifactTemplatePreset) {
+      throw new Error('expected live artifact image template preset to render');
+    }
+    fireEvent.click(liveArtifactTemplatePreset);
+
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toBe('Create a refreshable Notion dashboard live artifact.');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/apply')
+    ))).toBe(false);
+    expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Live artifact');
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/apply',
+      expect.anything(),
+    ));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-live-artifact',
+      appliedPluginSnapshotId: 'snap-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      }),
+      prompt: 'Create a refreshable Notion dashboard live artifact.',
+    })));
+  });
+
+  it('binds the Home rail Live artifact chip with live-artifact metadata and applies it on submit', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, LIVE_ARTIFACT_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')) {
+        return new Response(JSON.stringify(LIVE_ARTIFACT_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-live-artifact'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Live artifact');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')
+    ))).toBe(false);
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Build a refreshable Stripe revenue dashboard.' },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')
+    ));
+    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
+      inputs: {},
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-live-artifact',
+      appliedPluginSnapshotId: 'snap-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      }),
+      prompt: 'Build a refreshable Stripe revenue dashboard.',
+    })));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('exposes deck page ranges beside speaker notes and submits the selected range', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        return new Response(JSON.stringify(SIMPLE_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId="ds-refly"
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-speakerNotes')).toBeTruthy();
+    });
+    expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('10-15 pages');
+
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-slideCount'));
+    fireEvent.click(await screen.findByRole('option', { name: '15-20 pages' }));
+    expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('15-20 pages');
+
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Create an investor deck for a local-first design tool.' },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-simple-deck/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
+    ));
+    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
+      inputs: {
+        slideCount: '15-20 pages',
+        speakerNotes: 'include speaker notes',
+        designSystem: 'Refly Design System',
+      },
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-simple-deck',
+      pluginInputs: expect.objectContaining({
+        slideCount: '15-20 pages',
+      }),
+      projectKind: 'deck',
+      projectMetadata: expect.objectContaining({
+        kind: 'deck',
+        slideCount: '15-20 pages',
+        speakerNotes: true,
+      }),
+    })));
+  });
+
+  it('switches output-type chips without replacing an existing prompt', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -499,10 +1023,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
 
     render(
       <HomeView
@@ -515,13 +1036,82 @@ describe('HomeView prompt handoff', () => {
 
     const input = await screen.findByTestId('home-hero-input');
     fireEvent.change(input, { target: { value: 'Keep my current brief' } });
+    await clearActiveTypeChip();
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/plugins/example-web-prototype/apply',
-      expect.anything(),
-    ));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ))).toBe(false);
+    expect((input as HTMLTextAreaElement).value).toBe('Keep my current brief');
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
+  });
+
+  it('lets selected chips seed the hero through preset cards', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, SIMPLE_DECK_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')) {
+        return new Response(JSON.stringify(WEB_PROTOTYPE_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')) {
+        return new Response(JSON.stringify(SIMPLE_DECK_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+
+    render(
+      <HomeView
+        projects={[]}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId="ds-refly"
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Slide deck');
+    });
+    expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-plugin-presets').textContent).toContain('Simple Deck');
+    fireEvent.click(screen.getAllByTestId('home-hero-plugin-preset')[0]!);
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-simple-deck/apply')
+    ))).toBe(false);
+    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe(
+      'Create a pitch deck for decision makers about the user brief with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
+    );
+
+    await clearActiveTypeChip();
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    });
+    fireEvent.click(screen.getAllByTestId('home-hero-plugin-preset')[0]!);
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ))).toBe(false);
+    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe(
+      'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+    );
   });
 
   it('appends a plugin-use query handoff without replacing an existing prompt', async () => {
@@ -535,10 +1125,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
 
     const { rerender } = render(
       <HomeView
@@ -582,7 +1169,7 @@ describe('HomeView prompt handoff', () => {
   it('binds od-plugin-authoring before submitting the rail create-plugin prompt', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN, WEB_PROTOTYPE_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -596,10 +1183,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
     const onSubmit = vi.fn();
 
     render(
@@ -611,7 +1195,8 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clearActiveTypeChip();
+    await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-plugin-authoring/apply',
       expect.anything(),
@@ -621,6 +1206,11 @@ describe('HomeView prompt handoff', () => {
       expect(badge.textContent).toContain('Create plugin');
       expect(badge.textContent).not.toContain('Plugin authoring');
     });
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
+    expect(input.value).toBe(PLUGIN_AUTHORING_PROMPT);
+    expect(inputCard?.classList.contains('home-hero__input-card--compact-authoring')).toBe(true);
+    expect(inputCard?.style.getPropertyValue('--home-hero-prompt-max-height')).toBe('132px');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -635,7 +1225,7 @@ describe('HomeView prompt handoff', () => {
   it('keeps the authoring goal input linked to the prompt and submit payload', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN, WEB_PROTOTYPE_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -649,10 +1239,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
     const onSubmit = vi.fn();
 
     render(
@@ -664,7 +1251,8 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clearActiveTypeChip();
+    await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-plugin-authoring/apply',
       expect.anything(),
@@ -701,7 +1289,7 @@ describe('HomeView prompt handoff', () => {
     });
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [AUTHORING_PLUGIN, WEB_PROTOTYPE_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -712,10 +1300,7 @@ describe('HomeView prompt handoff', () => {
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
+    stubAnimationFrame();
     const onSubmit = vi.fn();
 
     render(
@@ -727,7 +1312,13 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clearActiveTypeChip();
+    await clickHomeShortcut('create-plugin');
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
+    expect(input.value).toBe(PLUGIN_AUTHORING_PROMPT);
+    expect(inputCard?.classList.contains('home-hero__input-card--compact-authoring')).toBe(true);
+    expect(inputCard?.style.getPropertyValue('--home-hero-prompt-max-height')).toBe('132px');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
     expect(onSubmit).not.toHaveBeenCalled();
 
@@ -746,3 +1337,15 @@ describe('HomeView prompt handoff', () => {
     }));
   });
 });
+
+async function clearActiveTypeChip() {
+  const chip = screen.queryByTestId('home-hero-active-type-chip');
+  if (chip) fireEvent.click(chip);
+}
+
+async function clickHomeShortcut(id: string) {
+  const trigger = await screen.findByTestId('home-hero-shortcuts-trigger');
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByTestId(`home-hero-rail-${id}`));
+}

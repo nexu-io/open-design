@@ -6,6 +6,13 @@ import {
   type DragEvent as ReactDragEvent,
 } from 'react';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackFileManagerClick,
+  trackFileUploadResult,
+  trackPageView,
+} from '../analytics/events';
+import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
 import { isMacPlatform } from '../utils/platform';
 import {
@@ -37,9 +44,11 @@ import {
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
+import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
@@ -74,12 +83,14 @@ interface Props {
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
   defaultDesignSystemId?: string | null;
-  onSetDefaultDesignSystem?: (id: string) => void;
+  onSetDefaultDesignSystem?: (id: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onDesignSystemNeedsWork?: (
     sectionTitle: string,
@@ -93,6 +104,10 @@ interface Props {
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => void;
+  onConnectRepo?: () => void;
+  githubConnected?: boolean;
+  commentPortalId?: string;
+  onCommentModeChange?: (active: boolean) => void;
 }
 
 interface SketchState {
@@ -195,6 +210,8 @@ export function FileWorkspace({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onPluginFolderAgentAction,
+  activePluginActionPaths,
+  hiddenPluginActionPaths,
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
@@ -205,8 +222,23 @@ export function FileWorkspace({
   designSystemReview,
   onDesignSystemReviewDecision,
   onUseDesignSystem,
+  onConnectRepo,
+  githubConnected,
+  commentPortalId,
+  onCommentModeChange,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  // P1 page_view page_name=file_manager — once per project the user lands
+  // inside the workspace. Re-fire when the projectId changes so a
+  // project-switch session shows up as a fresh view rather than reusing
+  // the previous one.
+  const fileManagerViewedProjectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (fileManagerViewedProjectRef.current === projectId) return;
+    fileManagerViewedProjectRef.current = projectId;
+    trackPageView(analytics.track, { page_name: 'file_manager' });
+  }, [projectId, analytics.track]);
   const defaultRootTab = designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
@@ -292,6 +324,22 @@ export function FileWorkspace({
     setActiveTab(name);
   }
 
+  // Open `openName` (focusing it) and close `closeName` in a single tab-state
+  // update. Used by the React module pointer (issue #2744): once the user
+  // jumps to the HTML entry that renders a module, the dead-end module tab is
+  // dropped. Done atomically because calling openFile() then closeTab() would
+  // each read the same stale `persistedTabs` prop and the second would clobber
+  // the first.
+  function openFileReplacing(openName: string, closeName: string) {
+    setUploadError(null);
+    const withoutClosed = persistedTabs.filter((tabName) => tabName !== closeName);
+    const nextTabs = withoutClosed.includes(openName)
+      ? withoutClosed
+      : [...withoutClosed, openName];
+    onTabsStateChange({ tabs: nextTabs, active: openName });
+    setActiveTab(openName);
+  }
+
   function closeTab(name: string) {
     const sketchEntry = sketches[name];
     const isPending = sketchEntry && !sketchEntry.persisted;
@@ -356,12 +404,23 @@ export function FileWorkspace({
     if (picked.length === 0) return;
 
     setUploadError(null);
+    // Cohort math is shared across all three upload surfaces; see
+    // `analytics/upload-tracking.ts` for the per-file → batch reduction.
+    const cohort = deriveUploadCohort(picked);
     let result: UploadProjectFilesResult;
     try {
       result = await uploadProjectFiles(projectId, picked);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
+      trackFileUploadResult(analytics.track, {
+        page_name: 'file_manager',
+        area: 'file_manager',
+        project_id: projectId,
+        ...cohort,
+        result: 'failed',
+        error_code: detail,
+      });
       return;
     }
     if (result.uploaded.length > 0) {
@@ -380,6 +439,22 @@ export function FileWorkspace({
           : `Upload failed for ${failedCount} file(s)${detail}.`,
       );
       console.warn('Project upload had failures', result.failed);
+      trackFileUploadResult(analytics.track, {
+        page_name: 'file_manager',
+        area: 'file_manager',
+        project_id: projectId,
+        ...cohort,
+        result: 'failed',
+        ...(result.error ? { error_code: result.error } : {}),
+      });
+    } else if (result.uploaded.length > 0) {
+      trackFileUploadResult(analytics.track, {
+        page_name: 'file_manager',
+        area: 'file_manager',
+        project_id: projectId,
+        ...cohort,
+        result: 'success',
+      });
     }
   }
 
@@ -659,7 +734,11 @@ export function FileWorkspace({
       entry.discardRawItemsOnSave ? [] : entry.rawItems,
       entry.items,
     );
+    const startedAt = Date.now();
     const file = await writeProjectTextFile(projectId, name, JSON.stringify(doc, null, 2));
+    const elapsed = Date.now() - startedAt;
+    // Ensures saving UI shows so the button does not flicker
+    if (elapsed < 500) await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
     if (file) {
       setSketches((curr) => ({
         ...curr,
@@ -680,8 +759,10 @@ export function FileWorkspace({
       });
       setActiveTab(name);
       await onRefreshFiles();
+      return true;
     } else {
       setSketches((curr) => ({ ...curr, [name]: { ...curr[name]!, saving: false } }));
+      return false;
     }
   }
 
@@ -770,7 +851,7 @@ export function FileWorkspace({
               title="Design System"
             >
               <span className="tab-icon" aria-hidden>
-                <Icon name="palette" size={13} />
+                <Icon name="blocks" size={13} />
               </span>
               <span className="ws-tab-label">Design System</span>
             </button>
@@ -888,6 +969,8 @@ export function FileWorkspace({
             designSystemReview={designSystemReview}
             onReviewDecision={onDesignSystemReviewDecision}
             onUseDesignSystem={onUseDesignSystem}
+            onConnectRepo={onConnectRepo}
+            githubConnected={githubConnected}
           />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
@@ -899,15 +982,52 @@ export function FileWorkspace({
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onRenameFile={handleRename}
-            onDeleteFile={(name) => void handleDelete(name)}
-            onDeleteFiles={handleDeleteMany}
-            onUpload={() => fileInputRef.current?.click()}
+            onDeleteFile={(name) => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'delete',
+              });
+              void handleDelete(name);
+            }}
+            onDeleteFiles={(names) => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'delete',
+              });
+              return handleDeleteMany(names);
+            }}
+            onUpload={() => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'upload',
+              });
+              fileInputRef.current?.click();
+            }}
             onUploadFiles={(picked) => void uploadFiles(picked)}
-            onPaste={() => setShowPasteDialog(true)}
-            onNewSketch={startNewSketch}
+            onPaste={() => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'paste',
+              });
+              setShowPasteDialog(true);
+            }}
+            onNewSketch={() => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'new_sketch',
+              });
+              startNewSketch();
+            }}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
+            activePluginActionPaths={activePluginActionPaths}
+            hiddenPluginActionPaths={hiddenPluginActionPaths}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -948,6 +1068,9 @@ export function FileWorkspace({
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
             onFileSaved={onRefreshFiles}
+            onOpenFileReplacing={openFileReplacing}
+            commentPortalId={commentPortalId}
+            onCommentModeChange={onCommentModeChange}
           />
         ) : (
           <div className="viewer-empty">
@@ -1017,6 +1140,8 @@ function DesignSystemProjectPanel({
   designSystemReview,
   onReviewDecision,
   onUseDesignSystem,
+  onConnectRepo,
+  githubConnected,
 }: {
   projectId: string;
   system: DesignSystemSummary;
@@ -1026,7 +1151,7 @@ function DesignSystemProjectPanel({
   onOpenFile: (name: string) => void;
   onUploadAssets: () => void;
   defaultDesignSystemId?: string | null;
-  onSetDefaultDesignSystem?: (id: string) => void;
+  onSetDefaultDesignSystem?: (id: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onNeedsWork?: (
     sectionTitle: string,
@@ -1040,6 +1165,8 @@ function DesignSystemProjectPanel({
     details?: DesignSystemReviewDetails,
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => void;
+  onConnectRepo?: () => void;
+  githubConnected?: boolean;
 }) {
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -1066,6 +1193,10 @@ function DesignSystemProjectPanel({
   const sections = buildDesignSystemReviewSections(allFileNames, fileByName);
   const published = status === 'published';
   const isDefault = published && defaultDesignSystemId === system.id;
+  // Strip a trailing "design system" from the title so the heading
+  // "Review <name> design system" does not read redundantly when a system is
+  // already named e.g. "Acme Design System".
+  const systemDisplayName = system.title.replace(/\s*design system$/i, '').trim() || system.title;
   const activityFileOps = useMemo(() => deriveFileOps(activityEvents), [activityEvents]);
   const activityTodos = useMemo(() => latestTodosFromEvents(activityEvents), [activityEvents]);
   const sectionReviews: DesignSystemProjectSectionReview[] = sections.map((section) => {
@@ -1179,8 +1310,20 @@ function DesignSystemProjectPanel({
       sectionStatus,
       sectionStatusLabel,
     } = item;
-    const expanded = (expandedSections[instanceId] ?? defaultExpanded) || sectionActivity.running;
     const needsAttention = designSystemReviewNeedsAttention(item);
+    // A section the user marked "Looks good" is validated, so collapse it by
+    // default to show it is done. Gate that on the current status, not just the
+    // stored decision: when a section is regenerated after approval its status
+    // moves back to needs-attention, and it has to reopen so the "review again"
+    // notice and the review buttons (both rendered only while expanded) stay
+    // visible. Without the needsAttention guard a stale "looks-good" decision
+    // keeps the regenerated section collapsed and the change is easy to miss.
+    // The user can still re-expand with the chevron (expandedSections[instanceId]),
+    // and an active agent run forces it open.
+    const reviewedGood =
+      !needsAttention && (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
+    const expanded =
+      (expandedSections[instanceId] ?? (defaultExpanded && !reviewedGood)) || sectionActivity.running;
     return (
       <section
         key={instanceId}
@@ -1191,25 +1334,50 @@ function DesignSystemProjectPanel({
         ].join(' ')}
       >
         <div className="ds-project-section-head">
+          {/* The trigger is a stretched button covering the whole head, so the
+              entire row toggles. It is a sibling of the review action buttons
+              (not a parent), so there are no nested interactive elements. The
+              title below is display-only (pointer-events: none) and lets clicks
+              fall through to this trigger. */}
           <button
             type="button"
-            className="ds-project-section-title"
+            className="ds-project-section-head-trigger"
             aria-expanded={expanded}
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${section.title}`}
             onClick={() => toggleSection(instanceId)}
-          >
+          />
+          <span className="ds-project-section-title">
             <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={13} />
             <span>
               <strong>{section.title}</strong>
               <small>{section.subtitle}</small>
             </span>
-          </button>
+            {!expanded ? (
+              <span
+                className={[
+                  'ds-project-section-state',
+                  'ds-project-section-dot',
+                  designSystemSectionStatusClass(sectionStatus),
+                ].join(' ')}
+                aria-label={sectionStatusLabel}
+                title={sectionStatusLabel}
+              >
+                {needsAttention ? 'Needs review' : 'Looks good'}
+              </span>
+            ) : null}
+          </span>
           {expanded ? (
             <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
               <button
                 type="button"
                 className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
                 data-testid={`design-system-review-good-${slugForTestId(section.title)}`}
-                onClick={() => markSectionReview(section.title, 'looks-good')}
+                onClick={() => {
+                  markSectionReview(section.title, 'looks-good');
+                  // Collapse on validate, overriding any manual expand so the
+                  // section always tidies away once it is marked good.
+                  setExpandedSections((current) => ({ ...current, [instanceId]: false }));
+                }}
               >
                 <Icon name="check" size={13} />
                 Looks good
@@ -1223,20 +1391,48 @@ function DesignSystemProjectPanel({
                 <Icon name="comment" size={13} />
                 Needs work...
               </button>
+              {feedbackSection === section.title ? (
+                <form
+                  className="ds-project-feedback-popover"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    submitNeedsWorkFeedback(section.title, section.files);
+                  }}
+                >
+                  <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
+                    Tell the agent what to change
+                  </label>
+                  <textarea
+                    id={`ds-feedback-${slugForTestId(section.title)}`}
+                    value={feedbackText}
+                    rows={3}
+                    placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
+                    onChange={(event) => setFeedbackText(event.target.value)}
+                    autoFocus
+                  />
+                  <div>
+                    <button
+                      type="button"
+                      className="ghost compact"
+                      onClick={() => {
+                        setFeedbackSection(null);
+                        setFeedbackText('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="primary compact"
+                      disabled={!feedbackText.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </form>
+              ) : null}
             </div>
-          ) : (
-            <span
-              className={[
-                'ds-project-section-state',
-                'ds-project-section-dot',
-                designSystemSectionStatusClass(sectionStatus),
-              ].join(' ')}
-              aria-label={sectionStatusLabel}
-              title={sectionStatusLabel}
-            >
-              {needsAttention ? 'Needs review' : 'Looks good'}
-            </span>
-          )}
+          ) : null}
         </div>
         {expanded ? (
           <div className="ds-project-section-body">
@@ -1268,58 +1464,15 @@ function DesignSystemProjectPanel({
               </div>
             ) : null}
             {previewFile ? (
-              <button
-                type="button"
-                className="ds-project-inline-preview"
-                onClick={() => onOpenFile(previewFile.name)}
-              >
+              <div className="ds-project-inline-preview">
                 <DesignSystemInlinePreview projectId={projectId} file={previewFile} />
-              </button>
+              </div>
             ) : (
               <div className="ds-project-preview-placeholder">
                 <Icon name="sparkles" size={16} />
                 <span>Generating preview...</span>
               </div>
             )}
-            {feedbackSection === section.title ? (
-              <form
-                className="ds-project-feedback-box"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submitNeedsWorkFeedback(section.title, section.files);
-                }}
-              >
-                <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
-                  Tell the agent what to change in {section.title}
-                </label>
-                <textarea
-                  id={`ds-feedback-${slugForTestId(section.title)}`}
-                  value={feedbackText}
-                  rows={3}
-                  placeholder="e.g. make the color tokens closer to our product, tighten spacing, regenerate the preview..."
-                  onChange={(event) => setFeedbackText(event.target.value)}
-                />
-                <div>
-                  <button
-                    type="button"
-                    className="ghost compact"
-                    onClick={() => {
-                      setFeedbackSection(null);
-                      setFeedbackText('');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="primary compact"
-                    disabled={!feedbackText.trim()}
-                  >
-                    Send feedback
-                  </button>
-                </div>
-              </form>
-            ) : null}
           </div>
         ) : null}
       </section>
@@ -1331,7 +1484,7 @@ function DesignSystemProjectPanel({
       <div className="ds-project-panel ds-project-panel--generating">
         <div className="ds-project-generation-stage">
           <span className="ds-project-generation-mark">
-            <Icon name="palette" size={24} />
+            <Icon name="blocks" size={24} />
           </span>
           <h1>Creating your design system...</h1>
           <p>Keep this tab open. You can come back in a few minutes.</p>
@@ -1354,7 +1507,51 @@ function DesignSystemProjectPanel({
     <div className="ds-project-panel">
       <div className="ds-project-main ds-project-main--review">
         <div className="ds-project-head ds-project-head--review">
-          <h1>{published ? 'Your design system is ready' : 'Review draft design system'}</h1>
+          <h1>
+            {published
+              ? `${systemDisplayName} design system`
+              : `Review ${systemDisplayName} design system`}
+          </h1>
+          <div className="ds-project-publish-card__toggles">
+            {/* The publish button is disabled until the GitHub import evidence is
+                ready, and a disabled button never fires the hover or focus that
+                surfaces a `title` tooltip. Keep the guidance on this wrapper,
+                which is never disabled, and let pointer events fall through the
+                disabled button to it (see .ds-project-publish-trigger) so the
+                explanation stays reachable exactly when publishing is blocked. */}
+            <span
+              className="ds-project-publish-trigger"
+              title={
+                !published && !githubEvidence.ready
+                  ? 'Finish importing your GitHub repo before you can publish.'
+                  : undefined
+              }
+            >
+              <button
+                type="button"
+                className={published ? 'ghost compact' : 'primary'}
+                data-testid="design-system-publish"
+                disabled={statusBusy || (!published && !githubEvidence.ready)}
+                onClick={() => void togglePublished(!published)}
+              >
+                {published ? <Icon name="check" size={14} /> : null}
+                {published ? 'Published' : 'Publish'}
+              </button>
+            </span>
+            {published ? (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={isDefault}
+                  disabled={statusBusy}
+                  onChange={(event) => {
+                    onSetDefaultDesignSystem?.(event.target.checked ? system.id : null);
+                  }}
+                />
+                Default
+              </label>
+            ) : null}
+          </div>
         </div>
 
         <div className="ds-project-publish-card ds-project-publish-card--review">
@@ -1363,31 +1560,6 @@ function DesignSystemProjectPanel({
               ? "Your team's new projects can use this design system as context by default."
               : 'Your design system is ready, but your feedback will improve it. Publish it when it is ready to use in future projects.'}
           </p>
-          <div className="ds-project-publish-card__toggles">
-            <label>
-              <input
-                type="checkbox"
-                checked={published}
-                disabled={statusBusy || (!published && !githubEvidence.ready)}
-                title={!githubEvidence.ready ? 'GitHub connector evidence is required before publishing.' : undefined}
-                onChange={(event) => void togglePublished(event.target.checked)}
-              />
-              Published
-            </label>
-            {published ? (
-              <label>
-                <input
-                  type="checkbox"
-                  checked={isDefault}
-                  disabled={statusBusy}
-                  onChange={(event) => {
-                    if (event.target.checked) onSetDefaultDesignSystem?.(system.id);
-                  }}
-                />
-                Default
-              </label>
-            ) : null}
-          </div>
           {published ? (
             <div className="ds-project-use-row">
               <span>Use this system</span>
@@ -1405,16 +1577,22 @@ function DesignSystemProjectPanel({
 
         {!githubEvidence.ready ? (
           <div className="ds-project-warning-card">
-            <Icon name="help-circle" size={16} />
+            <Icon name="github" size={16} />
             <span>
-              <strong>Waiting for GitHub connector evidence</strong>
-              <small>
-                {githubEvidence.noteCount === 0
-                  ? 'Run connector intake before publishing. Drafts cannot be used by other projects until repository evidence is captured.'
-                  : 'Connector evidence notes exist; waiting for repository file snapshots before publishing.'}
-              </small>
+              <strong>{repoConnectCopy(githubConnected).bannerTitle}</strong>
+              <small>{repoConnectCopy(githubConnected).bannerBody}</small>
             </span>
-            {githubEvidence.hasSourceManifest ? (
+            {onConnectRepo ? (
+              <button
+                type="button"
+                className="ghost compact"
+                disabled={githubConnected === undefined}
+                onClick={onConnectRepo}
+              >
+                <Icon name="github" size={13} />
+                {repoConnectCopy(githubConnected).buttonLabel}
+              </button>
+            ) : githubEvidence.hasSourceManifest ? (
               <button type="button" className="ghost compact" onClick={() => onOpenFile('context/source-context.md')}>
                 <Icon name="file" size={13} />
                 Open source context
@@ -1424,17 +1602,7 @@ function DesignSystemProjectPanel({
         ) : null}
 
         {fontFiles.length === 0 ? (
-          <div className="ds-project-warning-card">
-            <Icon name="help-circle" size={16} />
-            <span>
-              <strong>Missing brand fonts</strong>
-              <small>Open Design is rendering typography with substitute web fonts.</small>
-            </span>
-            <button type="button" className="ghost compact" onClick={onUploadAssets}>
-              <Icon name="upload" size={13} />
-              Upload fonts
-            </button>
-          </div>
+          <MissingBrandFontsBanner projectId={projectId} onUploadAssets={onUploadAssets} />
         ) : null}
 
         <div className="ds-project-sections">
@@ -1479,39 +1647,6 @@ function designSystemHasSourceContext(system: DesignSystemSummary): boolean {
     provenance.notes?.trim() ||
     provenance.sourceNotes?.trim(),
   );
-}
-
-function designSystemGithubEvidenceState(
-  system: DesignSystemSummary,
-  names: string[],
-): {
-  required: boolean;
-  ready: boolean;
-  noteCount: number;
-  snapshotCount: number;
-  hasSourceManifest: boolean;
-} {
-  const expectedRepos = system.provenance?.githubUrls?.length ?? 0;
-  const required = expectedRepos > 0;
-  if (!required) {
-    return {
-      required: false,
-      ready: true,
-      noteCount: 0,
-      snapshotCount: 0,
-      hasSourceManifest: names.some((name) => normalizeDesignSystemPath(name) === 'context/source-context.md'),
-    };
-  }
-  const normalized = names.map(normalizeDesignSystemPath);
-  const noteCount = normalized.filter((name) => /^context\/github\/[^/]+\.md$/u.test(name)).length;
-  const snapshotCount = normalized.filter((name) => /^context\/github\/[^/]+\/files\//u.test(name)).length;
-  return {
-    required: true,
-    ready: noteCount >= expectedRepos && snapshotCount > 0,
-    noteCount,
-    snapshotCount,
-    hasSourceManifest: normalized.includes('context/source-context.md'),
-  };
 }
 
 function slugForTestId(value: string): string {

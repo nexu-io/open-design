@@ -9,6 +9,7 @@ await build({
     "./src/api/connectionTest.ts",
     "./src/api/orbit.ts",
     "./src/api/finalize.ts",
+    "./src/api/handoff.ts",
     "./src/api/providerModels.ts",
     "./src/api/research.ts",
     "./src/analytics/index.ts",

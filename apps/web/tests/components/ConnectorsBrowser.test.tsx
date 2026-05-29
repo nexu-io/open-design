@@ -12,6 +12,7 @@ import {
   fetchConnectorDiscovery,
   fetchConnectors,
   fetchConnectorStatuses,
+  openExternalUrl,
 } from '../../src/providers/registry';
 
 vi.mock('../../src/providers/registry', async () => {
@@ -27,6 +28,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchConnectorDiscovery: vi.fn(),
     fetchConnectors: vi.fn(),
     fetchConnectorStatuses: vi.fn(),
+    openExternalUrl: vi.fn(),
   };
 });
 
@@ -66,9 +68,11 @@ describe('ConnectorsBrowser', () => {
     vi.mocked(fetchConnectorDetail).mockReset();
     vi.mocked(fetchConnectorDiscovery).mockReset();
     vi.mocked(fetchConnectorStatuses).mockReset();
+    vi.mocked(openExternalUrl).mockReset();
     vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
     vi.mocked(connectConnector).mockResolvedValue({ connector: null });
     vi.mocked(fetchConnectorDetail).mockResolvedValue(null);
+    vi.mocked(openExternalUrl).mockResolvedValue(true);
     window.sessionStorage.clear();
   });
 
@@ -425,6 +429,11 @@ describe('ConnectorsBrowser', () => {
     await screen.findByText('GitHub');
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await screen.findByRole('button', { name: 'Cancel' });
+    const authorizationButton = screen.getByRole('button', { name: 'Continue in browser' });
+    fireEvent.click(authorizationButton);
+    await waitFor(() => expect(openExternalUrl).toHaveBeenCalledWith(
+      'https://example.com/oauth',
+    ));
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -812,7 +821,7 @@ describe('ConnectorsBrowser', () => {
     fireEvent(window, new Event('focus'));
 
     await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
-    expect(await screen.findByText("Couldn't cancel authorization. Try again.")).toBeTruthy();
+    expect(await screen.findAllByText("Couldn't cancel authorization. Try again.")).toHaveLength(2);
 
     vi.useRealTimers();
   });

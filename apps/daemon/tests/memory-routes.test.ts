@@ -124,12 +124,14 @@ describe('memory routes', () => {
 
     const json = await res.json() as {
       enabled: boolean;
+      chatExtractionEnabled: boolean;
       rootDir: string;
       index: string;
       entries: unknown[];
       extraction: unknown;
     };
     expect(json.enabled).toBe(true);
+    expect(json.chatExtractionEnabled).toBe(true);
     expect(json.rootDir).toBe(memoryDir(dataDir));
     expect(json.index).toContain('# Memory');
     expect(json.entries).toEqual([]);
@@ -314,6 +316,37 @@ describe('memory routes', () => {
         name: 'Remembered note',
       }),
     ]);
+  });
+
+  it('does not extract chat memories when chat learning is disabled', async () => {
+    const configRes = await fetch(`${baseUrl}/api/memory/config`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chatExtractionEnabled: false }),
+    });
+    expect(configRes.status).toBe(200);
+
+    const res = await fetch(`${baseUrl}/api/memory/extract`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        userMessage: 'Remember: prefer dark mode for UI examples.',
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const json = await res.json() as {
+      changed: Array<unknown>;
+      attemptedLLM: boolean;
+    };
+    expect(json.changed).toEqual([]);
+    expect(json.attemptedLLM).toBe(false);
+
+    const listRes = await fetch(`${baseUrl}/api/memory`);
+    const listJson = await listRes.json() as {
+      entries: Array<unknown>;
+    };
+    expect(listJson.entries).toEqual([]);
   });
 
   it('reports attemptedLLM for post-turn extraction requests without triggering a real provider call', async () => {

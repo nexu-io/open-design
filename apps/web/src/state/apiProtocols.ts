@@ -65,6 +65,22 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'gemini-1.5-pro',
     'gemini-1.5-flash',
   ],
+  senseaudio: [
+    // SenseAudio is an OpenAI-compatible gateway that fronts both its own
+    // models (senseaudio-s2 family) and aggregator routes to deepseek /
+    // glm / kimi / minimax. Listing the headline house models first keeps
+    // the picker's default selection on a SenseAudio-native checkpoint;
+    // the aggregator IDs trail so users who arrived for a specific
+    // upstream still find it in this tab without retyping it.
+    'senseaudio-s2',
+    'senseaudio-s2-flash',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'glm-5.1',
+    'kimi-k2.6',
+    'MiniMax-M2.7-highspeed',
+    'MiniMax-M2.7',
+  ],
   ollama: [
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
@@ -123,6 +139,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   // pick produces a deterministic answer; users who care can override
   // through the Memory model picker.
   ollama: 'gemma3:4b',
+  senseaudio: 'senseaudio-s2-flash',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
@@ -134,6 +151,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'azure', title: 'Azure OpenAI' },
   { id: 'google', title: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud' },
+  { id: 'senseaudio', title: 'SenseAudio' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -142,6 +160,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
+  senseaudio: 'SenseAudio API',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -150,6 +169,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   azure: 'azure key',
   google: 'AIza...',
   ollama: 'Ollama API key',
+  senseaudio: 'SenseAudio API key',
 };
 
 // Default base URL the daemon assumes when the user leaves the field
@@ -161,4 +181,5 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   azure: '',
   google: 'https://generativelanguage.googleapis.com',
   ollama: 'https://ollama.com',
+  senseaudio: 'https://api.senseaudio.cn',
 };

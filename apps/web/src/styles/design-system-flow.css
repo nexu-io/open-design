@@ -13,6 +13,12 @@
   overflow-y: auto;
   background: var(--bg);
   color: var(--text);
+  position: relative;
+}
+.ds-setup-shell--embedded {
+  height: auto;
+  overflow: visible;
+  background: transparent;
 }
 .ds-setup-topbar {
   height: 64px;
@@ -36,6 +42,44 @@
   justify-content: center;
   gap: 8px;
 }
+.ds-setup-actions button,
+.ds-resource-inline button,
+.ds-drop-zone-wrap > button,
+.ds-github-access-toggle,
+.ds-github-access-actions button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-setup-actions button:hover,
+.ds-resource-inline button:hover,
+.ds-drop-zone-wrap > button:hover,
+.ds-github-access-toggle:hover,
+.ds-github-access-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+.ds-setup-actions .primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+.ds-setup-actions .primary:disabled,
+.ds-resource-inline button:disabled {
+  cursor: default;
+  opacity: 0.58;
+  transform: none;
+}
 .ds-setup-topbar .primary {
   justify-self: end;
 }
@@ -54,6 +98,26 @@
   margin: 0 auto;
   padding: 36px 0 64px;
 }
+.ds-setup-shell--embedded .ds-setup-form {
+  width: 100%;
+  padding: 0;
+}
+.ds-setup-shell--embedded .ds-setup-form > h1,
+.ds-setup-shell--embedded .ds-setup-form > p {
+  display: none;
+}
+.ds-setup-shell--embedded .ds-setup-form > h1 {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 27px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+.ds-setup-shell--embedded .ds-setup-form > p {
+  max-width: 62ch;
+  margin-bottom: 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
 .ds-setup-form > h1,
 .ds-setup-center-card h1,
 .ds-review-column > h1 {
@@ -70,24 +134,49 @@
 .ds-setup-field {
   display: grid;
   gap: 8px;
-  margin-bottom: 28px;
+  margin-bottom: 18px;
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
 }
+.ds-setup-field > span {
+  color: var(--text-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+}
 .ds-setup-field textarea {
   min-height: 112px;
   resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 13px;
+  color: var(--text-strong);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  font: inherit;
   font-size: 15px;
   line-height: 1.6;
 }
+.ds-setup-field textarea::placeholder,
+.ds-resource-inline input::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 62%, transparent);
+}
+.ds-setup-field textarea:focus,
+.ds-setup-field textarea:focus-visible,
+.ds-resource-inline input:focus,
+.ds-resource-inline input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: 0;
+}
 .ds-resource-section {
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 .ds-resource-section h2 {
   margin: 0 0 8px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 22px;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 19px;
+  font-weight: 750;
   line-height: 1.2;
 }
 .ds-resource-section h2 span,
@@ -98,27 +187,28 @@
   font-weight: 400;
 }
 .ds-resource-card {
-  margin-top: 26px;
+  margin-top: 12px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel) 98%, var(--bg-subtle) 2%);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--shadow-color, #000) 5%, transparent), var(--shadow-xs);
   overflow: hidden;
 }
 .ds-resource-row {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
   align-items: center;
-  padding: 18px 22px;
-  border-top: 1px solid var(--border);
+  padding: 16px 18px;
+  border-top: 1px solid var(--border-soft);
 }
 .ds-resource-row:first-child {
   border-top: 0;
 }
 .ds-resource-row > strong {
-  color: var(--text);
-  font-size: 14px;
+  color: var(--text-strong);
+  font-size: 13.5px;
+  line-height: 1.3;
 }
 .ds-resource-row > p {
   grid-column: 1 / -1;
@@ -131,6 +221,18 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
+}
+.ds-resource-inline input {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text-strong);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+  font: inherit;
+  font-size: 13px;
 }
 .ds-github-url-list {
   grid-column: 1 / -1;
@@ -304,17 +406,48 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed var(--border-strong);
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 76%, var(--accent) 24%);
   border-radius: 8px;
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 84%, var(--bg-panel) 16%);
   color: var(--text-muted);
   cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-drop-zone:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-subtle));
+  color: var(--text);
 }
 .ds-drop-zone span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.ds-source-upload-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  backdrop-filter: blur(2px);
+}
+.ds-source-upload-loading__card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 .ds-hidden-input {
   display: none;
@@ -362,6 +495,36 @@
   justify-content: center;
   gap: 12px;
   margin-top: 28px;
+}
+.ds-setup-actions--embedded {
+  justify-content: flex-end;
+  margin-top: 22px;
+  margin-bottom: 54px;
+}
+
+@media (max-width: 760px) {
+  .ds-setup-shell--embedded .ds-setup-form > h1 {
+    font-size: 24px;
+  }
+
+  .ds-resource-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 15px;
+  }
+
+  .ds-resource-inline,
+  .ds-drop-zone-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .ds-setup-actions--embedded {
+    justify-content: stretch;
+  }
+
+  .ds-setup-actions--embedded button {
+    flex: 1;
+  }
 }
 .ds-workspace {
   min-height: 100vh;
@@ -1167,7 +1330,52 @@
   min-height: 320px;
 }
 .design-systems-manager {
-  gap: 20px;
+  gap: 14px;
+}
+.ds-manager-tabs,
+.ds-manager-subtabs {
+  display: flex;
+  align-items: center;
+}
+.ds-manager-tabs {
+  margin-bottom: 2px;
+}
+.ds-manager-subtabs {
+  margin-top: -4px;
+  margin-bottom: 6px;
+}
+.ds-tag-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ds-tag-tabs::-webkit-scrollbar {
+  display: none;
+}
+.ds-tag-tabs button {
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--shadow-xs);
+}
+.ds-tag-tabs button:hover:not(.active) {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.ds-tag-tabs button.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 .ds-settings-page {
   gap: 16px;
@@ -1197,7 +1405,7 @@
   min-height: 34px;
 }
 .ds-templates-card {
-  margin-top: -4px;
+  margin-top: 0;
 }
 .ds-private-note {
   margin: -4px 2px 0;
@@ -1206,10 +1414,26 @@
 }
 .ds-manager-toolbar {
   align-items: stretch;
-  padding: 14px 18px 0;
+  width: min(100% - 36px, 1280px);
+  margin: 14px auto 0;
+  padding: 0;
 }
 .ds-manager-toolbar > input {
   min-height: 38px;
+}
+.design-systems-manager .examples-filter-row {
+  width: min(100% - 36px, 1280px);
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 14px;
+  padding: 0;
+  margin-bottom: 28px;
+}
+.design-systems-manager .ds-grid {
+  width: min(100% - 36px, 1280px);
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0;
 }
 .ds-manager-eyebrow {
   display: block;
@@ -1265,6 +1489,60 @@
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+.ds-coming-soon-card .ds-user-empty {
+  min-height: 108px;
+  display: flex;
+  align-items: center;
+}
+.ds-coming-soon-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ds-template-list {
+  display: flex;
+  flex-direction: column;
+}
+.ds-template-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+.ds-template-row:first-child {
+  border-top: 0;
+}
+.ds-template-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.ds-template-row strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.ds-template-row span,
+.ds-template-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.ds-template-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-template-row small {
+  flex: 0 0 auto;
 }
 .ds-user-list {
   display: flex;
@@ -1530,6 +1808,43 @@
   place-items: center;
   color: var(--accent);
 }
+/* While the design system is generating (and other waiting states), the small
+   block of the blocks icon hops, spins, and bounces back into the cluster. The
+   <rect> is the small block; transform-box keeps it spinning on its own center.
+   overflow: visible lets the hop rise past the 24-unit viewBox without clipping. */
+.ds-project-generation-mark svg {
+  overflow: visible;
+}
+.ds-project-generation-mark svg rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ds-generation-block 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes ds-generation-block {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  35% {
+    transform: translateY(-4px) rotate(180deg);
+  }
+  60% {
+    transform: translateY(0) rotate(360deg);
+  }
+  72% {
+    transform: translateY(-2px) rotate(360deg);
+  }
+  85% {
+    transform: translateY(0) rotate(360deg);
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-project-generation-mark svg rect {
+    animation: none;
+  }
+}
 .ds-project-generation-stage h1 {
   margin: 0;
   color: var(--text);
@@ -1631,17 +1946,45 @@
   line-height: 1.45;
 }
 .ds-project-publish-card__toggles {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 18px;
 }
-.ds-project-publish-card label {
+.ds-project-publish-card__toggles label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--text);
   font-size: 13px;
   white-space: nowrap;
+}
+.ds-project-publish-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+.ds-project-publish-trigger > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 10px;
+  line-height: 1;
+}
+.ds-project-publish-trigger > button svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+/* A disabled button does not fire the hover or focus that shows its own `title`,
+   so the publish guidance lives on this wrapper. Make the disabled button
+   transparent to pointer events so hovering it reveals the wrapper title, and
+   carry the not-allowed cursor the button would otherwise show. */
+.ds-project-publish-trigger:has(> button:disabled) {
+  cursor: not-allowed;
+}
+.ds-project-publish-trigger > button:disabled {
+  pointer-events: none;
 }
 .ds-project-use-row {
   margin-top: 14px;
@@ -1783,7 +2126,7 @@
   font-size: 13px;
 }
 .ds-project-warning-card {
-  margin: 14px 0 0;
+  margin: 14px 0 18px;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
@@ -1816,6 +2159,13 @@
   align-items: center;
   gap: 7px;
   white-space: nowrap;
+}
+/* Holds the Upload fonts + Use system fonts actions in the card's last cell.
+   Issue #2814. */
+.ds-warning-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ds-context-strip {
   margin: 22px 0 30px;
@@ -1856,18 +2206,36 @@
   gap: 28px;
 }
 .ds-project-section-head {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 10px;
 }
+/* Stretched toggle: covers the whole head so the entire row expands/collapses.
+   Sits behind the title (which is pointer-events: none, so clicks fall through)
+   and behind the review action buttons (which are lifted above it). */
+.ds-project-section-head-trigger {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: inherit;
+}
 .ds-project-section-title {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  flex: 1;
   min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 0;
@@ -1881,7 +2249,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 .ds-project-section-title strong {
   margin: 0;
@@ -1943,6 +2311,8 @@
   color: var(--amber);
 }
 .ds-project-review-actions {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -1965,6 +2335,51 @@
   border-color: color-mix(in srgb, var(--red) 42%, var(--border));
   background: color-mix(in srgb, var(--red) 9%, var(--bg-panel));
   color: var(--red);
+}
+/* "Needs work..." feedback form. Floats below the review buttons as a popover
+   instead of flowing inline in the actions row, which otherwise cramped the
+   section head. Anchored to .ds-project-review-actions (position: relative). */
+.ds-project-feedback-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(360px, 88vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: ds-feedback-pop-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ds-project-feedback-popover label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.ds-project-feedback-popover textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.ds-project-feedback-popover > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@keyframes ds-feedback-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .ds-project-section-body {
   display: flex;
@@ -2006,7 +2421,6 @@
 }
 .ds-project-inline-preview iframe {
   border: 0;
-  pointer-events: none;
 }
 .ds-project-inline-preview img {
   object-fit: contain;
@@ -2151,7 +2565,11 @@
   width: min(940px, 100%);
 }
 .ds-project-head--review {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   border-bottom: 0;
   padding: 16px 0 28px;
 }
@@ -2172,11 +2590,6 @@
   color: var(--text-muted);
   font-size: 16px;
   line-height: 1.55;
-}
-.ds-project-publish-card--review .ds-project-publish-card__toggles {
-  min-height: 58px;
-  padding: 0 24px;
-  border-top: 1px solid var(--border);
 }
 .ds-project-publish-card--review .ds-project-use-row {
   margin: 0;
@@ -2310,6 +2723,10 @@
   }
   .ds-project-review-actions {
     justify-content: flex-start;
+  }
+  .ds-project-feedback-popover {
+    right: auto;
+    left: 0;
   }
   .ds-project-section-state {
     margin-left: 0;

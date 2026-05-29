@@ -109,23 +109,28 @@ export async function importFolderProject(
 
 export async function importClaudeDesignZip(
   file: File,
-): Promise<{ project: Project; conversationId: string; entryFile: string } | null> {
-  try {
-    const form = new FormData();
-    form.append('file', file);
-    const resp = await fetch('/api/import/claude-design', {
-      method: 'POST',
-      body: form,
-    });
-    if (!resp.ok) return null;
-    return (await resp.json()) as {
-      project: Project;
-      conversationId: string;
-      entryFile: string;
-    };
-  } catch {
-    return null;
+): Promise<{ project: Project; conversationId: string; entryFile: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('/api/import/claude-design', {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) {
+    const payload = await resp.json().catch(() => null);
+    const message =
+      payload != null &&
+      typeof payload === 'object' &&
+      typeof (payload as { error?: unknown }).error === 'string'
+        ? (payload as { error: string }).error
+        : `Import failed (${resp.status})`;
+    throw new Error(message);
   }
+  return (await resp.json()) as {
+    project: Project;
+    conversationId: string;
+    entryFile: string;
+  };
 }
 
 // ---------- templates ----------
@@ -311,6 +316,11 @@ export async function listMessages(
 
 export interface SaveMessageOptions {
   telemetryFinalized?: boolean;
+  // Set during page-unload paths (pagehide / visibilitychange→hidden) so
+  // the in-flight PUT survives even if the document tears down before the
+  // response arrives. Without keepalive the browser cancels the fetch
+  // and the daemon never sees the final buffered text chunk.
+  keepalive?: boolean;
 }
 
 export async function saveMessage(
@@ -329,6 +339,7 @@ export async function saveMessage(
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        ...(options.keepalive ? { keepalive: true } : {}),
       },
     );
   } catch {
@@ -509,6 +520,39 @@ export interface PluginShareOutcome {
   code?: string;
 }
 
+export interface PluginShareTaskStart {
+  taskId: string;
+  action: 'publish-github' | 'contribute-open-design';
+  path: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  startedAt: number;
+}
+
+export interface PluginShareTaskResult {
+  message: string;
+  url?: string;
+  log?: string[];
+}
+
+export interface PluginShareTaskError {
+  message: string;
+  code?: string;
+  log?: string[];
+}
+
+export interface PluginShareTaskSnapshot {
+  taskId: string;
+  action: 'publish-github' | 'contribute-open-design';
+  path: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  startedAt: number;
+  endedAt?: number | null;
+  progress: string[];
+  nextSince: number;
+  result?: PluginShareTaskResult;
+  error?: PluginShareTaskError;
+}
+
 export async function publishGeneratedPluginToGitHub(
   projectId: string,
   relativePath: string,
@@ -521,6 +565,63 @@ export async function contributeGeneratedPluginToOpenDesign(
   relativePath: string,
 ): Promise<PluginShareOutcome> {
   return postGeneratedPluginShareAction(projectId, relativePath, 'contribute-open-design');
+}
+
+export async function startGeneratedPluginShareTask(
+  projectId: string,
+  relativePath: string,
+  action: 'publish-github' | 'contribute-open-design',
+): Promise<PluginShareTaskStart> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/plugins/share-tasks`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: relativePath, action }),
+    },
+  );
+  const body = await resp.json().catch(() => null) as Partial<PluginShareTaskStart> & {
+    error?: string | { message?: string };
+    message?: string;
+  } | null;
+  if (!resp.ok || !body?.taskId || !body?.action || !body?.path || !body?.status || !body?.startedAt) {
+    const errorMessage =
+      body?.message
+      ?? (typeof body?.error === 'string' ? body.error : body?.error?.message)
+      ?? 'Could not start plugin share task.';
+    throw new Error(errorMessage);
+  }
+  return {
+    taskId: body.taskId,
+    action: body.action,
+    path: body.path,
+    status: body.status,
+    startedAt: body.startedAt,
+  };
+}
+
+export async function waitGeneratedPluginShareTask(
+  taskId: string,
+  since: number,
+  timeoutMs = 25_000,
+): Promise<PluginShareTaskSnapshot> {
+  const resp = await fetch(`/api/plugins/share-tasks/${encodeURIComponent(taskId)}/wait`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ since, timeoutMs }),
+  });
+  const body = await resp.json().catch(() => null) as PluginShareTaskSnapshot & {
+    error?: string | { message?: string };
+    message?: string;
+  } | null;
+  if (!resp.ok || !body?.taskId) {
+    const errorMessage =
+      body?.message
+      ?? (typeof body?.error === 'string' ? body.error : body?.error?.message)
+      ?? 'Could not fetch plugin share task.';
+    throw new Error(errorMessage);
+  }
+  return body;
 }
 
 export type PluginShareProjectOutcome =

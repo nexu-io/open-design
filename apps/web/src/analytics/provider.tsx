@@ -6,13 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { useI18n } from '../i18n';
 import {
-  ANALYTICS_HEADER_ANONYMOUS_ID,
+  ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
   ANALYTICS_HEADER_LOCALE,
   ANALYTICS_HEADER_REQUEST_ID,
@@ -21,10 +20,13 @@ import {
 import {
   applyConsent,
   applyIdentity,
+  bootstrapExceptionTracking,
   capture,
   getAnalyticsClient,
   getResolvedAnonymousId,
+  setConfigureGlobals,
 } from './client';
+import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
   detectClientType,
   getAnonymousId,
@@ -50,6 +52,12 @@ interface AnalyticsContextValue {
   // state is reset() then identify()'d to the new id so the next event
   // batch is fully decoupled from the deleted identity.
   setIdentity: (installationId: string | null) => void;
+  // Push the configure-state triplet (has_available_configure_cli /
+  // configure_type / configure_availability) to the PostHog global
+  // register so every subsequent capture inherits it. Called from
+  // App.tsx whenever the user's execution-mode config changes (mode
+  // switch, agent select, BYOK save, CLI rescan).
+  setConfigureGlobals: (next: AnalyticsConfigureGlobals) => void;
   anonymousId: string;
   sessionId: string;
   newRequestId: () => string;
@@ -80,10 +88,13 @@ function isSameOriginApiCall(url: unknown): boolean {
 // App version is read from a runtime endpoint rather than at build time so
 // the same web bundle reports the daemon-pinned version even when running
 // against a newer/older daemon during dev. Falls back to '0.0.0' until the
-// fetch resolves; analytics events fired before resolution simply have a
-// stale version string and are not re-emitted.
-function useAppVersion(): string {
-  const versionRef = useRef('0.0.0');
+// fetch resolves, then the resolved value flows through state so every
+// downstream effect that depends on `appVersion` re-runs and re-registers
+// the PostHog super-property with the real version. Earlier `useRef` shape
+// silently broke this: ref writes don't trigger re-renders, so every event
+// shipped with `app_version='0.0.0'`.
+export function useAppVersion(): string {
+  const [version, setVersion] = useState('0.0.0');
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -92,7 +103,8 @@ function useAppVersion(): string {
         if (!res.ok) return;
         const body = (await res.json()) as { version?: { version?: string } };
         if (cancelled) return;
-        if (body?.version?.version) versionRef.current = body.version.version;
+        const next = body?.version?.version;
+        if (next) setVersion(next);
       } catch {
         // Best-effort.
       }
@@ -101,7 +113,7 @@ function useAppVersion(): string {
       cancelled = true;
     };
   }, []);
-  return versionRef.current;
+  return version;
 }
 
 export function AnalyticsProvider({ children }: { children: ReactNode }) {
@@ -126,6 +138,17 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const [resolvedAnonId, setResolvedAnonId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
+    // Bridge the always-on error tracker to /api/analytics/config so any
+    // exceptions buffered since module load (see client-app.tsx) can flush
+    // to PostHog. This runs regardless of the user's analytics consent
+    // toggle — error reports are intentionally not gated by it.
+    void bootstrapExceptionTracking({
+      anonymousId: identity.anonymousId,
+      sessionId: identity.sessionId,
+      clientType: identity.clientType,
+      locale,
+      appVersion,
+    });
     void getAnalyticsClient({
       anonymousId: identity.anonymousId,
       sessionId: identity.sessionId,
@@ -157,7 +180,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     if (!resolvedAnonId) return;
     const original = window.fetch;
     const baseHeaders: Record<string, string> = {
-      [ANALYTICS_HEADER_ANONYMOUS_ID]: resolvedAnonId,
+      [ANALYTICS_HEADER_DEVICE_ID]: resolvedAnonId,
       [ANALYTICS_HEADER_SESSION_ID]: identity.sessionId,
       [ANALYTICS_HEADER_CLIENT_TYPE]: identity.clientType,
     };
@@ -282,6 +305,9 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         // start using the new id immediately, not after the next reload.
         if (installationId) setResolvedAnonId(installationId);
       },
+      setConfigureGlobals: (next: AnalyticsConfigureGlobals) => {
+        setConfigureGlobals(next);
+      },
       anonymousId: identity.anonymousId,
       sessionId: identity.sessionId,
       newRequestId: () => randomUUID(),
@@ -302,6 +328,7 @@ export function useAnalytics(): AnalyticsContextValue {
       track: () => undefined,
       setConsent: () => undefined,
       setIdentity: () => undefined,
+      setConfigureGlobals: () => undefined,
       anonymousId: 'unmounted',
       sessionId: 'unmounted',
       newRequestId: () => randomUUID(),

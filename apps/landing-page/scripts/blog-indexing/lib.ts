@@ -108,6 +108,7 @@ export interface SearchAnalyticsQueryOptions {
   endDate: string;
   dimensions?: string[];
   rowLimit?: number;
+  dataState?: 'final' | 'all' | 'hourly_all';
   dimensionFilterGroups?: unknown[];
 }
 
@@ -422,7 +423,7 @@ export async function querySearchAnalyticsRows(
       endDate: options.endDate,
       dimensions: options.dimensions ?? [],
       rowLimit: options.rowLimit ?? 25_000,
-      dataState: 'final',
+      ...(options.dataState ? { dataState: options.dataState } : {}),
       ...(options.dimensionFilterGroups
         ? { dimensionFilterGroups: options.dimensionFilterGroups }
         : {}),

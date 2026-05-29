@@ -6,6 +6,7 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   azure: 'Azure OpenAI',
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
+  senseaudio: 'SenseAudio API',
 };
 
 const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
@@ -14,6 +15,7 @@ const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
   azure: 'azure-openai-api',
   google: 'google-gemini-api',
   ollama: 'ollama-cloud-api',
+  senseaudio: 'senseaudio-api',
 };
 
 export function apiProtocolLabel(protocol: ApiProtocol | undefined): string {

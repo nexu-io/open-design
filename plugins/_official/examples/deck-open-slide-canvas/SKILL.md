@@ -3,7 +3,9 @@ name: deck-open-slide-canvas
 zh_name: "1920 画布自由 Deck"
 en_name: "Open-Slide 1920 Canvas Deck"
 emoji: "🎨"
-description: "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板"
+description: "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template."
+zh_description: "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板"
+en_description: "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template."
 category: slides
 scenario: design
 aspect_hint: "1920×1080 (16:9)"
@@ -29,7 +31,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Open-Slide 1920 Canvas Deck template to turn my content into a locked 1920x1080 free-composition deck with React component-level layout. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 1920 画布自由 Deck】

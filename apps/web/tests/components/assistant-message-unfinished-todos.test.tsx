@@ -79,6 +79,8 @@ describe('AssistantMessage unfinished todo state', () => {
   it('shows a soft no-output state instead of Done for empty API responses', () => {
     render(
       <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
         message={messageWithEvents([
           { kind: 'status', label: 'empty_response', detail: 'deepseek-chat' },
           {
@@ -101,6 +103,8 @@ describe('AssistantMessage unfinished todo state', () => {
   it('keeps Done for a completed latest TodoWrite fixture', () => {
     render(
       <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
         message={messageWithEvents([
           {
             kind: 'tool_use',
@@ -166,6 +170,8 @@ describe('AssistantMessage unfinished todo state', () => {
     const onContinue = vi.fn();
     render(
       <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
         message={messageWithEvents([
           {
             kind: 'tool_use',
@@ -213,6 +219,8 @@ describe('AssistantMessage unfinished todo state', () => {
   it('hides the continue button on older assistant turns', () => {
     render(
       <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
         message={messageWithEvents([
           {
             kind: 'tool_use',
@@ -276,8 +284,8 @@ describe('AssistantMessage unfinished todo state', () => {
     fireEvent.click(screen.getByTestId('assistant-plugin-contribute-generated-plugin'));
     expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'contribute');
     expect(
-      await screen.findByText('Sent to the agent. The CLI run will continue in chat.'),
-    ).toBeTruthy();
+      screen.queryByText('Sent to the agent. The CLI run will continue in chat.'),
+    ).toBeNull();
 
     fireEvent.click(screen.getByTestId('assistant-plugin-open-manifest-generated-plugin'));
     expect(onOpen).toHaveBeenCalledWith('generated-plugin/open-design.json');

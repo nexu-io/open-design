@@ -35,6 +35,7 @@ export type MediaProviderId =
   | 'nanobanana'
   | 'imagerouter'
   | 'custom-image'
+  | 'comfyui'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -135,11 +136,19 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'custom-image',
     label: 'Custom Image API',
-    hint: 'OpenAI-compatible /v1/images/generations endpoint',
+    hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)',
     integrated: true,
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
     customModelPlaceholder: 'my-image-model',
+  },
+  {
+    id: 'comfyui',
+    label: 'ComfyUI',
+    hint: 'Local JSON workflow server (planned adapter)',
+    integrated: false,
+    defaultBaseUrl: 'http://127.0.0.1:8188',
+    docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow',
   },
   {
     id: 'bfl',
@@ -234,7 +243,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'senseaudio',
     label: 'SenseAudio',
-    hint: 'TTS · 70+ system voices · clone',
+    hint: '',
     integrated: true,
     defaultBaseUrl: 'https://api.senseaudio.cn',
     docsUrl: 'https://docs.senseaudio.cn',
@@ -344,6 +353,29 @@ export const IMAGE_MODELS: MediaModel[] = [
     caps: ['i2i'],
   },
 
+  // SenseAudio — synchronous /v1/image/sync, Bearer auth, reference URL or data URI.
+  {
+    id: 'senseaudio-image-2.0-260319',
+    label: 'senseaudio-image-2.0',
+    hint: 'SenseAudio · multi-aspect, latest',
+    provider: 'senseaudio',
+    caps: ['t2i', 'i2i'],
+  },
+  {
+    id: 'senseaudio-image-1.0-260319',
+    label: 'senseaudio-image-1.0',
+    hint: 'SenseAudio · standard',
+    provider: 'senseaudio',
+    caps: ['t2i', 'i2i'],
+  },
+  {
+    id: 'doubao-seedream-5-0-260128',
+    label: 'seedream-5.0',
+    hint: 'SenseAudio · ByteDance Seedream 5.0 hi-res',
+    provider: 'senseaudio',
+    caps: ['t2i', 'i2i'],
+  },
+
   // xAI Grok Imagine — text-to-image (1k/2k, 11+ aspect ratios).
   {
     id: 'grok-imagine-image',
@@ -385,13 +417,13 @@ export const IMAGE_MODELS: MediaModel[] = [
     caps: ['t2i'],
   },
 
-  // Custom OpenAI-compatible /v1/images/generations endpoint.
+  // Custom OpenAI-compatible image generation + edit endpoints.
   {
     id: 'custom-image',
     label: 'custom-image',
     hint: 'Custom · OpenAI-compatible endpoint',
     provider: 'custom-image',
-    caps: ['t2i'],
+    caps: ['t2i', 'i2i'],
   },
 
   // Black Forest Labs FLUX family.

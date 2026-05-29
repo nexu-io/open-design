@@ -32,10 +32,11 @@
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
+import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
 const ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX = 'ElevenLabs voice list could not be loaded';
@@ -50,6 +51,38 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '503': 'Service Unavailable',
   '504': 'Gateway Timeout',
 };
+
+function renderUiLocalePrompt(locale: string | undefined): string {
+  const normalized = locale?.trim();
+  if (!normalized || normalized.toLowerCase() === 'en') return '';
+  const languageName = normalized === 'zh-CN'
+    ? 'Simplified Chinese'
+    : normalized === 'zh-TW'
+      ? 'Traditional Chinese'
+      : normalized;
+  const lines = [
+    '# UI locale override',
+    '',
+    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
+  ];
+  if (normalized === 'zh-CN') {
+    lines.push(
+      '',
+      'For the default quick brief in Simplified Chinese, use copy like:',
+      '- title: `快速简报 — 30 秒`',
+      '- description: `开始生成前我会先确认这些信息。不适用的可以跳过，我会补上默认值。`',
+      '- output label/options: `我们要做什么？` / `幻灯片 / 路演稿`, `单页网页原型 / 落地页`, `多屏应用原型`, `数据看板 / 工具界面`, `编辑式 / 营销页面`, `其他 — 我来描述`',
+      '- platform label/options: `目标平台` / `响应式网页`, `桌面网页`, `iOS 应用`, `Android 应用`, `平板应用`, `桌面应用`, `固定画布 (1920×1080)`',
+      '- audience label/placeholder: `目标用户` / `例如：早期投资人、开发者工具采购者、内部高管评审`',
+      '- tone label/options: `视觉调性` / `编辑 / 杂志感`, `现代极简`, `活泼 / 插画感`, `科技 / 工具型`, `奢华 / 精致`, `粗野 / 实验性`, `人性化 / 亲切`',
+      '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
+      '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
+      '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
+    );
+  }
+  return lines.join('\n');
+}
 
 function normalizePromptText(value: string): string {
   return value
@@ -86,6 +119,7 @@ type ProjectMetadata = {
   intent?: string | null;
   fidelity?: string | null;
   speakerNotes?: boolean | null;
+  slideCount?: string | null;
   animations?: boolean | null;
   includeLandingPage?: boolean | null;
   includeOsWidgets?: boolean | null;
@@ -151,6 +185,37 @@ type AudioVoiceOption = {
   labels?: Record<string, string> | null;
 };
 
+type ExclusiveSurfaceMode = 'deck' | 'image' | 'video' | 'audio';
+
+const EXCLUSIVE_SURFACE_MODES = new Set<ExclusiveSurfaceMode>(['deck', 'image', 'video', 'audio']);
+
+export function resolveExclusiveSurface(args: {
+  metadata?: ProjectMetadata | undefined;
+  skillMode?: ComposeInput['skillMode'] | undefined;
+  skillModes?: ComposeInput['skillModes'] | undefined;
+}): ExclusiveSurfaceMode | null {
+  const activeSkillModes = new Set(
+    Array.isArray(args.skillModes)
+      ? args.skillModes.filter(Boolean)
+      : args.skillMode
+        ? [args.skillMode]
+        : [],
+  );
+  const metadataSurface = EXCLUSIVE_SURFACE_MODES.has(args.metadata?.kind as ExclusiveSurfaceMode)
+    ? args.metadata?.kind as ExclusiveSurfaceMode
+    : null;
+  const primarySkillSurface = EXCLUSIVE_SURFACE_MODES.has(args.skillMode as ExclusiveSurfaceMode)
+    ? args.skillMode as ExclusiveSurfaceMode
+    : null;
+  const composedSurfaceModes = Array.from(activeSkillModes).filter((mode): mode is ExclusiveSurfaceMode =>
+    EXCLUSIVE_SURFACE_MODES.has(mode as ExclusiveSurfaceMode),
+  );
+
+  return metadataSurface
+    ?? primarySkillSurface
+    ?? (composedSurfaceModes.length === 1 ? composedSurfaceModes[0] ?? null : null);
+}
+
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
@@ -203,6 +268,7 @@ export interface ComposeInput {
     | 'video'
     | 'audio'
     | undefined;
+  skillModes?: Array<'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio'> | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,
@@ -303,6 +369,12 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  // UI locale selected by the client. User-visible generated form copy
+  // must follow this locale even when the user's initial prompt is brief.
+  locale?: string | undefined;
+  // Run-scoped media policy. Defaults to enabled when omitted so existing
+  // local OD behavior keeps the same media prompt contract.
+  mediaExecution?: MediaExecutionPolicy | undefined;
 }
 
 export function composeSystemPrompt({
@@ -311,6 +383,7 @@ export function composeSystemPrompt({
   skillBody,
   skillName,
   skillMode,
+  skillModes,
   designSystemBody,
   designSystemTitle,
   designSystemUsageMd,
@@ -333,8 +406,10 @@ export function composeSystemPrompt({
   pluginBlock,
   activeStageBlocks,
   streamFormat,
+  locale,
   userInstructions,
   projectInstructions,
+  mediaExecution,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -342,6 +417,14 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  const activeSkillModes = new Set(
+    Array.isArray(skillModes)
+      ? skillModes.filter(Boolean)
+      : skillMode
+        ? [skillMode]
+        : [],
+  );
+  const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -358,6 +441,12 @@ export function composeSystemPrompt({
 
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  const localePrompt = renderUiLocalePrompt(locale);
+  if (localePrompt) {
+    parts.push(localePrompt);
     parts.push('\n\n---\n\n');
   }
 
@@ -473,7 +562,13 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = renderMetadataBlock(
+    metadata,
+    template,
+    audioVoiceOptions,
+    audioVoiceOptionsError,
+    mediaExecution,
+  );
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -492,8 +587,8 @@ export function composeSystemPrompt({
   // skeleton would conflict. The skill-seed path takes over via
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
-  const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
-  const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
+  const isDeckProject = resolvedExclusiveSurface === 'deck';
+  const isFreeformProject = activeSkillModes.size === 0 && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
@@ -514,17 +609,14 @@ export function composeSystemPrompt({
   }
 
   const isMediaSurface =
-    skillMode === 'image' ||
-    skillMode === 'video' ||
-    skillMode === 'audio' ||
-    metadata?.kind === 'image' ||
-    metadata?.kind === 'video' ||
-    metadata?.kind === 'audio';
+    resolvedExclusiveSurface === 'image'
+    || resolvedExclusiveSurface === 'video'
+    || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
-    parts.push(MEDIA_GENERATION_CONTRACT);
+    parts.push(renderMediaGenerationContract(mediaExecution));
   }
 
-  if (includeCodexImagegenOverride) {
+  if (includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
     const codexImagegenOverride = renderCodexImagegenOverride(
       agentId,
       metadata,
@@ -676,6 +768,31 @@ export function shouldRenderCodexImagegenOverride(
   );
 }
 
+function shouldAllowCodexImagegenOverride(
+  metadata: ProjectMetadata | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): boolean {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode !== 'enabled') return false;
+  if (
+    Array.isArray(mediaExecution?.allowedSurfaces) &&
+    mediaExecution.allowedSurfaces.length > 0 &&
+    !mediaExecution.allowedSurfaces.includes('image')
+  ) {
+    return false;
+  }
+  const model = resolveCodexImagegenModelId(metadata);
+  if (
+    model &&
+    Array.isArray(mediaExecution?.allowedModels) &&
+    mediaExecution.allowedModels.length > 0 &&
+    !mediaExecution.allowedModels.includes(model)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function renderCodexImagegenOverride(
   agentId: string | null | undefined,
   metadata: ProjectMetadata | undefined,
@@ -732,6 +849,7 @@ function renderMetadataBlock(
   template: ProjectTemplate | undefined,
   audioVoiceOptions: AudioVoiceOption[] | undefined,
   audioVoiceOptionsError: string | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
 ): string {
   if (!metadata) return '';
   const lines: string[] = [];
@@ -778,6 +896,9 @@ function renderMetadataBlock(
     lines.push(
       '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
     );
+    lines.push(
+      '- **artifact-output rule**: when you generate an HTML artifact, keep conversational prose concise and product-facing. Do not dump the full raw HTML source back into chat; the artifact/file is the source of truth and the assistant message should only summarize the result.',
+    );
   }
   if (metadata.includeLandingPage) {
     lines.push(
@@ -804,6 +925,9 @@ function renderMetadataBlock(
     );
   }
   if (metadata.kind === 'deck') {
+    lines.push(
+      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+    );
     lines.push(
       `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
     );
@@ -834,9 +958,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'image',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`',
+      mediaExecution,
+    ));
   }
   if (metadata.kind === 'video') {
     lines.push(
@@ -856,9 +982,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'video',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
+      mediaExecution,
+    ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
@@ -908,9 +1036,11 @@ function renderMetadataBlock(
       );
     }
     lines.push('');
-    lines.push(
-      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'audio',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
+      mediaExecution,
+    ));
   }
 
   if (metadata.inspirationDesignSystemIds && metadata.inspirationDesignSystemIds.length > 0) {
@@ -1051,6 +1181,19 @@ function renderMetadataBlock(
   }
 
   return lines.join('\n');
+}
+
+function renderMediaMetadataAction(
+  surface: MediaSurface,
+  command: string,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): string {
+  const article = surface === 'audio' ? 'an' : 'a';
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode === 'disabled') {
+    return `This is ${article} **${surface}** project, but Open Design-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+  }
+  return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }
 
 function shouldRenderElevenLabsVoiceOptions(

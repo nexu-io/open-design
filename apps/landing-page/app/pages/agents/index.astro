@@ -1,0 +1,233 @@
+---
+/*
+ * /agents/ — agent-name long tail.
+ *
+ * Captures "claude code design", "codex design", "cursor agent design",
+ * "gemini cli design", "opencode design", "qwen design" queries. Each
+ * agent gets a short card explaining how it plugs into Open Design.
+ * Per-agent detail pages (e.g. `/agents/claude-code/`) will follow as
+ * P2 work — this hub is the SEO entry point.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getInfoPageCopy } from '../../info-page-i18n';
+import { DEFAULT_LOCALE, localeFromPath, localizedHref, type LandingLocaleCode } from '../../i18n';
+
+// Derive SITE from Astro.site so preview/staging JSON-LD matches the
+// layout's canonical link. Falls back to the production origin.
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const page = copy.agents;
+const common = copy.common;
+
+const title = page.title;
+const description = page.description;
+
+// 17 first-party adapters live in `apps/daemon/src/runtimes/defs/`. Keep
+// this list in lockstep with that directory; opendesigner.io advertises
+// "16 out of the box" — Open Design ships one more, and the names below
+// match the canonical `name:` field on each `RuntimeAgentDef`.
+const tiers = [
+  {
+    label: page.tiers[0].label,
+    blurb: page.tiers[0].blurb,
+    agents: [
+      { slug: 'claude-code', name: 'Claude Code',     vendor: 'Anthropic',     key: 'Anthropic API key (BYOK) or Claude subscription' },
+      { slug: 'codex',       name: 'Codex',           vendor: 'OpenAI',        key: 'OpenAI API key (BYOK) or ChatGPT subscription' },
+      { slug: 'cursor',      name: 'Cursor Agent',    vendor: 'Cursor',        key: 'Cursor account (uses your provider keys)' },
+      { slug: 'gemini',      name: 'Gemini CLI',      vendor: 'Google',        key: 'Google AI Studio key (BYOK)' },
+      { slug: 'copilot',     name: 'GitHub Copilot CLI', vendor: 'GitHub',     key: 'GitHub Copilot subscription' },
+      { slug: 'opencode',    name: 'OpenCode',        vendor: 'community',     key: 'Provider keys via OpenCode config (BYOK)' },
+      { slug: 'qwen',        name: 'Qwen',            vendor: 'Alibaba',       key: 'DashScope / Qwen API key (BYOK)' },
+    ],
+  },
+  {
+    label: page.tiers[1].label,
+    blurb: page.tiers[1].blurb,
+    agents: [
+      { slug: 'grok',   name: 'Grok',                 vendor: 'xAI',           key: 'xAI SuperGrok OAuth (`grok login --oauth`)' },
+      { slug: 'hermes', name: 'Hermes',               vendor: 'community',     key: 'xAI / OpenAI / Anthropic keys via `hermes auth add`' },
+      { slug: 'kimi',   name: 'Kimi CLI',             vendor: 'Moonshot',      key: 'Moonshot API key (BYOK)' },
+      { slug: 'devin',  name: 'Devin for Terminal',   vendor: 'Cognition',     key: 'Devin account' },
+      { slug: 'deepseek', name: 'DeepSeek TUI',       vendor: 'DeepSeek',      key: 'DeepSeek API key (BYOK)' },
+      { slug: 'pi',     name: 'Pi',                   vendor: 'Inflection',    key: 'Pi account (interactive auth)' },
+    ],
+  },
+  {
+    label: page.tiers[2].label,
+    blurb: page.tiers[2].blurb,
+    agents: [
+      { slug: 'vibe',  name: 'Mistral Vibe CLI',     vendor: 'Mistral',        key: 'Mistral API key (BYOK)' },
+      { slug: 'kiro',  name: 'Kiro CLI',             vendor: 'Amazon (preview)', key: 'AWS credentials (BYOK)' },
+      { slug: 'kilo',  name: 'Kilo',                 vendor: 'community',      key: 'Provider keys via Kilo config (BYOK)' },
+      { slug: 'qoder', name: 'Qoder CLI',            vendor: 'community',      key: 'Provider keys via Qoder config (BYOK)' },
+    ],
+  },
+];
+
+const allAgents = tiers.flatMap((t) => t.agents);
+
+const localizedCredentialLabels: Partial<Record<LandingLocaleCode, Record<string, string>>> = {
+  zh: {
+    'claude-code': 'Anthropic API key（BYOK）或 Claude 订阅',
+    codex: 'OpenAI API key（BYOK）或 ChatGPT 订阅',
+    cursor: 'Cursor 账号，使用你自己的模型凭据',
+    gemini: 'Google AI Studio key（BYOK）',
+    copilot: 'GitHub Copilot 订阅',
+    opencode: '通过 OpenCode 配置接入模型凭据（BYOK）',
+    qwen: 'DashScope / Qwen API key（BYOK）',
+    grok: 'xAI SuperGrok OAuth',
+    hermes: '通过 Hermes 添加 xAI / OpenAI / Anthropic 凭据',
+    kimi: 'Moonshot API key（BYOK）',
+    devin: 'Devin 账号',
+    deepseek: 'DeepSeek API key（BYOK）',
+    pi: 'Pi 账号（交互式登录）',
+    vibe: 'Mistral API key（BYOK）',
+    kiro: 'AWS 凭据（BYOK）',
+    kilo: '通过 Kilo 配置接入模型凭据（BYOK）',
+    qoder: '通过 Qoder 配置接入模型凭据（BYOK）',
+  },
+  'zh-tw': {
+    'claude-code': 'Anthropic API key（BYOK）或 Claude 訂閱',
+    codex: 'OpenAI API key（BYOK）或 ChatGPT 訂閱',
+    cursor: 'Cursor 帳號，使用你自己的模型憑據',
+    gemini: 'Google AI Studio key（BYOK）',
+    copilot: 'GitHub Copilot 訂閱',
+    opencode: '透過 OpenCode 設定接入模型憑據（BYOK）',
+    qwen: 'DashScope / Qwen API key（BYOK）',
+    grok: 'xAI SuperGrok OAuth',
+    hermes: '透過 Hermes 加入 xAI / OpenAI / Anthropic 憑據',
+    kimi: 'Moonshot API key（BYOK）',
+    devin: 'Devin 帳號',
+    deepseek: 'DeepSeek API key（BYOK）',
+    pi: 'Pi 帳號（互動式登入）',
+    vibe: 'Mistral API key（BYOK）',
+    kiro: 'AWS 憑據（BYOK）',
+    kilo: '透過 Kilo 設定接入模型憑據（BYOK）',
+    qoder: '透過 Qoder 設定接入模型憑據（BYOK）',
+  },
+  uk: {
+    'claude-code': 'Anthropic API key (BYOK) або передплата Claude',
+    codex: 'OpenAI API key (BYOK) або передплата ChatGPT',
+    cursor: 'Обліковий запис Cursor із вашими ключами моделей',
+    gemini: 'Google AI Studio key (BYOK)',
+    copilot: 'Передплата GitHub Copilot',
+    opencode: 'Ключі моделей через конфігурацію OpenCode (BYOK)',
+    qwen: 'DashScope / Qwen API key (BYOK)',
+    grok: 'xAI SuperGrok OAuth',
+    hermes: 'Ключі xAI / OpenAI / Anthropic через Hermes',
+    kimi: 'Moonshot API key (BYOK)',
+    devin: 'Обліковий запис Devin',
+    deepseek: 'DeepSeek API key (BYOK)',
+    pi: 'Обліковий запис Pi з інтерактивною авторизацією',
+    vibe: 'Mistral API key (BYOK)',
+    kiro: 'AWS credentials (BYOK)',
+    kilo: 'Ключі моделей через конфігурацію Kilo (BYOK)',
+    qoder: 'Ключі моделей через конфігурацію Qoder (BYOK)',
+  },
+};
+
+const credentialLabel = (agent: (typeof allAgents)[number]) => {
+  if (locale === DEFAULT_LOCALE) return agent.key;
+  return localizedCredentialLabels[locale]?.[agent.slug] ?? `${common.byok} · ${agent.vendor}`;
+};
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}agents/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Open Design supported agents',
+    numberOfItems: allAgents.length,
+    itemListElement: allAgents.map((a, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      name: a.name,
+      url: `${SITE}agents/#${a.slug}`,
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">{page.label}</span>
+      <h1 class="display">{page.heading(allAgents.length)}</h1>
+      <p class="lead">{page.lead(allAgents.length)}</p>
+    </header>
+
+    <section class="info-section">
+      <h2>{page.adaptersTitle}</h2>
+      <p>{page.adaptersBody}</p>
+    </section>
+
+    {tiers.map((tier) => (
+      <section class="info-section">
+        <h2>{tier.label}</h2>
+        <p>{tier.blurb}</p>
+        <ul class="agent-grid">
+          {tier.agents.map((a) => (
+            <li class="agent-card" id={a.slug}>
+              <h3>{a.name}</h3>
+              <p><strong>{page.vendor}:</strong> {a.vendor}</p>
+              <p><strong>{page.credential}:</strong> {credentialLabel(a)}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+
+    <section class="info-section" id="byok">
+      <h2>{page.byokTitle}</h2>
+      <p>{page.byokLead}</p>
+      <ul>
+        {page.byokItems.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="next">
+      <h2>{page.nextTitle}</h2>
+      <ul>
+        <li><a class="inline-link" href={href('/quickstart/')}>{page.nextItems[0].label}</a> — {page.nextItems[0].body}</li>
+        <li><a class="inline-link" href={href('/skills/')}>{page.nextItems[1].label}</a> — {page.nextItems[1].body}</li>
+        <li><a class="inline-link" href={href('/systems/')}>{page.nextItems[2].label}</a> — {page.nextItems[2].body}</li>
+        <li><a class="inline-link" href={href('/alternatives/claude-design/')}>{page.nextItems[3].label}</a> — {page.nextItems[3].body}</li>
+      </ul>
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{page.ctaTitle(allAgents.length)}</h2>
+        <p>{page.ctaBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        <a class="btn btn-ghost" href={`${REPO}/releases`} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-ghost" href="https://discord.gg/9ptkbbqRu" target="_blank" rel="noreferrer noopener">{common.requestAdapter}</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● {common.byok}</span>
+        <span>{allAgents.length} adapters · {common.apache}</span>
+        <span>{common.macWinLinux}</span>
+      </div>
+    </section>
+  </article>
+</Layout>

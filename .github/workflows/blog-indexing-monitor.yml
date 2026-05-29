@@ -251,7 +251,9 @@ jobs:
         run: |
           existing=$(gh issue list --repo nexu-io/open-design --state open --search 'in:title "Blog indexing — URLs stalled in Search Console"' --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo nexu-io/open-design --body 'All previously stalled URLs have reached `indexed` status. Closing automatically. — `blog-indexing-monitor`'
+            body_file="$RUNNER_TEMP/blog-indexing-monitor-stall-close.md"
+            printf '%s\n' "All previously stalled URLs have reached \`indexed\` status. Closing automatically. — \`blog-indexing-monitor\`" > "$body_file"
+            gh issue comment "$existing" --repo nexu-io/open-design --body-file "$body_file"
             gh issue close "$existing" --repo nexu-io/open-design
           fi
 
@@ -262,7 +264,9 @@ jobs:
         run: |
           existing=$(gh issue list --repo nexu-io/open-design --state open --search 'in:title "Blog traffic — indexed posts with zero impressions"' --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo nexu-io/open-design --body 'All previously low-traffic tracked URLs now have impressions or no longer match the escalation window. Closing automatically. — `blog-indexing-monitor`'
+            body_file="$RUNNER_TEMP/blog-indexing-monitor-low-traffic-close.md"
+            printf '%s\n' "All previously low-traffic tracked URLs now have impressions or no longer match the escalation window. Closing automatically. — \`blog-indexing-monitor\`" > "$body_file"
+            gh issue comment "$existing" --repo nexu-io/open-design --body-file "$body_file"
             gh issue close "$existing" --repo nexu-io/open-design
           fi
 

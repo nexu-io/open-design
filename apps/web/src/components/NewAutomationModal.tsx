@@ -107,16 +107,58 @@ function formatTime12h(time: string): string {
   return `${h12}:${mm} ${suffix}`;
 }
 
-export function describeScheduleSummary(schedule: RoutineSchedule): string {
+/**
+ * Shared schedule display parts — single source of truth for both the
+ * string formatter (describeScheduleSummary) and the node builder
+ * (buildScheduleSummaryNode). Any change to labels, time format, or
+ * weekday names only needs to happen here.
+ */
+type ScheduleParts =
+  | { kind: 'hourly'; minute: string }
+  | { kind: 'timed'; freq: string; time: string; tz: string };
+
+function decomposeSchedule(schedule: RoutineSchedule): ScheduleParts {
   if (schedule.kind === 'hourly') {
-    const mm = String(schedule.minute).padStart(2, '0');
-    return `Hourly at :${mm}`;
+    return { kind: 'hourly', minute: String(schedule.minute).padStart(2, '0') };
   }
   const tz = tzCityLabel(schedule.timezone);
-  if (schedule.kind === 'daily') return `Daily at ${formatTime12h(schedule.time)} · ${tz}`;
-  if (schedule.kind === 'weekdays') return `Weekdays at ${formatTime12h(schedule.time)} · ${tz}`;
-  const day = WEEKDAY_LABELS.find((w) => w.value === schedule.weekday)?.long ?? 'Sunday';
-  return `${day} at ${formatTime12h(schedule.time)} · ${tz}`;
+  const time = formatTime12h(schedule.time);
+  const freq =
+    schedule.kind === 'daily'
+      ? 'Daily'
+      : schedule.kind === 'weekdays'
+        ? 'Weekdays'
+        : WEEKDAY_LABELS.find((w) => w.value === schedule.weekday)?.long ?? 'Sunday';
+  return { kind: 'timed', freq, time, tz };
+}
+
+export function describeScheduleSummary(schedule: RoutineSchedule): string {
+  const parts = decomposeSchedule(schedule);
+  if (parts.kind === 'hourly') return `Hourly at :${parts.minute}`;
+  return `${parts.freq} at ${parts.time} · ${parts.tz}`;
+}
+
+/** Renders the schedule summary as structured pill segments for better visual hierarchy. */
+function buildScheduleSummaryNode(schedule: RoutineSchedule): ReactNode {
+  const parts = decomposeSchedule(schedule);
+  if (parts.kind === 'hourly') {
+    return (
+      <span className="automation-pill__segments">
+        <span className="automation-pill__freq">Hourly</span>
+        <span className="automation-pill__sep">·</span>
+        <span className="automation-pill__time">:{parts.minute}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="automation-pill__segments">
+      <span className="automation-pill__freq">{parts.freq}</span>
+      <span className="automation-pill__sep">·</span>
+      <span className="automation-pill__time">{parts.time}</span>
+      <span className="automation-pill__sep">·</span>
+      <span className="automation-pill__tz">{parts.tz}</span>
+    </span>
+  );
 }
 
 type FormState = {
@@ -439,13 +481,13 @@ export function NewAutomationModal({
       const url = isEdit ? `/api/routines/${editingId}` : '/api/routines';
       const payload = isEdit
         ? {
-            name: body.name,
-            prompt: body.prompt,
-            schedule: body.schedule,
-            target: body.target,
-            skillId: body.skillId,
-            context: body.context,
-          }
+          name: body.name,
+          prompt: body.prompt,
+          schedule: body.schedule,
+          target: body.target,
+          skillId: body.skillId,
+          context: body.context,
+        }
         : body;
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
@@ -470,6 +512,7 @@ export function NewAutomationModal({
   const projectLabel =
     form.mode === 'reuse' && projectName ? projectName : 'New project each run';
   const scheduleLabel = describeScheduleSummary(buildSchedule(form));
+  const scheduleLabelNode = buildScheduleSummaryNode(buildSchedule(form));
   const mentionQueryNorm = (mention?.query ?? '').trim().toLowerCase();
   const filteredSkills = filterCapabilities(
     skills,
@@ -786,7 +829,8 @@ export function NewAutomationModal({
             <PillButton
               icon="history"
               active={popover === 'schedule'}
-              label={scheduleLabel}
+              label={scheduleLabelNode}
+              aria-label={scheduleLabel}
               onClick={() =>
                 setPopover((p) => (p === 'schedule' ? null : 'schedule'))
               }
@@ -937,12 +981,14 @@ function PillButton({
   icon,
   label,
   active,
+  'aria-label': ariaLabel,
   onClick,
   children,
 }: {
   icon: 'folder' | 'history';
-  label: string;
+  label: ReactNode;
   active?: boolean;
+  'aria-label'?: string;
   onClick: () => void;
   children?: ReactNode;
 }) {
@@ -951,6 +997,7 @@ function PillButton({
       <button
         type="button"
         className={`automation-pill${active ? ' is-active' : ''}`}
+        aria-label={ariaLabel}
         onClick={onClick}
       >
         <Icon name={icon} size={12} />

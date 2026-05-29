@@ -11,6 +11,7 @@
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type {
+  ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
   ChatRunStatus,
@@ -42,6 +43,7 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   return 'unknown';
 }
 import { parseSseFrame } from './sse';
+import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
@@ -133,10 +135,50 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
   return history;
 }
 
+// Strip OD-specific markup that the agent emitted on a prior turn but
+// that the model would otherwise pattern-match as a template to echo.
+// Today this is `<question-form>` blocks and the ```json fenced schemas
+// some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
+// them — leaving those literal in the transcript causes weak/medium
+// plain-stream models to re-emit an identical form on the user's
+// follow-up turn, looking like the discovery form loop never breaks
+// (see PR #3157 form-loop investigation).
+//
+// User content is preserved verbatim — a user message that legitimately
+// quotes `<question-form>` (e.g. discussing the markup with the agent)
+// must not be mangled.
+export function sanitizePriorAssistantTurnForTranscript(content: string): string {
+  let sanitized = content.replace(
+    /<question-form\b[^>]*>[\s\S]*?<\/question-form>/g,
+    '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
+  );
+  // Strip ```json (or plain ```) fenced blocks whose body matches the
+  // form schema shape — `"questions": [` is the strongest tell. A
+  // generic JSON snippet without that key (e.g. an API response the
+  // agent shared) is left intact.
+  sanitized = sanitized.replace(
+    /```(?:json)?\s*\n([\s\S]*?)\n```/g,
+    (match, body: string) => {
+      if (/"questions"\s*:\s*\[/.test(body)) {
+        return '[form schema was echoed here on a prior turn; stripped to avoid a loop.]';
+      }
+      return match;
+    },
+  );
+  return sanitized;
+}
+
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
   const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
   const transcript = scopedHistory
-    .map((m) => `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(m.content.trim()))}`)
+    .map((m) => {
+      const trimmed = m.content.trim();
+      const sanitized =
+        m.role === 'assistant'
+          ? sanitizePriorAssistantTurnForTranscript(trimmed)
+          : trimmed;
+      return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
+    })
     .join('\n\n');
   const warning = buildPriorRunContextWarning(scopedHistory);
   return warning ? `${warning}\n\n${transcript}` : transcript;
@@ -181,10 +223,16 @@ export interface DaemonStreamOptions {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  locale?: string;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
+  // v2 analytics context propagated to run_created / run_finished.
+  // Optional; the daemon only consumes these to shape PostHog props
+  // (page_name / area / entry_from / DS context). Behavior never
+  // depends on them.
+  analyticsHints?: ChatAnalyticsHints;
 }
 
 export interface DaemonReattachOptions {
@@ -217,6 +265,31 @@ function daemonSseErrorMessage(data: SseErrorPayload): string {
   return `${message}\n${detail}`;
 }
 
+function daemonSseError(data: SseErrorPayload): Error {
+  const error = new Error(daemonSseErrorMessage(data)) as Error & {
+    code?: string;
+    details?: unknown;
+  };
+  if (data.error?.code) error.code = data.error.code;
+  if (data.error?.details !== undefined) error.details = data.error.details;
+  return error;
+}
+
+function shouldSuppressLifecycleExitFallback(
+  agentId: string | undefined,
+  exitCode: number | null,
+  exitSignal: string | null,
+  stderrTail: string,
+): boolean {
+  if (exitCode !== 130 || exitSignal) return false;
+  if (agentId === 'amr') return true;
+  const normalizedStderr = stderrTail.toLowerCase();
+  return (
+    normalizedStderr.includes('opencode server listening') ||
+    normalizedStderr.includes('opencode_server_password')
+  );
+}
+
 export async function streamViaDaemon({
   agentId,
   history,
@@ -236,10 +309,12 @@ export async function streamViaDaemon({
   reasoning,
   research,
   context,
+  locale,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
   onRunEventId,
+  analyticsHints,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
     onRunStatus?.(status);
@@ -264,8 +339,10 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    locale,
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
+    ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
 
@@ -293,9 +370,19 @@ export async function streamViaDaemon({
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
     onRunCreated?.(runId);
+    // Start the stuck-run watchdog. trackRunProgress is called inside the
+    // SSE consumer below on every event; trackRunTerminal fires when the
+    // stream resolves to a terminal state (or errors out).
+    trackRunStart(runId, {
+      agent_id: agentId,
+      project_id: projectId ?? undefined,
+      conversation_id: conversationId ?? undefined,
+      client_type: detectClientType(),
+    });
     notifyRunsChanged();
     emitRunStatus('queued');
     await consumeDaemonRun({
+      agentId,
       runId,
       signal,
       cancelSignal,
@@ -355,6 +442,150 @@ export async function submitChatRunToolResult(
   }
 }
 
+// PR #3157: Antigravity's auth banner can offer a one-click "open
+// system terminal with agy" button. The daemon endpoint spawns
+// osascript / x-terminal-emulator / `cmd /c start` for the user; on
+// success the new Terminal window pops up with agy running and the
+// browser opens for OAuth. The Promise resolves once the daemon kicks
+// off the spawn (not when OAuth completes), so the UI can disable the
+// button momentarily and then re-enable for a retry click after the
+// user finishes in the terminal.
+export interface LaunchAntigravityOauthResult {
+  ok: boolean;
+  platform?: string;
+  via?: string;
+  error?: string;
+}
+export async function launchAntigravityOauth(): Promise<LaunchAntigravityOauthResult> {
+  try {
+    const resp = await fetch('/api/agents/antigravity/oauth-launch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const body = (await resp.json().catch(() => null)) as
+      | LaunchAntigravityOauthResult
+      | null;
+    if (!resp.ok) {
+      return {
+        ok: false,
+        error:
+          body?.error ?? `daemon returned ${resp.status} ${resp.statusText}`,
+      };
+    }
+    return body ?? { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export interface VelaUser {
+  id: string;
+  email: string;
+  name?: string;
+  image?: string | null;
+  plan?: string;
+}
+
+export interface VelaLoginStatus {
+  loggedIn: boolean;
+  loginInFlight?: boolean;
+  profile: string;
+  user: VelaUser | null;
+  configPath: string;
+}
+
+// AMR (vela) login surfaces three thin endpoints on the daemon:
+//   GET  /api/integrations/vela/status   — read ~/.amr/config.json projection
+//   POST /api/integrations/vela/login    — spawn `vela login` (vela opens browser itself)
+//   POST /api/integrations/vela/login/cancel — terminate a still-pending login
+//   POST /api/integrations/vela/logout   — clear ~/.amr auth and Settings-backed AMR auth env
+// The Settings UI polls /status after kicking off /login to detect completion.
+export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
+  try {
+    const resp = await fetch('/api/integrations/vela/status');
+    if (!resp.ok) return null;
+    return (await resp.json()) as VelaLoginStatus;
+  } catch {
+    return null;
+  }
+}
+
+export interface StartVelaLoginResult {
+  ok: boolean;
+  status: number;
+  pid?: number;
+  alreadyRunning?: boolean;
+  error?: string;
+}
+
+export async function startVelaLogin(): Promise<StartVelaLoginResult> {
+  try {
+    const resp = await fetch('/api/integrations/vela/login', { method: 'POST' });
+    if (resp.ok) {
+      const body = (await resp.json()) as { pid?: number };
+      return { ok: true, status: resp.status, pid: body.pid };
+    }
+    const body = (await resp.json().catch(() => null)) as { error?: string } | null;
+    return {
+      ok: false,
+      status: resp.status,
+      alreadyRunning: resp.status === 409,
+      error: body?.error ?? '',
+    };
+  } catch (err) {
+    return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function cancelVelaLogin(): Promise<{ ok: boolean; canceled?: boolean }> {
+  try {
+    const resp = await fetch('/api/integrations/vela/login/cancel', { method: 'POST' });
+    if (!resp.ok) return { ok: false };
+    const body = (await resp.json().catch(() => null)) as { canceled?: boolean } | null;
+    return { ok: true, canceled: body?.canceled };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function velaLogout(): Promise<{ ok: boolean }> {
+  try {
+    const resp = await fetch('/api/integrations/vela/logout', { method: 'POST' });
+    return { ok: resp.ok };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// Forwards the user's assistant-turn rating to the daemon so it can emit
+// a Langfuse `score-create`. Fire-and-forget — failures are not surfaced
+// to the UI (the rating is already persisted on the message itself via
+// the PUT /messages/:id round-trip).
+export async function reportChatRunFeedback(req: {
+  runId: string;
+  projectId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  rating: 'positive' | 'negative';
+  reasonCodes: string[];
+  hasCustomReason: boolean;
+  customReason: string;
+}): Promise<void> {
+  try {
+    await fetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+  } catch {
+    // Best-effort.
+  }
+}
+
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
@@ -382,6 +613,7 @@ export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
 }
 
 async function consumeDaemonRun({
+  agentId,
   runId,
   signal,
   cancelSignal,
@@ -389,7 +621,7 @@ async function consumeDaemonRun({
   initialLastEventId,
   onRunStatus,
   onRunEventId,
-}: DaemonReattachOptions): Promise<void> {
+}: DaemonReattachOptions & { agentId?: string }): Promise<void> {
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
@@ -456,10 +688,12 @@ async function consumeDaemonRun({
           if (!parsed) continue;
           if (parsed.kind === 'comment') {
             sawStreamProgress = true;
+            trackRunProgress(runId);
             continue;
           }
           if (parsed.kind !== 'event') continue;
           sawStreamProgress = true;
+          trackRunProgress(runId);
           if (parsed.id) {
             lastEventId = parsed.id;
             onRunEventId?.(parsed.id);
@@ -505,7 +739,7 @@ async function consumeDaemonRun({
           if (event.event === 'error') {
             onRunStatus?.('failed');
             const data = event.data as SseErrorPayload;
-            handlers.onError(new Error(daemonSseErrorMessage(data)));
+            handlers.onError(daemonSseError(data));
             return;
           }
 
@@ -538,6 +772,7 @@ async function consumeDaemonRun({
         serverDeclaredSuccess = status.status === 'succeeded';
         onRunStatus?.(endStatus);
       } else {
+        onRunStatus?.('failed');
         handlers.onError(new Error('daemon stream disconnected before run completed'));
         return;
       }
@@ -563,6 +798,10 @@ async function consumeDaemonRun({
       (!serverDeclaredSuccess &&
         (exitSignal || (exitCode !== null && exitCode !== 0)));
     if (looksLikeFailure) {
+      if (shouldSuppressLifecycleExitFallback(agentId, exitCode, exitSignal, stderrBuf)) {
+        handlers.onDone(acc);
+        return;
+      }
       const tail = stderrBuf.trim().slice(-400);
       handlers.onError(
         new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${tail ? `\n${tail}` : ''}`),
@@ -572,6 +811,11 @@ async function consumeDaemonRun({
     handlers.onDone(acc);
   } finally {
     cancelSignal?.removeEventListener('abort', cancelRun);
+    // Settle the stuck-run watchdog with whatever terminal state we
+    // resolved. If the watchdog was never armed (reattach paths that
+    // hit the daemon for an already-finished run), trackRunTerminal
+    // is a no-op for unknown runIds.
+    trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
   }
 }
 

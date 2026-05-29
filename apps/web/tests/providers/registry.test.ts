@@ -12,12 +12,15 @@ import {
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
+  fetchPluginExampleHtml,
+  fetchPluginPreviewHtml,
   fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
   fetchSkillExample,
   isDeployProviderId,
   updateDeployConfig,
   uploadProjectFiles,
+  writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
 
 describe('fetchAppVersionInfo', () => {
@@ -50,6 +53,29 @@ describe('fetchAppVersionInfo', () => {
     );
 
     await expect(fetchAppVersionInfo()).resolves.toBeNull();
+  });
+});
+
+describe('writeProjectTextFileDetailed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces daemon save errors instead of collapsing them to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        error: { code: 'ARTIFACT_REGRESSION', message: 'new artifact is smaller than the prior version' },
+      }), { status: 422, headers: { 'Content-Type': 'application/json' } })),
+    );
+
+    await expect(writeProjectTextFileDetailed('project-1', 'preview.html', '<html></html>')).resolves.toEqual({
+      ok: false,
+      status: 422,
+      code: 'ARTIFACT_REGRESSION',
+      message: 'new artifact is smaller than the prior version',
+    });
   });
 });
 
@@ -121,6 +147,91 @@ describe('fetchSkillExample', () => {
       error: 'HTTP 500',
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
+  });
+});
+
+// Plugin previews use the same daemon contract as skill examples (the
+// daemon returns 404 when the manifest declares a preview entry but no
+// file ships at that path). Skills already map that 404 to
+// { unavailable: true, kind: 'html' } per #897 so the modal renders a
+// calm "no shipped preview" placeholder instead of "Couldn't load this
+// example. The example HTML failed to fetch." Plugins lacked the
+// symmetric treatment, so bundled plugins like `example-live-artifact`
+// surfaced the misleading error from the Home Community grid even
+// though the catalog simply ships no example HTML for that plugin.
+describe('fetchPluginPreviewHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing previews as unavailable instead of an error', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('preview not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ unavailable: true, kind: 'html' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/preview',
+    );
+  });
+
+  it('forwards real preview fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ error: 'HTTP 500' });
+  });
+
+  it('returns html on success', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('<html><body>preview</body></html>', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginPreviewHtml('example-live-artifact'),
+    ).resolves.toEqual({ html: '<html><body>preview</body></html>' });
+  });
+});
+
+describe('fetchPluginExampleHtml', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing example stems as unavailable instead of an error', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('example not found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginExampleHtml('example-live-artifact', 'index'),
+    ).resolves.toEqual({ unavailable: true, kind: 'html' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/example/index',
+    );
+  });
+
+  it('forwards real example fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchPluginExampleHtml('example-live-artifact', 'index'),
+    ).resolves.toEqual({ error: 'HTTP 500' });
   });
 });
 
@@ -375,9 +486,13 @@ describe('connectConnector', () => {
     expect(authWindow.document.body.innerHTML).toContain('Default auth config not found for toolkit "canvas".');
   });
 
-  it('returns a user-facing error when the OAuth popup is blocked', async () => {
+  it('opens the system browser through the daemon when the OAuth popup is blocked', async () => {
     const open = vi.fn(() => null);
-    vi.stubGlobal('window', { open } as unknown as Window & typeof globalThis);
+    const assign = vi.fn();
+    vi.stubGlobal('window', {
+      open,
+      location: { assign },
+    } as unknown as Window & typeof globalThis);
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/api/connectors/auth-configs/prepare') {
         return new Response(JSON.stringify({
@@ -385,6 +500,9 @@ describe('connectConnector', () => {
             github: { status: 'ready', authConfigId: 'ac_github' },
           },
         }), { status: 200 });
+      }
+      if (url === '/api/system/open-external') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       return new Response(JSON.stringify({
         connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
@@ -396,9 +514,15 @@ describe('connectConnector', () => {
     await expect(connectConnector('github')).resolves.toEqual({
       connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
       auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
-      error: 'Popup blocked. Allow popups for Open Design and try again.',
     });
-    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank');
+    expect(assign).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('/api/system/open-external', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://example.com/oauth' }),
+    });
     expect(fetchMock).not.toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {
       method: 'POST',
     });

@@ -31,6 +31,7 @@ export type SrcdocOptions = {
   editBridge?: boolean;
   paletteBridge?: boolean;
   initialPalette?: string | null;
+  previewFocusGuard?: boolean;
 };
 
 export function buildSrcdoc(
@@ -53,7 +54,8 @@ export function buildSrcdoc(
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
-  const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
+  const withFocusGuard = options.previewFocusGuard ? injectPreviewFocusGuard(withShim) : withShim;
+  const withDeck = options.deck ? injectDeckBridge(withFocusGuard, options.initialSlideIndex) : withFocusGuard;
   // Comment + Inspect share an element-selection bridge: both pick a
   // [data-od-id] / [data-screen-label] node and route the host's reply
   // to either the comment popover (annotate) or the inspect panel
@@ -72,9 +74,27 @@ export function buildSrcdoc(
     ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
     : withSelection;
   const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withEdit));
+  // The tweaks bridge is always injected — it's a passive listener that
+  // toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
+  // it to a per-call option would force iframe srcdoc regeneration (and a
+  // visible flash) every time the host toggle flips.
+  const withTweaks = injectTweaksBridge(withEdit);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
 }
 
+/**
+ * Build the lazy transport shell.
+ *
+ * The shell does two things:
+ *   1. Register a listener for `od:srcdoc-transport-activate` that replaces
+ *      its own document with the real artifact HTML.
+ *   2. Post `od:srcdoc-transport-ready` to the parent as soon as the listener
+ *      is installed. This `ready` signal is the only reliable way for the
+ *      host to know the listener is live; without it, the host risks posting
+ *      `activate` before the iframe's script has executed (e.g. right after a
+ *      key-driven re-mount), in which case the message is dropped and the
+ *      iframe stays stuck on the empty shell. See #2253.
+ */
 export function buildLazySrcdocTransport(): string {
   return `<!doctype html>
 <html>
@@ -89,10 +109,48 @@ export function buildLazySrcdocTransport(): string {
         document.write(data.html);
         document.close();
       });
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+        }
+      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
     })();</script>
   </head>
   <body></body>
 </html>`;
+}
+
+export interface SrcDocActivationInputs {
+  /** The real artifact HTML the host wants to inject into the shell. */
+  srcDoc: string;
+  /** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
+  useUrlLoadPreview: boolean;
+  /** Host's render pipeline is routing through the lazy transport shell. */
+  useLazySrcDocTransport: boolean;
+  /** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
+  shellReady: boolean;
+  /** Which artifact HTML has already been pushed into this shell (dedupe). */
+  activatedHtml: string | null;
+}
+
+/**
+ * Pure decision for whether the host should now post
+ * `od:srcdoc-transport-activate` to the shell iframe.
+ *
+ * Gating on `shellReady` is the fix for #2253: without it, an activation
+ * triggered by `useUrlLoadPreview` flipping to false (e.g. opening the
+ * Tweaks palette) can fire while the iframe's shell script has not yet
+ * registered its message listener. The message is dropped, the shell stays
+ * on its empty 536-byte body, and the dedupe check then suppresses the
+ * follow-up activation from the iframe's onLoad path.
+ */
+export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boolean {
+  if (!state.srcDoc) return false;
+  if (state.useUrlLoadPreview) return false;
+  if (!state.useLazySrcDocTransport) return false;
+  if (!state.shellReady) return false;
+  if (state.activatedHtml === state.srcDoc) return false;
+  return true;
 }
 
 function injectSrcdocTransportActivationBridge(doc: string): string {
@@ -110,13 +168,28 @@ function injectSrcdocTransportActivationBridge(doc: string): string {
 
 function injectSnapshotBridge(doc: string): string {
   const script = `<script data-od-snapshot-bridge>(function(){
+  var SNAPSHOT_STYLE_PROPS = [
+    'display','position','box-sizing','width','height','min-width','max-width','min-height','max-height',
+    'margin','margin-top','margin-right','margin-bottom','margin-left',
+    'padding','padding-top','padding-right','padding-bottom','padding-left',
+    'border','border-top','border-right','border-bottom','border-left','border-radius',
+    'font','font-family','font-size','font-weight','font-style','line-height','letter-spacing',
+    'color','background-color','opacity','transform','transform-origin','overflow','overflow-x','overflow-y',
+    'white-space','text-align','vertical-align','object-fit','object-position',
+    'flex','flex-direction','flex-wrap','flex-grow','flex-shrink','flex-basis',
+    'grid','grid-template-columns','grid-template-rows','grid-column','grid-row',
+    'gap','row-gap','column-gap','align-items','align-content','align-self',
+    'justify-items','justify-content','justify-self','inset','top','right','bottom','left',
+    'z-index','box-shadow','text-shadow'
+  ];
   function copyComputedStyle(source, target){
     if (!source || !target || source.nodeType !== 1 || target.nodeType !== 1) return;
     var computed = window.getComputedStyle(source);
     var style = target.getAttribute('style') || '';
-    for (var i = 0; i < computed.length; i++){
-      var prop = computed[i];
-      style += prop + ':' + computed.getPropertyValue(prop) + ';';
+    for (var i = 0; i < SNAPSHOT_STYLE_PROPS.length; i++){
+      var prop = SNAPSHOT_STYLE_PROPS[i];
+      var value = computed.getPropertyValue(prop);
+      if (value) style += prop + ':' + value + ';';
     }
     target.setAttribute('style', style);
   }
@@ -138,13 +211,21 @@ function injectSnapshotBridge(doc: string): string {
     syncElementState(originalRoot, cloneRoot);
     var originals = originalRoot.querySelectorAll('*');
     var clones = cloneRoot.querySelectorAll('*');
-    var count = Math.min(originals.length, clones.length);
+    var count = Math.min(originals.length, clones.length, 3500);
     for (var i = 0; i < count; i++){
       copyComputedStyle(originals[i], clones[i]);
       syncElementState(originals[i], clones[i]);
     }
     var scripts = cloneRoot.querySelectorAll('script');
     for (var s = scripts.length - 1; s >= 0; s--) scripts[s].remove();
+    var links = cloneRoot.querySelectorAll('link[rel~="stylesheet"], link[rel~="preload"], link[rel~="preconnect"]');
+    for (var l = links.length - 1; l >= 0; l--) links[l].remove();
+    var styles = cloneRoot.querySelectorAll('style');
+    for (var st = 0; st < styles.length; st++) {
+      styles[st].textContent = (styles[st].textContent || '')
+        .replace(/@import[^;]+;/gi, '')
+        .replace(/@font-face\\s*\\{[^}]*\\}/gi, '');
+    }
   }
   function waitForImages(){
     var imgs = Array.prototype.slice.call(document.images || []);
@@ -156,6 +237,17 @@ function injectSnapshotBridge(doc: string): string {
       });
     }));
   }
+  function scrollOffset(){
+    var doc = document.documentElement;
+    var body = document.body;
+    return {
+      x: Math.max(window.scrollX || 0, doc ? doc.scrollLeft || 0 : 0, body ? body.scrollLeft || 0 : 0),
+      y: Math.max(window.scrollY || 0, doc ? doc.scrollTop || 0 : 0, body ? body.scrollTop || 0 : 0)
+    };
+  }
+  function escapeAttribute(value){
+    return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
   function renderSnapshot(id){
     var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
     var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
@@ -165,10 +257,17 @@ function injectSnapshotBridge(doc: string): string {
     var clone = document.documentElement.cloneNode(true);
     clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     inlineSnapshotStyles(document.documentElement, clone);
-    var serializer = new XMLSerializer();
-    var html = serializer.serializeToString(clone);
+    var scroll = scrollOffset();
+    var cloneBody = clone.querySelector('body');
+    var rootStyle = clone.getAttribute('style') || '';
+    var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
+    var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
+    var wrapperStyle = rootStyle + bodyStyle +
+      'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
+      'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
+    var html = '<div xmlns="http://www.w3.org/1999/xhtml" style="' + escapeAttribute(wrapperStyle) + '">' + bodyContent + '</div>';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-      '<foreignObject x="' + (-window.scrollX || 0) + '" y="' + (-window.scrollY || 0) + '" width="' + docW + '" height="' + docH + '">' +
+      '<foreignObject x="0" y="0" width="' + docW + '" height="' + docH + '">' +
       html +
       '</foreignObject></svg>';
     var img = new Image();
@@ -186,10 +285,14 @@ function injectSnapshotBridge(doc: string): string {
         window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: String(err && err.message || err) }, '*');
       }
     };
+    function encodedSvgDataUrl(){
+      var encoded = encodeURIComponent(svg);
+      return 'data:image/svg+xml;charset=utf-8,' + encoded;
+    }
     img.onerror = function(){
       window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: 'snapshot image failed' }, '*');
     };
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    img.src = encodedSvgDataUrl();
   }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
@@ -616,6 +719,49 @@ function injectSandboxShim(doc: string): string {
   return shim + doc;
 }
 
+function injectPreviewFocusGuard(doc: string): string {
+  const script = `<script data-od-preview-focus-guard>(function(){
+  var lastTrustedInputAt = 0;
+  function userActivated(){
+    return Date.now() - lastTrustedInputAt < 1000;
+  }
+  function markTrustedInput(event){
+    if (event && event.isTrusted) lastTrustedInputAt = Date.now();
+  }
+  document.addEventListener('pointerdown', function(event){
+    markTrustedInput(event);
+  }, true);
+  document.addEventListener('keydown', function(event){
+    markTrustedInput(event);
+  }, true);
+  try {
+    var nativeWindowFocus = window.focus && window.focus.bind(window);
+    Object.defineProperty(window, 'focus', {
+      configurable: true,
+      writable: true,
+      value: function(){
+        if (userActivated() && nativeWindowFocus) return nativeWindowFocus();
+      }
+    });
+  } catch (_) {}
+  try {
+    var nativeElementFocus = HTMLElement.prototype.focus;
+    Object.defineProperty(HTMLElement.prototype, 'focus', {
+      configurable: true,
+      writable: true,
+      value: function(options){
+        if (userActivated()) return nativeElementFocus.call(this, options);
+      }
+    });
+  } catch (_) {}
+})();</script>`;
+  if (/<head[^>]*>/i.test(doc))
+    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
+  if (/<body[^>]*>/i.test(doc))
+    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
+  return script + doc;
+}
+
 // Selection bridge: shared substrate for Comment mode and Inspect mode.
 // Both modes pick a [data-od-id] / [data-screen-label] element on click;
 // the difference is what the host does with the selection — annotate
@@ -870,7 +1016,7 @@ function meaningfulDomFallbackTarget(el) {
 
   var tag = el.tagName ? el.tagName.toLowerCase() : '';
 
-  if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th|section|article|main|aside|nav)$/.test(tag)) {
+  if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th)$/.test(tag)) {
     return true;
   }
 
@@ -899,9 +1045,13 @@ function meaningfulDomFallbackTarget(el) {
   var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
   if (!text) return false;
 
+  if (/^(span|strong|em|b|i|small|code|mark)$/.test(tag)) return true;
+
   var meaningfulChildren = 0;
   for (var child = el.firstElementChild;child;child = child.nextElementSibling) {
-    if ((child.textContent || '').replace(/\s+/g, ' ').trim()) {
+    var childTag = child.tagName ? child.tagName.toLowerCase() : '';
+    if (/^(script|style|template|meta|link|title|noscript)$/.test(childTag)) continue;
+    if ((child.textContent || '').replace(/\s+/g, ' ').trim() || /^(img|video|canvas|svg|input|textarea|select)$/.test(childTag)) {
       meaningfulChildren++;
       if (meaningfulChildren > 1) return false;
     }
@@ -909,8 +1059,12 @@ function meaningfulDomFallbackTarget(el) {
 
   return true;
 }
-  function targetFrom(el, allowDomFallback, clickedEl){
+  function generatedRootAnnotation(el, id){
+    return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
+  }
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
     var selector = annotatedSelectorFor(el);
     if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
       selector = domSelectorFor(el);
@@ -922,16 +1076,20 @@ function meaningfulDomFallbackTarget(el) {
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
+    var position = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
     var payload = {
       type: 'od:comment-target',
       elementId: id,
       selector: selector,
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
-      position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      position: position,
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
+    if (clickPoint) {
+      payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+    }
     if (clickedEl && clickedEl !== el) {
       var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
       var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
@@ -961,6 +1119,9 @@ function meaningfulDomFallbackTarget(el) {
   }
   var postTargetsPending = false;
   var postPreviewScrollPending = false;
+  var postActiveTargetPending = false;
+  var activeCommentElementId = null;
+  var activeCommentSelector = null;
   function previewScrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
   }
@@ -987,6 +1148,34 @@ function meaningfulDomFallbackTarget(el) {
   function requestPreviewScrollRestore(){
     window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
   }
+  function findCommentTargetByIdentity(elementId, selector){
+    var el = null;
+    if (selector) {
+      try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
+    }
+    if (!el && elementId) {
+      try {
+        var id = String(elementId).replace(/"/g, '\\"');
+        el = document.querySelector('[data-od-id="' + id + '"], [data-screen-label="' + id + '"]');
+      } catch (_) { el = null; }
+    }
+    return el;
+  }
+  function postActiveCommentTarget(){
+    if (!active() || !activeCommentElementId) return;
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    if (!el) return;
+    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+  }
+  function schedulePostActiveCommentTarget(){
+    if (!active() || !activeCommentElementId || postActiveTargetPending) return;
+    postActiveTargetPending = true;
+    window.requestAnimationFrame(function(){
+      postActiveTargetPending = false;
+      postActiveCommentTarget();
+    });
+  }
   function postTargets(){
     if (!active()) return;
     window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
@@ -1010,21 +1199,67 @@ function meaningfulDomFallbackTarget(el) {
     window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
   }
   function canUseDomFallback(){
-    return commentEnabled && !inspectEnabled && document.querySelectorAll('[data-od-id], [data-screen-label]').length === 0;
+    return commentEnabled && !inspectEnabled;
+  }
+  function eventCandidateElements(event){
+    var items = [];
+    function push(node){
+      if (!node || node.nodeType !== 1) return;
+      if (items.indexOf(node) >= 0) return;
+      items.push(node);
+    }
+    try {
+      if (event && typeof event.composedPath === 'function') {
+        var path = event.composedPath();
+        for (var i = 0; i < path.length; i++) push(path[i]);
+      }
+    } catch (_) {}
+    push(event && event.target);
+    try {
+      if (
+        event &&
+        typeof event.clientX === 'number' &&
+        typeof event.clientY === 'number' &&
+        document.elementsFromPoint
+      ) {
+        var stack = document.elementsFromPoint(event.clientX, event.clientY);
+        for (var s = 0; s < stack.length; s++) push(stack[s]);
+      } else if (
+        event &&
+        typeof event.clientX === 'number' &&
+        typeof event.clientY === 'number' &&
+        document.elementFromPoint
+      ) {
+        push(document.elementFromPoint(event.clientX, event.clientY));
+      }
+    } catch (_) {}
+    return items;
   }
   function closestTarget(event){
-    var clicked = event.target;
-    var el = clicked;
-    var fallback = null;
+    var candidates = eventCandidateElements(event);
     var allowDomFallback = mode === 'picker' && canUseDomFallback();
-    while (el && el !== document.documentElement) {
-      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
-        return { target: el, clicked: clicked };
+    var annotatedFallback = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var clicked = candidates[i];
+      var el = clicked;
+      while (el && el !== document.documentElement) {
+        if (allowDomFallback && meaningfulDomFallbackTarget(el)) {
+          return { target: el, clicked: clicked };
+        }
+        if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
+          var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+          if (allowDomFallback && generatedRootAnnotation(el, id)) {
+            el = el.parentElement;
+            continue;
+          }
+          if (allowDomFallback && !annotatedFallback) annotatedFallback = { target: el, clicked: clicked };
+          if (allowDomFallback) break;
+          return { target: el, clicked: clicked };
+        }
+        el = el.parentElement;
       }
-      if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
-      el = el.parentElement;
     }
-    return fallback ? { target: fallback, clicked: clicked } : null;
+    return annotatedFallback;
   }
   function applyOverride(elementId, selector, prop, value){
     if (!elementId || !prop) return;
@@ -1061,7 +1296,11 @@ function meaningfulDomFallbackTarget(el) {
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
       if (active()) setTimeout(postTargets, 0);
-      else hoveredId = null;
+      else {
+        hoveredId = null;
+        activeCommentElementId = null;
+        activeCommentSelector = null;
+      }
       if (!commentEnabled || mode !== 'pod') {
         drawing = false;
         stroke = [];
@@ -1075,6 +1314,12 @@ function meaningfulDomFallbackTarget(el) {
       if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
       if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
       setTimeout(postPreviewScroll, 0);
+      return;
+    }
+    if (data.type === 'od:comment-active-target') {
+      activeCommentElementId = data.elementId ? String(data.elementId) : null;
+      activeCommentSelector = data.selector ? String(data.selector) : null;
+      schedulePostActiveCommentTarget();
       return;
     }
     if (data.type === 'od:inspect-mode') {
@@ -1160,8 +1405,14 @@ function meaningfulDomFallbackTarget(el) {
     if (result) {
       ev.preventDefault();
       ev.stopPropagation();
-      var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled, result.clicked);
-      if (payload) window.parent.postMessage(payload, '*');
+      var commentPickerClick = commentEnabled && mode === 'picker' && !inspectEnabled;
+      var clickPoint = commentPickerClick ? { x: ev.clientX, y: ev.clientY } : null;
+      var payload = targetFrom(result.target, commentPickerClick, result.clicked, clickPoint);
+      if (payload) {
+        activeCommentElementId = payload.elementId || activeCommentElementId;
+        activeCommentSelector = payload.selector || activeCommentSelector;
+        window.parent.postMessage(payload, '*');
+      }
       return;
     }
     // Free-pin fallback (comment mode only). Lets users drop a comment
@@ -1195,6 +1446,7 @@ function meaningfulDomFallbackTarget(el) {
       label: 'pin',
       text: '',
       position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 },
+      hoverPoint: { x: pinX, y: pinY },
       htmlHint: '',
       style: null,
       freePin: true
@@ -1232,6 +1484,7 @@ function meaningfulDomFallbackTarget(el) {
   document.addEventListener('pointercancel', finishStroke, true);
   window.addEventListener('resize', schedulePostTargets);
   document.addEventListener('scroll', function(){
+    schedulePostActiveCommentTarget();
     schedulePostTargets();
     schedulePostPreviewScroll();
   }, true);
@@ -1261,6 +1514,11 @@ function meaningfulDomFallbackTarget(el) {
 html[data-od-comment-mode] body * { cursor: crosshair !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
+/* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
+   While picker modes are on, disable pointer events on outer-document iframes so the
+   hit target resolves to an annotated ancestor (card, shell) in this document. */
+html[data-od-comment-mode] body iframe,
+html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 </style>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }
@@ -1288,11 +1546,24 @@ html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cel
 // the scaled canvas ends up offset toward the bottom-right of any
 // preview that's smaller than 1920x1080 — exactly what users see in the
 // sandbox iframe. `place-content: center` centers the track itself.
+//
+// Framework decks (apps/daemon/src/prompts/deck-framework.ts) opt out:
+// their `fit()` already centers a `transform-origin: top left` stage with
+// an explicit `translate(tx, ty)` that assumes the stage's natural layout
+// position is (0, 0). If we force `place-content: center` on their
+// `.deck-shell` grid, the implicit track gets re-centered to
+// ((sw-1920)/2, (sh-1080)/2) and `fit()`'s translate stacks on top, so
+// the scaled stage lands ~1000px off-screen and the user sees a mostly-
+// black preview with a sliver of slide content in the top-left. Skip the
+// override whenever the framework's marker id is present.
 function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
-  const styleFix = `<style data-od-deck-fix>
+  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const styleFix = isFrameworkDeck
+    ? ''
+    : `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){
@@ -1308,13 +1579,80 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
-  function scroller(){
-    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
-    return document.scrollingElement || document.documentElement;
+  function scrollOverflow(el){
+    if (!el) return 0;
+    return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+  }
+  function overflowMode(el){
+    if (!el || !window.getComputedStyle) return '';
+    try {
+      return String(window.getComputedStyle(el).overflowX || '').toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+  function isScrollableOverflowMode(mode){
+    return mode === 'auto' || mode === 'scroll' || mode === 'overlay';
+  }
+  function isClippedOverflowMode(mode){
+    return mode === 'hidden' || mode === 'clip';
+  }
+  function isRootScrollContainer(el){
+    return !!el && (
+      el === document.scrollingElement ||
+      el === document.documentElement ||
+      el === document.body
+    );
+  }
+  function rootScrollerClipped(){
+    return isClippedOverflowMode(overflowMode(document.documentElement)) ||
+      isClippedOverflowMode(overflowMode(document.body));
+  }
+  function scrollLeftOf(el){
+    if (!el) return 0;
+    try {
+      return Number(el.scrollLeft) || 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+  function scrollTargets(){
+    var targets = [];
+    function add(node){
+      if (!node) return;
+      for (var i=0; i<targets.length; i++) if (targets[i] === node) return;
+      targets.push(node);
+    }
+    add(document.scrollingElement);
+    add(document.documentElement);
+    add(document.body);
+    return targets;
+  }
+  function maxScrollLeft(){
+    var targets = scrollTargets();
+    var value = 0;
+    for (var i=0; i<targets.length; i++) {
+      value = Math.max(value, Number(targets[i].scrollLeft || 0));
+    }
+    return value;
+  }
+  function hasHorizontalScroll(){
+    var targets = scrollTargets();
+    for (var i=0; i<targets.length; i++) {
+      if (targets[i].scrollWidth > targets[i].clientWidth + 1) return true;
+    }
+    return false;
   }
   function isScrollDeck(){
-    var sc = scroller();
-    return !!(sc && sc.scrollWidth > sc.clientWidth + 1);
+    var targets = scrollTargets();
+    for (var i=0; i<targets.length; i++) {
+      var candidate = targets[i];
+      if (scrollOverflow(candidate) <= 1) continue;
+      var mode = overflowMode(candidate);
+      if (isScrollableOverflowMode(mode)) return true;
+      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return true;
+    }
+    return false;
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
@@ -1336,8 +1674,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (!list || !list.length) return 0;
     if (isScrollDeck()) {
       var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(scroller().scrollLeft / w)));
+      return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
     }
+    var byTransform = activeIndexFromTransform(list);
+    if (byTransform >= 0) return byTransform;
     var byClass = findActiveByClass(list);
     if (byClass >= 0) return byClass;
     var byVis = findActiveByVisibility(list);
@@ -1364,14 +1704,80 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     }
     return 'active';
   }
+  function hasComputedHiddenSibling(list, active){
+    if (active < 0) return false;
+    for (var i=0; i<list.length; i++) {
+      if (i === active) continue;
+      try {
+        var cs = window.getComputedStyle(list[i]);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
+      } catch (_) {}
+    }
+    return false;
+  }
   function canSetActive(list){
-    if (findActiveByClass(list) >= 0) return true;
+    // A bare active-class marker is not enough to prove the host can drive the
+    // deck by class mutation alone. Many generated decks keep that marker in
+    // sync for counters / dots but move the visible slide via a translated
+    // stage or track, so flipping classes in the host bridge updates the
+    // reported slide index while leaving the canvas on the old page. Only
+    // treat class-driven decks as directly mutable when inactive siblings are
+    // actually hidden by computed visibility rules.
+    var active = findActiveByClass(list);
+    if (active >= 0 && hasComputedHiddenSibling(list, active)) return true;
     for (var i=0; i<list.length; i++) {
       if (list[i].style.display === 'none') return true;
       if (list[i].style.visibility === 'hidden') return true;
       if (list[i].hasAttribute('hidden')) return true;
     }
     return false;
+  }
+  function transformTrack(list){
+    if (!list || !list.length) return null;
+    var first = list[0];
+    var node = first && first.parentElement;
+    while (node && node !== document.body && node !== document.documentElement) {
+      try {
+        var directSlides = 0;
+        for (var i=0; i<node.children.length; i++) {
+          if (node.children[i].classList && node.children[i].classList.contains('slide')) directSlides += 1;
+        }
+        var style = window.getComputedStyle(node);
+        if (
+          directSlides >= list.length &&
+          (
+            node.style.transform ||
+            style.transform !== 'none' ||
+            /\\b(?:flex|grid)\\b/i.test(style.display)
+          )
+        ) {
+          return node;
+        }
+      } catch (_) {}
+      node = node.parentElement;
+    }
+    return null;
+  }
+  function activeIndexFromTransform(list){
+    var track = transformTrack(list);
+    if (!track) return -1;
+    var raw = track.style.transform || '';
+    var match = raw.match(/translateX\\(\\s*(-?[0-9.]+)\\s*(vw|%)\\s*\\)/i);
+    if (!match) return -1;
+    var value = parseFloat(match[1]);
+    if (!Number.isFinite(value)) return -1;
+    return Math.max(0, Math.min(list.length - 1, Math.round(Math.abs(value) / 100)));
+  }
+  function transformGo(i){
+    var list = slides();
+    var track = transformTrack(list);
+    if (!track) return false;
+    var target = Math.max(0, Math.min(list.length - 1, i));
+    var unit = /translateX\\(\\s*-?[0-9.]+\\s*%\\s*\\)/i.test(track.style.transform || '') ? '%' : 'vw';
+    track.style.transform = 'translateX(' + (-target * 100) + unit + ')';
+    updateDeckChrome(target, list.length);
+    report();
+    return true;
   }
   function updateDeckChrome(i, count){
     var cur = document.getElementById('deck-cur');
@@ -1419,7 +1825,15 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    var left = next * window.innerWidth;
+    var targets = scrollTargets();
+    for (var t=0; t<targets.length; t++) {
+      try {
+        targets[t].scrollTo({ left: left, behavior: 'smooth' });
+      } catch (_) {
+        try { targets[t].scrollLeft = left; } catch (__) {}
+      }
+    }
     setTimeout(report, 380);
   }
   function targetFor(action, list){
@@ -1439,6 +1853,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       return;
     }
     if (canSetActive(list) && setActive(target)) return;
+    if (transformGo(target)) return;
     if (action === 'next') dispatchKey('ArrowRight');
     else if (action === 'prev') dispatchKey('ArrowLeft');
     else if (action === 'first') dispatchKey('Home');
@@ -1451,6 +1866,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var target = Math.max(0, Math.min(list.length - 1, i));
     if (isScrollDeck()) { scrollGo(target); return; }
     if (canSetActive(list) && setActive(target)) return;
+    if (transformGo(target)) return;
     var current = activeIndex(list);
     var diff = target - current;
     if (!diff) { report(); return; }
@@ -1464,6 +1880,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       var list = slides();
       var i = activeIndex(list);
       var count = list.length;
+      var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
       window.parent.postMessage({
         type: 'od:slide-state',
         active: i,
@@ -1472,8 +1889,12 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       document.querySelectorAll('.slide-number').forEach(function(el){
         el.setAttribute('data-current',i+1); el.setAttribute('data-total',count);
       });
-      document.querySelectorAll('.progress-bar>span').forEach(function(el){
-        el.style.width=(count?((i+1)/count*100)+'%':'0');
+      document.querySelectorAll('.progress-bar>span,.deck-progress>span,.deck-progress .bar').forEach(function(el){
+        el.style.width=progressWidth;
+      });
+      document.querySelectorAll('.deck-progress').forEach(function(el){
+        if (el.querySelector('span,.bar')) return;
+        el.style.width=progressWidth;
       });
     } catch (e) {}
   }
@@ -1562,4 +1983,123 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   observeSlides();
 })();</script>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
+}
+
+// The tweaks bridge lets the host toolbar toggle the visibility of the artifact's
+// native tweaks panel. Bidirectional: host posts `od:tweaks-panel-visible` to
+// drive panel visibility; bridge posts `od:tweaks-panel-state` back whenever the
+// artifact's own `× close` button or `T` shortcut flips the `.tw-hidden` class,
+// so the toolbar toggle stays in sync. Also reports `od:tweaks-available` so the
+// host can disable the toggle on artifacts without a `.tw-panel`.
+function injectTweaksBridge(doc: string): string {
+  // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
+  // opacity) so the CSS transition plays in both directions. `.tw-restore` is
+  // kept permanently hidden — the host toolbar is the only entry point.
+  const style = `<style data-od-tweaks-bridge-style>
+[data-od-tweaks-hidden] .tw-panel {
+  transform: translateX(calc(100% + 32px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.tw-restore { display: none !important; }
+</style>`;
+  const script = `<script data-od-tweaks-bridge>(function(){
+  // Synchronously hide BEFORE the artifact body parses so the panel never
+  // flashes on initial paint. The host removes the attribute via postMessage
+  // once it knows the desired state.
+  document.documentElement.setAttribute('data-od-tweaks-hidden', '');
+
+  var suppressEcho = false;
+  var observer = null;
+
+  function panelEl(){ return document.querySelector('.tw-panel'); }
+
+  function applyClassesToPanel(visible){
+    var panel = panelEl();
+    if (panel) panel.classList.toggle('tw-hidden', !visible);
+  }
+
+  function setPanelVisible(visible){
+    suppressEcho = true;
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !visible);
+    applyClassesToPanel(visible);
+    // Clear flag after the MutationObserver has had a chance to fire for this
+    // change so we don't echo our own host-driven toggles back to the host.
+    Promise.resolve().then(function(){ suppressEcho = false; });
+  }
+
+  function postState(){
+    var panel = panelEl();
+    if (!panel) return;
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-panel-state',
+        visible: !panel.classList.contains('tw-hidden'),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function postAvailability(){
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-available',
+        available: !!panelEl(),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function attachObserver(){
+    var panel = panelEl();
+    if (!panel || observer) return;
+    observer = new MutationObserver(function(){
+      if (suppressEcho) return;
+      postState();
+    });
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function onReady(){
+    // Capture the panel authored visibility BEFORE we apply the host hidden
+    // attribute. The bridge sets data-od-tweaks-hidden synchronously in head
+    // (before the body parses), so on entry to onReady the attribute is
+    // always present even though the artifact may have authored the panel
+    // as default-visible. Reading the panel class first is the only place
+    // we can still observe the author intent. Then drive the attribute,
+    // classes, and posted state from that captured value so a default
+    // visible tw-panel reports visible:true and the toolbar toggle starts
+    // ON. Issue surfaced in PR #1643 review.
+    var panel = panelEl();
+    var initialVisible = !!panel && !panel.classList.contains('tw-hidden');
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !initialVisible);
+    applyClassesToPanel(initialVisible);
+    attachObserver();
+    postAvailability();
+    // Post the captured initial visibility so the toolbar toggle reflects
+    // the default state on mount. Without this the toggle reads OFF while
+    // a default-visible tw-panel artifact clearly shows its panel and the
+    // user would have to click toggle-on then toggle-off to actually hide.
+    postState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onReady);
+  } else {
+    onReady();
+  }
+
+  window.addEventListener('message', function(ev){
+    if (!ev.data || ev.data.type !== 'od:tweaks-panel-visible') return;
+    setPanelVisible(!!ev.data.visible);
+  });
+})();</script>`;
+  const withStyle = /<\/head>/i.test(doc)
+    ? doc.replace(/<\/head>/i, style + '</head>')
+    : /<head[^>]*>/i.test(doc)
+      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
+      : style + doc;
+  // Inject the bridge as early as possible (inside <head>) so the synchronous
+  // attribute set runs before the artifact body parses.
+  if (/<\/head>/i.test(withStyle)) return withStyle.replace(/<\/head>/i, script + '</head>');
+  if (/<head[^>]*>/i.test(withStyle)) return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
+  return script + withStyle;
 }

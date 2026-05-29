@@ -8,8 +8,10 @@ import type {
   ConnectorStatusResponse,
   ImportGitHubDesignSystemRequest,
   ImportGitHubDesignSystemResponse,
+  OpenDesignGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
+  ReplaceProjectWorkingDirResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -85,7 +87,7 @@ function deployProviderQuery(providerId?: WebDeployProviderId): string {
 
 export async function fetchAgents(options?: { throwOnError?: boolean }): Promise<AgentInfo[]> {
   try {
-    const resp = await fetch('/api/agents');
+    const resp = await fetch('/api/agents', { cache: 'no-store' });
     if (!resp.ok) {
       if (options?.throwOnError) throw new Error(`agents ${resp.status}`);
       return [];
@@ -744,6 +746,32 @@ function popupBlockedMessage(): string {
   return 'Popup blocked. Allow popups for Open Design and try again.';
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+  if (isOpenDesignHostAvailable()) {
+    const opened = await openHostExternalUrl(url);
+    if (opened.ok) return true;
+  }
+  try {
+    const resp = await fetch('/api/system/open-external', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (resp.ok) {
+      const json = (await resp.json().catch(() => null)) as { ok?: unknown } | null;
+      if (json?.ok === true) return true;
+    }
+  } catch {
+    // Fall through to current-tab navigation below.
+  }
+  try {
+    window.location.assign(url);
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 async function decodeConnectorError(resp: Response): Promise<string> {
   try {
     const payload = (await resp.json()) as { error?: { message?: string } } | null;
@@ -795,14 +823,11 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       } else if (authWindow) {
         openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
-        const redirected = window.open(json.auth.redirectUrl, '_blank');
-        if (!redirected) {
-          return {
-            connector: json.connector ?? null,
-            auth: json.auth,
-            error: popupBlockedMessage(),
-          };
-        }
+        // The embedded browser can block even the synchronous placeholder
+        // popup. Ask the local daemon to open the system browser; if that
+        // route is unavailable, openExternalUrl falls back to current-tab
+        // navigation.
+        await openExternalUrl(json.auth.redirectUrl);
       }
     } else if (json.auth?.kind === 'connected') {
       renderConnectorAuthInfo(authWindow, {
@@ -1018,6 +1043,28 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
     if (!resp.ok) return null;
     const json = (await resp.json()) as Partial<AppVersionResponse>;
     return isAppVersionInfo(json.version) ? json.version : null;
+  } catch {
+    return null;
+  }
+}
+
+export type LatestGithubReleaseInfo = {
+  tagName: string;
+  htmlUrl: string;
+  stale: boolean;
+};
+
+export async function fetchLatestGithubReleaseInfo(): Promise<LatestGithubReleaseInfo | null> {
+  try {
+    const resp = await fetch('/api/github/open-design/releases/latest');
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as Partial<OpenDesignGithubLatestReleaseResponse>;
+    if (typeof json.tag_name !== 'string' || typeof json.html_url !== 'string') return null;
+    return {
+      tagName: json.tag_name,
+      htmlUrl: json.html_url,
+      stale: json.stale === true,
+    };
   } catch {
     return null;
   }
@@ -1513,17 +1560,39 @@ export async function writeProjectTextFile(
   content: string,
   options?: { artifactManifest?: ArtifactManifest },
 ): Promise<ProjectFile | null> {
+  const result = await writeProjectTextFileDetailed(projectId, name, content, options);
+  return result.ok ? result.file : null;
+}
+
+export type WriteProjectTextFileResult =
+  | { ok: true; file: ProjectFile }
+  | { ok: false; status?: number; code?: string; message: string };
+
+export async function writeProjectTextFileDetailed(
+  projectId: string,
+  name: string,
+  content: string,
+  options?: { artifactManifest?: ArtifactManifest },
+): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const body = await readApiErrorBody(resp);
+      return {
+        ok: false,
+        status: resp.status,
+        code: body.code,
+        message: body.message || resp.statusText || 'Save failed',
+      };
+    }
     const json = (await resp.json()) as { file: ProjectFile };
-    return json.file;
+    return { ok: true, file: json.file };
   } catch {
-    return null;
+    return { ok: false, message: 'Network error while saving the file' };
   }
 }
 
@@ -1718,6 +1787,63 @@ export async function openFolderDialog(): Promise<string | null> {
   }
 }
 
+// "Replace working directory" — points an existing project at a new
+// folder. Mirrors the import-folder trust gate but updates the current
+// project record instead of creating a new project.
+export async function replaceProjectWorkingDir(
+  projectId: string,
+  baseDir: string,
+  desktopImportToken?: string,
+): Promise<ReplaceProjectWorkingDirResponse> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (desktopImportToken) {
+    headers['x-od-desktop-import-token'] = desktopImportToken;
+  }
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/working-dir`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ baseDir }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await readApiErrorBody(resp);
+    throw new Error(body.message);
+  }
+  return (await resp.json()) as ReplaceProjectWorkingDirResponse;
+}
+
+// Hand-off (open project in local app). The daemon enumerates installed
+// editors on demand (PATH probe + macOS bundle scan), and the POST
+// endpoint spawns the chosen app with the project's resolvedDir.
+export async function fetchHostEditors(): Promise<
+  import('@open-design/contracts').HostEditorsResponse
+> {
+  const resp = await fetch('/api/editors');
+  if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
+  return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+}
+
+export async function openProjectInEditor(
+  projectId: string,
+  editorId: import('@open-design/contracts').HostEditorId,
+): Promise<import('@open-design/contracts').OpenProjectInEditorResponse> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/open-in`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ editorId }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await readApiErrorBody(resp);
+    throw new Error(body.message);
+  }
+  return (await resp.json()) as import('@open-design/contracts').OpenProjectInEditorResponse;
+}
+
 export async function fetchDesignSystemPreview(id: string): Promise<string | null> {
   try {
     const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/preview`);
@@ -1742,6 +1868,13 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
 // Mirrors fetchSkillExample's discriminated result so the modal can
 // surface a Retry button instead of staying stuck at "Loading…" when
 // a plugin ships no preview entry or the asset is missing on disk.
+//
+// 404 is mapped to `unavailable` (mirroring the skill helper's #897
+// behavior) because the daemon returns 404 when the manifest's
+// `preview.entry` points at a file that doesn't ship — a missing
+// asset for an otherwise valid plugin is not an error the user can
+// retry their way out of. Surfacing the calm "no shipped preview"
+// placeholder is the truthful UX.
 export async function fetchPluginPreviewHtml(
   id: string,
 ): Promise<SkillExampleResult> {
@@ -1749,7 +1882,10 @@ export async function fetchPluginPreviewHtml(
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(id)}/preview`,
     );
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      if (resp.status === 404) return { unavailable: true, kind: 'html' };
+      return { error: `HTTP ${resp.status}` };
+    }
     return { html: await resp.text() };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'network error';
@@ -1758,7 +1894,8 @@ export async function fetchPluginPreviewHtml(
 }
 
 // Fetch a single example output by stem (matches the basename of the
-// `od.useCase.exampleOutputs[].path` minus its extension).
+// `od.useCase.exampleOutputs[].path` minus its extension). 404 is
+// mapped to `unavailable` for the same reason as fetchPluginPreviewHtml.
 export async function fetchPluginExampleHtml(
   pluginId: string,
   stem: string,
@@ -1767,7 +1904,10 @@ export async function fetchPluginExampleHtml(
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/example/${encodeURIComponent(stem)}`,
     );
-    if (!resp.ok) return { error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      if (resp.status === 404) return { unavailable: true, kind: 'html' };
+      return { error: `HTTP ${resp.status}` };
+    }
     return { html: await resp.text() };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'network error';

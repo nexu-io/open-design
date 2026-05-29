@@ -1,0 +1,147 @@
+---
+/*
+ * /compare/ — evaluation-stage comparison hub.
+ *
+ * Captures "open design vs <competitor>" queries with honest summary
+ * cards that link out to per-competitor detail pages (today: just the
+ * primary Claude Design alternative page; others will follow as
+ * `/alternatives/<slug>/`).
+ *
+ * Honest-limitations block at the bottom is required by §8 of the
+ * SEO plan — comparison pages without a limitation section read as
+ * adversarial and tank trust.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getInfoPageCopy } from '../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../i18n';
+
+// Derive SITE from Astro.site so preview/staging deploys produce JSON-LD
+// that matches the layout's `canonical` link. Falls back to the
+// production origin so a missing `site` config never emits a broken URL.
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const page = copy.compare;
+const common = copy.common;
+
+const title = page.title;
+const description = page.description;
+
+// Honest-limits FAQ — visible at the bottom of the page AND emitted as
+// FAQPage JSON-LD. Google requires schema entries to mirror visible
+// content; converting our "what we don't do" prose into question form
+// gives us a shot at the People Also Ask rich result on comparison
+// queries.
+const limitsFaq = page.limitsFaq.map(({ name, text }) => ({ q: name, a: text }));
+
+const comparisons = page.comparisons.map((comparison, idx) => ({
+  ...comparison,
+  href: idx === 0 ? href('/alternatives/claude-design/') : 'https://github.com/nexu-io/open-design',
+}));
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}compare/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: `${SITE}compare/`,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    '@id': `${SITE}compare/#limits-faq`,
+    mainEntity: limitsFaq.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">{page.label}</span>
+      <h1 class="display">{page.heading}</h1>
+      <p class="lead">{page.lead}</p>
+    </header>
+
+    <nav class="info-toc" aria-label={common.onThisPage}>
+      <span>{common.onThisPage}</span>
+      <a href="#claude-design">{page.toc[0]}</a>
+      <a href="#figma-make">{page.toc[1]}</a>
+      <a href="#v0">{page.toc[2]}</a>
+      <a href="#lovable-bolt">{page.toc[3]}</a>
+      <a href="#open-codesign">{page.toc[4]}</a>
+      <a href="#limits">{page.toc[5]}</a>
+    </nav>
+
+    <section class="info-section">
+      <ul class="compare-grid">
+        {comparisons.map((c) => {
+          const id =
+            c.competitor === 'Claude Design'
+              ? 'claude-design'
+              : c.competitor === 'Figma Make'
+              ? 'figma-make'
+              : c.competitor === 'v0 by Vercel'
+              ? 'v0'
+              : c.competitor === 'Lovable / Bolt'
+              ? 'lovable-bolt'
+              : 'open-codesign';
+          const isInternal = c.href.startsWith('/');
+          return (
+            <li class="compare-card" id={id}>
+              <h3>Open Design vs <em>{c.competitor}</em></h3>
+              <p>{c.summary}</p>
+              <a
+                href={c.href}
+                target={isInternal ? undefined : '_blank'}
+                rel={isInternal ? undefined : 'noreferrer noopener'}
+              >
+                {c.cta}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+
+    <section class="info-section" id="limits">
+      <h2>{page.limitsTitle}</h2>
+      <p>{page.limitsBody}</p>
+      <ol class="faq-list">
+        {limitsFaq.map(({ q, a }, idx) => (
+          <li class="faq-item">
+            <details>
+              <summary>
+                <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                <span class="faq-q">{q}</span>
+                <span class="faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <p class="faq-a">{a}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </section>
+  </article>
+</Layout>

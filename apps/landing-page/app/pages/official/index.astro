@@ -1,0 +1,148 @@
+---
+/*
+ * /official/ — brand-authority surface.
+ *
+ * This page exists to satisfy "Open Design vs OpenDesigner / opendesign.ai"
+ * brand-confusion queries: it lists every canonical link, names every alias
+ * the project is searched under, and points at the GitHub source of truth.
+ *
+ * Per `growth/seo-opendesigner-analysis.md` §2 + §8, the page must:
+ * - lead with canonical links (site, GitHub, releases, docs, Discord)
+ * - explain the OpenDesign / open-design / opendesign alias relationship
+ * - never call third-party capture sites "fake" in visible copy
+ * - publish Organization JSON-LD with the same alternateNames as `/`
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getGithubRepoMeta } from '../../_lib/github';
+import { getInfoPageCopy } from '../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../i18n';
+
+const github = await getGithubRepoMeta();
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const page = copy.official;
+const common = copy.common;
+
+// Derive SITE from Astro.site so preview/staging JSON-LD matches the
+// layout's canonical link. Falls back to the production origin.
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const REPO_ISSUES = `${REPO}/issues`;
+const REPO_LICENSE = `${REPO}/blob/main/LICENSE`;
+const DOCS = `${REPO}#readme`;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
+
+const title = page.title;
+const description = page.description;
+
+const sources = [
+  { ...page.sources[0], href: SITE },
+  { ...page.sources[1], href: REPO },
+  { ...page.sources[2], name: github.versionLabel, href: REPO_RELEASES },
+  { ...page.sources[3], href: REPO_ISSUES },
+  { ...page.sources[4], href: DISCORD },
+  { ...page.sources[5], href: DOCS },
+  { ...page.sources[6], href: REPO_LICENSE },
+  { ...page.sources[7], href: href('/skills/') },
+  { ...page.sources[8], href: href('/systems/') },
+  { ...page.sources[9], href: href('/templates/') },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE}official/` },
+    ],
+  },
+  {
+    // The Organization entity is fully defined on `/` with the canonical
+    // `@id: '<site>#organization'`. Schema.org `@id`s should be unique,
+    // so we only REFERENCE the entity here (this WebPage is "about"
+    // that Organization), not redefine it. Google merges the two
+    // mentions through the shared `@id`.
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    '@id': `${SITE}official/#webpage`,
+    name: title,
+    description,
+    url: `${SITE}official/`,
+    isPartOf: { '@id': `${SITE}#website` },
+    about: { '@id': `${SITE}#organization` },
+    mainEntity: { '@id': `${SITE}#organization` },
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">{page.label}</span>
+      <h1 class="display">{page.heading}</h1>
+      <p class="lead">{page.lead}</p>
+    </header>
+
+    <section class="info-section">
+      <h2>{page.canonicalTitle}</h2>
+      <p>{page.canonicalBody}</p>
+      <div class="source-card">
+        {sources.map((s) => (
+          <a href={s.href} target={s.href.startsWith('http') ? '_blank' : undefined} rel={s.href.startsWith('http') ? 'noreferrer noopener' : undefined}>
+            <span>
+              <span class="label">{s.label}</span><br />
+              <strong>{s.name}</strong>
+            </span>
+            <span class="arrow" aria-hidden="true">→</span>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <section class="info-section" id="aliases">
+      <h2>{page.aliasesTitle}</h2>
+      <p>{page.aliasesLead}</p>
+      <ul>
+        {page.aliases.map((item) => (
+          <li><strong>{item.label}</strong> — {item.body}</li>
+        ))}
+      </ul>
+      <p>{page.aliasesClosing}</p>
+    </section>
+
+    <section class="info-section" id="maintainer">
+      <h2>{page.maintainerTitle}</h2>
+      <p>{page.maintainerBody}</p>
+    </section>
+
+    <section class="info-section">
+      <h2>{page.runtimeTitle}</h2>
+      <p>{page.runtimeBody}</p>
+      <ul>
+        {page.runtimeItems.map((item) => (
+          <li><strong>{item.label}</strong> — {item.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section">
+      <h2>{page.nextTitle}</h2>
+      <ul>
+        <li><a class="inline-link" href={href('/quickstart/')}>{page.nextItems[0].label}</a> — {page.nextItems[0].body}</li>
+        <li><a class="inline-link" href={href('/agents/')}>{page.nextItems[1].label}</a> — {page.nextItems[1].body}</li>
+        <li><a class="inline-link" href={href('/alternatives/claude-design/')}>{page.nextItems[2].label}</a> — {page.nextItems[2].body}</li>
+        <li><a class="inline-link" href={href('/skills/')}>{page.nextItems[3].label}</a> — {page.nextItems[3].body}</li>
+        <li><a class="inline-link" href={href('/systems/')}>{page.nextItems[4].label}</a> — {page.nextItems[4].body}</li>
+      </ul>
+    </section>
+  </article>
+</Layout>

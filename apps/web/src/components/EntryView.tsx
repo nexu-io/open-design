@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
 import type {
   ConnectorDetail,
   ConnectorStatusResponse,
@@ -21,6 +22,7 @@ import type {
   ProjectMetadata,
   ProjectTemplate,
   PromptTemplateSummary,
+  ProviderModelOption,
   SkillSummary,
 } from '../types';
 // `EntryShell` owns the redesigned home layout (left rail + centered
@@ -29,7 +31,7 @@ import type {
 // connector lifecycle, exported helpers) stay close to a no-op here.
 import { EntryShell } from './EntryShell';
 import type { IntegrationTab } from './IntegrationsView';
-import type { CreateInput } from './NewProjectPanel';
+import type { CreateInput, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import {
   fetchConnectors,
   fetchConnectorStatuses,
@@ -59,6 +61,8 @@ interface Props {
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
   config: AppConfig;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   integrationInitialTab?: IntegrationTab;
   composioConfigLoading?: boolean;
   daemonLive: boolean;
@@ -70,6 +74,8 @@ interface Props {
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
+  onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   // Quick theme switch invoked from the avatar-popover dropdown so the
   // user can flip light/dark/system without opening the full Settings
   // dialog. Persistence happens in `App`; this component just forwards.
@@ -92,13 +98,15 @@ interface Props {
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
-  ) => void;
+  ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
     locale?: string,
   ) => Promise<PluginShareProjectOutcome>;
-  onImportClaudeDesign: (file: File) => Promise<void> | void;
+  onImportClaudeDesign: (
+    file: File,
+  ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   onOpenProject: (id: string) => void;
@@ -107,10 +115,23 @@ interface Props {
   onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
+  renderDesignSystemCreation?: (
+    onBack: () => void,
+    hooks?: {
+      onBeforeGenerate?: (snapshot: DesignSystemGenerateSnapshot) => void;
+      onGenerateSettled?: (
+        snapshot: DesignSystemGenerateSnapshot,
+        outcome:
+          | { result: 'success' }
+          | { result: 'failed'; errorCode: string },
+      ) => void;
+    },
+  ) => ReactNode;
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
-  onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'library' | 'about') => void;
+  onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'library' | 'about' | 'memory' | 'designSystems') => void;
+  onCompleteOnboarding: () => void;
 }
 
 const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
@@ -237,6 +258,8 @@ export function EntryView({
   defaultDesignSystemId,
   agents,
   config,
+  providerModelsCache,
+  onProviderModelsCacheChange,
   integrationInitialTab,
   composioConfigLoading = false,
   daemonLive,
@@ -245,6 +268,8 @@ export function EntryView({
   onAgentModelChange,
   onApiProtocolChange,
   onApiModelChange,
+  onConfigPersist,
+  onRefreshAgents,
   onThemeChange,
   skillsLoading = false,
   designSystemsLoading = false,
@@ -261,10 +286,12 @@ export function EntryView({
   onRenameProject,
   onChangeDefaultDesignSystem,
   onCreateDesignSystem,
+  renderDesignSystemCreation,
   onOpenDesignSystem,
   onDesignSystemsRefresh,
   onPersistComposioKey,
   onOpenSettings,
+  onCompleteOnboarding,
 }: Props) {
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
   const [connectorsLoading, setConnectorsLoading] = useState(false);
@@ -322,6 +349,7 @@ export function EntryView({
       designSystems={designSystems}
       projects={projects}
       templates={templates}
+      onDeleteTemplate={onDeleteTemplate}
       promptTemplates={promptTemplates}
       defaultDesignSystemId={defaultDesignSystemId}
       connectors={connectors}
@@ -332,6 +360,8 @@ export function EntryView({
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
       config={config}
+      providerModelsCache={providerModelsCache}
+      onProviderModelsCacheChange={onProviderModelsCacheChange}
       agents={agents}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
@@ -339,6 +369,8 @@ export function EntryView({
       onAgentModelChange={onAgentModelChange}
       onApiProtocolChange={onApiProtocolChange}
       onApiModelChange={onApiModelChange}
+      onConfigPersist={onConfigPersist}
+      onRefreshAgents={onRefreshAgents}
       onThemeChange={onThemeChange}
       onCreateProject={onCreateProject}
       onCreatePluginShareProject={onCreatePluginShareProject}
@@ -351,10 +383,12 @@ export function EntryView({
       onRenameProject={onRenameProject}
       onChangeDefaultDesignSystem={onChangeDefaultDesignSystem}
       onCreateDesignSystem={onCreateDesignSystem}
+      renderDesignSystemCreation={renderDesignSystemCreation}
       onOpenDesignSystem={onOpenDesignSystem}
       onDesignSystemsRefresh={onDesignSystemsRefresh}
       onPersistComposioKey={onPersistComposioKey}
       onOpenSettings={onOpenSettings}
+      onCompleteOnboarding={onCompleteOnboarding}
     />
   );
 }

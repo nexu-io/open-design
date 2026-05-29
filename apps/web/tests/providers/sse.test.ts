@@ -4,6 +4,7 @@ import {
   buildDaemonTranscript,
   latestUserPromptFromHistory,
   reattachDaemonRun,
+  sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
@@ -145,6 +146,115 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('small answer');
   });
 
+  // PR #3157 form-loop investigation: weak / medium plain-stream models
+  // (GPT-OSS-120B Medium, Gemini 3.5 Flash through Antigravity's `agy`)
+  // pattern-match on the literal `<question-form>` markup the agent
+  // emitted on turn 1 and re-emit an identical form on turn 2 even when
+  // the OD-side OVERRIDE block explicitly forbids it. Stripping the
+  // markup from prior assistant turns at the transcript layer kills the
+  // echo source entirely.
+  it('strips question-form markup from prior assistant turns to kill the form-echo loop', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        'Got it — let me ask a few questions:',
+        '',
+        '<question-form id="discovery" title="Quick brief — 30 seconds">',
+        '{',
+        '  "description": "I will lock the brief.",',
+        '  "questions": [{ "id": "output", "label": "What are we making?" }]',
+        '}',
+        '</question-form>',
+      ].join('\n'),
+    );
+
+    expect(sanitized).not.toContain('<question-form');
+    expect(sanitized).not.toContain('</question-form>');
+    expect(sanitized).not.toContain('"questions": [');
+    expect(sanitized).toContain('question-form was emitted here on a prior turn');
+  });
+
+  it('also strips ```json fenced form-schema echoes that some models add alongside the form tag', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        'Got it — 请告诉我以下信息：',
+        '',
+        '```json',
+        '{',
+        '  "title": "快速简报 — 30 秒",',
+        '  "questions": [',
+        '    { "id": "output", "label": "我们要做什么？" }',
+        '  ]',
+        '}',
+        '```',
+        '',
+        '<question-form id="discovery" title="快速简报 — 30 秒">',
+        '{ "questions": [] }',
+        '</question-form>',
+      ].join('\n'),
+    );
+
+    expect(sanitized).not.toContain('```json');
+    expect(sanitized).not.toContain('<question-form');
+    expect(sanitized).toContain('form schema was echoed here on a prior turn');
+  });
+
+  it('preserves unrelated ```json fences (regular JSON snippets without "questions") so model output stays intact', () => {
+    const original = [
+      'Here is the config you asked about:',
+      '',
+      '```json',
+      '{ "endpoint": "https://api.example.com", "version": 2 }',
+      '```',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+
+    // No `"questions"` key → fence is NOT stripped.
+    expect(sanitized).toBe(original);
+  });
+
+  it('preserves <artifact> blocks — only question-form is stripped, the deliverable stays intact', () => {
+    const original = [
+      'Build summary below.',
+      '',
+      '<artifact identifier="deck" type="text/html" title="Pitch deck">',
+      '<!doctype html>',
+      '<html><body>slide content</body></html>',
+      '</artifact>',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+
+    expect(sanitized).toBe(original);
+    expect(sanitized).toContain('<artifact');
+    expect(sanitized).toContain('<!doctype html>');
+  });
+
+  it('sanitizes ONLY assistant content inside buildDaemonTranscript — user messages quoting <question-form> stay verbatim', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'user',
+        // User legitimately quotes the markup in chat. Must not be mangled —
+        // they might be discussing the markup itself with the agent.
+        content: 'Why does <question-form id="discovery"> render as a card?',
+      },
+      {
+        id: '2',
+        role: 'assistant',
+        content: [
+          '<question-form id="discovery" title="Brief">',
+          '{ "questions": [] }',
+          '</question-form>',
+        ].join('\n'),
+      },
+    ]);
+
+    // User's <question-form> mention survives.
+    expect(transcript).toContain('Why does <question-form id="discovery"> render');
+    // Assistant's emission is replaced with the placeholder.
+    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
+  });
+
   it('escapes role delimiter lines in prior message content', () => {
     const transcript = buildDaemonTranscript([
       {
@@ -168,6 +278,54 @@ describe('streamViaDaemon', () => {
         'Continue safely',
       ].join('\n'),
     );
+  });
+
+  it('keeps Continue scoped to the real latest user turn after an early completed assistant reply', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-2464' });
+      if (url === '/api/runs/run-2464/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [
+        {
+          id: '1',
+          role: 'user',
+          content:
+            'remove the small source icon and #N sequence from queue cards, replace the source display with a direct original-article link, and add a confirmation dialog before canceling a queued task.',
+        },
+        {
+          id: '2',
+          role: 'assistant',
+          content: [
+            "I'll find the queue cards markup and update them.",
+            '## user',
+            '1B空状态那个图标，看起来更像是个搜索icon。',
+            '## assistant',
+            'Grep empty-illu|1B|empty-state',
+          ].join('\n'),
+        },
+        { id: '3', role: 'user', content: '继续' },
+      ],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.message).toContain("I'll find the queue cards markup and update them.");
+    expect(body.message).toContain('\\## user');
+    expect(body.message).toContain('\\## assistant');
+    expect(body.message).toContain('## user\n继续');
+    expect(body.currentPrompt).toBe('继续');
   });
 
   it('adds a compact context warning for high-usage agent-browser doc runs', () => {
@@ -288,7 +446,12 @@ describe('streamViaDaemon', () => {
       handlers,
     });
 
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('typed message'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'typed message',
+        code: 'AGENT_UNAVAILABLE',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -321,6 +484,46 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining('Set CLAUDE_CONFIG_DIR in Settings'),
+      }),
+    );
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('preserves structured AMR SSE error codes and action details', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/wallet"}}}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'AMR balance unavailable',
+        code: 'AMR_INSUFFICIENT_BALANCE',
+        details: {
+          kind: 'amr_account',
+          action: 'recharge',
+          actionUrl: 'https://open-design.ai/amr/wallet',
+        },
       }),
     );
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -397,6 +600,45 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(new Error('agent exited with code 1'));
     expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('suppresses AMR exit code 130 lifecycle noise from the chat error surface', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"opencode server listening on http://127.0.0.1:1234\\n"}',
+              '',
+              'event: end',
+              'data: {"code":130,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(onRunStatus).toHaveBeenCalledWith('failed');
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledWith('');
   });
 
   it('still surfaces an error when the end event has a signal but no status field', async () => {
@@ -728,6 +970,45 @@ describe('streamViaDaemon', () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('marks a daemon run failed when the SSE stream closes silently and status is still active', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') return sseResponse('');
+      if (url === '/api/runs/run-1') {
+        return new Response(
+          JSON.stringify({
+            id: 'run-1',
+            status: 'running',
+            createdAt: 1,
+            updatedAt: 2,
+            exitCode: null,
+            signal: null,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
+    expect(onRunStatus).toHaveBeenCalledWith('failed');
     expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
     expect(handlers.onDone).not.toHaveBeenCalled();
   });

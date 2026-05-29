@@ -1,0 +1,32 @@
+{
+  "name": "@open-design/diagnostics",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Diagnostics export: log collection, redaction, and zip packaging shared by daemon and desktop.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run -c vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "jszip": "3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.39",
+    "esbuild": "0.28.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
+  }
+}

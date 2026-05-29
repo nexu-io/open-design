@@ -7,6 +7,7 @@ import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
   buildClaudeMcpJson,
+  buildOpenCodeMcpConfigContent,
   isManagedProjectCwd,
   readMcpConfig,
   sanitizeMcpServer,
@@ -387,6 +388,199 @@ describe('buildAcpMcpServers', () => {
       args: ['-y', '@modelcontextprotocol/server-github'],
       env: [{ name: 'TOKEN', value: 'x' }],
     });
+  });
+});
+
+describe('buildOpenCodeMcpConfigContent', () => {
+  it('returns null when no enabled servers (avoids polluting OPENCODE_CONFIG_CONTENT)', () => {
+    expect(buildOpenCodeMcpConfigContent([])).toBeNull();
+    expect(
+      buildOpenCodeMcpConfigContent([
+        {
+          id: 'x',
+          transport: 'stdio',
+          enabled: false,
+          command: 'echo',
+        },
+      ]),
+    ).toBeNull();
+  });
+
+  it('serialises a stdio server to OpenCode local schema (type=local, command=[cmd,...args])', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'basic-memory',
+        transport: 'stdio',
+        enabled: true,
+        command: '/opt/homebrew/bin/uvx',
+        args: ['basic-memory', 'mcp'],
+      },
+    ]);
+    expect(raw).not.toBeNull();
+    expect(typeof raw).toBe('string');
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, Record<string, unknown>>;
+    };
+    expect(parsed.mcp['basic-memory']).toEqual({
+      type: 'local',
+      command: ['/opt/homebrew/bin/uvx', 'basic-memory', 'mcp'],
+      enabled: true,
+    });
+  });
+
+  it('emits environment when the user supplied env vars', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'github',
+        transport: 'stdio',
+        enabled: true,
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_xxx' },
+      },
+    ]);
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, Record<string, unknown>>;
+    };
+    expect(parsed.mcp.github).toEqual({
+      type: 'local',
+      command: ['npx', '-y', '@modelcontextprotocol/server-github'],
+      environment: { GITHUB_PERSONAL_ACCESS_TOKEN: 'ghp_xxx' },
+      enabled: true,
+    });
+  });
+
+  it('serialises sse / http servers to OpenCode remote schema (type=remote, url, headers)', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'higgsfield',
+        transport: 'sse',
+        enabled: true,
+        url: 'https://mcp.higgsfield.ai',
+        headers: { Authorization: 'Bearer abc' },
+      },
+    ]);
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, Record<string, unknown>>;
+    };
+    expect(parsed.mcp.higgsfield).toEqual({
+      type: 'remote',
+      url: 'https://mcp.higgsfield.ai',
+      headers: { Authorization: 'Bearer abc' },
+      enabled: true,
+    });
+  });
+
+  it('skips disabled servers without leaving an empty mcp record', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'a',
+        transport: 'stdio',
+        enabled: true,
+        command: 'echo',
+      },
+      {
+        id: 'b',
+        transport: 'stdio',
+        enabled: false,
+        command: 'rm',
+      },
+    ]);
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, unknown>;
+    };
+    expect(Object.keys(parsed.mcp)).toEqual(['a']);
+  });
+
+  it('skips stdio servers missing a command (sanitize lets them through; we must guard at build)', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'bad',
+        transport: 'stdio',
+        enabled: true,
+        // command intentionally omitted
+      },
+      {
+        id: 'good',
+        transport: 'stdio',
+        enabled: true,
+        command: 'echo',
+      },
+    ]);
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, unknown>;
+    };
+    expect(Object.keys(parsed.mcp)).toEqual(['good']);
+  });
+
+  it('skips remote servers missing a url', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'broken',
+        transport: 'http',
+        enabled: true,
+        // url intentionally omitted
+      },
+    ]);
+    expect(raw).toBeNull();
+  });
+
+  it('injects a daemon-issued Bearer into oauth http servers without a pinned Authorization', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [
+        {
+          id: 'higgsfield',
+          transport: 'http',
+          enabled: true,
+          authMode: 'oauth',
+          url: 'https://mcp.higgsfield.ai/mcp',
+        },
+      ],
+      { higgsfield: 'access-tok-xyz' },
+    );
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, Record<string, unknown>>;
+    };
+    expect(parsed.mcp.higgsfield?.headers).toEqual({
+      Authorization: 'Bearer access-tok-xyz',
+    });
+  });
+
+  it('does NOT overwrite a user-pinned Authorization header even when a token exists', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [
+        {
+          id: 'higgsfield',
+          transport: 'http',
+          enabled: true,
+          authMode: 'oauth',
+          url: 'https://mcp.higgsfield.ai/mcp',
+          headers: { authorization: 'Bearer manual-token' },
+        },
+      ],
+      { higgsfield: 'access-tok-xyz' },
+    );
+    const parsed = JSON.parse(raw as string) as {
+      mcp: Record<string, Record<string, unknown>>;
+    };
+    expect(parsed.mcp.higgsfield?.headers).toEqual({
+      authorization: 'Bearer manual-token',
+    });
+  });
+
+  it('produces stable JSON formatting (no trailing whitespace, no BOM)', () => {
+    const raw = buildOpenCodeMcpConfigContent([
+      {
+        id: 'a',
+        transport: 'stdio',
+        enabled: true,
+        command: 'echo',
+      },
+    ]);
+    expect(raw).not.toBeNull();
+    expect((raw as string).charCodeAt(0)).not.toBe(0xfeff);
+    // Round-trip MUST parse cleanly.
+    expect(() => JSON.parse(raw as string)).not.toThrow();
   });
 });
 

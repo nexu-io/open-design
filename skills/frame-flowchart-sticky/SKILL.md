@@ -3,7 +3,9 @@ name: frame-flowchart-sticky
 zh_name: "便利贴流程图帧"
 en_name: "Sticky Flowchart Frame"
 emoji: "📝"
-description: "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm"
+description: "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel."
+zh_description: "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm"
+en_description: "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel."
 category: video
 scenario: operations
 aspect_hint: "1920×1080 (16:9)"
@@ -27,7 +29,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Sticky Flowchart Frame template to turn my content into a whiteboard-brainstorm frame with SVG curve connectors, sticky-note nodes, and cursor interaction. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 便利贴流程图帧 (Sticky Flowchart)】

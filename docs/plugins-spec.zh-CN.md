@@ -225,8 +225,13 @@ my-plugin/
   "specVersion": "1.0.0",
   "name": "make-a-deck",
   "title": "Make a deck",
+  "title_i18n": { "en": "Make a deck", "zh-CN": "制作 Deck" },
   "version": "1.0.0",
   "description": "Generate a 12-slide investor deck from a one-line brief.",
+  "description_i18n": {
+    "en": "Generate a 12-slide investor deck from a one-line brief.",
+    "zh-CN": "根据一句 brief 生成 12 页投资人 deck。"
+  },
   "author":   { "name": "Open Design", "url": "https://open-design.ai" },
   "license":  "MIT",
   "homepage": "https://github.com/open-design/plugins/make-a-deck",
@@ -349,6 +354,7 @@ my-plugin/
 - `compat.*`：指向继承格式文件的相对路径。loader 会把它们的内容合并进 [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts) 组装出的 OD prompt stack。
 - `specVersion`：解释此 manifest 时使用的 Open Design 插件规范版本。它独立于插件 `version`，并会冻结到 apply snapshot，便于 replay。
 - `version`：插件包自身版本。只要行为、元数据、pipeline、inputs 或随包 assets 出现用户需要审计的变化，就应该 bump。
+- `title_i18n` / `description_i18n`：可选本地化展示元数据。`title` 和 `description` 保持英文 fallback；UI 会按请求 locale、基础语言、英文、首个可用值的顺序解析。
 - `od.kind`：registry 里的分类（`skill` / `scenario` / `atom` / `bundle`）。
 - `od.taskKind`：四类产品场景之一（`new-generation` / `code-migration` / `figma-migration` / `tune-collab`，§1「四类产品场景」）。决定 marketplace filter、初始 inputs 模板、推荐 pipeline 起点。
 - `od.preview`：驱动 marketplace 卡片和详情页。`entry` 通过 daemon 以 sandboxed 方式服务（扩展现有 `/api/skills/:id/example` plumbing）。

@@ -31,14 +31,20 @@ export const opencodeAgentDef = {
         'run',
         '--format',
         'json',
-        '--dangerously-skip-permissions',
       ];
       if (options.model && options.model !== 'default') {
-        args.push('--model', options.model);
+        args.push('-m', options.model);
       }
       return args;
     },
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'opencode',
+    // OpenCode reads MCP servers from its layered config (global ~/.config
+    // /opencode/opencode.json + project opencode.json + OPENCODE_CONFIG
+    // + OPENCODE_CONFIG_CONTENT). The env-var form lets the daemon hand
+    // user-configured external MCP servers to a single `opencode run`
+    // invocation without polluting the user's saved config files. See
+    // <https://opencode.ai/docs/config> and issue #2142.
+    externalMcpInjection: 'opencode-env-content',
 } satisfies RuntimeAgentDef;

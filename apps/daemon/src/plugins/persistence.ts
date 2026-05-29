@@ -142,6 +142,30 @@ export function migratePlugins(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_genui_proj_surface ON genui_surfaces(project_id, surface_id);
     CREATE INDEX IF NOT EXISTS idx_genui_conv_surface ON genui_surfaces(conversation_id, surface_id);
     CREATE INDEX IF NOT EXISTS idx_genui_run          ON genui_surfaces(run_id);
+
+    CREATE TABLE IF NOT EXISTS skill_plugin_candidates (
+      id                   TEXT PRIMARY KEY,
+      project_id           TEXT NOT NULL,
+      run_id               TEXT,
+      conversation_id      TEXT,
+      assistant_message_id TEXT,
+      fingerprint          TEXT NOT NULL,
+      status               TEXT NOT NULL DEFAULT 'active',
+      title                TEXT NOT NULL,
+      description          TEXT NOT NULL,
+      confidence           REAL NOT NULL,
+      source_refs_json     TEXT NOT NULL,
+      provenance_json      TEXT NOT NULL,
+      draft_path           TEXT,
+      created_at           INTEGER NOT NULL,
+      updated_at           INTEGER NOT NULL,
+      dismissed_at         INTEGER,
+      UNIQUE(project_id, fingerprint),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_skill_plugin_candidates_project
+      ON skill_plugin_candidates(project_id, status, created_at DESC);
   `);
 
   const marketplaceCols = db.prepare(`PRAGMA table_info(plugin_marketplaces)`).all() as DbRow[];

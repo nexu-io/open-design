@@ -24,6 +24,11 @@ import {
 import { fetchPreviewComments } from '../../src/providers/registry';
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => key,
 }));
 
@@ -38,6 +43,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
+  listProjectRuns: vi.fn().mockResolvedValue([]),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
 }));
@@ -83,7 +89,21 @@ vi.mock('../../src/state/projects', async () => {
 });
 
 vi.mock('../../src/components/AppChromeHeader', () => ({
-  AppChromeHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+  AppChromeHeader: ({
+    children,
+    fileActionsBefore,
+    actions,
+  }: {
+    children: ReactNode;
+    fileActionsBefore?: ReactNode;
+    actions?: ReactNode;
+  }) => (
+    <header>
+      {children}
+      {fileActionsBefore}
+      {actions}
+    </header>
+  ),
 }));
 
 vi.mock('../../src/components/AvatarMenu', () => ({
@@ -164,6 +184,10 @@ function ProjectViewHarness({ initialProject }: { initialProject: Project }) {
 
 const SAVED = 'Always use tabs, never spaces.';
 
+async function openProjectInstructionsFromSettings() {
+  fireEvent.click(await screen.findByTestId('project-settings-trigger'));
+}
+
 describe('ProjectView – saved Project instructions surface (#1822)', () => {
   beforeEach(() => {
     mockedListConversations.mockResolvedValue([conversation]);
@@ -216,10 +240,10 @@ describe('ProjectView – saved Project instructions surface (#1822)', () => {
   it('offers an add affordance and opens an empty editor when no instructions are saved', async () => {
     render(<ProjectViewHarness initialProject={baseProject} />);
 
-    const add = await screen.findByTestId('project-instructions-add');
+    expect(await screen.findByTestId('project-settings-trigger')).toBeTruthy();
     expect(screen.queryByTestId('project-instructions-chip')).toBeNull();
 
-    fireEvent.click(add);
+    await openProjectInstructionsFromSettings();
 
     const textarea = screen.getByTestId('project-instructions-textarea') as HTMLTextAreaElement;
     expect(textarea.value).toBe('');
@@ -229,7 +253,7 @@ describe('ProjectView – saved Project instructions surface (#1822)', () => {
     mockedPatchProject.mockResolvedValue({ ...baseProject, customInstructions: SAVED });
     render(<ProjectViewHarness initialProject={baseProject} />);
 
-    fireEvent.click(await screen.findByTestId('project-instructions-add'));
+    await openProjectInstructionsFromSettings();
     fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
       target: { value: SAVED },
     });

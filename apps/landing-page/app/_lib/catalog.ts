@@ -11,6 +11,19 @@ import { getCollection, type CollectionEntry } from 'astro:content';
 import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {
+  DEFAULT_LOCALE,
+  type LandingLocaleCode,
+  type LocalizedStringValue,
+} from '../i18n';
+import {
+  explicitLocalizedString,
+  localizeCraftText,
+  localizeSkillDescription,
+  localizeSystemText,
+  localizeTaxonomyValue,
+  localizeTemplateText,
+} from '../content-i18n';
 
 // ---------------------------------------------------------------------------
 // Preview imagery lookup
@@ -21,9 +34,18 @@ import path from 'node:path';
 // a `previewUrl` (or `null` when the underlying skill has no `example.html`).
 // ---------------------------------------------------------------------------
 
-const PREVIEWS_ROOT = path.resolve(
-  fileURLToPath(new URL('../../public/previews', import.meta.url)),
-);
+const PREVIEWS_ROOT_CANDIDATES = [
+  // `pnpm --filter @open-design/landing-page build` may keep cwd at the
+  // workspace root, while direct package scripts run from the app root.
+  path.resolve(process.cwd(), 'apps/landing-page/public/previews'),
+  path.resolve(process.cwd(), 'public/previews'),
+  // Keep the source-relative path as a final fallback for local dev.
+  path.resolve(fileURLToPath(new URL('../../public/previews', import.meta.url))),
+] as const;
+
+function previewRoot(): string | null {
+  return PREVIEWS_ROOT_CANDIDATES.find((dir) => existsSync(dir)) ?? null;
+}
 
 /**
  * Map of `slug → filename`, e.g. `'kami-deck' → 'kami-deck.webp'`.
@@ -36,7 +58,9 @@ const PREVIEWS_ROOT = path.resolve(
  * template asset).
  */
 function listPreviews(bucket: 'skills' | 'systems' | 'templates'): Map<string, string> {
-  const dir = path.join(PREVIEWS_ROOT, bucket);
+  const root = previewRoot();
+  if (!root) return new Map();
+  const dir = path.join(root, bucket);
   if (!existsSync(dir)) return new Map();
   const map = new Map<string, string>();
   for (const file of readdirSync(dir)) {
@@ -60,8 +84,40 @@ function previewUrlFor(
   return filename ? `/previews/${bucket}/${filename}` : null;
 }
 
+const SKILLS_SRC_CANDIDATES = [
+  // Same dual-cwd story as PREVIEWS_ROOT_CANDIDATES.
+  path.resolve(process.cwd(), 'skills'),
+  path.resolve(process.cwd(), '../../skills'),
+  path.resolve(fileURLToPath(new URL('../../../../skills', import.meta.url))),
+] as const;
+
+function skillsSourceRoot(): string | null {
+  return SKILLS_SRC_CANDIDATES.find((dir) => existsSync(dir)) ?? null;
+}
+
+/**
+ * Slugs whose folder ships a runnable `example.html`. We treat that as
+ * the canonical signal that a skill is template-flavoured (a real
+ * static demo we can iframe / screenshot) rather than instruction-only
+ * (pure SKILL.md prose).
+ *
+ * Read once per build so the per-record `shapeSkill()` call stays O(1).
+ */
+function listSkillExamples(): Set<string> {
+  const root = skillsSourceRoot();
+  if (!root) return new Set();
+  const out = new Set<string>();
+  for (const name of readdirSync(root)) {
+    if (name.startsWith('_') || name.startsWith('.')) continue;
+    const example = path.join(root, name, 'example.html');
+    if (existsSync(example)) out.add(name);
+  }
+  return out;
+}
+
 const REPO_TREE = 'https://github.com/nexu-io/open-design/tree/main';
 const REPO_BLOB = 'https://github.com/nexu-io/open-design/blob/main';
+const SHOULD_CACHE_CATALOG = import.meta.env.PROD;
 
 // ---------------------------------------------------------------------------
 // Skills
@@ -69,23 +125,50 @@ const REPO_BLOB = 'https://github.com/nexu-io/open-design/blob/main';
 
 export type SkillEntry = CollectionEntry<'skills'>;
 
+/**
+ * Two flavours of skill share the same SKILL.md schema and the same
+ * /skills/<slug>/ detail route, but differ in how they're presented:
+ *
+ *   - `template` — ships a runnable `example.html`. The detail page
+ *     exposes a click-to-expand iframe of the demo, and the catalog
+ *     row uses a real screenshot as its thumbnail.
+ *
+ *   - `instruction` — pure SKILL.md (e.g. `copywriting`,
+ *     `creative-director`). The "demo" depends on the agent's input,
+ *     so there's nothing static to iframe. The detail page hides the
+ *     preview block and surfaces the full SKILL.md body instead, and
+ *     the catalog row uses a typographic fallback card as its thumb.
+ *
+ * Catalog routing splits on this field: `/skills/templates/` and
+ * `/skills/instructions/` filter to one kind each; `/skills/` itself
+ * shows both as separate sections.
+ */
+export type SkillKind = 'instruction' | 'template';
+
 export interface SkillRecord {
   slug: string;
   name: string;
   description: string;
   triggers: ReadonlyArray<string>;
   mode?: string;
+  modeLabel?: string;
   platform?: string;
+  platformLabel?: string;
   scenario?: string;
+  scenarioLabel?: string;
   category?: string;
+  categoryLabel?: string;
   featured?: number;
   upstream?: string;
   examplePrompt?: string;
   source: string;
   body: string;
+  kind: SkillKind;
   /** `/previews/skills/<slug>.png` if a generated preview exists, else null. */
   previewUrl: string | null;
 }
+
+const skillRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<SkillRecord>>>();
 
 function deriveSkillSlug(id: string): string {
   // `id` is `[folder]/SKILL` (no extension). We want the folder name.
@@ -101,12 +184,21 @@ function firstParagraph(text: string | undefined, fallback = ''): string {
 export function shapeSkill(
   entry: SkillEntry,
   previews: Map<string, string>,
+  examples: Set<string>,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): SkillRecord {
   const slug = deriveSkillSlug(entry.id);
   const data = entry.data as {
-    name?: string;
-    description?: string;
+    name?: LocalizedStringValue;
+    description?: LocalizedStringValue;
     triggers?: string[];
+    i18n?: Record<string, {
+      name?: string;
+      description?: string;
+      triggers?: string[];
+      examplePrompt?: string;
+      example_prompt?: string;
+    }>;
     od?: {
       mode?: string;
       platform?: string;
@@ -114,39 +206,100 @@ export function shapeSkill(
       category?: string;
       featured?: number;
       upstream?: string;
-      example_prompt?: string;
+      example_prompt?: LocalizedStringValue;
     };
   };
-  const description = (data.description ?? '').trim();
+  const localized = data.i18n?.[locale];
+  const name = explicitLocalizedString(localized?.name ?? data.name, locale) ?? slug;
+  const rawDescription = explicitLocalizedString(data.description, DEFAULT_LOCALE) ?? '';
+  const description =
+    explicitLocalizedString(localized?.description ?? data.description, locale) ??
+    localizeSkillDescription({
+      name,
+      mode: data.od?.mode,
+      scenario: data.od?.scenario,
+      category: data.od?.category,
+      locale,
+      fallback: rawDescription,
+    });
+  const examplePrompt = explicitLocalizedString(
+    localized?.examplePrompt ?? localized?.example_prompt ?? data.od?.example_prompt,
+    locale,
+  ) ?? '';
   return {
     slug,
-    name: data.name ?? slug,
+    name,
     description,
-    triggers: data.triggers ?? [],
+    triggers: localized?.triggers ?? (locale === DEFAULT_LOCALE ? data.triggers ?? [] : []),
     mode: data.od?.mode,
+    modeLabel: localizeTaxonomyValue(data.od?.mode, locale),
     platform: data.od?.platform,
+    platformLabel: localizeTaxonomyValue(data.od?.platform, locale),
     scenario: data.od?.scenario,
+    scenarioLabel: localizeTaxonomyValue(data.od?.scenario, locale),
     category: data.od?.category,
+    categoryLabel: localizeTaxonomyValue(data.od?.category, locale),
     featured: data.od?.featured,
     upstream: data.od?.upstream,
-    examplePrompt: data.od?.example_prompt,
+    examplePrompt,
     source: `${REPO_TREE}/skills/${slug}`,
     body: entry.body ?? '',
+    kind: examples.has(slug) ? 'template' : 'instruction',
     previewUrl: previewUrlFor('skills', slug, previews),
   };
 }
 
-export async function getSkillRecords(): Promise<ReadonlyArray<SkillRecord>> {
-  const previews = listPreviews('skills');
-  const entries = await getCollection('skills');
-  const shaped = entries.map((entry) => shapeSkill(entry, previews));
-  return shaped.sort((a, b) => {
-    // Featured (lower number = higher priority) first, then alphabetical.
-    const af = a.featured ?? Number.POSITIVE_INFINITY;
-    const bf = b.featured ?? Number.POSITIVE_INFINITY;
-    if (af !== bf) return af - bf;
-    return a.name.localeCompare(b.name);
-  });
+export async function getSkillRecords(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<SkillRecord>> {
+  if (!SHOULD_CACHE_CATALOG) {
+    const previews = listPreviews('skills');
+    const examples = listSkillExamples();
+    const entries = await getCollection('skills');
+    const shaped = entries.map((entry) => shapeSkill(entry, previews, examples, locale));
+    return shaped.sort((a, b) => {
+      // Featured (lower number = higher priority) first, then alphabetical.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const cached = skillRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const previews = listPreviews('skills');
+    const examples = listSkillExamples();
+    const entries = await getCollection('skills');
+    const shaped = entries.map((entry) => shapeSkill(entry, previews, examples, locale));
+    return shaped.sort((a, b) => {
+      // Featured (lower number = higher priority) first, then alphabetical.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
+  skillRecordsCache.set(locale, promise);
+  return promise;
+}
+
+/**
+ * Filter helper for kind-specific catalog routes (`/plugins/templates/`,
+ * `/plugins/skills/`). Caller gets the records already sorted by the
+ * standard catalog rules.
+ */
+export async function getSkillRecordsByKind(
+  kind: SkillKind,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<SkillRecord>> {
+  const all = await getSkillRecords(locale);
+  return all.filter((s) => s.kind === kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,12 +312,15 @@ export interface SystemRecord {
   slug: string;
   name: string;
   category: string;
+  categoryLabel: string;
   tagline: string;
   atmosphere: string;
   palette: ReadonlyArray<string>;
   source: string;
   body: string;
 }
+
+const systemRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<SystemRecord>>>();
 
 function extractH1(body: string): string | undefined {
   for (const line of body.split('\n')) {
@@ -238,30 +394,74 @@ function extractPalette(body: string, limit = 5): ReadonlyArray<string> {
   return Array.from(seen);
 }
 
-export function shapeSystem(entry: SystemEntry): SystemRecord {
+export function shapeSystem(
+  entry: SystemEntry,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): SystemRecord {
   const slug = entry.id.split('/')[0] ?? entry.id;
   const body = entry.body ?? '';
+  const data = entry.data as {
+    i18n?: Record<string, {
+      name?: string;
+      category?: string;
+      tagline?: string;
+      atmosphere?: string;
+    }>;
+  };
+  const localized = data.i18n?.[locale];
   const h1 = extractH1(body) ?? slug;
   const { category, tagline } = extractCategoryBlock(body);
   const atmosphere = extractAtmosphere(body);
   const palette = extractPalette(body);
+  const name =
+    localized?.name ??
+    (h1.replace(/^Design System Inspired by\s+/i, '').trim() || slug);
+  const rawCategory = localized?.category ?? (category || 'Uncategorized');
+  const localizedText = localizeSystemText({
+    name,
+    category: rawCategory,
+    paletteCount: palette.length,
+    locale,
+    fallbackTagline: localized?.tagline ?? tagline,
+    fallbackAtmosphere: localized?.atmosphere ?? atmosphere,
+  });
   return {
     slug,
-    name: h1.replace(/^Design System Inspired by\s+/i, '').trim() || slug,
-    category: category || 'Uncategorized',
-    tagline,
-    atmosphere,
+    name,
+    category: rawCategory,
+    categoryLabel: localizedText.category,
+    tagline: localizedText.tagline,
+    atmosphere: localizedText.atmosphere,
     palette,
     source: `${REPO_TREE}/design-systems/${slug}`,
     body,
   };
 }
 
-export async function getSystemRecords(): Promise<ReadonlyArray<SystemRecord>> {
-  const entries = await getCollection('systems');
-  return entries
-    .map(shapeSystem)
-    .sort((a, b) => a.name.localeCompare(b.name));
+export async function getSystemRecords(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<SystemRecord>> {
+  if (!SHOULD_CACHE_CATALOG) {
+    const entries = await getCollection('systems');
+    return entries
+      .map((entry) => shapeSystem(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const cached = systemRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const entries = await getCollection('systems');
+    return entries
+      .map((entry) => shapeSystem(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  systemRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +477,8 @@ export interface CraftRecord {
   source: string;
   body: string;
 }
+
+const craftRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<CraftRecord>>>();
 
 const CRAFT_NAME_OVERRIDES: Record<string, string> = {
   'rtl-and-bidi': 'RTL & Bidi',
@@ -367,43 +569,94 @@ function extractFirstProseParagraph(body: string): string {
   return stripMarkdownInline(buf.join(' '));
 }
 
-export function shapeCraft(entry: CraftEntry): CraftRecord {
+export function shapeCraft(
+  entry: CraftEntry,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): CraftRecord {
   const slug = entry.id;
   const body = entry.body ?? '';
+  const data = entry.data as {
+    i18n?: Record<string, {
+      name?: string;
+      summary?: string;
+    }>;
+  };
+  const localized = data.i18n?.[locale];
   const h1 = extractH1(body);
   const cleanH1 = h1 ? stripMarkdownInline(h1).replace(/\s+craft rules?$/i, '').trim() : '';
+  const fallbackName = localized?.name ?? (cleanH1 || titleizeSlug(slug));
+  const fallbackSummary = localized?.summary ?? extractFirstProseParagraph(body);
+  const localizedText = localizeCraftText({
+    slug,
+    name: fallbackName,
+    summary: fallbackSummary,
+    locale,
+  });
   return {
     slug,
-    name: cleanH1 || titleizeSlug(slug),
-    summary: extractFirstProseParagraph(body),
+    name: localizedText.name,
+    summary: localizedText.summary,
     source: `${REPO_BLOB}/craft/${slug}.md`,
     body,
   };
 }
 
-export async function getCraftRecords(): Promise<ReadonlyArray<CraftRecord>> {
-  const entries = await getCollection('craft');
-  // Astro normalizes the entry id from `craft/README.md` to `readme`
-  // (lowercase, extension stripped). Comparing the raw `'README'` string
-  // misses it on disk and used to ship `/craft/readme/` as a public
-  // craft principle and inflate the nav count by one. Compare
-  // case-insensitively so future README casings (`Readme.md`, etc.) are
-  // also filtered out.
-  return entries
-    .filter((e) => e.id.toLowerCase() !== 'readme')
-    .map(shapeCraft)
-    .sort((a, b) => a.name.localeCompare(b.name));
+export async function getCraftRecords(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<CraftRecord>> {
+  if (!SHOULD_CACHE_CATALOG) {
+    const entries = await getCollection('craft');
+    // Astro normalizes the entry id from `craft/README.md` to `readme`
+    // (lowercase, extension stripped). Comparing the raw `'README'` string
+    // misses it on disk and used to ship `/craft/readme/` as a public
+    // craft principle and inflate the nav count by one. Compare
+    // case-insensitively so future README casings (`Readme.md`, etc.) are
+    // also filtered out.
+    return entries
+      .filter((e) => e.id.toLowerCase() !== 'readme')
+      .map((entry) => shapeCraft(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const cached = craftRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const entries = await getCollection('craft');
+    // Astro normalizes the entry id from `craft/README.md` to `readme`
+    // (lowercase, extension stripped). Comparing the raw `'README'` string
+    // misses it on disk and used to ship `/craft/readme/` as a public
+    // craft principle and inflate the nav count by one. Compare
+    // case-insensitively so future README casings (`Readme.md`, etc.) are
+    // also filtered out.
+    return entries
+      .filter((e) => e.id.toLowerCase() !== 'readme')
+      .map((entry) => shapeCraft(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  craftRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
-// Templates — Live Artifacts + skills with `mode: template`
+// Templates — renderable design templates + legacy Live Artifacts
 // ---------------------------------------------------------------------------
 
 export interface TemplateRecord {
   slug: string;
   name: string;
   summary: string;
-  origin: 'live-artifact' | 'skill';
+  origin: 'design-template' | 'live-artifact';
+  mode?: string;
+  modeLabel?: string;
+  platform?: string;
+  platformLabel?: string;
+  scenario?: string;
+  scenarioLabel?: string;
+  featured?: number;
   source: string;
   detailHref: string;
   /** Skill body / template README body (Markdown). */
@@ -411,14 +664,79 @@ export interface TemplateRecord {
   previewUrl: string | null;
 }
 
+const templateRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<TemplateRecord>>>();
+
 export type TemplateEntry = CollectionEntry<'templates'>;
+export type DesignTemplateEntry = CollectionEntry<'designTemplates'>;
+
+export function shapeDesignTemplate(
+  entry: DesignTemplateEntry,
+  previews: Map<string, string>,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): TemplateRecord {
+  const slug = deriveSkillSlug(entry.id);
+  const data = entry.data as {
+    name?: LocalizedStringValue;
+    description?: LocalizedStringValue;
+    i18n?: Record<string, {
+      name?: string;
+      description?: string;
+      summary?: string;
+    }>;
+    od?: {
+      mode?: string;
+      platform?: string;
+      scenario?: string;
+      featured?: number;
+    };
+  };
+  const body = entry.body ?? '';
+  const localized = data.i18n?.[locale];
+  const name =
+    explicitLocalizedString(localized?.name ?? data.name, locale) ?? titleizeSlug(slug);
+  const summary =
+    explicitLocalizedString(
+      localized?.summary ?? localized?.description ?? data.description,
+      locale,
+    ) ||
+    firstParagraph(explicitLocalizedString(data.description, DEFAULT_LOCALE)) ||
+    extractFirstProseParagraph(body) ||
+    'Open Design renderable design template.';
+  const localizedText = localizeTemplateText({ name, summary, locale });
+
+  return {
+    slug,
+    name: localizedText.name,
+    summary: localizedText.summary,
+    origin: 'design-template',
+    mode: data.od?.mode,
+    modeLabel: localizeTaxonomyValue(data.od?.mode, locale),
+    platform: data.od?.platform,
+    platformLabel: localizeTaxonomyValue(data.od?.platform, locale),
+    scenario: data.od?.scenario,
+    scenarioLabel: localizeTaxonomyValue(data.od?.scenario, locale),
+    featured: data.od?.featured,
+    source: `${REPO_TREE}/design-templates/${slug}`,
+    detailHref: `/templates/${slug}/`,
+    body,
+    previewUrl: previewUrlFor('templates', slug, previews),
+  };
+}
 
 export function shapeLiveArtifactTemplate(
   entry: TemplateEntry,
   previews: Map<string, string>,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): TemplateRecord {
   const slug = entry.id.split('/')[0] ?? entry.id;
   const body = entry.body ?? '';
+  const data = entry.data as {
+    i18n?: Record<string, {
+      name?: string;
+      summary?: string;
+    }>;
+  };
+  const localized = data.i18n?.[locale];
   const h1 = extractH1(body);
 
   // Some authors write `# \`otd-operations-brief\` · live-artifact template`
@@ -431,13 +749,22 @@ export function shapeLiveArtifactTemplate(
     .trim();
 
   const summary = extractFirstProseParagraph(body) || 'Open Design Live Artifact template.';
+  const localizedText = localizeTemplateText({
+    name: localized?.name ?? (cleanH1 || titleizeSlug(slug)),
+    summary: localized?.summary ?? summary,
+    locale,
+  });
 
   const liveSlug = `live-${slug}`;
   return {
     slug: liveSlug,
-    name: cleanH1 || titleizeSlug(slug),
-    summary,
+    name: localizedText.name,
+    summary: localizedText.summary,
     origin: 'live-artifact',
+    mode: 'template',
+    modeLabel: localizeTaxonomyValue('template', locale),
+    scenario: 'live-artifacts',
+    scenarioLabel: localizeTaxonomyValue('live-artifacts', locale),
     source: `${REPO_TREE}/templates/live-artifacts/${slug}`,
     detailHref: `/templates/${liveSlug}/`,
     body,
@@ -445,30 +772,62 @@ export function shapeLiveArtifactTemplate(
   };
 }
 
-export async function getTemplateRecords(): Promise<ReadonlyArray<TemplateRecord>> {
-  const previews = listPreviews('templates');
-  const liveEntries = await getCollection('templates');
-  const liveRecords = liveEntries.map((entry) => shapeLiveArtifactTemplate(entry, previews));
+export async function getTemplateRecords(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<TemplateRecord>> {
+  if (!SHOULD_CACHE_CATALOG) {
+    const previews = listPreviews('templates');
+    const designEntries = await getCollection('designTemplates');
+    const designRecords = designEntries.map((entry) =>
+      shapeDesignTemplate(entry, previews, locale),
+    );
 
-  const skillRecords = await getSkillRecords();
-  const skillTemplates: TemplateRecord[] = skillRecords
-    .filter((s) => s.mode === 'template')
-    .map((s) => ({
-      slug: `skill-${s.slug}`,
-      name: s.name,
-      summary: firstParagraph(s.description),
-      origin: 'skill' as const,
-      source: s.source,
-      detailHref: `/skills/${s.slug}/`,
-      body: s.body,
-      // Templates render skill-mode skill thumbnails reusing the
-      // /previews/skills/ tree (no separate render).
-      previewUrl: s.previewUrl,
-    }));
+    const liveEntries = await getCollection('templates');
+    const liveRecords = liveEntries.map((entry) =>
+      shapeLiveArtifactTemplate(entry, previews, locale),
+    );
 
-  return [...liveRecords, ...skillTemplates].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+    return [...designRecords, ...liveRecords].sort((a, b) => {
+      // Keep explicitly featured templates first, then group the canonical
+      // design-template catalogue ahead of legacy live-artifact shims.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      if (a.origin !== b.origin) return a.origin === 'design-template' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const cached = templateRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const previews = listPreviews('templates');
+    const designEntries = await getCollection('designTemplates');
+    const designRecords = designEntries.map((entry) =>
+      shapeDesignTemplate(entry, previews, locale),
+    );
+
+    const liveEntries = await getCollection('templates');
+    const liveRecords = liveEntries.map((entry) =>
+      shapeLiveArtifactTemplate(entry, previews, locale),
+    );
+
+    return [...designRecords, ...liveRecords].sort((a, b) => {
+      // Keep explicitly featured templates first, then group the canonical
+      // design-template catalogue ahead of legacy live-artifact shims.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      if (a.origin !== b.origin) return a.origin === 'design-template' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
+  templateRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -493,6 +852,8 @@ export interface CatalogCounts {
   byPlatform: Readonly<Record<string, number>>;
 }
 
+const catalogCountsCache = new Map<LandingLocaleCode, Promise<CatalogCounts>>();
+
 function tallyKey(values: Iterable<string | undefined>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of values) {
@@ -503,21 +864,50 @@ function tallyKey(values: Iterable<string | undefined>): Record<string, number> 
   return out;
 }
 
-export async function getCatalogCounts(): Promise<CatalogCounts> {
-  const [skills, systems, templates, craft] = await Promise.all([
-    getSkillRecords(),
-    getSystemRecords(),
-    getTemplateRecords(),
-    getCraftRecords(),
-  ]);
-  return {
-    skills: skills.length,
-    systems: systems.length,
-    templates: templates.length,
-    craft: craft.length,
-    byMode: tallyKey(skills.map((s) => s.mode)),
-    byPlatform: tallyKey(skills.map((s) => s.platform)),
-  };
+export async function getCatalogCounts(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<CatalogCounts> {
+  if (!SHOULD_CACHE_CATALOG) {
+    const [skills, systems, templates, craft] = await Promise.all([
+      getSkillRecords(locale),
+      getSystemRecords(locale),
+      getTemplateRecords(locale),
+      getCraftRecords(locale),
+    ]);
+    return {
+      skills: skills.length,
+      systems: systems.length,
+      templates: templates.length,
+      craft: craft.length,
+      byMode: tallyKey(skills.map((s) => s.mode)),
+      byPlatform: tallyKey(skills.map((s) => s.platform)),
+    };
+  }
+
+  const cached = catalogCountsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const [skills, systems, templates, craft] = await Promise.all([
+      getSkillRecords(locale),
+      getSystemRecords(locale),
+      getTemplateRecords(locale),
+      getCraftRecords(locale),
+    ]);
+    return {
+      skills: skills.length,
+      systems: systems.length,
+      templates: templates.length,
+      craft: craft.length,
+      byMode: tallyKey(skills.map((s) => s.mode)),
+      byPlatform: tallyKey(skills.map((s) => s.platform)),
+    };
+  })();
+
+  catalogCountsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -632,62 +1022,95 @@ export function tagIndex(values: ReadonlyArray<string | undefined>): ReadonlyArr
 // human label (preserving the original `od.mode` casing for the heading).
 // ---------------------------------------------------------------------------
 
-export async function getSkillsForMode(slug: string): Promise<{
+export async function getSkillsForMode(
+  slug: string,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<{
   label: string | null;
   records: ReadonlyArray<SkillRecord>;
 }> {
-  const all = await getSkillRecords();
+  const all = await getSkillRecords(locale);
   const matches = all.filter((s) => {
     const canonical = canonicalMode(s.mode);
     return canonical && slugifyTag(canonical) === slug;
   });
   return {
-    label: canonicalMode(matches[0]?.mode) ?? null,
+    label:
+      localizeTaxonomyValue(canonicalMode(matches[0]?.mode), locale) ??
+      canonicalMode(matches[0]?.mode) ??
+      null,
     records: matches,
   };
 }
 
-export async function getSkillsForScenario(slug: string): Promise<{
+export async function getSkillsForScenario(
+  slug: string,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<{
   label: string | null;
   records: ReadonlyArray<SkillRecord>;
 }> {
-  const all = await getSkillRecords();
+  const all = await getSkillRecords(locale);
   const matches = all.filter((s) => {
     const canonical = canonicalScenario(s.scenario);
     return canonical && slugifyTag(canonical) === slug;
   });
   return {
-    label: canonicalScenario(matches[0]?.scenario) ?? null,
+    label:
+      localizeTaxonomyValue(canonicalScenario(matches[0]?.scenario), locale) ??
+      canonicalScenario(matches[0]?.scenario) ??
+      null,
     records: matches,
   };
 }
 
-export async function getSystemsForCategory(slug: string): Promise<{
+export async function getSystemsForCategory(
+  slug: string,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<{
   label: string | null;
   records: ReadonlyArray<SystemRecord>;
 }> {
-  const all = await getSystemRecords();
+  const all = await getSystemRecords(locale);
   const matches = all.filter((s) => {
     const canonical = canonicalCategory(s.category);
     return canonical !== undefined && slugifyTag(canonical) === slug;
   });
   return {
-    label: canonicalCategory(matches[0]?.category) ?? null,
+    label:
+      localizeTaxonomyValue(canonicalCategory(matches[0]?.category), locale) ??
+      canonicalCategory(matches[0]?.category) ??
+      null,
     records: matches,
   };
 }
 
-export async function getSkillModeIndex(): Promise<ReadonlyArray<TagDescriptor>> {
+export async function getSkillModeIndex(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<TagDescriptor>> {
   const all = await getSkillRecords();
-  return tagIndex(all.map((s) => canonicalMode(s.mode)));
+  return tagIndex(all.map((s) => canonicalMode(s.mode))).map((tag) => ({
+    ...tag,
+    label: localizeTaxonomyValue(tag.label, locale) ?? tag.label,
+  }));
 }
 
-export async function getSkillScenarioIndex(): Promise<ReadonlyArray<TagDescriptor>> {
+export async function getSkillScenarioIndex(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<TagDescriptor>> {
   const all = await getSkillRecords();
-  return tagIndex(all.map((s) => canonicalScenario(s.scenario)));
+  return tagIndex(all.map((s) => canonicalScenario(s.scenario))).map((tag) => ({
+    ...tag,
+    label: localizeTaxonomyValue(tag.label, locale) ?? tag.label,
+  }));
 }
 
-export async function getSystemCategoryIndex(): Promise<ReadonlyArray<TagDescriptor>> {
+export async function getSystemCategoryIndex(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<TagDescriptor>> {
   const all = await getSystemRecords();
-  return tagIndex(all.map((s) => canonicalCategory(s.category)));
+  return tagIndex(all.map((s) => canonicalCategory(s.category))).map((tag) => ({
+    ...tag,
+    label: localizeTaxonomyValue(tag.label, locale) ?? tag.label,
+  }));
 }

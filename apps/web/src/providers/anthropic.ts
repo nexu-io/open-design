@@ -11,10 +11,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import { streamMessageAnthropicProxy } from './anthropic-compatible';
+import type { ProxyContext } from './api-proxy';
 import { streamMessageAzure } from './azure-compatible';
 import { streamMessageGoogle } from './google-compatible';
 import { streamMessageOllama } from './ollama-compatible';
 import { isOpenAICompatible, streamMessageOpenAI } from './openai-compatible';
+import { streamMessageSenseAudio } from './senseaudio-compatible';
 
 // Re-export for convenience
 export { isOpenAICompatible } from './openai-compatible';
@@ -39,6 +41,12 @@ export async function streamMessage(
   history: ChatMessage[],
   signal: AbortSignal,
   handlers: StreamHandlers,
+  // Only the senseaudio branch reads `context.projectId` today (so the
+  // daemon-side `generate_image` tool can write into the active
+  // project's folder). Other branches accept and ignore — keeping the
+  // signature uniform means the single call site in ProjectView passes
+  // the same shape regardless of protocol.
+  context?: ProxyContext,
 ): Promise<void> {
   // Prefer the explicit Settings protocol; keep the legacy heuristic as a
   // fallback for configs saved before apiProtocol existed.
@@ -50,6 +58,9 @@ export async function streamMessage(
   }
   if (cfg.apiProtocol === 'google') {
     return streamMessageGoogle(cfg, system, history, signal, handlers);
+  }
+  if (cfg.apiProtocol === 'senseaudio') {
+    return streamMessageSenseAudio(cfg, system, history, signal, handlers, context);
   }
   if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
     return streamMessageOpenAI(cfg, system, history, signal, handlers);

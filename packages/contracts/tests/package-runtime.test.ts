@@ -33,6 +33,8 @@ describe('@open-design/contracts package runtime shape', () => {
     expect(pkg.exports?.['./api/connectionTest']?.types).toBe('./dist/api/connectionTest.d.ts');
     expect(pkg.exports?.['./api/research']?.default).toBe('./dist/api/research.mjs');
     expect(pkg.exports?.['./api/research']?.types).toBe('./dist/api/research.d.ts');
+    expect(pkg.exports?.['./api/handoff']?.default).toBe('./dist/api/handoff.mjs');
+    expect(pkg.exports?.['./api/handoff']?.types).toBe('./dist/api/handoff.d.ts');
     expect(pkg.exports?.['./critique']?.default).toBe('./dist/critique.mjs');
     expect(pkg.exports?.['./critique']?.types).toBe('./dist/critique.d.ts');
   });
@@ -54,6 +56,7 @@ describe('@open-design/contracts package runtime shape', () => {
     const contracts = await import('@open-design/contracts');
     const connectionTest = await import('@open-design/contracts/api/connectionTest');
     const research = await import('@open-design/contracts/api/research');
+    const handoff = await import('@open-design/contracts/api/handoff');
     const critique = await import('@open-design/contracts/critique');
 
     expect(contracts.composeSystemPrompt).toEqual(expect.any(Function));
@@ -62,6 +65,14 @@ describe('@open-design/contracts package runtime shape', () => {
     expect(connectionTest.isLoopbackApiHost).toEqual(expect.any(Function));
     expect(connectionTest.isBlockedExternalApiHostname).toEqual(expect.any(Function));
     expect(research.RESEARCH_DEFAULT_MAX_SOURCES.shallow).toBe(5);
+    // The handoff DTO module is interface-only except for HANDOFF_SCHEMA_VERSION,
+    // which exists precisely so esbuild emits a real `.mjs` and NodeNext
+    // consumers can resolve the subpath. Importing it through the package
+    // `exports` map proves the built publish surface — esbuild entrypoint,
+    // exports entry, and root re-export — actually resolves, which a test
+    // importing `../src/api/handoff` would not catch.
+    expect(handoff.HANDOFF_SCHEMA_VERSION).toBe(2);
+    expect(contracts.HANDOFF_SCHEMA_VERSION).toBe(2);
     expect(critique.defaultCritiqueConfig()).toMatchObject({
       enabled: false,
       protocolVersion: critique.CRITIQUE_PROTOCOL_VERSION,

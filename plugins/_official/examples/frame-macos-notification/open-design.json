@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-macos-notification",
-  "title": "macOS 通知横幅",
+  "title": "macOS Notification Banner",
+  "title_i18n": {
+    "en": "macOS Notification Banner",
+    "zh-CN": "macOS 通知横幅",
+    "zh-TW": "macOS 通知橫幅",
+    "ja": "macOS 通知バナー",
+    "ko": "macOS 알림 배너",
+    "de": "macOS-Benachrichtigungsbanner",
+    "fr": "Bannière de notification macOS",
+    "ru": "Баннер уведомлений macOS",
+    "es": "Banner de notificación macOS",
+    "pt-BR": "Banner de notificação macOS",
+    "it": "Banner di notifica macOS",
+    "vi": "Banner thông báo macOS",
+    "pl": "Banner powiadomień macOS",
+    "id": "Banner Notifikasi macOS",
+    "nl": "macOS-meldingsbanner",
+    "ar": "بانر إشعارات macOS",
+    "tr": "macOS Bildirim Banner'ı",
+    "uk": "Банер сповіщень macOS"
+  },
   "version": "0.1.0",
-  "description": "拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告",
+  "description": "Realistic macOS notification banner with app icon, title, and body, suited to video overlays or product teasers.",
+  "description_i18n": {
+    "en": "Realistic macOS notification banner with app icon, title, and body, suited to video overlays or product teasers.",
+    "zh-CN": "拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告",
+    "zh-TW": "逼真的 macOS 通知橫幅，包含應用程式圖示、標題和內文，適用於影片疊加層或產品預告。",
+    "ja": "アプリアイコン、タイトル、本文を含むリアルな macOS 通知バナー。動画オーバーレイや製品ティザーに最適。",
+    "ko": "앱 아이콘, 제목, 본문이 포함된 사실적인 macOS 알림 배너로, 비디오 오버레이나 제품 티저에 적합합니다.",
+    "de": "Realistisches macOS-Benachrichtigungsbanner mit App-Symbol, Titel und Text, geeignet für Video-Overlays oder Produkt-Teaser.",
+    "fr": "Bannière de notification macOS réaliste avec icône d'app, titre et corps de texte, adaptée aux superpositions vidéo ou teasers produit.",
+    "ru": "Реалистичный баннер уведомлений macOS с иконкой приложения, заголовком и текстом, подходит для видеооверлеев или анонсов продуктов.",
+    "es": "Banner de notificación macOS realista con icono de app, título y cuerpo, ideal para superposiciones de video o avances de productos.",
+    "pt-BR": "Banner de notificação macOS realista com ícone do app, título e corpo, ideal para sobreposições de vídeo ou teasers de produtos.",
+    "it": "Banner di notifica macOS realistico con icona app, titolo e corpo, adatto per overlay video o teaser di prodotti.",
+    "vi": "Banner thông báo macOS chân thực với biểu tượng ứng dụng, tiêu đề và nội dung, phù hợp cho lớp phủ video hoặc teaser sản phẩm.",
+    "pl": "Realistyczny banner powiadomień macOS z ikoną aplikacji, tytułem i treścią, odpowiedni do nakładek wideo lub zapowiedzi produktów.",
+    "id": "Banner notifikasi macOS realistis dengan ikon aplikasi, judul, dan isi, cocok untuk overlay video atau teaser produk.",
+    "nl": "Realistische macOS-meldingsbanner met app-pictogram, titel en tekst, geschikt voor video-overlays of productteaser.",
+    "ar": "بانر إشعارات macOS واقعي مع أيقونة التطبيق والعنوان والنص، مناسب لتراكبات الفيديو أو إعلانات المنتجات.",
+    "tr": "Uygulama simgesi, başlık ve gövde içeren gerçekçi macOS bildirim banner'ı, video kaplama veya ürün tanıtımları için uygundur.",
+    "uk": "Реалістичний банер сповіщень macOS з іконкою додатка, заголовком і текстом, підходить для відеооверлеїв або анонсів продуктів."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -39,11 +79,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「macOS 通知横幅」模板把我的内容做成一段「拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the macOS Notification Banner template to turn my content into a realistic macOS notification banner for a video overlay or product teaser. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「macOS 通知横幅」模板把我的内容做成一段「拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "macOS 通知横幅"
+          "title": "macOS Notification Banner",
+          "title_i18n": {
+            "en": "macOS Notification Banner",
+            "zh-CN": "macOS 通知横幅"
+          }
         }
       ]
     },
