@@ -1391,5 +1391,4 @@ test('detectAgents isolates CodeBuddy probe failure from other agents', async ()
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
->>>>>>> 4091945fd (fix(daemon): guard CodeBuddy env canonicalization behind process.platform === "win32")
 });

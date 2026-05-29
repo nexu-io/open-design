@@ -45,12 +45,9 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   vibeAgentDef,
   deepseekAgentDef,
   aiderAgentDef,
-<<<<<<< HEAD
   antigravityAgentDef,
   reasonixAgentDef,
-=======
   codebuddyAgentDef,
->>>>>>> ab4a7a914 (fix(daemon): move codebuddy after established adapters in AGENT_DEFS)
 ];
 
 export function readLocalAgentProfileDefs(
