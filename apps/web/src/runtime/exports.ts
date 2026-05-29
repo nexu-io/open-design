@@ -331,12 +331,18 @@ export function exportAsMd(source: string, title: string): void {
  * injected into a srcdoc preview iframe. Returns null if the bridge is not
  * present (e.g. URL-load mode) or the capture times out.
  */
-export function requestPreviewSnapshot(
+export type PreviewSnapshot = { dataUrl: string; w: number; h: number };
+
+export type PreviewSnapshotResult =
+  | { ok: true; snapshot: PreviewSnapshot }
+  | { ok: false; reason: 'loading' | 'post-message-error' | 'render-error' | 'timeout'; error?: string };
+
+export function requestPreviewSnapshotResult(
   iframe: HTMLIFrameElement,
-  timeout = 2500,
-): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  timeout = 8000,
+): Promise<PreviewSnapshotResult> {
   const win = iframe.contentWindow;
-  if (!win) return Promise.resolve(null);
+  if (!win) return Promise.resolve({ ok: false, reason: 'loading' });
   const id = `snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return new Promise((resolve) => {
     let done = false;
@@ -354,23 +360,33 @@ export function requestPreviewSnapshot(
       if (done) return;
       done = true;
       window.removeEventListener('message', onMsg);
-      if (d.dataUrl && d.w && d.h) resolve({ dataUrl: d.dataUrl, w: d.w, h: d.h });
-      else resolve(null);
+      if (d.dataUrl && d.w && d.h) resolve({ ok: true, snapshot: { dataUrl: d.dataUrl, w: d.w, h: d.h } });
+      else resolve({ ok: false, reason: 'render-error', error: d.error });
     }
     window.addEventListener('message', onMsg);
     try {
       win.postMessage({ type: 'od:snapshot', id }, '*');
     } catch {
-      /* sandboxed */
+      done = true;
+      window.removeEventListener('message', onMsg);
+      resolve({ ok: false, reason: 'post-message-error' });
     }
     setTimeout(() => {
       if (!done) {
         done = true;
         window.removeEventListener('message', onMsg);
-        resolve(null);
+        resolve({ ok: false, reason: 'timeout' });
       }
     }, timeout);
   });
+}
+
+export async function requestPreviewSnapshot(
+  iframe: HTMLIFrameElement,
+  timeout = 8000,
+): Promise<PreviewSnapshot | null> {
+  const result = await requestPreviewSnapshotResult(iframe, timeout);
+  return result.ok ? result.snapshot : null;
 }
 
 /** Convert a data-URL to a Blob without re-encoding through canvas. */

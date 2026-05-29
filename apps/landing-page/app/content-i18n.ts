@@ -4,6 +4,7 @@ import {
   type LandingLocaleCode,
   type LocalizedStringValue,
 } from './i18n';
+import { getPluginsCopy } from './_lib/plugins-i18n';
 
 type ContentCopy = {
   skillNoun: string;
@@ -420,6 +421,44 @@ const TAXONOMY_TERMS: Record<string, Partial<Record<LandingLocaleCode, string>>>
   personal: { zh: '个人', 'zh-tw': '個人', ja: '個人', ko: '개인', de: 'Persoenlich', fr: 'personnel', ru: 'личное', es: 'personal', 'pt-br': 'pessoal', it: 'personale', vi: 'ca nhan', pl: 'osobiste', id: 'personal', nl: 'persoonlijk', ar: 'شخصي', tr: 'kisisel', uk: 'особисте' },
   finance: { zh: '金融', 'zh-tw': '金融', ja: '金融', ko: '금융', de: 'Finanzen', fr: 'finance', ru: 'финансы', es: 'finanzas', 'pt-br': 'financas', it: 'finanza', vi: 'tai chinh', pl: 'finanse', id: 'keuangan', nl: 'financien', ar: 'مالية', tr: 'finans', uk: 'фінанси' },
   docs: { zh: '文档', 'zh-tw': '文件', ja: 'ドキュメント', ko: '문서', de: 'Dokumente', fr: 'documents', ru: 'документы', es: 'documentos', 'pt-br': 'documentos', it: 'documenti', vi: 'tai lieu', pl: 'dokumenty', id: 'dokumen', nl: 'documenten', ar: 'مستندات', tr: 'belgeler', uk: 'документи' },
+
+  'code-migration': { zh: '代码迁移', 'zh-tw': '程式碼遷移', ja: 'コードマイグレーション', ko: '코드 마이그레이션', de: 'Code-Migration', fr: 'Migration de code', ru: 'Миграция кода', es: 'Migración de código', 'pt-br': 'Migração de código', it: 'Migrazione codice', vi: 'Di trú mã', pl: 'Migracja kodu', id: 'Migrasi kode', nl: 'Code-migratie', ar: 'ترحيل الكود', tr: 'Kod taşıma', uk: 'Міграція коду' },
+  creator: { zh: '创作者', 'zh-tw': '創作者', ja: 'クリエイター', ko: '크리에이터', de: 'Creator', fr: 'Créateur', ru: 'Создатель', es: 'Creador', 'pt-br': 'Criador', it: 'Creator', vi: 'Người sáng tạo', pl: 'Twórca', id: 'Pembuat', nl: 'Maker', ar: 'المُنشئ', tr: 'Yaratıcı', uk: 'Творець' },
+  critique: { zh: '评审', 'zh-tw': '評審', ja: 'クリティーク', ko: '크리틱', de: 'Kritik', fr: 'Critique', ru: 'Критика', es: 'Crítica', 'pt-br': 'Crítica', it: 'Critica', vi: 'Phản biện', pl: 'Krytyka', id: 'Kritik', nl: 'Kritiek', ar: 'نقد', tr: 'Eleştiri', uk: 'Критика' },
+  'default-router': { zh: '默认路由', 'zh-tw': '預設路由', ja: 'デフォルトルーター', ko: '기본 라우터', de: 'Standard-Router', fr: 'Router par défaut', ru: 'Маршрутизатор по умолчанию', es: 'Enrutador por defecto', 'pt-br': 'Roteador padrão', it: 'Router predefinito', vi: 'Router mặc định', pl: 'Router domyślny', id: 'Router default', nl: 'Standaardrouter', ar: 'الموجّه الافتراضي', tr: 'Varsayılan yönlendirici', uk: 'Маршрутизатор за замовчуванням' },
+  'design-refine': { zh: '设计精修', 'zh-tw': '設計精修', ja: 'デザイン精緻化', ko: '디자인 정교화', de: 'Design-Refinement', fr: 'Affinage du design', ru: 'Доводка дизайна', es: 'Refinamiento de diseño', 'pt-br': 'Refino de design', it: 'Affinamento design', vi: 'Tinh chỉnh thiết kế', pl: 'Dopracowanie designu', id: 'Penyempurnaan desain', nl: 'Designverfijning', ar: 'تحسين التصميم', tr: 'Tasarım rafinajı', uk: 'Доопрацювання дизайну' },
+  'design-system': { zh: '设计系统', 'zh-tw': '設計系統', ja: 'デザインシステム', ko: '디자인 시스템', de: 'Designsystem', fr: 'Design system', ru: 'Дизайн-система', es: 'Sistema de diseño', 'pt-br': 'Design system', it: 'Design system', vi: 'Hệ thống thiết kế', pl: 'System designu', id: 'Sistem desain', nl: 'Designsysteem', ar: 'نظام التصميم', tr: 'Tasarım sistemi', uk: 'Дизайн-система' },
+  discovery: { zh: '探索', 'zh-tw': '探索', ja: 'ディスカバリー', ko: '디스커버리', de: 'Discovery', fr: 'Découverte', ru: 'Исследование', es: 'Descubrimiento', 'pt-br': 'Descoberta', it: 'Scoperta', vi: 'Khám phá', pl: 'Odkrywanie', id: 'Penemuan', nl: 'Discovery', ar: 'اكتشاف', tr: 'Keşif', uk: 'Дослідження' },
+  'downstream-export': { zh: '下游导出', 'zh-tw': '下游匯出', ja: 'ダウンストリームエクスポート', ko: '다운스트림 내보내기', de: 'Downstream-Export', fr: 'Export en aval', ru: 'Экспорт вниз по потоку', es: 'Exportación downstream', 'pt-br': 'Exportação downstream', it: 'Export downstream', vi: 'Xuất downstream', pl: 'Eksport downstream', id: 'Ekspor downstream', nl: 'Downstream-export', ar: 'تصدير لاحق', tr: 'Downstream dışa aktarma', uk: 'Downstream експорт' },
+  edit: { zh: '编辑', 'zh-tw': '編輯', ja: '編集', ko: '편집', de: 'Bearbeiten', fr: 'Édition', ru: 'Редактирование', es: 'Editar', 'pt-br': 'Editar', it: 'Modifica', vi: 'Chỉnh sửa', pl: 'Edycja', id: 'Sunting', nl: 'Bewerken', ar: 'تحرير', tr: 'Düzenle', uk: 'Редагування' },
+  education: { zh: '教育', 'zh-tw': '教育', ja: '教育', ko: '교육', de: 'Bildung', fr: 'Éducation', ru: 'Образование', es: 'Educación', 'pt-br': 'Educação', it: 'Istruzione', vi: 'Giáo dục', pl: 'Edukacja', id: 'Pendidikan', nl: 'Onderwijs', ar: 'تعليم', tr: 'Eğitim', uk: 'Освіта' },
+  engineering: { zh: '工程', 'zh-tw': '工程', ja: 'エンジニアリング', ko: '엔지니어링', de: 'Engineering', fr: 'Ingénierie', ru: 'Инженерия', es: 'Ingeniería', 'pt-br': 'Engenharia', it: 'Ingegneria', vi: 'Kỹ thuật', pl: 'Inżynieria', id: 'Teknik', nl: 'Engineering', ar: 'هندسة', tr: 'Mühendislik', uk: 'Інженерія' },
+  export: { zh: '导出', 'zh-tw': '匯出', ja: 'エクスポート', ko: '내보내기', de: 'Export', fr: 'Export', ru: 'Экспорт', es: 'Exportar', 'pt-br': 'Exportar', it: 'Esporta', vi: 'Xuất', pl: 'Eksport', id: 'Ekspor', nl: 'Exporteren', ar: 'تصدير', tr: 'Dışa aktar', uk: 'Експорт' },
+  extract: { zh: '提取', 'zh-tw': '擷取', ja: '抽出', ko: '추출', de: 'Extrahieren', fr: 'Extraire', ru: 'Извлечение', es: 'Extraer', 'pt-br': 'Extrair', it: 'Estrai', vi: 'Trích xuất', pl: 'Wyodrębnij', id: 'Ekstrak', nl: 'Extraheren', ar: 'استخراج', tr: 'Çıkar', uk: 'Витягнення' },
+  'figma-migration': { zh: 'Figma 迁移', 'zh-tw': 'Figma 遷移', ja: 'Figma マイグレーション', ko: 'Figma 마이그레이션', de: 'Figma-Migration', fr: 'Migration Figma', ru: 'Миграция Figma', es: 'Migración Figma', 'pt-br': 'Migração do Figma', it: 'Migrazione Figma', vi: 'Di trú Figma', pl: 'Migracja Figma', id: 'Migrasi Figma', nl: 'Figma-migratie', ar: 'ترحيل Figma', tr: 'Figma taşıma', uk: 'Міграція Figma' },
+  general: { zh: '通用', 'zh-tw': '通用', ja: '汎用', ko: '일반', de: 'Allgemein', fr: 'Général', ru: 'Общее', es: 'General', 'pt-br': 'Geral', it: 'Generale', vi: 'Tổng quát', pl: 'Ogólne', id: 'Umum', nl: 'Algemeen', ar: 'عام', tr: 'Genel', uk: 'Загальне' },
+  handoff: { zh: '交付', 'zh-tw': '交付', ja: 'ハンドオフ', ko: '핸드오프', de: 'Übergabe', fr: 'Transfert', ru: 'Передача', es: 'Entrega', 'pt-br': 'Handoff', it: 'Handoff', vi: 'Bàn giao', pl: 'Handoff', id: 'Handoff', nl: 'Overdracht', ar: 'تسليم', tr: 'Devir', uk: 'Передача' },
+  healthcare: { zh: '医疗', 'zh-tw': '醫療', ja: '医療', ko: '의료', de: 'Gesundheit', fr: 'Santé', ru: 'Здравоохранение', es: 'Salud', 'pt-br': 'Saúde', it: 'Sanità', vi: 'Y tế', pl: 'Opieka zdrowotna', id: 'Kesehatan', nl: 'Zorg', ar: 'الرعاية الصحية', tr: 'Sağlık', uk: 'Охорона здоровʼя' },
+  hr: { zh: '人力资源', 'zh-tw': '人力資源', ja: '人事', ko: '인사', de: 'HR', fr: 'RH', ru: 'HR', es: 'RR. HH.', 'pt-br': 'RH', it: 'Risorse umane', vi: 'Nhân sự', pl: 'HR', id: 'SDM', nl: 'HR', ar: 'الموارد البشرية', tr: 'İK', uk: 'Кадри' },
+  import: { zh: '导入', 'zh-tw': '匯入', ja: 'インポート', ko: '가져오기', de: 'Import', fr: 'Import', ru: 'Импорт', es: 'Importar', 'pt-br': 'Importar', it: 'Importa', vi: 'Nhập', pl: 'Import', id: 'Impor', nl: 'Importeren', ar: 'استيراد', tr: 'İçe aktar', uk: 'Імпорт' },
+  knowledge: { zh: '知识', 'zh-tw': '知識', ja: 'ナレッジ', ko: '지식', de: 'Wissen', fr: 'Connaissance', ru: 'Знания', es: 'Conocimiento', 'pt-br': 'Conhecimento', it: 'Conoscenza', vi: 'Tri thức', pl: 'Wiedza', id: 'Pengetahuan', nl: 'Kennis', ar: 'معرفة', tr: 'Bilgi', uk: 'Знання' },
+  live: { zh: '实时', 'zh-tw': '即時', ja: 'ライブ', ko: '라이브', de: 'Live', fr: 'Live', ru: 'Прямой эфир', es: 'En vivo', 'pt-br': 'Ao vivo', it: 'Live', vi: 'Trực tiếp', pl: 'Live', id: 'Live', nl: 'Live', ar: 'مباشر', tr: 'Canlı', uk: 'Наживо' },
+  'live-artifacts': { zh: '实时产物', 'zh-tw': '即時產物', ja: 'ライブ成果物', ko: '라이브 산출물', de: 'Live-Artefakte', fr: 'Artefacts en direct', ru: 'Живые артефакты', es: 'Artefactos en vivo', 'pt-br': 'Artefatos ao vivo', it: 'Artefatti live', vi: 'Artifact trực tiếp', pl: 'Artefakty live', id: 'Artefak live', nl: 'Live artefacten', ar: 'عناصر مباشرة', tr: 'Canlı çıktılar', uk: 'Живі артефакти' },
+  'media-generation': { zh: '媒体生成', 'zh-tw': '媒體生成', ja: 'メディア生成', ko: '미디어 생성', de: 'Medienerzeugung', fr: 'Génération de médias', ru: 'Генерация медиа', es: 'Generación de medios', 'pt-br': 'Geração de mídia', it: 'Generazione media', vi: 'Tạo media', pl: 'Generowanie mediów', id: 'Pembuatan media', nl: 'Mediageneratie', ar: 'توليد الوسائط', tr: 'Medya üretimi', uk: 'Генерація медіа' },
+  'new-generation': { zh: '新生成', 'zh-tw': '新生成', ja: '新規生成', ko: '새로 생성', de: 'Neuerzeugung', fr: 'Nouvelle génération', ru: 'Новая генерация', es: 'Nueva generación', 'pt-br': 'Nova geração', it: 'Nuova generazione', vi: 'Tạo mới', pl: 'Nowe tworzenie', id: 'Pembuatan baru', nl: 'Nieuwe generatie', ar: 'إنشاء جديد', tr: 'Yeni üretim', uk: 'Нова генерація' },
+  operation: { zh: '运维', 'zh-tw': '營運', ja: '運用', ko: '운영', de: 'Betrieb', fr: 'Opération', ru: 'Операции', es: 'Operación', 'pt-br': 'Operação', it: 'Operazione', vi: 'Vận hành', pl: 'Operacja', id: 'Operasi', nl: 'Operatie', ar: 'عملية', tr: 'Operasyon', uk: 'Операція' },
+  orbit: { zh: '轨道', 'zh-tw': '軌道', ja: 'オービット', ko: '오빗', de: 'Orbit', fr: 'Orbit', ru: 'Orbit', es: 'Orbit', 'pt-br': 'Orbit', it: 'Orbit', vi: 'Orbit', pl: 'Orbit', id: 'Orbit', nl: 'Orbit', ar: 'مدار', tr: 'Yörünge', uk: 'Орбіта' },
+  planning: { zh: '规划', 'zh-tw': '規劃', ja: '計画', ko: '계획', de: 'Planung', fr: 'Planification', ru: 'Планирование', es: 'Planificación', 'pt-br': 'Planejamento', it: 'Pianificazione', vi: 'Lập kế hoạch', pl: 'Planowanie', id: 'Perencanaan', nl: 'Planning', ar: 'تخطيط', tr: 'Planlama', uk: 'Планування' },
+  'plugin-authoring': { zh: '插件编写', 'zh-tw': '外掛編寫', ja: 'プラグイン作成', ko: '플러그인 작성', de: 'Plugin-Erstellung', fr: 'Création de plugin', ru: 'Создание плагина', es: 'Creación de plugin', 'pt-br': 'Criação de plugin', it: 'Creazione plugin', vi: 'Tạo plugin', pl: 'Tworzenie wtyczki', id: 'Pembuatan plugin', nl: 'Plug-in maken', ar: 'تأليف الإضافة', tr: 'Eklenti yazma', uk: 'Створення плагіна' },
+  'plugin-sharing': { zh: '插件分享', 'zh-tw': '外掛分享', ja: 'プラグイン共有', ko: '플러그인 공유', de: 'Plugin-Sharing', fr: 'Partage de plugin', ru: 'Шаринг плагина', es: 'Compartir plugin', 'pt-br': 'Compartilhamento de plugin', it: 'Condivisione plugin', vi: 'Chia sẻ plugin', pl: 'Udostępnianie wtyczki', id: 'Berbagi plugin', nl: 'Plug-in delen', ar: 'مشاركة الإضافة', tr: 'Eklenti paylaşımı', uk: 'Поширення плагіна' },
+  refine: { zh: '精修', 'zh-tw': '精修', ja: '精緻化', ko: '정교화', de: 'Verfeinern', fr: 'Affiner', ru: 'Доводка', es: 'Refinar', 'pt-br': 'Refinar', it: 'Affinare', vi: 'Tinh chỉnh', pl: 'Dopracuj', id: 'Sempurnakan', nl: 'Verfijnen', ar: 'تحسين', tr: 'Rafine et', uk: 'Доопрацювати' },
+  review: { zh: '评审', 'zh-tw': '評審', ja: 'レビュー', ko: '리뷰', de: 'Review', fr: 'Revue', ru: 'Ревью', es: 'Revisión', 'pt-br': 'Revisão', it: 'Revisione', vi: 'Đánh giá', pl: 'Recenzja', id: 'Tinjau', nl: 'Review', ar: 'مراجعة', tr: 'İnceleme', uk: 'Огляд' },
+  sales: { zh: '销售', 'zh-tw': '銷售', ja: 'セールス', ko: '세일즈', de: 'Vertrieb', fr: 'Ventes', ru: 'Продажи', es: 'Ventas', 'pt-br': 'Vendas', it: 'Vendite', vi: 'Bán hàng', pl: 'Sprzedaż', id: 'Penjualan', nl: 'Verkoop', ar: 'مبيعات', tr: 'Satış', uk: 'Продажі' },
+  scenario: { zh: '场景', 'zh-tw': '場景', ja: 'シナリオ', ko: '시나리오', de: 'Szenario', fr: 'Scénario', ru: 'Сценарий', es: 'Escenario', 'pt-br': 'Cenário', it: 'Scenario', vi: 'Kịch bản', pl: 'Scenariusz', id: 'Skenario', nl: 'Scenario', ar: 'سيناريو', tr: 'Senaryo', uk: 'Сценарій' },
+  support: { zh: '支持', 'zh-tw': '支援', ja: 'サポート', ko: '지원', de: 'Support', fr: 'Support', ru: 'Поддержка', es: 'Soporte', 'pt-br': 'Suporte', it: 'Supporto', vi: 'Hỗ trợ', pl: 'Wsparcie', id: 'Dukungan', nl: 'Support', ar: 'دعم', tr: 'Destek', uk: 'Підтримка' },
+  'token-map': { zh: 'Token 映射', 'zh-tw': 'Token 對應', ja: 'トークンマップ', ko: '토큰 맵', de: 'Token-Map', fr: 'Carte de tokens', ru: 'Карта токенов', es: 'Mapa de tokens', 'pt-br': 'Mapa de tokens', it: 'Mappa token', vi: 'Bản đồ token', pl: 'Mapa tokenów', id: 'Peta token', nl: 'Token-map', ar: 'خريطة الرموز', tr: 'Token haritası', uk: 'Карта токенів' },
+  'tune-collab': { zh: '调优协作', 'zh-tw': '調優協作', ja: 'チューン協作', ko: '튜닝 협업', de: 'Tuning-Collab', fr: 'Collab de tuning', ru: 'Тюнинг-коллаб', es: 'Colaboración de ajuste', 'pt-br': 'Colaboração de ajuste', it: 'Collab di tuning', vi: 'Hợp tác tinh chỉnh', pl: 'Tuning collab', id: 'Kolaborasi tuning', nl: 'Tuning-collab', ar: 'تعاون الضبط', tr: 'Tuning iş birliği', uk: 'Тюнінг-співпраця' },
+  validation: { zh: '验证', 'zh-tw': '驗證', ja: '検証', ko: '검증', de: 'Validierung', fr: 'Validation', ru: 'Валидация', es: 'Validación', 'pt-br': 'Validação', it: 'Validazione', vi: 'Xác nhận', pl: 'Walidacja', id: 'Validasi', nl: 'Validatie', ar: 'تحقق', tr: 'Doğrulama', uk: 'Валідація' },
 };
 
 const CRAFT_LABELS: Record<string, Partial<Record<LandingLocaleCode, string>>> = {
@@ -433,6 +472,21 @@ const CATEGORY_LABELS: Record<string, Partial<Record<LandingLocaleCode, string>>
   'developer tools': { zh: '开发者工具', 'zh-tw': '開發者工具', ja: '開発者ツール', ko: '개발자 도구', de: 'Entwicklerwerkzeuge', fr: 'outils developpeur', ru: 'инструменты разработчика', es: 'herramientas de desarrollo', 'pt-br': 'ferramentas de desenvolvimento', it: 'strumenti per sviluppatori', vi: 'cong cu lap trinh', pl: 'narzedzia developerskie', id: 'alat developer', nl: 'ontwikkelaarstools', ar: 'أدوات المطورين', tr: 'gelistirici araclari', uk: 'інструменти розробника' },
   'productivity & saas': { zh: '效率与 SaaS', 'zh-tw': '效率與 SaaS', ja: '生産性と SaaS', ko: '생산성 및 SaaS', de: 'Produktivitaet und SaaS', fr: 'productivite et SaaS', ru: 'продуктивность и SaaS', es: 'productividad y SaaS', 'pt-br': 'produtividade e SaaS', it: 'produttivita e SaaS', vi: 'nang suat va SaaS', pl: 'produktywnosc i SaaS', id: 'produktivitas dan SaaS', nl: 'productiviteit en SaaS', ar: 'الإنتاجية وSaaS', tr: 'uretkenlik ve SaaS', uk: 'продуктивність і SaaS' },
   'design & creative': { zh: '设计与创意', 'zh-tw': '設計與創意', ja: 'デザインとクリエイティブ', ko: '디자인 및 크리에이티브', de: 'Design und Kreativitaet', fr: 'design et creation', ru: 'дизайн и креатив', es: 'diseño y creatividad', 'pt-br': 'design e criatividade', it: 'design e creativita', vi: 'thiet ke va sang tao', pl: 'design i kreatywnosc', id: 'desain dan kreatif', nl: 'design en creativiteit', ar: 'التصميم والإبداع', tr: 'tasarim ve yaraticilik', uk: 'дизайн і креатив' },
+
+  '3d-shaders': { zh: '3D 着色器', 'zh-tw': '3D 著色器', ja: '3D シェーダー', ko: '3D 셰이더', de: '3D-Shader', fr: 'Shaders 3D', ru: '3D-шейдеры', es: 'Shaders 3D', 'pt-br': 'Shaders 3D', it: 'Shader 3D', vi: 'Shader 3D', pl: 'Shadery 3D', id: 'Shader 3D', nl: '3D-shaders', ar: 'مظللات 3D', tr: '3D shader', uk: '3D-шейдери' },
+  'animation-motion': { zh: '动效', 'zh-tw': '動效', ja: 'アニメーション・モーション', ko: '애니메이션 모션', de: 'Animation und Motion', fr: 'Animation et motion', ru: 'Анимация и motion', es: 'Animación y motion', 'pt-br': 'Animação e motion', it: 'Animazione e motion', vi: 'Hoạt hình và motion', pl: 'Animacja i motion', id: 'Animasi dan motion', nl: 'Animatie en motion', ar: 'الحركة والتحريك', tr: 'Animasyon ve motion', uk: 'Анімація та motion' },
+  'audio-music': { zh: '音频与音乐', 'zh-tw': '音訊與音樂', ja: 'オーディオと音楽', ko: '오디오와 음악', de: 'Audio und Musik', fr: 'Audio et musique', ru: 'Аудио и музыка', es: 'Audio y música', 'pt-br': 'Áudio e música', it: 'Audio e musica', vi: 'Âm thanh và nhạc', pl: 'Audio i muzyka', id: 'Audio dan musik', nl: 'Audio en muziek', ar: 'الصوت والموسيقى', tr: 'Ses ve müzik', uk: 'Аудіо та музика' },
+  'creative-direction': { zh: '创意指导', 'zh-tw': '創意指導', ja: 'クリエイティブディレクション', ko: '크리에이티브 디렉션', de: 'Creative Direction', fr: 'Direction créative', ru: 'Креативное руководство', es: 'Dirección creativa', 'pt-br': 'Direção criativa', it: 'Direzione creativa', vi: 'Chỉ đạo sáng tạo', pl: 'Kierunek kreatywny', id: 'Arah kreatif', nl: 'Creative direction', ar: 'الإخراج الإبداعي', tr: 'Kreatif yönlendirme', uk: 'Креативне керівництво' },
+  'design-systems': { zh: '设计系统', 'zh-tw': '設計系統', ja: 'デザインシステム', ko: '디자인 시스템', de: 'Designsysteme', fr: 'Design systems', ru: 'Дизайн-системы', es: 'Sistemas de diseño', 'pt-br': 'Design systems', it: 'Design system', vi: 'Hệ thống thiết kế', pl: 'Systemy designu', id: 'Sistem desain', nl: 'Designsystemen', ar: 'أنظمة التصميم', tr: 'Tasarım sistemleri', uk: 'Дизайн-системи' },
+  diagrams: { zh: '图表', 'zh-tw': '圖表', ja: 'ダイアグラム', ko: '다이어그램', de: 'Diagramme', fr: 'Diagrammes', ru: 'Диаграммы', es: 'Diagramas', 'pt-br': 'Diagramas', it: 'Diagrammi', vi: 'Sơ đồ', pl: 'Diagramy', id: 'Diagram', nl: 'Diagrammen', ar: 'مخططات', tr: 'Diyagramlar', uk: 'Діаграми' },
+  documents: { zh: '文档', 'zh-tw': '文件', ja: 'ドキュメント', ko: '문서', de: 'Dokumente', fr: 'Documents', ru: 'Документы', es: 'Documentos', 'pt-br': 'Documentos', it: 'Documenti', vi: 'Tài liệu', pl: 'Dokumenty', id: 'Dokumen', nl: 'Documenten', ar: 'مستندات', tr: 'Belgeler', uk: 'Документи' },
+  figma: { zh: 'Figma', 'zh-tw': 'Figma', ja: 'Figma', ko: 'Figma', de: 'Figma', fr: 'Figma', ru: 'Figma', es: 'Figma', 'pt-br': 'Figma', it: 'Figma', vi: 'Figma', pl: 'Figma', id: 'Figma', nl: 'Figma', ar: 'Figma', tr: 'Figma', uk: 'Figma' },
+  'image-generation': { zh: '图像生成', 'zh-tw': '影像生成', ja: '画像生成', ko: '이미지 생성', de: 'Bildgenerierung', fr: 'Génération d’images', ru: 'Генерация изображений', es: 'Generación de imágenes', 'pt-br': 'Geração de imagens', it: 'Generazione immagini', vi: 'Tạo hình ảnh', pl: 'Generowanie obrazów', id: 'Pembuatan gambar', nl: 'Beeldgeneratie', ar: 'توليد الصور', tr: 'Görsel üretimi', uk: 'Генерація зображень' },
+  'marketing-creative': { zh: '营销创意', 'zh-tw': '行銷創意', ja: 'マーケティング・クリエイティブ', ko: '마케팅 크리에이티브', de: 'Marketing-Creative', fr: 'Créatif marketing', ru: 'Креатив маркетинга', es: 'Creatividad de marketing', 'pt-br': 'Criativo de marketing', it: 'Creativo marketing', vi: 'Sáng tạo marketing', pl: 'Kreacja marketingowa', id: 'Kreatif pemasaran', nl: 'Marketing creative', ar: 'إبداع التسويق', tr: 'Pazarlama kreatif', uk: 'Маркетинг креатив' },
+  screenshots: { zh: '截图', 'zh-tw': '截圖', ja: 'スクリーンショット', ko: '스크린샷', de: 'Screenshots', fr: 'Captures d’écran', ru: 'Скриншоты', es: 'Capturas de pantalla', 'pt-br': 'Capturas de tela', it: 'Screenshot', vi: 'Ảnh chụp màn hình', pl: 'Zrzuty ekranu', id: 'Tangkapan layar', nl: 'Schermafbeeldingen', ar: 'لقطات الشاشة', tr: 'Ekran görüntüleri', uk: 'Скриншоти' },
+  slides: { zh: '幻灯片', 'zh-tw': '簡報', ja: 'スライド', ko: '슬라이드', de: 'Slides', fr: 'Slides', ru: 'Слайды', es: 'Diapositivas', 'pt-br': 'Slides', it: 'Slide', vi: 'Slide', pl: 'Slajdy', id: 'Slide', nl: 'Slides', ar: 'شرائح', tr: 'Slaytlar', uk: 'Слайди' },
+  'video-generation': { zh: '视频生成', 'zh-tw': '影片生成', ja: '動画生成', ko: '비디오 생성', de: 'Videoerzeugung', fr: 'Génération de vidéos', ru: 'Генерация видео', es: 'Generación de video', 'pt-br': 'Geração de vídeo', it: 'Generazione video', vi: 'Tạo video', pl: 'Generowanie wideo', id: 'Pembuatan video', nl: 'Videogeneratie', ar: 'توليد الفيديو', tr: 'Video üretimi', uk: 'Генерація відео' },
+  'web-artifacts': { zh: 'Web 产物', 'zh-tw': 'Web 產物', ja: 'Web 成果物', ko: 'Web 산출물', de: 'Web-Artefakte', fr: 'Artefacts web', ru: 'Веб-артефакты', es: 'Artefactos web', 'pt-br': 'Artefatos web', it: 'Artefatti web', vi: 'Artifact web', pl: 'Artefakty web', id: 'Artefak web', nl: 'Web-artefacten', ar: 'عناصر الويب', tr: 'Web çıktıları', uk: 'Веб-артефакти' },
 };
 
 const normalizeTerm = (value: string) => value.trim().toLowerCase();
@@ -626,12 +680,25 @@ export function localizeTaxonomyValue(
   locale: LandingLocaleCode,
 ): string | undefined {
   if (!value) return undefined;
-  if (locale === DEFAULT_LOCALE) return value;
   const key = normalizeTerm(value);
+  // Plugins-i18n's 23-key `subcategory` map covers scene-level slugs like
+  // `business-dashboards` and `social-short-form` — values that originate
+  // from `od.scenario` on bundled plugins and never appear in TAXONOMY_TERMS
+  // or CATEGORY_LABELS. Consulting it here gives English a friendly label
+  // ("Dashboards") instead of the raw kebab key, and lets every chip
+  // consumer pick up scene-level translations on non-English locales.
+  const subcategoryLabel = getPluginsCopy(locale).subcategory[key];
+  if (locale === DEFAULT_LOCALE) return subcategoryLabel ?? value;
+  // Return undefined when no real translation is found, so chip-rail
+  // consumers can drop the chip entirely rather than render a noisy
+  // "Category" / "分類" placeholder for every taxonomy slug we have not
+  // localized yet (`design-system`, `planning`, `code-migration`, etc.).
+  // Callers that genuinely want the unknownTag placeholder should use
+  // `localizeContentTag` instead, which keeps the explicit fallback.
   return (
     TAXONOMY_TERMS[key]?.[locale] ??
     CATEGORY_LABELS[key]?.[locale] ??
-    copyFor(locale)?.unknownTag
+    subcategoryLabel
   );
 }
 
@@ -644,6 +711,32 @@ export function localizeContentTag(
   return localizeTaxonomyValue(value, locale) ?? copyFor(locale)?.unknownTag;
 }
 
+/*
+ * Mixed-language guard used by every `localizeXxxText` helper below.
+ *
+ * The legacy fallback templates for craft / template / system / plugin /
+ * blog are Chinese / Japanese / Korean sentences that splice an English
+ * `name` into themselves: ``${name}工艺规则`` produces "Editorial
+ * typography hierarchy 工艺规则" when the source material is still in
+ * English. That mid-sentence script switch reads as broken on
+ * `/zh/...`, `/zh-tw/...`, `/ja/...`, `/ko/...` even when chrome around
+ * it is fully localized.
+ *
+ * Until the source-of-truth (SKILL.md frontmatter, design-system /
+ * craft markdown) ships per-locale `name` fields, the cleaner UX is to
+ * render the section in English on a CJK locale: chrome stays in the
+ * visitor's language, the body reads like an untranslated source
+ * snippet (which is what it actually is), and the awkward script
+ * straddling goes away.
+ */
+const CJK_CHAR_RE = /[぀-ゟ゠-ヿㇰ-ㇿ가-힯一-鿿豈-﫿]/;
+const CJK_LOCALES = new Set<LandingLocaleCode>(['zh', 'zh-tw', 'ja', 'ko']);
+
+function nameNeedsEnglishFallback(name: string, locale: LandingLocaleCode): boolean {
+  if (!CJK_LOCALES.has(locale)) return false;
+  return !CJK_CHAR_RE.test(name);
+}
+
 export function localizeSkillDescription(args: {
   name: string;
   mode?: string;
@@ -654,6 +747,7 @@ export function localizeSkillDescription(args: {
 }): string {
   const copy = copyFor(args.locale);
   if (!copy) return args.fallback;
+  if (nameNeedsEnglishFallback(args.name, args.locale)) return args.fallback;
   const labels = [args.mode, args.scenario, args.category]
     .map((value) => localizeTaxonomyValue(value, args.locale))
     .filter((value): value is string => Boolean(value));
@@ -670,6 +764,13 @@ export function localizeSystemText(args: {
 }): { category: string; tagline: string; atmosphere: string } {
   const copy = copyFor(args.locale);
   if (!copy) {
+    return {
+      category: args.category,
+      tagline: args.fallbackTagline,
+      atmosphere: args.fallbackAtmosphere,
+    };
+  }
+  if (nameNeedsEnglishFallback(args.name, args.locale)) {
     return {
       category: args.category,
       tagline: args.fallbackTagline,
@@ -693,6 +794,9 @@ export function localizeCraftText(args: {
   const copy = copyFor(args.locale);
   if (!copy) return { name: args.name, summary: args.summary };
   const baseName = CRAFT_LABELS[args.slug]?.[args.locale] ?? args.name;
+  if (nameNeedsEnglishFallback(baseName, args.locale)) {
+    return { name: args.name, summary: args.summary };
+  }
   return {
     name: copy.craftName(baseName),
     summary: copy.craftSummary(baseName),
@@ -706,6 +810,9 @@ export function localizeTemplateText(args: {
 }): { name: string; summary: string } {
   const copy = copyFor(args.locale);
   if (!copy) return { name: args.name, summary: args.summary };
+  if (nameNeedsEnglishFallback(args.name, args.locale)) {
+    return { name: args.name, summary: args.summary };
+  }
   return {
     name: copy.templateName(args.name),
     summary: copy.templateSummary(args.name),
@@ -725,6 +832,13 @@ export function localizePluginText(args: {
 }): { title: string; description: string; exampleQuery: string | undefined } {
   const copy = copyFor(args.locale);
   if (!copy) {
+    return {
+      title: args.title,
+      description: args.description,
+      exampleQuery: undefined,
+    };
+  }
+  if (nameNeedsEnglishFallback(args.title, args.locale)) {
     return {
       title: args.title,
       description: args.description,
@@ -760,7 +874,20 @@ export function localizeBlogPostText(args: {
       bodyHtml: undefined,
     };
   }
+  // Blog posts go through `localizedBlogTopic`, which has its own per-id
+  // translation table; if the topic isn't there the helper returns the raw
+  // English title — wrapping that in a Chinese sentence template ("Open
+  // Design 指南：BYOK reality check") would mix scripts the same way craft
+  // / template / system do. Same guard applies.
   const topic = localizedBlogTopic(args.id, args.locale);
+  if (nameNeedsEnglishFallback(topic, args.locale)) {
+    return {
+      title: args.title,
+      summary: args.summary,
+      category: args.category,
+      bodyHtml: undefined,
+    };
+  }
   const title = copy.blogTitle(topic);
   const summary = copy.blogSummary(topic);
   return {

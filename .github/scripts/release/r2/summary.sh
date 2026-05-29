@@ -65,6 +65,7 @@ if (platforms.mac.enabled) {
 if (platforms.win.enabled) {
   platforms.win.artifacts = {
     installer: optional("R2_WIN_INSTALLER_URL"),
+    portableZip: optional("R2_WIN_PORTABLE_ZIP_URL"),
   };
   platforms.win.feed = optional("R2_WIN_FEED_URL");
   platforms.win.e2e = platformReport("win");
@@ -142,7 +143,10 @@ const platformRows = [
   [
     "Windows x64",
     platformStatus(platforms.win, "Published"),
-    linkList([{ label: "Installer", url: platforms.win.artifacts?.installer }]),
+    linkList([
+      { label: "Installer", url: platforms.win.artifacts?.installer },
+      { label: "Portable ZIP", url: platforms.win.artifacts?.portableZip },
+    ]),
     link("latest.yml", platforms.win.feed),
   ],
   [

@@ -55,6 +55,18 @@ export interface SeoHeadProps {
 
 const props = Astro.props as SeoHeadProps;
 
+// Staging / PR-preview builds set OD_LANDING_NOINDEX=1 so the mirror at
+// staging.open-design.ai (exposed via certificate-transparency logs) is kept
+// out of the search index. We emit `noindex` rather than a robots.txt
+// `Disallow` so crawlers can still fetch the page and read both this tag and
+// the canonical (which points at the production origin). Production builds
+// leave the flag unset and stay fully indexable.
+//
+// `__OD_LANDING_NOINDEX__` is a compile-time constant injected by
+// `vite.define` in astro.config.ts — `.astro` frontmatter is transformed by
+// Vite and cannot read process.env directly.
+const noindex = __OD_LANDING_NOINDEX__;
+
 const SITE_NAME = 'Open Design';
 const TAGLINE = 'Design with the agent already on your laptop.';
 const isArticle = props.kind === 'article';
@@ -149,6 +161,7 @@ const blogJsonLd =
 <title>{fullTitle}</title>
 <meta name='description' content={props.description} />
 <meta name='theme-color' content='#efe7d2' />
+{noindex && <meta name='robots' content='noindex, nofollow' />}
 <link rel='canonical' href={canonical} />
 {alternateLinks.map((entry) => (
   <link rel='alternate' hreflang={entry.hreflang} href={entry.href} />

@@ -27,11 +27,13 @@ export interface ToastProps {
   /** ARIA role. Use "alert" for error messages (announced immediately),
    *  "status" (default) for non-urgent confirmations. */
   role?: 'status' | 'alert';
+  tone?: 'default' | 'success';
+  placement?: 'bottom' | 'top';
 }
 
 const DEFAULT_TTL = 4000;
 
-export function Toast({ message, details, code, ttlMs = DEFAULT_TTL, onDismiss, role = 'status' }: ToastProps) {
+export function Toast({ message, details, code, ttlMs = DEFAULT_TTL, onDismiss, role = 'status', tone = 'default', placement = 'bottom' }: ToastProps) {
   // When code is present the toast is a manual-action surface; never
   // auto-dismiss it out from under the user mid-copy.
   const effectiveTtl = code ? 0 : ttlMs;
@@ -45,7 +47,11 @@ export function Toast({ message, details, code, ttlMs = DEFAULT_TTL, onDismiss, 
   }, [message, details, code, effectiveTtl, onDismiss]);
 
   return (
-    <div className="od-toast" role={role} aria-live={role === 'alert' ? 'assertive' : 'polite'}>
+    <div
+      className={`od-toast tone-${tone} placement-${placement}`}
+      role={role}
+      aria-live={role === 'alert' ? 'assertive' : 'polite'}
+    >
       <div className="od-toast-message">{message}</div>
       {details ? <div className="od-toast-details">{details}</div> : null}
       {code ? (

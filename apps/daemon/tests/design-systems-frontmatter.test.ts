@@ -254,4 +254,28 @@ describe('listDesignSystems frontmatter parsing (issue #1857)', () => {
     const [ds] = await listDesignSystems(root);
     expect(ds?.body).toBe(raw);
   });
+
+  it('extracts SwiftUI Color tokens as swatches when the palette is Swift source', async () => {
+    const root = fresh();
+    writeDesignMd(
+      root,
+      'swift-brand',
+      [
+        '# Swift Brand',
+        '',
+        '> Category: Custom',
+        '',
+        'Palette from ColorSystem.swift:',
+        '',
+        '- appShellLight: `Color(red: 0xF4 / 255, green: 0xF4 / 255, blue: 0xF4 / 255)`',
+        '- ink: `Color(red: 0x11 / 255, green: 0x11 / 255, blue: 0x11 / 255)`',
+        '- grey50: `Color(hue: 220 / 360, saturation: 0.02, brightness: 0.99)`',
+        '- accent: `Color(hue: 220 / 360, saturation: 0.82, brightness: 0.9)`',
+      ].join('\n'),
+    );
+
+    const [ds] = await listDesignSystems(root);
+    expect(ds?.swatches.length).toBeGreaterThan(0);
+    expect(ds?.swatches).toContain('#f4f4f4');
+  });
 });

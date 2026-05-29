@@ -1,8 +1,9 @@
 import sitemap, { type SitemapItem } from '@astrojs/sitemap';
-import { readFileSync, readdirSync } from 'node:fs';
+import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AstroUserConfig } from 'astro';
 import { defineConfig } from 'astro/config';
+import type { AstroIntegration } from 'astro';
 import {
   DEFAULT_LOCALE,
   LANDING_LOCALES,
@@ -109,6 +110,34 @@ const editorialPaperTheme: ShikiThemeObject = {
 // builds (Cloudflare Pages preview deployments, local previews on a
 // different host) can stamp their own URL without forking the config.
 const site = process.env.OD_LANDING_SITE ?? 'https://open-design.ai';
+// Staging / PR-preview builds set OD_LANDING_NOINDEX=1. Resolved here (config
+// runs in Node and can read process.env) and inlined into components as the
+// compile-time constant `__OD_LANDING_NOINDEX__` via vite.define below —
+// `.astro` frontmatter is transformed by Vite and cannot read process.env.
+const landingNoindex = process.env.OD_LANDING_NOINDEX === '1';
+
+// Staging / PR-preview only: append a catch-all `X-Robots-Tag: noindex` to the
+// Cloudflare Pages `_headers` so EVERY response stays out of search indexes —
+// including the React-rendered homepage and `og.astro`, which build their own
+// <head> and don't go through SeoHead (whose <meta robots> covers HTML pages).
+// Production builds (flag unset) leave `_headers` untouched.
+const noindexHeaders: AstroIntegration = {
+  name: 'staging-noindex-headers',
+  hooks: {
+    'astro:build:done': () => {
+      if (!landingNoindex) return;
+      // `out/_headers` already exists (copied verbatim from public/_headers
+      // during the build). Append a catch-all noindex header. Path is built
+      // from the config dir + outDir rather than the hook's `dir` URL to
+      // avoid any URL-resolution ambiguity.
+      appendFileSync(
+        join(import.meta.dirname, 'out', '_headers'),
+        '\n# Staging / preview mirror — keep out of search indexes.\n/*\n  X-Robots-Tag: noindex, nofollow\n',
+      );
+    },
+  },
+};
+
 const sitemapLocales = Object.fromEntries(
   LANDING_LOCALES.map((locale) => [locale.code, locale.htmlLang]),
 );
@@ -137,6 +166,11 @@ export default defineConfig({
   srcDir: './app',
   outDir: './out',
   trailingSlash: 'always',
+  vite: {
+    define: {
+      __OD_LANDING_NOINDEX__: JSON.stringify(landingNoindex),
+    },
+  },
   build: {
     // Inline every emitted stylesheet directly into the HTML <head>.
     // Trade-off: HTML pages grow by ~10-15KB (already Brotli-compressed
@@ -159,6 +193,7 @@ export default defineConfig({
     },
   },
   integrations: [
+    noindexHeaders,
     sitemap({
       i18n: {
         defaultLocale: DEFAULT_LOCALE,

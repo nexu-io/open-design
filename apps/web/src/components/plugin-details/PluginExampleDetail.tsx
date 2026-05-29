@@ -1,8 +1,8 @@
 // HTML-preview detail surface for plugins that ship a runnable
 // `od.preview` entry or example output (the same surface ExamplesTab
 // uses for skill cards). Wraps the shared PreviewModal so the user
-// gets the full chrome — sandboxed iframe, Fullscreen, Share menu
-// (Export PDF / HTML / Zip / Open in new tab) — plus a primary
+// gets the full chrome — sandboxed iframe, Fullscreen, merged Share menu —
+// plus a primary
 // "Use plugin" action that routes through the home applyPlugin flow.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -14,7 +14,7 @@ import {
   type SkillExampleResult,
 } from '../../providers/registry';
 import { PreviewModal } from '../PreviewModal';
-import { PluginShareMenu } from './PluginShareMenu';
+import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
 
 interface Props {
@@ -36,6 +36,7 @@ export function PluginExampleDetail({
   const t = useT();
   const [html, setHtml] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [unavailableKind, setUnavailableKind] = useState<string | null>(null);
   const inFlightRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -44,6 +45,7 @@ export function PluginExampleDetail({
     try {
       setHtml(null);
       setError(null);
+      setUnavailableKind(null);
       const result: SkillExampleResult = exampleStem
         ? await fetchPluginExampleHtml(record.id, exampleStem)
         : await fetchPluginPreviewHtml(record.id);
@@ -53,9 +55,16 @@ export function PluginExampleDetail({
         setError(result.error);
         setHtml(undefined);
       } else {
-        // unavailable: skill declares a non-HTML preview; treat as a
-        // calm empty state rather than an error (see registry.ts §897).
-        setError(null);
+        // unavailable: the plugin's manifest declares no shipped
+        // preview entry (or the daemon 404s on its /preview path —
+        // common for bundled plugins like example-live-artifact whose
+        // manifest references an example file that doesn't ship).
+        // Forward to PreviewModal as a typed unavailable view so it
+        // renders the calm "no shipped preview" placeholder instead
+        // of the misleading "Couldn't load this example." error. The
+        // skill helper has had this treatment since #897; the plugin
+        // helper gained it later — keep both consumers in lockstep.
+        setUnavailableKind(result.kind);
         setHtml(undefined);
       }
     } finally {
@@ -86,11 +95,22 @@ export function PluginExampleDetail({
           label: t('examples.previewLabel'),
           html,
           error,
+          // Pass the surface-appropriate noun so the unavailable placeholder
+          // reads "this plugin" / "this template" instead of falling back to
+          // the legacy skills-only "this skill" copy. Issue #3216.
+          unavailable: unavailableKind
+            ? { kind: unavailableKind, noun: isDeck ? 'template' : 'plugin' }
+            : null,
           deck: isDeck,
         },
       ]}
       onView={onView}
       exportTitleFor={() => record.title}
+      shareTarget={{
+        title: record.title,
+        description: description || undefined,
+        url: buildPluginShareUrl(record),
+      }}
       onClose={onClose}
       sidebar={{
         // Surface every plugin-common manifest field — workflow, context

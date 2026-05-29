@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-deck-guizang-editorial",
   "title": "Guizang Editorial E-Ink Deck",
+  "title_i18n": {
+    "en": "Guizang Editorial E-Ink Deck",
+    "zh-CN": "归藏编辑墨水 Deck",
+    "zh-TW": "歸藏編輯水墨卡片組",
+    "ja": "Guizang エディトリアル E-Ink デッキ",
+    "ko": "Guizang 에디토리얼 E-Ink 덱",
+    "de": "Guizang Editorial E-Ink Deck",
+    "fr": "Guizang Editorial E-Ink Deck",
+    "ru": "Guizang Editorial E-Ink Deck",
+    "es": "Guizang Editorial E-Ink Deck",
+    "pt-BR": "Guizang Editorial E-Ink Deck",
+    "it": "Guizang Editorial E-Ink Deck",
+    "vi": "Guizang Editorial E-Ink Deck",
+    "pl": "Guizang Editorial E-Ink Deck",
+    "id": "Guizang Editorial E-Ink Deck",
+    "nl": "Guizang Editorial E-Ink Deck",
+    "ar": "Guizang Editorial E-Ink Deck",
+    "tr": "Guizang Editorial E-Ink Deck",
+    "uk": "Guizang Editorial E-Ink Deck"
+  },
   "version": "0.1.0",
   "description": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+  "description_i18n": {
+    "en": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "zh-CN": "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)",
+    "zh-TW": "編輯雜誌風格遇上水墨屏：10種版面和5種配色（水墨、靛青瓷、森林墨、牛皮紙、沙丘）。",
+    "ja": "エディトリアルマガジンとE-inkの融合：10レイアウトと5パレット（インク、インディゴポーセリン、フォレストインク、クラフトペーパー、デューン）。",
+    "ko": "편집 매거진과 전자잉크의 만남: 10가지 레이아웃과 5가지 팔레트(잉크, 인디고 포슬린, 포레스트 잉크, 크래프트 페이퍼, 듄).",
+    "de": "Redaktionelles Magazin trifft E-Ink: 10 Layouts und 5 Farbpaletten (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "fr": "Magazine éditorial rencontre l'e-ink : 10 mises en page et 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "ru": "Редакционный журнал встречает e-ink: 10 макетов и 5 палитр (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "es": "Revista editorial con e-ink: 10 diseños y 5 paletas (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "pt-BR": "Revista editorial com e-ink: 10 layouts e 5 paletas (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "it": "Rivista editoriale incontra e-ink: 10 layout e 5 palette (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "vi": "Tạp chí biên tập kết hợp e-ink: 10 bố cục và 5 bảng màu (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "pl": "Magazyn redakcyjny spotyka e-ink: 10 układów i 5 palet (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "id": "Majalah editorial bertemu e-ink: 10 tata letak dan 5 palet (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "nl": "Redactioneel magazine ontmoet e-ink: 10 lay-outs en 5 paletten (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "ar": "مجلة تحريرية تلتقي بـ e-ink: 10 تخطيطات و5 لوحات ألوان (Ink، Indigo Porcelain، Forest Ink، Kraft Paper، Dune).",
+    "tr": "Editoryal dergi e-ink ile buluşuyor: 10 düzen ve 5 palet (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "uk": "Редакційний журнал зустрічає e-ink: 10 макетів і 5 палітр (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune)."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -82,13 +122,5 @@
       "prompt:inject",
       "fs:write"
     ]
-  },
-  "title_i18n": {
-    "en": "Guizang Editorial E-Ink Deck",
-    "zh-CN": "归藏编辑墨水 Deck"
-  },
-  "description_i18n": {
-    "en": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
-    "zh-CN": "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)"
   }
 }

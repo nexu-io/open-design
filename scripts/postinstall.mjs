@@ -19,7 +19,6 @@ const buildTargets = [
   "packages/diagnostics",
   "tools/dev",
   "tools/pack",
-  "tools/pr",
   "tools/serve",
 ];
 

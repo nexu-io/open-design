@@ -104,7 +104,6 @@ export async function runElectronBuilder(
       iconSize: 96,
       title: identity.installerTitle,
     },
-    electronDist: config.electronDistPath,
     electronVersion: config.electronVersion,
     executableName: identity.executableName,
     extraMetadata: {

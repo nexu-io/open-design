@@ -214,10 +214,11 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 ### 5.10 Trae CLI
 
-- Invocation: `traecli acp serve`, using the daemon's shared ACP JSON-RPC transport. The adapter follows Trae CLI's public ACP entrypoint documented at https://www.volcengine.com/docs/86677/2227861?lang=zh.
+- Invocation: `traecli acp serve --yolo`, using the daemon's shared ACP JSON-RPC transport. The adapter follows Trae CLI's public ACP entrypoint documented at https://www.volcengine.com/docs/86677/2227861?lang=zh.
 - Streaming: `acp-json-rpc`; the daemon uses the same ACP event path as the other ACP-backed adapters.
 - Models: dynamic via the ACP handshake. If model discovery fails, the picker falls back to the CLI's default configuration rather than requiring CI or startup detection to log in to Trae CLI.
 - Skills: prompt injection only in v1. External MCP servers can be forwarded through the ACP launch descriptor with the existing `acp-merge` path.
+- Permission: `--yolo` avoids headless approval prompts in the web UI. This follows the adapter catalog's existing non-interactive permission posture for CLIs such as Devin, Copilot, Qoder, and DeepSeek: the daemon runs agent CLIs without a TTY, so it must not rely on an interactive tool-approval prompt to make progress.
 - **Gotcha:** Detection only proves `traecli --version` and model discovery can run in the current environment. Trae CLI owns login, account scope, and model entitlement; the daemon does not run login flows or edit Trae CLI configuration.
 
 ### 5.11 Pi

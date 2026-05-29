@@ -26,6 +26,12 @@ import { mkdir, cp, readdir, readFile, stat, unlink, writeFile } from 'node:fs/p
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import {
+  loadSkillCardMeta,
+  renderFallbackCard,
+  renderCardFromExternal,
+  type SkillCardMeta,
+} from './fallback-preview-card.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LANDING_ROOT = path.resolve(HERE, '..');
@@ -33,6 +39,16 @@ const REPO_ROOT = path.resolve(LANDING_ROOT, '../..');
 const SKILLS_DIR = path.join(REPO_ROOT, 'skills');
 const DESIGN_TEMPLATES_DIR = path.join(REPO_ROOT, 'design-templates');
 const TEMPLATES_DIR = path.join(REPO_ROOT, 'templates/live-artifacts');
+const BUNDLED_PLUGINS_DIR = path.join(REPO_ROOT, 'plugins/_official');
+// Buckets we walk under `plugins/_official/`. Order = registry walk order;
+// per-bucket previews land at `out/plugins/<manifest-id>.png` regardless.
+const BUNDLED_BUCKETS = [
+  'examples',
+  'image-templates',
+  'video-templates',
+  'scenarios',
+  'design-systems',
+] as const;
 const OUT_DIR = path.join(LANDING_ROOT, 'public/previews');
 const LANDING_PACKAGE_JSON = path.join(LANDING_ROOT, 'package.json');
 const MANIFEST_PATH = path.join(OUT_DIR, '.manifest.json');
@@ -44,12 +60,19 @@ const PREVIEW_GENERATOR_VERSION = '2026-05-22-incremental-1';
 const MANIFEST_VERSION = 1;
 
 interface Job {
-  bucket: 'skills' | 'templates';
+  bucket: 'skills' | 'templates' | 'plugins';
   slug: string;
   htmlPath: string;
   sourceRoot: string;
   /** Optional ready-made preview to copy verbatim (skips browser). */
   reuseFrom?: string;
+  /**
+   * When set, the renderer screenshots this in-memory HTML instead of
+   * navigating to `htmlPath`. Used by the fallback-card path for skills
+   * that ship a SKILL.md but no runnable demo. `htmlPath` still points
+   * at SKILL.md so the source-hash machinery picks up edits.
+   */
+  htmlContent?: string;
 }
 
 interface PreviewManifestEntry {
@@ -189,6 +212,11 @@ async function sourceHashForJob(job: Job, directoryHashes: Map<string, string>):
   }
 
   const hash = createHash('sha256');
+  // Fallback-card jobs encode their input in `htmlContent` (template
+  // output for SKILL.md frontmatter). Folding it into the source hash
+  // means a template tweak invalidates only the 96 fallbacks, not the
+  // expensive real-demo screenshots that don't depend on it.
+  if (job.htmlContent) hash.update(job.htmlContent);
   hash.update(baseHash);
   hash.update(await hashExtraDependencyRoots(job, directoryHashes));
   return hash.digest('hex');
@@ -248,6 +276,196 @@ async function removeIfExists(filePath: string): Promise<void> {
   await unlink(filePath);
 }
 
+/**
+ * Skills without a runnable `example.html` — pure SKILL.md instruction
+ * skills like `copywriting`, `creative-director`, `competitive-ads-extractor`.
+ * We synthesize a typographic editorial card and screenshot it so the
+ * catalog row stops falling back to a blank diagonal-stripe placeholder.
+ *
+ * The card's Nº matches the row's position WITHIN the instruction
+ * section (1..N over instruction skills only, sorted by featured asc
+ * then alphabetical). That keeps card numbering stable with what the
+ * catalog renders on `/skills/instructions/` and the Instructions
+ * section of `/skills/`.
+ */
+async function buildFallbackCardJobs(): Promise<Job[]> {
+  const skillJobs = await buildFallbackCardJobsFor({
+    sourceRoot: SKILLS_DIR,
+    bucket: 'skills',
+    hasRunnableDemo: (slug) => existsSync(path.join(SKILLS_DIR, slug, 'example.html')),
+  });
+
+  // Some `design-templates/<slug>/` ship neither example.html nor a
+  // ready-made preview.png — typically instruction-style design briefs
+  // misfiled under `design-templates/` instead of `skills/`. Without
+  // this, the catalog row falls back to the diagonal-stripe placeholder
+  // on `/plugins/templates/`. Treat them like instruction skills and
+  // synthesize the same editorial card.
+  const designTemplateJobs = await buildFallbackCardJobsFor({
+    sourceRoot: DESIGN_TEMPLATES_DIR,
+    bucket: 'templates',
+    hasRunnableDemo: (slug) =>
+      existsSync(path.join(DESIGN_TEMPLATES_DIR, slug, 'example.html')) ||
+      existsSync(path.join(DESIGN_TEMPLATES_DIR, slug, 'preview.png')),
+  });
+
+  return [...skillJobs, ...designTemplateJobs];
+}
+
+async function buildFallbackCardJobsFor(args: {
+  sourceRoot: string;
+  bucket: 'skills' | 'templates';
+  hasRunnableDemo: (slug: string) => boolean;
+}): Promise<Job[]> {
+  const allSlugs: string[] = [];
+  for (const entry of await readdir(args.sourceRoot, { withFileTypes: true })) {
+    if (entry.isDirectory()) allSlugs.push(entry.name);
+  }
+
+  const fallbackSlugs = allSlugs.filter((slug) => !args.hasRunnableDemo(slug));
+
+  const metas = fallbackSlugs
+    .map((slug) => loadSkillCardMeta(args.sourceRoot, slug))
+    .filter((m): m is SkillCardMeta => m !== null);
+
+  // Match `_lib/catalog.ts` → `getSkillRecords` sort: featured (∞ if
+  // unset) ascending, then alphabetical. Numbering is per-bucket so a
+  // given source folder's fallback cards stay in sync with the route
+  // that lists them (`/plugins/skills/` for skills, `/plugins/templates/`
+  // for design-templates).
+  metas.sort((a, b) => {
+    const af = a.featured ?? Number.POSITIVE_INFINITY;
+    const bf = b.featured ?? Number.POSITIVE_INFINITY;
+    if (af !== bf) return af - bf;
+    return a.slug.localeCompare(b.slug);
+  });
+
+  const jobs: Job[] = [];
+  for (let i = 0; i < metas.length; i++) {
+    const meta = metas[i]!;
+    const slugDir = path.join(args.sourceRoot, meta.slug);
+    jobs.push({
+      bucket: args.bucket,
+      slug: meta.slug,
+      htmlPath: path.join(slugDir, 'SKILL.md'),
+      sourceRoot: slugDir,
+      htmlContent: renderFallbackCard(meta, i + 1),
+    });
+  }
+  return jobs;
+}
+
+/**
+ * Bundled plugins (`plugins/_official/<bucket>/<slug>/open-design.json`)
+ * are the daemon's canonical plugin registry, and the in-app Plugins
+ * home reads from here. The marketing site's `/plugins/...` routes
+ * mirror the same data, so every bundled entry that doesn't ship a
+ * remote `od.preview.poster` URL needs a locally generated thumb so
+ * catalog rows never fall back to the diagonal-stripe placeholder.
+ *
+ * Three preview paths, in priority order:
+ *   1. Manifest already carries `od.preview.poster` (R2/CDN URL) — we
+ *      don't generate anything; the route's <img src> points straight
+ *      at the remote URL. Caller is expected to skip these.
+ *   2. Manifest carries `od.preview.entry` pointing at a local
+ *      `example.html` — Playwright screenshots that file in-place,
+ *      treating the slug folder as the asset root so relative
+ *      `./assets/...` resolves correctly.
+ *   3. Neither — synthesize the typographic fallback card from the
+ *      manifest's `title`/`description`/`mode`/`scenario`/`tags`. Same
+ *      visual as the SKILL.md fallback, just sourced from JSON.
+ *
+ * Output filename is the manifest `name` (e.g.
+ * `image-template-3d-stone-staircase-evolution-infographic.png`) so
+ * `<img src="/previews/plugins/<manifest-id>.png">` resolves directly.
+ */
+async function buildBundledPluginJobs(): Promise<Job[]> {
+  if (!existsSync(BUNDLED_PLUGINS_DIR)) return [];
+
+  const jobs: Job[] = [];
+  // Track per-bucket index for the fallback card's Nº.
+  const fallbackIndexByBucket = new Map<string, number>();
+
+  for (const bucket of BUNDLED_BUCKETS) {
+    const bucketDir = path.join(BUNDLED_PLUGINS_DIR, bucket);
+    if (!existsSync(bucketDir)) continue;
+    const entries = await readdir(bucketDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
+
+      const slugDir = path.join(bucketDir, entry.name);
+      const manifestPath = path.join(slugDir, 'open-design.json');
+      if (!existsSync(manifestPath)) continue;
+
+      let raw: Record<string, unknown>;
+      try {
+        raw = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        continue;
+      }
+
+      // Filter atoms (infrastructure) — they don't need a thumbnail.
+      const od = (raw.od ?? {}) as Record<string, unknown>;
+      if (od.kind === 'atom') continue;
+
+      const manifestId = typeof raw.name === 'string' ? raw.name : entry.name;
+
+      // Path 1: manifest ships a poster URL → no local generation.
+      const preview = (od.preview ?? {}) as Record<string, unknown>;
+      if (typeof preview.poster === 'string' && preview.poster.length > 0) {
+        continue;
+      }
+
+      // Path 2: manifest ships a local entry HTML.
+      const entryRel = typeof preview.entry === 'string' ? preview.entry : null;
+      if (entryRel) {
+        const entryAbs = path.resolve(slugDir, entryRel);
+        if (existsSync(entryAbs)) {
+          jobs.push({
+            bucket: 'plugins',
+            slug: manifestId,
+            htmlPath: entryAbs,
+            sourceRoot: slugDir,
+          });
+          continue;
+        }
+      }
+
+      // Path 3: synthesize a fallback card from manifest fields.
+      const idx = (fallbackIndexByBucket.get(bucket) ?? 0) + 1;
+      fallbackIndexByBucket.set(bucket, idx);
+      jobs.push({
+        bucket: 'plugins',
+        slug: manifestId,
+        htmlPath: manifestPath,
+        sourceRoot: slugDir,
+        htmlContent: renderCardFromExternal(
+          {
+            slug: manifestId,
+            title: typeof raw.title === 'string' ? raw.title : manifestId,
+            description:
+              typeof raw.description === 'string' ? raw.description : '',
+            mode: typeof od.mode === 'string' ? od.mode : undefined,
+            category: typeof od.scenario === 'string' ? od.scenario : undefined,
+            attribution:
+              typeof (raw.author as Record<string, unknown> | undefined)?.name ===
+              'string'
+                ? ((raw.author as Record<string, unknown>).name as string)
+                : undefined,
+          },
+          idx,
+        ),
+      });
+    }
+  }
+
+  return jobs;
+}
+
 async function discoverJobs(): Promise<Job[]> {
   const jobs: Job[] = [];
 
@@ -264,6 +482,18 @@ async function discoverJobs(): Promise<Job[]> {
       });
     }
   }
+
+  // Synthesize cards for every other SKILL.md so the catalog never
+  // shows a bare diagonal-stripe placeholder when the agent has nothing
+  // demo-able to render.
+  jobs.push(...(await buildFallbackCardJobs()));
+
+  // Bundled-plugin manifests under `plugins/_official/`. Renders local
+  // example.html where present, falls back to the same typographic
+  // card the SKILL.md path uses otherwise. Manifests with a remote
+  // `od.preview.poster` URL are skipped — the catalog page points
+  // straight at the CDN URL.
+  jobs.push(...(await buildBundledPluginJobs()));
 
   if (existsSync(DESIGN_TEMPLATES_DIR)) {
     const designTemplateEntries = await readdir(DESIGN_TEMPLATES_DIR, { withFileTypes: true });
@@ -343,10 +573,22 @@ async function captureOne(browser: Browser, job: Job): Promise<{
   });
   const page = await ctx.newPage();
   try {
-    await page.goto(pathToFileURL(job.htmlPath).toString(), {
-      waitUntil: 'load',
-      timeout: NAVIGATION_TIMEOUT_MS,
-    });
+    if (job.htmlContent) {
+      // In-memory render path (fallback cards). `setContent` resolves
+      // before `<link rel="stylesheet">` finishes, so explicitly wait
+      // for `load` and `document.fonts.ready` — without this the
+      // screenshot captures a flash of unstyled serif glyphs.
+      await page.setContent(job.htmlContent, {
+        waitUntil: 'load',
+        timeout: NAVIGATION_TIMEOUT_MS,
+      });
+      await page.evaluate(() => document.fonts.ready);
+    } else {
+      await page.goto(pathToFileURL(job.htmlPath).toString(), {
+        waitUntil: 'load',
+        timeout: NAVIGATION_TIMEOUT_MS,
+      });
+    }
     await page.waitForTimeout(SETTLE_MS);
     await page.screenshot({
       path: targetPng,

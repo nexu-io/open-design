@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from 'react-dom';
 import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
@@ -35,7 +36,7 @@ import type {
   ResearchOptions,
   RunContextSelection,
 } from '@open-design/contracts';
-import { buildVisualAnnotationAttachment } from '../comments';
+import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
@@ -97,6 +98,7 @@ interface Props {
   streaming: boolean;
   sendDisabled?: boolean;
   initialDraft?: string;
+  draftStorageKey?: string;
   // Lazy ensure — the composer calls this before its first upload, so the
   // project folder exists on disk before files land in it. Returns the
   // project id when ready.
@@ -160,6 +162,11 @@ interface Props {
 // push text into the composer without owning its draft state.
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
+  restoreDraft: (draft: {
+    text: string;
+    attachments?: ChatAttachment[];
+    commentAttachments?: ChatCommentAttachment[];
+  }) => void;
   focus: () => void;
 }
 
@@ -190,6 +197,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       streaming,
       sendDisabled = false,
       initialDraft,
+      draftStorageKey,
       onEnsureProject,
       commentAttachments = [],
       onRemoveCommentAttachment,
@@ -216,7 +224,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
-    const [draft, setDraft] = useState(initialDraft ?? "");
+    const [draft, setDraft] = useState(() => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "");
 
     // chat_panel page_view fires from ProjectView (which outlives
     // conversation switches) so the event measures real chat-panel
@@ -294,6 +302,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         seededRef.current = true;
       }
     }, [initialDraft, draft]);
+
+    useEffect(() => {
+      saveComposerDraft(draftStorageKey, draft);
+    }, [draftStorageKey, draft]);
 
     useEffect(() => {
       if (!toolsOpen) return;
@@ -674,6 +686,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             ta.setSelectionRange(pos, pos);
           });
         },
+        restoreDraft: ({ text, attachments = [], commentAttachments = [] }) => {
+          setDraft(text);
+          setStaged(attachments);
+          setStagedVisualComments(commentAttachments);
+          setStagedSkills([]);
+          setStagedMcpServers([]);
+          setStagedConnectors([]);
+          setUploadError(null);
+          setMention(null);
+          setSlash(null);
+          seededRef.current = true;
+          requestAnimationFrame(() => {
+            const ta = textareaRef.current;
+            if (!ta) return;
+            ta.focus();
+            const pos = text.length;
+            ta.setSelectionRange(pos, pos);
+          });
+        },
         focus: () => {
           textareaRef.current?.focus();
         },
@@ -806,19 +837,50 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    async function uploadClipboardImagesFromAsyncClipboard() {
+      if (!navigator.clipboard?.read) return false;
+      try {
+        const items = await navigator.clipboard.read();
+        const files: File[] = [];
+        const stamp = Date.now();
+        for (const item of items) {
+          const imageType = item.types.find((type) => type.startsWith('image/'));
+          if (!imageType) continue;
+          const blob = await item.getType(imageType);
+          const extension = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+          files.push(new File([blob], `clipboard-screenshot-${stamp}.${extension}`, { type: imageType }));
+        }
+        if (files.length === 0) return false;
+        await uploadFiles(files);
+        return true;
+      } catch (err) {
+        console.warn('Could not read image from clipboard', err);
+        return false;
+      }
+    }
+
     useEffect(() => {
       function onAnnotation(e: Event) {
         const detail = (e as CustomEvent<AnnotationEventDetail>).detail;
         if (!detail) return;
         void (async () => {
+          let acked = false;
+          const ack = (result: { ok: boolean; message?: string }) => {
+            if (acked) return;
+            acked = true;
+            detail.ack?.(result);
+          };
           let uploaded: ChatAttachment[] = [];
           let visualAttachmentInput: Parameters<typeof buildVisualAnnotationAttachment>[0] | null = null;
           let visualAttachment: ChatCommentAttachment | null = null;
-          if (detail.file) {
-            const id = await ensureProject();
-            if (!id) return;
-            setUploading(true);
-            try {
+          try {
+            if (detail.file) {
+              const id = await ensureProject();
+              if (!id) {
+                ack({ ok: false, message: t('chat.annotationProjectCreateFailed') });
+                return;
+              }
+              setUploading(true);
               const result = await uploadProjectFiles(id, [detail.file]);
               if (result.uploaded.length > 0) {
                 uploaded = result.uploaded;
@@ -863,45 +925,57 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               if (result.failed.length > 0) {
                 const detailText = result.error ? ` (${result.error})` : '';
                 setUploadError(`Attachment upload failed for ${result.failed.length} file(s)${detailText}.`);
+                if (uploaded.length === 0) {
+                  ack({ ok: false, message: t('chat.annotationUploadFailed') });
+                  return;
+                }
               }
-            } finally {
-              setUploading(false);
             }
-          }
+            setUploading(false);
 
-          if (detail.action === 'send') {
-            if (streaming) {
-              if (uploaded.length > 0) setStaged((s) => [...s, ...uploaded]);
-              if (visualAttachmentInput) {
-                setStagedVisualComments((current) => [
-                  ...current,
-                  buildVisualAnnotationAttachment({
-                    ...visualAttachmentInput!,
-                    order: commentAttachments.length + current.length + 1,
-                  }),
-                ]);
+            if (detail.action === 'send') {
+              if (streaming) {
+                if (uploaded.length > 0) setStaged((s) => [...s, ...uploaded]);
+                if (visualAttachmentInput) {
+                  setStagedVisualComments((current) => [
+                    ...current,
+                    buildVisualAnnotationAttachment({
+                      ...visualAttachmentInput!,
+                      order: commentAttachments.length + current.length + 1,
+                    }),
+                  ]);
+                }
+                if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+                setStreamingAnnotationSendPending(true);
+                textareaRef.current?.focus();
+                ack({ ok: true });
+                return;
               }
-              if (detail.note) setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
-              setStreamingAnnotationSendPending(true);
-              textareaRef.current?.focus();
+              if (visualAttachmentInput) {
+                visualAttachment = buildVisualAnnotationAttachment({
+                  ...visualAttachmentInput,
+                  order: commentAttachments.length + stagedVisualComments.length + 1,
+                });
+              }
+              const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
+              const attachments = [...staged, ...uploaded];
+              const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
+              ack({ ok: true });
               return;
             }
-            if (visualAttachmentInput) {
-              visualAttachment = buildVisualAnnotationAttachment({
-                ...visualAttachmentInput,
-                order: commentAttachments.length + stagedVisualComments.length + 1,
-              });
-            }
-            const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
-            const attachments = [...staged, ...uploaded];
-            const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-            sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
-            return;
-          }
 
-          if (detail.note) {
-            setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
-            textareaRef.current?.focus();
+            if (detail.note) {
+              setDraft((d) => (d ? `${d}\n${detail.note}` : detail.note));
+              textareaRef.current?.focus();
+            }
+            ack({ ok: true });
+          } catch (err) {
+            console.warn('Could not send annotation', err);
+            setUploadError(err instanceof Error ? err.message : t('chat.annotationFailed'));
+            ack({ ok: false, message: t('chat.annotationFailed') });
+          } finally {
+            setUploading(false);
           }
         })();
       }
@@ -918,6 +992,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       stagedSkills,
       stagedVisualComments,
       streaming,
+      t,
     ]);
 
     useEffect(() => {
@@ -951,7 +1026,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (files.length > 0) {
         e.preventDefault();
         void uploadFiles(files);
+        return;
       }
+      void uploadClipboardImagesFromAsyncClipboard();
     }
 
     function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -1000,6 +1077,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           new RegExp(`(^|\\s)@${escapeRegExp(s.id)}(\\s|$)`).test(value),
         ),
       );
+      // Skip mention and slash detection during IME composition (e.g.,
+      // Chinese, Japanese, Korean input) to prevent cursor jumping.
+      // Issue #2851.
+      if (composingRef.current) return;
       // Detect a fresh @ at start or after whitespace; capture the typed
       // query up to the cursor.
       const before = value.slice(0, cursor);
@@ -1138,7 +1219,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         reset();
         return;
       }
-      if ((!prompt && staged.length === 0 && nextCommentAttachments.length === 0) || streaming) return;
+      if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) return;
       sendComposedTurn(prompt, staged, nextCommentAttachments, contextMeta);
     }
 
@@ -1213,6 +1294,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           .filter((s) => skillMatchesQuery(s, mentionQuery))
           .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery))
       : [];
+    const hasComposerPayload =
+      draft.trim().length > 0 || staged.length > 0 || currentCommentAttachments().length > 0;
+    const showStopButton = streaming && !hasComposerPayload;
+    const showSendButton = !streaming || hasComposerPayload;
 
     return (
       <div
@@ -1644,7 +1729,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             </button>
             {footerAccessory}
             <span className="composer-spacer" />
-            {streaming ? (
+            {showStopButton ? (
               <button
                 type="button"
                 className="composer-send stop"
@@ -1653,7 +1738,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="stop" size={13} />
                 <span>{t('chat.stop')}</span>
               </button>
-            ) : (
+            ) : null}
+            {showSendButton ? (
               <button
                 type="button"
                 className="composer-send"
@@ -1666,15 +1752,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   });
                   void submit();
                 }}
-                disabled={
-                  sendDisabled ||
-                  (!draft.trim() && staged.length === 0 && currentCommentAttachments().length === 0)
-                }
+                disabled={sendDisabled || !hasComposerPayload}
+                aria-label={t('chat.send')}
+                title={t('chat.send')}
               >
                 <Icon name="send" size={13} />
                 <span>{t('chat.send')}</span>
               </button>
-            )}
+            ) : null}
           </div>
         </div>
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
@@ -1866,7 +1951,7 @@ function StagedAttachments({
           );
         })}
       </div>
-      {preview && previewUrl ? (
+      {preview && previewUrl ? createPortal(
         <div
           className="staged-preview-modal"
           role="dialog"
@@ -1891,7 +1976,8 @@ function StagedAttachments({
             </div>
             <img src={previewUrl} alt={preview.name} />
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </>
   );
@@ -1951,8 +2037,8 @@ function StagedCommentAttachments({
     <div className="staged-row comment-staged-row" data-testid="staged-comment-attachments">
       {visibleAttachments.map((a) => (
         <div key={a.id} className="staged-chip staged-comment">
-          <span className="staged-name" title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${a.elementId}: ${a.comment}`}>
-            <strong>{a.selectionKind === 'visual' ? 'Visual mark' : a.elementId}</strong>
+          <span className="staged-name" title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${commentTargetDisplayName(a)}: ${a.comment}`}>
+            <strong>{commentTargetDisplayName(a)}</strong>
             <span>{a.comment}</span>
           </span>
           <button
@@ -2340,8 +2426,8 @@ function mcpTemplateMatchesQuery(tpl: McpTemplate, query: string): boolean {
     .includes(q);
 }
 
-function pluginSourceLabel(plugin: InstalledPluginRecord): string {
-  return plugin.sourceKind === 'bundled' ? 'Official' : 'My plugin';
+function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): string {
+  return plugin.sourceKind === 'bundled' ? t('chat.mentionPluginOfficial') : t('chat.mentionPluginMine');
 }
 
 function ToolsImportPanel({
@@ -2488,16 +2574,16 @@ function MentionPopover({
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
-    { id: 'all', label: 'All' },
-    { id: 'plugins', label: 'Plugins' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'mcp', label: 'MCP' },
-    { id: 'connectors', label: 'Connectors' },
-    { id: 'files', label: 'Design files' },
+    { id: 'all', label: t('chat.mentionTabAll') },
+    { id: 'plugins', label: t('chat.mentionTabPlugins') },
+    { id: 'skills', label: t('chat.mentionTabSkills') },
+    { id: 'mcp', label: t('chat.mentionTabMcp') },
+    { id: 'connectors', label: t('chat.mentionTabConnectors') },
+    { id: 'files', label: t('chat.mentionTabFiles') },
   ];
   const showPlugins = tab === 'all' || tab === 'plugins';
   const showSkills = tab === 'all' || tab === 'skills';
@@ -2515,7 +2601,7 @@ function MentionPopover({
   }, [connectors, files, plugins, skills, mcpServers, tab]);
   return (
     <div className="mention-popover" data-testid="mention-popover">
-      <div className="mention-tabs" role="tablist" aria-label="Mention surfaces">
+      <div className="mention-tabs" role="tablist" aria-label={t('chat.mentionTabsAria')}>
         {tabs.map((item) => (
           <button
             key={item.id}
@@ -2534,15 +2620,15 @@ function MentionPopover({
         {!hasVisibleResults ? (
           <div className="mention-empty">
             {query ? (
-              <>No results for “{query}”.</>
+              <>{t('chat.mentionNoResults', { query })}</>
             ) : (
-              <>Search plugins, skills, MCP servers, connectors, and Design Files.</>
+              <>{t('chat.mentionSearchPrompt')}</>
             )}
           </div>
         ) : null}
         {showPlugins && plugins.length > 0 ? (
         <>
-          <div className="mention-section-label">Plugins</div>
+          <div className="mention-section-label">{t('chat.mentionSectionPlugins')}</div>
           {plugins.map((p) => (
             <button
               key={`plugin-${p.id}`}
@@ -2559,14 +2645,14 @@ function MentionPopover({
                   {p.manifest?.description ?? p.id}
                 </span>
               </span>
-              <span className="mention-meta">{pluginSourceLabel(p)}</span>
+              <span className="mention-meta">{pluginSourceLabel(p, t)}</span>
             </button>
           ))}
         </>
       ) : null}
         {showSkills && skills.length > 0 ? (
           <>
-            <div className="mention-section-label">Skills</div>
+            <div className="mention-section-label">{t('chat.mentionSectionSkills')}</div>
             {skills.map((skill) => {
               const active = skill.id === currentSkillId;
               return (
@@ -2585,7 +2671,7 @@ function MentionPopover({
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{active ? 'Active' : skill.mode}</span>
+                  <span className="mention-meta">{active ? t('chat.mentionActiveSkill') : skill.mode}</span>
                 </button>
               );
             })}
@@ -2593,7 +2679,7 @@ function MentionPopover({
         ) : null}
         {showMcp && mcpServers.length > 0 ? (
           <>
-            <div className="mention-section-label">MCP</div>
+            <div className="mention-section-label">{t('chat.mentionSectionMcp')}</div>
             {mcpServers.map((server) => (
               <button
                 key={`mcp-${server.id}`}
@@ -2601,7 +2687,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickMcp(server)}
-                title={`Use ${server.label || server.id}`}
+                title={t('chat.mentionUseMcpTitle', { name: server.label || server.id })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -2617,7 +2703,7 @@ function MentionPopover({
         ) : null}
         {showConnectors && connectors.length > 0 ? (
           <>
-            <div className="mention-section-label">Connectors</div>
+            <div className="mention-section-label">{t('chat.mentionSectionConnectors')}</div>
             {connectors.map((connector) => (
               <button
                 key={`connector-${connector.id}`}
@@ -2625,7 +2711,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickConnector(connector)}
-                title={`Use ${connector.name}`}
+                title={t('chat.mentionUseConnectorTitle', { name: connector.name })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -2641,7 +2727,7 @@ function MentionPopover({
         ) : null}
         {showFiles && files.length > 0 ? (
         <>
-          <div className="mention-section-label">Design files</div>
+          <div className="mention-section-label">{t('chat.mentionSectionFiles')}</div>
           {files.map((f) => {
             const key = f.path ?? f.name;
             return (
@@ -2669,6 +2755,28 @@ function MentionPopover({
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function loadComposerDraft(key?: string): string | null {
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function saveComposerDraft(key: string | undefined, draft: string) {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    if (draft) {
+      window.localStorage.setItem(key, draft);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be unavailable in privacy modes; the composer should still work.
+  }
 }
 
 function looksLikeImage(name: string): boolean {

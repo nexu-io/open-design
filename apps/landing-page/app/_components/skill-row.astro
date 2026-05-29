@@ -10,7 +10,6 @@
  */
 import type { SkillRecord } from '../_lib/catalog';
 import { localeFromPath, localizedHref } from '../i18n';
-import LazyImg from './lazy-img.astro';
 
 export interface Props {
   skill: SkillRecord;
@@ -21,11 +20,16 @@ const { skill, index } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
 
-// The first ~4 rows are visible above the fold on a typical laptop and
-// always render at the top of the first catalog list a visitor sees.
-// Skip the IntersectionObserver round-trip for them; everything below
-// uses precise lazy loading (rootMargin 300px) via the global script.
-const aboveFold = index < 4;
+// Catalog row thumbs are tiny (~130×80 rendered, single-format PNGs)
+// so we deliberately bypass the precise IntersectionObserver pipeline.
+// On long lists like /skills/instructions/ (96 rows) the observer's
+// swap latency stranded mid-page rows on the SVG placeholder during
+// fast scrolls. Native lazy loading (the browser's own 1250-3000px
+// lookahead) keeps the upcoming rows pre-fetched without the
+// observer round-trip; only the first three rows go eager so they
+// paint immediately on first paint instead of waiting for the
+// browser's lazy queue.
+const eager = index < 3;
 ---
 
 <li class="catalog-row catalog-row-skill">
@@ -33,10 +37,12 @@ const aboveFold = index < 4;
     <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
     <span class="row-thumb">
       {skill.previewUrl ? (
-        <LazyImg
+        <img
           src={skill.previewUrl}
           alt=""
-          loading={aboveFold ? 'eager' : 'precise'}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchpriority={eager ? 'high' : 'auto'}
         />
       ) : (
         <span class="row-thumb-empty" aria-hidden="true" />

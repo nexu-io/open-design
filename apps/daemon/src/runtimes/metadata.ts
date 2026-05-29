@@ -3,6 +3,10 @@ const AGENT_INSTALL_LINKS: Record<
   string,
   { installUrl?: string; docsUrl?: string }
 > = {
+  amr: {
+    installUrl: 'https://github.com/nexu-io/vela',
+    docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
+  },
   claude: {
     installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
     docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
@@ -68,8 +72,8 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://github.com/mistralai/vibe-acp',
   },
   deepseek: {
-    installUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI',
-    docsUrl: 'https://github.com/deepseek-ai/DeepSeek-TUI/blob/main/README.md',
+    installUrl: 'https://github.com/Hmbown/CodeWhale',
+    docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
   },
 };
 

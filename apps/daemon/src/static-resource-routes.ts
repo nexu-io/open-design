@@ -284,7 +284,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         res.setHeader('Access-Control-Allow-Origin', 'null');
       }
       res.setHeader('Cache-Control', 'no-store');
-      res.sendFile(sheet.absPath);
+      const buf = await fs.promises.readFile(sheet.absPath);
+      res.send(buf);
     } catch (err: any) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -502,7 +503,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // The example response above rewrites `./assets/<file>` into a request
   // against this route; we still keep the on-disk paths human-friendly so
   // contributors can preview `example.html` straight from disk.
-  app.get('/api/skills/:id/assets/*', async (req, res) => {
+  app.get('/api/skills/:id/assets/*splat', async (req, res) => {
     try {
       // Same rationale as /example above — assets need to resolve whether
       // the owning skill folder lives under skills/ or design-templates/.
@@ -511,7 +512,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
       }
-      const relPath = String((req.params as any)[0] || '');
+      const splatParam = (req.params as { splat?: string | string[] }).splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
       const assetsRoot = path.resolve(skill.dir, 'assets');
       const target = path.resolve(assetsRoot, relPath);
       if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
@@ -526,7 +528,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
-      res.type(mimeFor(target)).sendFile(target);
+      await res.type(mimeFor(target)).sendFile(target);
     } catch (err: any) {
       res.status(500).type('text/plain').send(String(err));
     }
@@ -580,7 +582,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
       const systems = await listAllDesignSystems();
       const designSystemId = path.basename(fs.realpathSync.native(result.dir));
-      const designSystem = systems.find((system) => system.id === designSystemId);
+      const designSystem = findUserDesignSystemInCatalog(systems, designSystemId);
       if (!designSystem) {
         return res.status(500).json({ error: `installed design system was not found in catalog: ${result.dir}` });
       }
@@ -636,10 +638,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         ...(typeof body.name === 'string' ? { name: body.name } : {}),
         ...(importMode ? { importMode } : {}),
         ...(craftApplies ? { craftApplies } : {}),
-        reservedIds: before.map((system) => system.id),
+        reservedIds: designSystemDirIdsFromCatalog(before),
       });
       const systems = await listAllDesignSystems();
-      const designSystem = systems.find((system) => system.id === result.id);
+      const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
         return sendApiError(
           res,
@@ -679,11 +681,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(typeof body.branch === 'string' ? { branch: body.branch } : {}),
           ...(importMode ? { importMode } : {}),
           ...(craftApplies ? { craftApplies } : {}),
-          reservedIds: before.map((system) => system.id),
+          reservedIds: designSystemDirIdsFromCatalog(before),
         },
       );
       const systems = await listAllDesignSystems();
-      const designSystem = systems.find((system) => system.id === result.id);
+      const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
         return sendApiError(
           res,
@@ -720,6 +722,24 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
+}
+
+function userDesignSystemCatalogId(dirId: string): string {
+  return `user:${dirId}`;
+}
+
+function findUserDesignSystemInCatalog<T extends { id: string }>(
+  systems: T[],
+  dirId: string,
+): T | undefined {
+  const catalogId = userDesignSystemCatalogId(dirId);
+  return systems.find((system) => system.id === catalogId || system.id === dirId);
+}
+
+function designSystemDirIdsFromCatalog(systems: Array<{ id: string }>): string[] {
+  return systems.map((system) =>
+    system.id.startsWith('user:') ? system.id.slice('user:'.length) : system.id,
+  );
 }
 
 function normalizeDesignSystemImportMode(value: unknown): 'normalized' | 'hybrid' | 'verbatim' | undefined {
