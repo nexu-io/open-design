@@ -55,6 +55,10 @@
   transition: background-color 120ms ease, color 120ms ease,
     border-color 120ms ease;
 }
+.plugin-share-trigger.ghost {
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
 .plugin-share-trigger--solo {
   border: 1px solid var(--border);
   background: var(--bg-panel);
@@ -429,4 +433,3 @@
   min-height: 56px;
   resize: vertical;
 }
-

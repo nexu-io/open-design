@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type WheelEvent } from 'react';
 
 import { Icon } from './Icon';
+import { RemixIcon } from './RemixIcon';
+import { useT } from '../i18n';
 import type { PreviewVisualMarkKind } from '../types';
 import { requestPreviewSnapshot } from '../runtime/exports';
-
-export type PreviewDrawMode = 'click' | 'draw';
+import { isImeComposing } from '../utils/imeComposing';
 
 interface Point { x: number; y: number }
 interface Stroke { points: Point[] }
@@ -28,13 +29,14 @@ export interface AnnotationEventDetail {
   markKind?: PreviewVisualMarkKind;
   bounds?: { x: number; y: number; width: number; height: number };
   target?: CaptureTarget | null;
+  ack?: (result: { ok: boolean; message?: string }) => void;
 }
 
 interface Props {
   children: ReactNode;
   active?: boolean;
+  captureViewport?: boolean;
   onActiveChange?: (active: boolean) => void;
-  onModeChange?: (mode: PreviewDrawMode) => void;
   captureTarget?: CaptureTarget | null;
   filePath?: string;
   sendDisabled?: boolean;
@@ -43,37 +45,35 @@ interface Props {
 
 const STROKE_COLOR = '#ff3b30';
 const STROKE_WIDTH = 4;
-const ACTIVE_BUTTON_COLOR = 'var(--accent)';
 const TARGET_COLOR = '#1677ff';
 
 export function PreviewDrawOverlay({
   children,
   active = false,
+  captureViewport = false,
   onActiveChange,
-  onModeChange,
   captureTarget = null,
   filePath,
   sendDisabled = false,
   sendDisabledReason,
 }: Props) {
+  const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [mode, setMode] = useState<PreviewDrawMode>('click');
   const [note, setNote] = useState('');
   const strokesRef = useRef<Stroke[]>([]);
+  const undoneStrokesRef = useRef<Stroke[]>([]);
   const drawingRef = useRef<Stroke | null>(null);
+  const composingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
+  const [undoCount, setUndoCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
   const [pendingAction, setPendingAction] = useState<'queue' | 'send' | null>(null);
+  const [captureWarning, setCaptureWarning] = useState<{
+    action: 'queue' | 'send';
+    message: string;
+  } | null>(null);
   const sending = pendingAction !== null;
-
-  useEffect(() => {
-    if (active) setMode('draw');
-    else setMode('click');
-  }, [active]);
-
-  useEffect(() => {
-    onModeChange?.(mode);
-  }, [mode, onModeChange]);
 
   const redraw = useCallback(() => {
     const cvs = canvasRef.current;
@@ -83,19 +83,19 @@ export function PreviewDrawOverlay({
     if (!ctx) return;
     ctx.clearRect(0, 0, cvs.width, cvs.height);
     ctx.strokeStyle = STROKE_COLOR;
-    ctx.lineWidth = STROKE_WIDTH;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.lineWidth = STROKE_WIDTH * dpr;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const dpr = window.devicePixelRatio || 1;
     const all = drawingRef.current ? [...strokesRef.current, drawingRef.current] : strokesRef.current;
     for (const s of all) {
       const first = s.points[0];
       if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(first.x * dpr, first.y * dpr);
+      ctx.moveTo(first.x * cvs.width, first.y * cvs.height);
       for (let i = 1; i < s.points.length; i++) {
         const p = s.points[i]!;
-        ctx.lineTo(p.x * dpr, p.y * dpr);
+        ctx.lineTo(p.x * cvs.width, p.y * cvs.height);
       }
       ctx.stroke();
     }
@@ -119,23 +119,39 @@ export function PreviewDrawOverlay({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [redraw, mode, hasInk]);
+  }, [redraw, active, hasInk]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        setMode('click');
         onActiveChange?.(false);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoStroke();
+        else undoStroke();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onActiveChange]);
+  }, [onActiveChange, sending]);
+
+  function syncHistoryState() {
+    setHasInk(strokesRef.current.length > 0);
+    setUndoCount(strokesRef.current.length);
+    setRedoCount(undoneStrokesRef.current.length);
+  }
 
   function pointFromEvent(e: PointerEvent): Point {
     const cvs = canvasRef.current!;
     const rect = cvs.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+    const y = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+    return {
+      x: Math.min(1, Math.max(0, x)),
+      y: Math.min(1, Math.max(0, y)),
+    };
   }
 
   function activePreviewIframe(): HTMLIFrameElement | null {
@@ -146,28 +162,29 @@ export function PreviewDrawOverlay({
   }
 
   function onPointerDown(e: PointerEvent) {
-    if (mode !== 'draw' || sending) return;
+    if (!active || sending) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     drawingRef.current = { points: [pointFromEvent(e)] };
     redraw();
   }
   function onPointerMove(e: PointerEvent) {
-    if (mode !== 'draw' || sending || !drawingRef.current) return;
+    if (!active || sending || !drawingRef.current) return;
     drawingRef.current.points.push(pointFromEvent(e));
     redraw();
   }
   function onPointerUp() {
-    if (mode !== 'draw' || sending || !drawingRef.current) return;
+    if (!active || sending || !drawingRef.current) return;
     if (drawingRef.current.points.length > 1) {
       strokesRef.current.push(drawingRef.current);
-      setHasInk(true);
+      undoneStrokesRef.current = [];
+      syncHistoryState();
     }
     drawingRef.current = null;
     redraw();
   }
 
   function onCanvasWheel(e: WheelEvent<HTMLCanvasElement>) {
-    if (mode !== 'draw' || sending) return;
+    if (!active || sending) return;
     const iframe = activePreviewIframe();
     const win = iframe?.contentWindow;
     if (!win || typeof win.scrollBy !== 'function') return;
@@ -177,24 +194,52 @@ export function PreviewDrawOverlay({
 
   function clearInk() {
     strokesRef.current = [];
+    undoneStrokesRef.current = [];
     drawingRef.current = null;
-    setHasInk(false);
+    syncHistoryState();
     redraw();
+  }
+
+  function undoStroke() {
+    if (sending) return;
+    const stroke = strokesRef.current.pop();
+    if (!stroke) return;
+    undoneStrokesRef.current.push(stroke);
+    drawingRef.current = null;
+    syncHistoryState();
+    redraw();
+  }
+
+  function redoStroke() {
+    if (sending) return;
+    const stroke = undoneStrokesRef.current.pop();
+    if (!stroke) return;
+    strokesRef.current.push(stroke);
+    drawingRef.current = null;
+    syncHistoryState();
+    redraw();
+  }
+
+  function closeOverlay() {
+    onActiveChange?.(false);
   }
 
   useEffect(() => {
     if (active) return;
     strokesRef.current = [];
+    undoneStrokesRef.current = [];
     drawingRef.current = null;
-    setHasInk(false);
+    syncHistoryState();
     redraw();
   }, [active, redraw]);
 
   function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
     const points = strokesRef.current.flatMap((stroke) => stroke.points);
     if (points.length === 0) return null;
-    const xs = points.map((point) => point.x);
-    const ys = points.map((point) => point.y);
+    const xs = points.map((point) => point.x * rect.width);
+    const ys = points.map((point) => point.y * rect.height);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     const maxX = Math.max(...xs);
@@ -304,10 +349,10 @@ export function PreviewDrawOverlay({
       const first = s.points[0];
       if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(first.x * sx, first.y * sy);
+      ctx.moveTo(first.x * snap.w, first.y * snap.h);
       for (let i = 1; i < s.points.length; i++) {
         const p = s.points[i]!;
-        ctx.lineTo(p.x * sx, p.y * sy);
+        ctx.lineTo(p.x * snap.w, p.y * snap.h);
       }
       ctx.stroke();
     }
@@ -316,9 +361,10 @@ export function PreviewDrawOverlay({
 
   async function send(action: 'queue' | 'send') {
     const hasTarget = Boolean(captureTarget);
-    const shouldCapture = hasInk || hasTarget;
+    const shouldCapture = hasInk || hasTarget || captureViewport;
     const canSubmit = shouldCapture || Boolean(note.trim());
     if (sending || !canSubmit) return;
+    setCaptureWarning(null);
     setPendingAction(action);
     try {
       let file: File | null = null;
@@ -327,49 +373,61 @@ export function PreviewDrawOverlay({
         const snap = await requestSnapshot();
         if (snap) blob = await compositeWithBackground(snap);
         if (!blob) {
-          const cvs = canvasRef.current;
-          if (cvs) {
-            const copy = document.createElement('canvas');
-            copy.width = cvs.width;
-            copy.height = cvs.height;
-            const ctx = copy.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(cvs, 0, 0);
-              const dpr = window.devicePixelRatio || 1;
-              drawCaptureTarget(ctx, dpr, dpr, captureTarget);
-              blob = await new Promise<Blob | null>((resolve) => copy.toBlob((b) => resolve(b), 'image/png'));
-            } else {
-              blob = await new Promise<Blob | null>((resolve) => cvs.toBlob((b) => resolve(b), 'image/png'));
-            }
-          }
+          setCaptureWarning({
+            action,
+            message: captureViewport && !hasInk && !hasTarget
+              ? t('chat.annotationPreviewMissing')
+              : t('chat.annotationPreviewMissingInk'),
+          });
+          return;
         }
-        if (blob) {
-          const ts = new Date().toISOString().replace(/[:.]/g, '-');
-          file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
-        }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
       }
       const kind = markKind();
-      const detail: AnnotationEventDetail = {
-        file,
-        note: note.trim(),
-        action,
-        filePath: captureTarget?.filePath || filePath,
-        markKind: kind,
-        bounds: kind ? annotationBounds() : undefined,
-        target: captureTarget,
-      };
-      window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
+        let settled = false;
+        const finish = (next: { ok: boolean; message?: string }) => {
+          if (settled) return;
+          settled = true;
+          resolve(next);
+        };
+        window.setTimeout(() => {
+          finish({ ok: false, message: t('chat.annotationTimeout') });
+        }, 60000);
+        const detail: AnnotationEventDetail = {
+          file,
+          note: note.trim(),
+          action,
+          filePath: captureTarget?.filePath || filePath,
+          markKind: kind,
+          bounds: kind ? annotationBounds() : undefined,
+          target: captureTarget,
+          ack: finish,
+        };
+        window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      });
+      if (!result.ok) {
+        setCaptureWarning({
+          action,
+          message: result.message || t('chat.annotationFailed'),
+        });
+        return;
+      }
       clearInk();
+      setCaptureWarning(null);
       setNote('');
     } finally {
       setPendingAction(null);
     }
   }
 
-  const overlayPointer = mode === 'draw' ? 'auto' : 'none';
-  const showCanvas = active || mode === 'draw' || hasInk;
-  const canSubmit = hasInk || Boolean(captureTarget) || Boolean(note.trim());
+  const overlayPointer = active ? 'auto' : 'none';
+  const showCanvas = active || hasInk;
+  const canSubmit = hasInk || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
   const canSend = canSubmit;
+  const canUndo = undoCount > 0 && !sending;
+  const canRedo = redoCount > 0 && !sending;
 
   return (
     <div
@@ -394,60 +452,85 @@ export function PreviewDrawOverlay({
             position: 'absolute',
             inset: 0,
             pointerEvents: overlayPointer,
-            cursor: mode === 'draw' ? 'crosshair' : 'default',
+            cursor: active ? 'crosshair' : 'default',
           }}
         />
       ) : null}
       {active ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 16,
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 8px',
-            background: 'rgba(20,20,20,0.92)',
-            color: '#fff',
-            borderRadius: 999,
-            boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 10,
-            pointerEvents: 'auto',
-            fontSize: 13,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setMode((m) => (m === 'draw' ? 'click' : 'draw'))}
-            disabled={sending}
-            style={pillStyle(mode === 'draw')}
-            aria-pressed={mode === 'draw'}
-          >
-            Draw
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('click')}
-            disabled={sending}
-            style={pillStyle(mode === 'click')}
-            aria-pressed={mode === 'click'}
-          >
-            Click
-          </button>
-          {hasInk ? (
-            <button type="button" onClick={clearInk} disabled={sending} style={ghostStyle}>
-              Clear
-            </button>
+        <>
+          {captureWarning ? (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 82,
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                maxWidth: 'min(420px, calc(100% - 32px))',
+                padding: '8px 12px',
+                borderRadius: 999,
+                background: 'rgba(20,20,20,0.92)',
+                color: '#fff',
+                boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(8px)',
+                zIndex: 11,
+                pointerEvents: 'none',
+                fontSize: 13,
+                lineHeight: 1.35,
+              }}
+            >
+              <span>{captureWarning.message}</span>
+            </div>
           ) : null}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 16,
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 8px',
+              background: 'rgba(20,20,20,0.92)',
+              color: '#fff',
+              borderRadius: 999,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 10,
+              pointerEvents: 'auto',
+              fontSize: 13,
+            }}
+          >
+          <button
+            type="button"
+            onClick={undoStroke}
+            disabled={!canUndo}
+            style={historyButtonStyle(canUndo)}
+            aria-label={t('manualEdit.undo')}
+            title={t('manualEdit.undo')}
+          >
+            <RemixIcon name="arrow-go-back-line" size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={redoStroke}
+            disabled={!canRedo}
+            style={historyButtonStyle(canRedo)}
+            aria-label={t('manualEdit.redo')}
+            title={t('manualEdit.redo')}
+          >
+            <RemixIcon name="arrow-go-forward-line" size={14} />
+          </button>
           <input
             className="preview-draw-note-input"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={sending}
-            placeholder="Type anywhere to add a note"
+            placeholder={t('chat.annotationNotePlaceholder')}
             style={{
               background: 'rgba(218, 97, 56, 0.18)',
               border: '1px solid rgba(248, 150, 104, 0.82)',
@@ -460,7 +543,16 @@ export function PreviewDrawOverlay({
               fontSize: 13,
               transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') void send('queue'); }}
+            onCompositionStart={() => {
+              composingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (isImeComposing(e, composingRef.current)) return;
+              if (e.key === 'Enter') void send('send');
+            }}
           />
           <button
             type="button"
@@ -475,10 +567,10 @@ export function PreviewDrawOverlay({
             {pendingAction === 'queue' ? (
               <>
                 <Icon name="spinner" size={12} />
-                <span>Queueing...</span>
+                <span>{t('chat.annotationQueueing')}</span>
               </>
             ) : (
-              'Queue'
+              t('chat.annotationQueue')
             )}
           </button>
           <button
@@ -495,13 +587,24 @@ export function PreviewDrawOverlay({
             {pendingAction === 'send' ? (
               <>
                 <Icon name="spinner" size={12} />
-                <span>Sending...</span>
+                <span>{t('chat.annotationSending')}</span>
               </>
             ) : (
-              'Send'
+              t('chat.send')
             )}
           </button>
-        </div>
+          <button
+            type="button"
+            onClick={closeOverlay}
+            disabled={sending}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            style={iconButtonStyle}
+          >
+            <Icon name="close" size={13} />
+          </button>
+          </div>
+        </>
       ) : null}
     </div>
   );
@@ -517,7 +620,7 @@ function pillStyle(active: boolean): CSSProperties {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
-    background: active ? ACTIVE_BUTTON_COLOR : 'transparent',
+    background: active ? 'var(--accent)' : 'transparent',
     color: active ? '#fff' : 'inherit',
   };
 }
@@ -532,5 +635,27 @@ const ghostStyle: CSSProperties = {
   alignItems: 'center',
   gap: 6,
   background: 'transparent',
+  color: 'inherit',
+};
+
+function historyButtonStyle(enabled: boolean): CSSProperties {
+  return {
+    ...iconButtonStyle,
+    opacity: enabled ? 1 : 0.36,
+    cursor: enabled ? 'pointer' : 'not-allowed',
+  };
+}
+
+const iconButtonStyle: CSSProperties = {
+  border: '1px solid rgba(255,255,255,0.18)',
+  borderRadius: 999,
+  width: 28,
+  height: 28,
+  padding: 0,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(255,255,255,0.06)',
   color: 'inherit',
 };

@@ -76,6 +76,7 @@ export type WinPaths = {
   packagedMainPrebundlePath: string;
   resourceRoot: string;
   setupPath: string;
+  setupZipPath: string;
   startMenuShortcutPath: string;
   tarballsRoot: string;
   userDesktopShortcutPath: string;
@@ -96,6 +97,7 @@ export type WinPackResult = {
   installerPath: string | null;
   latestYmlPath: string | null;
   outputRoot: string;
+  portableZipPath: string | null;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
   cacheReport: CacheReport;
@@ -123,12 +125,13 @@ export type WinSizeReport = {
     };
     nodeGypRebuild: boolean;
     npmRebuild: boolean;
-    targets: Array<"dir" | "nsis">;
+    targets: Array<"dir" | "nsis" | "zip">;
     webOutputMode: ToolPackConfig["webOutputMode"];
   };
   generatedAt: string;
   installerBytes: number | null;
   outputRootBytes: number;
+  portableZipBytes: number | null;
   resourceRootBytes: number;
   runtimeNamespaceRoot: string;
   topLevel: {

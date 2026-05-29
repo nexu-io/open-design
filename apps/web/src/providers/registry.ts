@@ -87,7 +87,7 @@ function deployProviderQuery(providerId?: WebDeployProviderId): string {
 
 export async function fetchAgents(options?: { throwOnError?: boolean }): Promise<AgentInfo[]> {
   try {
-    const resp = await fetch('/api/agents');
+    const resp = await fetch('/api/agents', { cache: 'no-store' });
     if (!resp.ok) {
       if (options?.throwOnError) throw new Error(`agents ${resp.status}`);
       return [];
@@ -1560,17 +1560,39 @@ export async function writeProjectTextFile(
   content: string,
   options?: { artifactManifest?: ArtifactManifest },
 ): Promise<ProjectFile | null> {
+  const result = await writeProjectTextFileDetailed(projectId, name, content, options);
+  return result.ok ? result.file : null;
+}
+
+export type WriteProjectTextFileResult =
+  | { ok: true; file: ProjectFile }
+  | { ok: false; status?: number; code?: string; message: string };
+
+export async function writeProjectTextFileDetailed(
+  projectId: string,
+  name: string,
+  content: string,
+  options?: { artifactManifest?: ArtifactManifest },
+): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const body = await readApiErrorBody(resp);
+      return {
+        ok: false,
+        status: resp.status,
+        code: body.code,
+        message: body.message || resp.statusText || 'Save failed',
+      };
+    }
     const json = (await resp.json()) as { file: ProjectFile };
-    return json.file;
+    return { ok: true, file: json.file };
   } catch {
-    return null;
+    return { ok: false, message: 'Network error while saving the file' };
   }
 }
 

@@ -79,7 +79,9 @@ function resolveDistDir(defaultValue: string) {
   return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || '.' : configured);
 }
 
-const DIST_DIR = resolveDistDir(isProd ? (shouldStaticExport ? 'out' : '.next') : '.next');
+const DIST_DIR = shouldStaticExport && !process.env.OD_WEB_DIST_DIR
+  ? null
+  : resolveDistDir('.next');
 
 function resolveDevTsconfigPath() {
   const configured = process.env.OD_WEB_TSCONFIG_PATH;
@@ -166,9 +168,10 @@ const nextConfig: NextConfig = {
     root: WORKSPACE_ROOT,
   },
   ...(DEV_TSCONFIG_PATH ? { typescript: { tsconfigPath: DEV_TSCONFIG_PATH } } : {}),
-  // Keep the bundle output predictable so the daemon's STATIC_DIR can point
-  // at it without any glob trickery.
-  distDir: DIST_DIR,
+  // Static exports keep Next.js's default `out/` output directory so static
+  // hosts like Vercel can publish the generated site directly. Server runtimes
+  // still keep a predictable traced build directory for sidecar launchers.
+  ...(DIST_DIR ? { distDir: DIST_DIR } : {}),
   ...(shouldStaticExport
     ? {
         output: 'export' as const,

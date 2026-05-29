@@ -1,0 +1,122 @@
+---
+/*
+ * Unified catalog row used across the new `/plugins/...` routes.
+ *
+ * Sits next to `skill-row.astro`, but accepts either a SkillRecord or
+ * a TemplateRecord — the two share the same display surface (preview,
+ * name, description, mode chip) but differ on the detail-page URL
+ * (`/skills/<slug>/` vs `/templates/<slug>/`). One component avoids
+ * forcing every callsite to write the same five-column markup twice.
+ */
+import type { SkillRecord, TemplateRecord } from '../_lib/catalog';
+import {
+  resolveBundledDescription,
+  resolveBundledTitle,
+  type BundledPluginRecord,
+} from '../_lib/bundled-plugins';
+import { localeFromPath, localizedHref } from '../i18n';
+import { localizeTaxonomyValue } from '../content-i18n';
+
+interface SkillItem {
+  kind: 'skill';
+  record: SkillRecord;
+}
+interface TemplateItem {
+  kind: 'template';
+  record: TemplateRecord;
+}
+interface BundledItem {
+  kind: 'bundled';
+  record: BundledPluginRecord;
+}
+
+export interface Props {
+  item: SkillItem | TemplateItem | BundledItem;
+  index: number;
+  /**
+   * Optional value for `data-scene` on the rendered `<li>`. Used by
+   * `/plugins/templates/<kind>/` so its client-side scene filter can
+   * toggle visibility without wrapping the row in an extra (and
+   * HTML-illegal) outer `<li>`.
+   */
+  dataScene?: string;
+}
+
+const { item, index, dataScene } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+// Catalog rows use native lazy-loading; the first three rows above the
+// fold get eager + high fetchpriority so first paint is unblocked.
+const eager = index < 3;
+
+let detailHref: string;
+let name: string;
+let description: string;
+let previewUrl: string | null;
+let modeLabel: string | undefined;
+let scenarioLabel: string | undefined;
+
+if (item.kind === 'skill') {
+  detailHref = `/skills/${item.record.slug}/`;
+  name = item.record.name;
+  description = item.record.description;
+  previewUrl = item.record.previewUrl;
+  modeLabel = item.record.modeLabel;
+  scenarioLabel = item.record.scenarioLabel;
+} else if (item.kind === 'template') {
+  detailHref = item.record.detailHref;
+  name = item.record.name;
+  description = item.record.summary;
+  previewUrl = item.record.previewUrl;
+  modeLabel = item.record.modeLabel;
+  scenarioLabel = item.record.scenarioLabel;
+} else {
+  // Bundled-plugin manifest. Preview comes straight from the manifest's
+  // `od.preview.poster` URL (already on R2), so we don't need a local
+  // generated PNG. Fall back to null if the author didn't ship one —
+  // the row gets the diagonal-stripe placeholder and styling stays
+  // consistent with the rest of the catalog.
+  detailHref = item.record.detailHref;
+  name = resolveBundledTitle(item.record, locale);
+  description = resolveBundledDescription(item.record, locale);
+  previewUrl = item.record.previewPoster ?? null;
+  // Bundled-plugin records ship raw taxonomy slugs (e.g. `video`, `image`).
+  // Run them through the shared TAXONOMY_TERMS map so the chip rail localizes
+  // alongside skill/template rows instead of leaking English on every locale.
+  // No raw-slug fallback here: when localizeTaxonomyValue returns undefined
+  // (slug isn't in any translation map), we'd rather drop the chip entirely
+  // than surface a kebab slug like `code-migration` or `plugin-sharing` that
+  // reads like a debug artifact next to the localized name.
+  modeLabel = localizeTaxonomyValue(item.record.mode, locale);
+  scenarioLabel = localizeTaxonomyValue(item.record.scenario, locale);
+}
+---
+
+<li class="catalog-row catalog-row-skill" data-scene={dataScene}>
+  <a href={href(detailHref)}>
+    <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
+    <span class="row-thumb">
+      {previewUrl ? (
+        <img
+          src={previewUrl}
+          alt=""
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchpriority={eager ? 'high' : 'auto'}
+        />
+      ) : (
+        <span class="row-thumb-empty" aria-hidden="true" />
+      )}
+    </span>
+    <span class="row-body">
+      <span class="row-name">{name}</span>
+      <span class="row-desc">{description}</span>
+    </span>
+    <span class="row-meta">
+      {modeLabel && <span class="meta-tag">{modeLabel}</span>}
+      {scenarioLabel && <span class="meta-tag muted">{scenarioLabel}</span>}
+    </span>
+    <span class="row-arrow" aria-hidden="true">→</span>
+  </a>
+</li>

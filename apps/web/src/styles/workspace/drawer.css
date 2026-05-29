@@ -348,6 +348,44 @@
   }
 }
 
+
+/* Keep the connector details drawer inside the embedded connectors panel.
+   The shared drawer remains full-viewport elsewhere, but embedded usage
+   needs an in-panel overlay so it does not stack above the settings modal. */
+.connectors-panel-embedded:has(.connector-drawer-backdrop) {
+  min-height: clamp(500px, 62vh, 700px);
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+.connectors-panel-embedded .connector-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  align-items: stretch;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg) 24%, transparent);
+  border-radius: inherit;
+}
+.connectors-panel-embedded .connector-drawer {
+  width: min(440px, 58%);
+  height: 100%;
+  max-height: none;
+  border-radius: var(--radius);
+  box-shadow: 0 20px 48px -28px rgba(15, 23, 42, 0.55);
+}
+@media (max-width: 720px) {
+  .connectors-panel-embedded:has(.connector-drawer-backdrop) {
+    min-height: clamp(520px, 70vh, 640px);
+  }
+  .connectors-panel-embedded .connector-drawer-backdrop {
+    padding: 0;
+  }
+  .connectors-panel-embedded .connector-drawer {
+    width: 100%;
+    border-radius: var(--radius);
+  }
+}
+
 /* Recent / Your designs segmented pill */
 .subtab-pill {
   display: inline-flex;
@@ -355,7 +393,7 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  gap: 2px;
+  gap: 4px;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
@@ -1508,4 +1546,50 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.designs-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.designs-empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0 0 24px 0;
+  letter-spacing: -0.01em;
+}
+
+
+.designs-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  box-shadow: 
+    0 4px 12px -3px color-mix(in srgb, var(--accent) 25%, transparent),
+    var(--shadow-sm);
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1), background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.designs-empty-cta:hover {
+  transform: scale(1.02);
+  box-shadow: 
+    0 6px 16px -4px color-mix(in srgb, var(--accent) 35%, transparent),
+    var(--shadow-md);
+}
+
+.designs-empty-cta:active {
+  transform: scale(0.98);
 }

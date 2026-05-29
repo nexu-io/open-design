@@ -177,6 +177,7 @@ jobs:
             --mac-compression normal
             --to dmg
             --json
+            --require-vela-cli
             --signed
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
@@ -459,7 +460,7 @@ jobs:
             "--namespace", "release-beta-win",
             "--portable",
             "--app-version", "${{ needs.metadata.outputs.beta_version }}",
-            "--to", "nsis",
+            "--to", "all",
             "--json"
           )
           "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -477,7 +478,7 @@ jobs:
               --namespace release-beta-win `
               --portable `
               --app-version "${{ needs.metadata.outputs.beta_version }}" `
-              --to nsis `
+              --to all `
               --json
             if ($LASTEXITCODE -ne 0) {
               throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"

@@ -426,19 +426,16 @@ test('cmd-shim and direct-exe guards are mutually exclusive on a single resoluti
   assert.ok(checkWindowsDirectExeCommandLineBudget(deepseek, exePath, args));
 });
 
-test('deepseek entry does not advertise deepseek-tui as a fallback bin', () => {
-  // `deepseek` is the dispatcher that owns `exec` / `--auto`; `deepseek-tui`
-  // is the runtime companion the dispatcher invokes. Upstream installs both
-  // together (npm and cargo). A `deepseek-tui`-only host is not a supported
-  // install, and `deepseek-tui` itself doesn't accept `exec --auto <prompt>`
-  // — surfacing it via fallbackBins would advertise availability but make
-  // the first /api/chat run fail. Pin the absence so the fallback can't
-  // drift back without an accompanying buildArgs branch + test.
-  assert.equal(
-    Array.isArray((deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins)
-      && ((deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins?.length ?? 0) > 0,
-    false,
-    `deepseek must not declare fallbackBins until the deepseek-tui-only invocation is implemented and tested; got ${JSON.stringify((deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins)}`,
+test('deepseek entry declares codewhale as a fallback bin but not deepseek-tui (issue #2983)', () => {
+  const fallbackBins = (deepseek as TestAgentDef & { fallbackBins?: string[] }).fallbackBins;
+  assert.ok(Array.isArray(fallbackBins), 'deepseek.fallbackBins must be an array');
+  assert.ok(
+    fallbackBins.includes('codewhale'),
+    `deepseek.fallbackBins must include 'codewhale'; got ${JSON.stringify(fallbackBins)}`,
+  );
+  assert.ok(
+    !fallbackBins.includes('deepseek-tui'),
+    'deepseek-tui is the runtime companion and must not be advertised as a dispatcher fallback',
   );
 });
 

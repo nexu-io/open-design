@@ -29,6 +29,8 @@ import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
+const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
+
 function symlinkDir(target: string, link: string): void {
   symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
 }
@@ -212,6 +214,71 @@ process.exit(0);
         });
       },
     );
+  });
+
+  it('retries transient AMR Link catalog failures before aborting startup', async () => {
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const stateFile = join(tmpdir(), `od-amr-model-retry-${randomUUID()}.json`);
+    try {
+      process.env.VELA_RUNTIME_KEY = 'fake-runtime-key';
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+
+      await withFakeAgent(
+        'vela',
+        `
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const stateFile = ${JSON.stringify(stateFile)};
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  const state = existsSync(stateFile)
+    ? JSON.parse(readFileSync(stateFile, 'utf8'))
+    : { attempts: 0 };
+  state.attempts += 1;
+  writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+  if (state.attempts < 3) {
+    process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+    process.exit(1);
+  }
+}
+const child = spawn(process.execPath, [fixture, ...args], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'amr',
+              message: 'hello',
+              model: 'deepseek-v3.2',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+          expect(body).toContain('"type":"text_delta","delta":"vela."');
+          expect(body).not.toContain('model_catalog_unavailable');
+          const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
+          expect(attempts.attempts).toBe(3);
+        },
+      );
+    } finally {
+      rmSync(stateFile, { force: true });
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
   });
 
   it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
@@ -521,6 +588,65 @@ process.stdin.on('end', () => {
         expect(body).not.toContain('unexpected-deck-framework');
       },
     );
+  });
+
+  it('honors mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        conversationId,
+        message: 'plan an image without using OD media',
+        skillId: 'imagegen',
+        mediaExecution: {
+          mode: 'disabled',
+          allowedSurfaces: ['image'],
+        },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as {
+      runs: Array<{ mediaExecution?: { mode?: string; allowedSurfaces?: string[] } }>;
+    };
+    expect(runsBody.runs).toHaveLength(1);
+    expect(runsBody.runs[0]?.mediaExecution).toMatchObject({
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    });
+  });
+
+  it('rejects invalid mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'opencode',
+        conversationId,
+        message: 'generate an image',
+        mediaExecution: { mode: 'provider-router' },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(body).toContain('mediaExecution.mode');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as { runs: unknown[] };
+    expect(runsBody.runs).toEqual([]);
   });
 
   it('propagates ad-hoc skill critique policy into the chat resolver', async () => {
@@ -1195,7 +1321,8 @@ setInterval(() => {}, 1000);
 
           expect(eventsBody).toContain('event: error');
           expect(eventsBody).toContain('Agent stalled without emitting any new output');
-          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toContain('Phase details: spawned agent opencode;');
+          expect(eventsBody).not.toContain('spawned agent binary');
           expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
           expect(statusBody.status).toBe('failed');
         },
@@ -1553,6 +1680,43 @@ describe('chat prompt helpers', () => {
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
+  });
+
+  it('omits the Codex final imagegen override when run media policy blocks execution', () => {
+    const metadata = {
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+      imageAspect: '1:1',
+    };
+    const mediaExecution = {
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    };
+    const generatedImagesDir = resolveCodexGeneratedImagesDir(
+      'codex',
+      metadata,
+      { CODEX_HOME: '/tmp/custom-codex-home' },
+      '/home/tester',
+      mediaExecution,
+    );
+    const otherwiseGrantedDir = resolve('/tmp/custom-codex-home/generated_images');
+    const override = resolveGrantedCodexImagegenOverride({
+      agentId: 'codex',
+      metadata,
+      codexGeneratedImagesDir: otherwiseGrantedDir,
+      extraAllowedDirs: [otherwiseGrantedDir],
+      mediaExecution,
+    });
+    const prompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt: 'daemon media policy prompt',
+      runtimeToolPrompt: 'runtime tools',
+      clientSystemPrompt: 'client instructions',
+      finalPromptOverride: override,
+    });
+
+    expect(generatedImagesDir).toBeNull();
+    expect(override).toBeNull();
+    expect(prompt).not.toContain('## Codex built-in imagegen override');
   });
 
   it('defaults enabled research without an explicit query to the current message', () => {
