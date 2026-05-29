@@ -13,8 +13,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type SetStateAction,
 } from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
@@ -227,6 +229,8 @@ interface Props {
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
   config: AppConfig;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -353,6 +357,8 @@ export function EntryShell({
   designSystemsLoading = false,
   projectsLoading = false,
   config,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   agents,
   daemonLive,
   onModeChange,
@@ -579,6 +585,7 @@ export function EntryShell({
                 <span className="entry-discord-badge__label">Join Discord</span>
               </a>
               <InlineModelSwitcher
+                providerModelsCache={sharedProviderModelsCache}
                 config={config}
                 agents={agents}
                 daemonLive={daemonLive}
@@ -748,6 +755,8 @@ export function EntryShell({
 
 function OnboardingView({
   config,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   agents,
   daemonLive,
   onModeChange,
@@ -761,6 +770,8 @@ function OnboardingView({
   onFinish,
 }: {
   config: AppConfig;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -808,9 +819,11 @@ function OnboardingView({
     | { status: 'running'; inputKey: string }
     | { status: 'done'; inputKey: string; result: ProviderModelsResponse }
   >({ status: 'idle' });
-  const [providerModelsCache, setProviderModelsCache] = useState<
+  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
   >({});
+  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
+  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
   const [profile, setProfile] = useState({
     role: '',
     orgSize: '',
