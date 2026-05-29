@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1050.0",
+    "@open-design/contracts": "workspace:*",
     "@playwright/test": "1.60.0",
     "@types/node": "20.19.39",
     "@types/pngjs": "6.0.5",

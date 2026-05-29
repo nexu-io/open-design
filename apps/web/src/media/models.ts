@@ -35,6 +35,7 @@ export type MediaProviderId =
   | 'nanobanana'
   | 'imagerouter'
   | 'custom-image'
+  | 'comfyui'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -135,11 +136,19 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'custom-image',
     label: 'Custom Image API',
-    hint: 'OpenAI-compatible /v1/images/generations endpoint',
+    hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)',
     integrated: true,
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
     customModelPlaceholder: 'my-image-model',
+  },
+  {
+    id: 'comfyui',
+    label: 'ComfyUI',
+    hint: 'Local JSON workflow server (planned adapter)',
+    integrated: false,
+    defaultBaseUrl: 'http://127.0.0.1:8188',
+    docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow',
   },
   {
     id: 'bfl',
@@ -408,13 +417,13 @@ export const IMAGE_MODELS: MediaModel[] = [
     caps: ['t2i'],
   },
 
-  // Custom OpenAI-compatible /v1/images/generations endpoint.
+  // Custom OpenAI-compatible image generation + edit endpoints.
   {
     id: 'custom-image',
     label: 'custom-image',
     hint: 'Custom · OpenAI-compatible endpoint',
     provider: 'custom-image',
-    caps: ['t2i'],
+    caps: ['t2i', 'i2i'],
   },
 
   // Black Forest Labs FLUX family.

@@ -80,13 +80,14 @@ jobs:
                 tools_dev_tests_required=true
                 tools_pack_tests_required=true
               fi
-              if [[ "$file" == "package.json" || "$file" == "apps/"*/"package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" ]]; then
+              # Keep this filter in sync with flake.nix daemonWorkspacePaths / webWorkspacePaths.
+              if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
                 nix_validation_required=true
               fi
               case "$file" in
                 *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
                   ;;
-                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml|.github/workflows/blog-3day-report.yml|.github/workflows/seo-daily-report.yml|.github/workflows/actionlint.yml|.github/workflows/visual-pr-capture.yml|.github/workflows/visual-pr-comment.yml)
+                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-staging.yml|.github/workflows/landing-page-production.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml|.github/workflows/blog-3day-report.yml|.github/workflows/seo-daily-report.yml|.github/workflows/actionlint.yml|.github/workflows/visual-pr-capture.yml|.github/workflows/visual-pr-comment.yml)
                   ;;
                 *)
                   workspace_validation_required=true
@@ -151,8 +152,96 @@ jobs:
             experimental-features = nix-command flakes
             accept-flake-config = true
 
+      - name: Setup Node for Nix hash refresh
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+
       - name: nix flake check
+        id: flake_check
+        continue-on-error: true
         run: nix flake check --print-build-logs --keep-going
+
+      - name: Generate Nix hash refresh patch
+        id: hash_refresh
+        if: ${{ github.event_name == 'pull_request' && steps.flake_check.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          out_dir="$RUNNER_TEMP/nix-hash-refresh"
+          mkdir -p "$out_dir"
+
+          status="update-failed"
+          if node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts >"$out_dir/update.log" 2>&1; then
+            if git diff --quiet --exit-code -- nix/pnpm-deps.nix; then
+              status="no-change"
+            else
+              git diff -- nix/pnpm-deps.nix >"$out_dir/nix-pnpm-deps.patch"
+              cp nix/pnpm-deps.nix "$out_dir/pnpm-deps.nix"
+              status="patch-generated"
+            fi
+          fi
+
+          printf '{"status":"%s","runId":%s,"prNumber":%s,"headSha":"%s"}\n' \
+            "$status" \
+            '${{ github.run_id }}' \
+            '${{ github.event.pull_request.number }}' \
+            '${{ github.event.pull_request.head.sha }}' >"$out_dir/metadata.json"
+
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Nix hash refresh artifact
+        if: ${{ github.event_name == 'pull_request' && steps.flake_check.outcome == 'failure' && steps.hash_refresh.outputs.status != 'no-change' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-hash-refresh
+          path: ${{ runner.temp }}/nix-hash-refresh
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summarize Nix hash refresh guidance
+        if: ${{ github.event_name == 'pull_request' && steps.flake_check.outcome == 'failure' }}
+        env:
+          HASH_REFRESH_STATUS: ${{ steps.hash_refresh.outputs.status }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${HASH_REFRESH_STATUS:-not-run}" in
+            patch-generated)
+              cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Generated Nix hash refresh
+
+          CI regenerated a patch for `nix/pnpm-deps.nix` and uploaded it as the
+          `nix-hash-refresh` artifact for this run.
+
+          - same-repo PRs: the follow-up `nix-hash-autofix` workflow will try to
+            push the hash-only patch back to the PR branch automatically;
+          - fork PRs: a PR comment will include the patch and artifact guidance.
+          EOF
+              ;;
+            no-change)
+              cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Nix hash refresh unavailable
+
+          `nix flake check` failed, but `nix/pnpm-deps.nix` did not change after
+          running the hash refresh helper. Inspect the Nix build logs for a
+          non-hash failure.
+          EOF
+              ;;
+            *)
+              cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Nix hash refresh failed
+
+          `nix flake check` failed and the helper could not generate a hash-only
+          patch. See the `nix-hash-refresh` artifact for `update.log`.
+          EOF
+              ;;
+          esac
+
+      - name: Fail when Nix validation fails
+        if: ${{ steps.flake_check.outcome == 'failure' }}
+        run: exit 1
 
   preflight:
     name: Preflight

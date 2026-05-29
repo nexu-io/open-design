@@ -13,11 +13,12 @@ import {
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
   type SidecarStamp,
 } from '@open-design/sidecar-proto';
 import {
   resolveLogFilePath,
-  resolveNamespaceRoot,
+  resolveRuntimeNamespaceRoot,
   type SidecarRuntimeContext,
 } from '@open-design/sidecar';
 
@@ -48,10 +49,14 @@ export const STANDALONE_LAUNCH_WARNING =
 
 function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | null): LogSource[] {
   if (runtime == null) return [];
-  const namespaceRoot = resolveNamespaceRoot({
-    base: runtime.base,
+  // In packaged builds `runtime.base` is `<namespaceRoot>/runtime`, so the log
+  // tree lives a level UP at `<namespaceRoot>/logs`; `resolveRuntimeNamespaceRoot`
+  // accounts for that (a plain `resolveNamespaceRoot` here resolved every
+  // daemon/web log to an ENOENT phantom path and captured none of them).
+  const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-    namespace: runtime.namespace,
+    runtime,
+    runtimeMode: SIDECAR_MODES.RUNTIME,
   });
   const apps = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP];
   const sources: LogSource[] = [];

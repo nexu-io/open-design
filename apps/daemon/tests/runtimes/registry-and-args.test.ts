@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
+import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
@@ -107,7 +108,7 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
   withPlatform('darwin', () => {
     const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-    assert.deepEqual(args.slice(0, 9), [
+    assert.deepEqual(args.slice(0, 11), [
       'exec',
       '--json',
       '--skip-git-repo-check',
@@ -115,6 +116,8 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
       'workspace-write',
       '-c',
       'sandbox_workspace_write.network_access=true',
+      '-c',
+      'default_permissions=":workspace"',
       '--disable',
       'plugins',
     ]);
@@ -126,17 +129,48 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
 
   for (const platform of ['darwin', 'linux'] as const) {
     withPlatform(platform, () => {
+      withEnvSnapshot(['WSL_DISTRO_NAME'], () => {
+        delete process.env.WSL_DISTRO_NAME;
+        const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+        assert.equal(args.includes('--full-auto'), false);
+        assert.deepEqual(args.slice(0, 5), [
+          'exec',
+          '--json',
+          '--skip-git-repo-check',
+          '--sandbox',
+          'workspace-write',
+        ]);
+        assert.equal(
+          args.includes('-c'),
+          true,
+        );
+        assert.equal(
+          args.includes('default_permissions=":workspace"'),
+          true,
+        );
+      });
+    });
+  }
+});
+
+test('codex args use danger-full-access sandbox on WSL because workspace-write stays read-only', () => {
+  delete process.env.OD_CODEX_DISABLE_PLUGINS;
+
+  withPlatform('linux', () => {
+    withEnvSnapshot(['WSL_DISTRO_NAME'], () => {
+      process.env.WSL_DISTRO_NAME = 'Ubuntu';
+      assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), true);
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
-      assert.equal(args.includes('--full-auto'), false);
       assert.deepEqual(args.slice(0, 5), [
         'exec',
         '--json',
         '--skip-git-repo-check',
         '--sandbox',
-        'workspace-write',
+        'danger-full-access',
       ]);
+      assert.equal(args.includes('default_permissions=":workspace"'), true);
     });
-  }
+  });
 });
 
 test('codex args use danger-full-access sandbox on Windows because workspace-write blocks PowerShell', () => {
@@ -165,6 +199,7 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
       args.includes('sandbox_workspace_write.network_access=true'),
       false,
     );
+    assert.equal(args.includes('default_permissions=":workspace"'), true);
   });
 });
 
@@ -230,7 +265,7 @@ test('codex model picker includes current OpenAI choices in priority order', asy
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
       const codexBin = join(dir, 'codex');
       writeFileSync(
         codexBin,
@@ -239,6 +274,7 @@ test('codex model picker includes current OpenAI choices in priority order', asy
       chmodSync(codexBin, 0o755);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
+      delete process.env.CODEX_BIN;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
@@ -285,7 +321,7 @@ test('codex parses live model catalog from debug models JSON', () => {
 test('codex detection surfaces live debug models separately from fallback models', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
   try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
       const codexBin = join(dir, 'codex');
       writeFileSync(
         codexBin,
@@ -301,6 +337,7 @@ exit 2
       chmodSync(codexBin, 0o755);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
+      delete process.env.CODEX_BIN;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');

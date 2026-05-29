@@ -52,6 +52,7 @@ import type {
   Project,
   ProjectPlatform,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
@@ -86,6 +87,7 @@ export type {
   OrbitRunSummary,
   OrbitStatusResponse,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewVisualMarkKind,
 } from '@open-design/contracts';
@@ -520,4 +522,5 @@ export type {
 export interface OpenTabsState {
   tabs: ProjectWorkspaceTabId[];
   active: ProjectWorkspaceTabId | null;
+  hasSavedState?: boolean;
 }

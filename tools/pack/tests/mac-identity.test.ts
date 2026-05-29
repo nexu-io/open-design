@@ -20,6 +20,7 @@ function makeConfig(root: string, namespace: string): ToolPackConfig {
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
+    requireVelaCli: false,
     roots: {
       output: {
         appBuilderRoot: join(root, ".tmp", "tools-pack", "out", "mac", "namespaces", namespace, "builder"),

@@ -1,0 +1,164 @@
+/* ============================================================
+   Open Design — neutral product workspace
+   ============================================================ */
+:root {
+  /* Surface palette — neutral app chrome that does not bias generated artifacts.
+     Keep warm/brand colors out of preview backgrounds; generated product UI
+     must choose its own palette through the active skill/design brief. */
+  --bg: #faf9f7;
+  --bg-app: #faf9f7;
+  --bg-panel: #ffffff;
+  --bg-subtle: #eef1f5;
+  --bg-muted: #e4e8ef;
+  --bg-elevated: #ffffff;
+  --border: #e1e5eb;
+  --border-strong: #c9d0da;
+  --border-soft: #edf0f4;
+
+  --text: #1a1916;
+  --text-strong: #0d0c0a;
+  --text-muted: #74716b;
+  --text-soft: #989590;
+  --text-faint: #b3b0a8;
+
+  /* Accent — Open Design action color for app chrome only. */
+  --accent: #c96442;
+  --accent-strong: #b45a3b;
+  --accent-soft: #f5d8cb;
+  --accent-tint: #fbeee5;
+  --accent-hover: #b45a3b;
+
+  /* Semantic accent tints used by tool / status pills. */
+  --green: #1f7a3a;
+  --green-bg: #e8f7ee;
+  --green-border: #c6ead2;
+  --blue: #2348b8;
+  --blue-bg: #e8efff;
+  --blue-border: #c8d6ff;
+  --purple: #6c3aa6;
+  --purple-bg: #f3ecf9;
+  --purple-border: #e4d4f1;
+  --red: #9c2a25;
+  --red-bg: #fdecea;
+  --red-border: #f5c6c2;
+  --amber: #b26200;
+  --amber-bg: #fff3e0;
+
+  --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
+  --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
+  --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
+  --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* "Active option" indicator color, intentionally separate from --accent
+     (brand orange used by primary CTAs like Create / Save). Use --selected
+     for "this option is the one currently picked" affordances — selected
+     fidelity card, focused input ring, active filter pill — so a primary
+     CTA and a selected state can coexist on the same screen without
+     competing. --selected-soft is the 16% tint for outer rings / fills. */
+  --selected: #2563eb;
+  --selected-soft: rgba(37, 99, 235, 0.16);
+
+  --serif: 'Source Serif Pro', 'Source Serif 4', 'Iowan Old Style', 'Apple Garamond', Georgia, 'Times New Roman', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Dark theme variables — shared between explicit [data-theme="dark"] and the
+   OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1917;
+  --bg-app: #1a1917;
+  --bg-panel: #222120;
+  --bg-subtle: #272523;
+  --bg-muted: #2e2c29;
+  --bg-elevated: #2a2825;
+  --border: #333128;
+  --border-strong: #46433c;
+  --border-soft: #2a2825;
+
+  --text: #e8e4dc;
+  --text-strong: #f2ede4;
+  --text-muted: #9a9690;
+  --text-soft: #6e6b65;
+  --text-faint: #4e4b46;
+
+  --accent: #d97a56;
+  --accent-strong: #e8896a;
+  --accent-soft: #3d2318;
+  --accent-tint: #2e1a12;
+  --accent-hover: #e8896a;
+
+  --green: #4caf72;
+  --green-bg: #0f2a18;
+  --green-border: #1a4028;
+  --blue: #6b8fe8;
+  --blue-bg: #0f1a38;
+  --blue-border: #1a2c58;
+  --purple: #a87dd4;
+  --purple-bg: #1e1030;
+  --purple-border: #321a50;
+  --red: #e06b65;
+  --red-bg: #2a0e0c;
+  --red-border: #451714;
+  --amber: #e09a40;
+  --amber-bg: #2a1a04;
+
+  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* System mode: follow OS preference when no explicit data-theme is set. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #1a1917;
+    --bg-app: #1a1917;
+    --bg-panel: #222120;
+    --bg-subtle: #272523;
+    --bg-muted: #2e2c29;
+    --bg-elevated: #2a2825;
+    --border: #333128;
+    --border-strong: #46433c;
+    --border-soft: #2a2825;
+
+    --text: #e8e4dc;
+    --text-strong: #f2ede4;
+    --text-muted: #9a9690;
+    --text-soft: #6e6b65;
+    --text-faint: #4e4b46;
+
+    --accent: #d97a56;
+    --accent-strong: #e8896a;
+    --accent-soft: #3d2318;
+    --accent-tint: #2e1a12;
+    --accent-hover: #e8896a;
+
+    --green: #4caf72;
+    --green-bg: #0f2a18;
+    --green-border: #1a4028;
+    --blue: #6b8fe8;
+    --blue-bg: #0f1a38;
+    --blue-border: #1a2c58;
+    --purple: #a87dd4;
+    --purple-bg: #1e1030;
+    --purple-border: #321a50;
+    --red: #e06b65;
+    --red-bg: #2a0e0c;
+    --red-border: #451714;
+    --amber: #e09a40;
+    --amber-bg: #2a1a04;
+
+    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+  }
+}

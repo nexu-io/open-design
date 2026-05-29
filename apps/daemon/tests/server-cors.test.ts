@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 function makeTestApp() {
   const app = express();
 
-  app.options('/api/projects/:id/raw/*', (req, res) => {
+  app.options('/api/projects/:id/raw/*splat', (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET');
@@ -16,11 +16,11 @@ function makeTestApp() {
     res.sendStatus(204);
   });
 
-  app.get('/api/projects/:id/raw/*', (req, res) => {
+  app.get('/api/projects/:id/raw/*splat', (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
     }
-    res.sendStatus(200);
+    res.type('html').send('<!doctype html><html><body><main><h1>Raw Preview Smoke</h1></main></body></html>');
   });
 
   return app;
@@ -60,6 +60,16 @@ describe('raw file endpoint CORS', () => {
   it('does not set Access-Control-Allow-Origin for same-origin requests (no Origin header)', async () => {
     const res = await fetch(`${baseUrl}/api/projects/test-id/raw/components/login.jsx`);
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('serves nested raw HTML bodies for null-origin preview iframes', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/test-id/raw/screens/tablet/index.html`, {
+      headers: { Origin: 'null' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('content-type')).toContain('text/html');
+    await expect(res.text()).resolves.toContain('Raw Preview Smoke');
   });
 
   it('handles OPTIONS preflight for null origin', async () => {

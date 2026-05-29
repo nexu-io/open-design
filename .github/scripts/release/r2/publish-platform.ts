@@ -175,10 +175,18 @@ if (platform === "mac") {
 } else if (platform === "win") {
   const suffix = optional("WIN_ASSET_SUFFIX", assetVersionSuffix);
   const installer = `open-design-${releaseVersion}${suffix}-win-x64-setup.exe`;
+  const portableZip = `open-design-${releaseVersion}${suffix}-win-x64-portable.zip`;
+  const includeZip = optional("WIN_INCLUDE_ZIP", "true") !== "false";
+  const artifacts = { installer: fileEntry(installer, contentType(installer)) };
+  const assetNames = [installer, `${installer}.sha256`, "latest.yml"];
+  if (includeZip) {
+    artifacts.portableZip = fileEntry(portableZip, contentType(portableZip));
+    assetNames.push(portableZip, `${portableZip}.sha256`);
+  }
   config = {
     arch: "x64",
-    artifacts: { installer: fileEntry(installer, contentType(installer)) },
-    assetNames: [installer, `${installer}.sha256`, "latest.yml"],
+    artifacts,
+    assetNames,
     feed: {
       latestUrl: publicUrl(latestPrefix, "latest.yml"),
       name: "latest.yml",

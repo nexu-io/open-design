@@ -84,6 +84,37 @@ function previewUrlFor(
   return filename ? `/previews/${bucket}/${filename}` : null;
 }
 
+const SKILLS_SRC_CANDIDATES = [
+  // Same dual-cwd story as PREVIEWS_ROOT_CANDIDATES.
+  path.resolve(process.cwd(), 'skills'),
+  path.resolve(process.cwd(), '../../skills'),
+  path.resolve(fileURLToPath(new URL('../../../../skills', import.meta.url))),
+] as const;
+
+function skillsSourceRoot(): string | null {
+  return SKILLS_SRC_CANDIDATES.find((dir) => existsSync(dir)) ?? null;
+}
+
+/**
+ * Slugs whose folder ships a runnable `example.html`. We treat that as
+ * the canonical signal that a skill is template-flavoured (a real
+ * static demo we can iframe / screenshot) rather than instruction-only
+ * (pure SKILL.md prose).
+ *
+ * Read once per build so the per-record `shapeSkill()` call stays O(1).
+ */
+function listSkillExamples(): Set<string> {
+  const root = skillsSourceRoot();
+  if (!root) return new Set();
+  const out = new Set<string>();
+  for (const name of readdirSync(root)) {
+    if (name.startsWith('_') || name.startsWith('.')) continue;
+    const example = path.join(root, name, 'example.html');
+    if (existsSync(example)) out.add(name);
+  }
+  return out;
+}
+
 const REPO_TREE = 'https://github.com/nexu-io/open-design/tree/main';
 const REPO_BLOB = 'https://github.com/nexu-io/open-design/blob/main';
 const SHOULD_CACHE_CATALOG = import.meta.env.PROD;
@@ -93,6 +124,26 @@ const SHOULD_CACHE_CATALOG = import.meta.env.PROD;
 // ---------------------------------------------------------------------------
 
 export type SkillEntry = CollectionEntry<'skills'>;
+
+/**
+ * Two flavours of skill share the same SKILL.md schema and the same
+ * /skills/<slug>/ detail route, but differ in how they're presented:
+ *
+ *   - `template` — ships a runnable `example.html`. The detail page
+ *     exposes a click-to-expand iframe of the demo, and the catalog
+ *     row uses a real screenshot as its thumbnail.
+ *
+ *   - `instruction` — pure SKILL.md (e.g. `copywriting`,
+ *     `creative-director`). The "demo" depends on the agent's input,
+ *     so there's nothing static to iframe. The detail page hides the
+ *     preview block and surfaces the full SKILL.md body instead, and
+ *     the catalog row uses a typographic fallback card as its thumb.
+ *
+ * Catalog routing splits on this field: `/skills/templates/` and
+ * `/skills/instructions/` filter to one kind each; `/skills/` itself
+ * shows both as separate sections.
+ */
+export type SkillKind = 'instruction' | 'template';
 
 export interface SkillRecord {
   slug: string;
@@ -112,6 +163,7 @@ export interface SkillRecord {
   examplePrompt?: string;
   source: string;
   body: string;
+  kind: SkillKind;
   /** `/previews/skills/<slug>.png` if a generated preview exists, else null. */
   previewUrl: string | null;
 }
@@ -132,6 +184,7 @@ function firstParagraph(text: string | undefined, fallback = ''): string {
 export function shapeSkill(
   entry: SkillEntry,
   previews: Map<string, string>,
+  examples: Set<string>,
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): SkillRecord {
   const slug = deriveSkillSlug(entry.id);
@@ -191,6 +244,7 @@ export function shapeSkill(
     examplePrompt,
     source: `${REPO_TREE}/skills/${slug}`,
     body: entry.body ?? '',
+    kind: examples.has(slug) ? 'template' : 'instruction',
     previewUrl: previewUrlFor('skills', slug, previews),
   };
 }
@@ -200,8 +254,9 @@ export async function getSkillRecords(
 ): Promise<ReadonlyArray<SkillRecord>> {
   if (!SHOULD_CACHE_CATALOG) {
     const previews = listPreviews('skills');
+    const examples = listSkillExamples();
     const entries = await getCollection('skills');
-    const shaped = entries.map((entry) => shapeSkill(entry, previews, locale));
+    const shaped = entries.map((entry) => shapeSkill(entry, previews, examples, locale));
     return shaped.sort((a, b) => {
       // Featured (lower number = higher priority) first, then alphabetical.
       const af = a.featured ?? Number.POSITIVE_INFINITY;
@@ -218,8 +273,9 @@ export async function getSkillRecords(
 
   const promise = (async () => {
     const previews = listPreviews('skills');
+    const examples = listSkillExamples();
     const entries = await getCollection('skills');
-    const shaped = entries.map((entry) => shapeSkill(entry, previews, locale));
+    const shaped = entries.map((entry) => shapeSkill(entry, previews, examples, locale));
     return shaped.sort((a, b) => {
       // Featured (lower number = higher priority) first, then alphabetical.
       const af = a.featured ?? Number.POSITIVE_INFINITY;
@@ -231,6 +287,19 @@ export async function getSkillRecords(
 
   skillRecordsCache.set(locale, promise);
   return promise;
+}
+
+/**
+ * Filter helper for kind-specific catalog routes (`/plugins/templates/`,
+ * `/plugins/skills/`). Caller gets the records already sorted by the
+ * standard catalog rules.
+ */
+export async function getSkillRecordsByKind(
+  kind: SkillKind,
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<ReadonlyArray<SkillRecord>> {
+  const all = await getSkillRecords(locale);
+  return all.filter((s) => s.kind === kind);
 }
 
 // ---------------------------------------------------------------------------

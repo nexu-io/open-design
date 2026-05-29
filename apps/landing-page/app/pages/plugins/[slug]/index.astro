@@ -1,0 +1,365 @@
+---
+/*
+ * /plugins/<manifest-id>/ — bundled-plugin detail page.
+ *
+ * One static page per manifest under `plugins/_official/`, built from
+ * `open-design.json`. The page is deliberately information-dense
+ * rather than visual: bundled plugins ship a poster (already on R2)
+ * for the hero, then a structured read-out of mode / scenario /
+ * platform / tags / triggers / author / GitHub source.
+ *
+ * Note: the route's `slug` parameter is the manifest `name` field
+ * (e.g. `image-template-3d-stone-staircase-evolution-infographic`),
+ * not the folder name. Manifest ids are globally unique within the
+ * registry so there's no risk of collision across buckets.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import {
+  getDetailPlugins,
+  resolveBundledDescription,
+  resolveBundledTitle,
+  type BundledPluginRecord,
+} from '../../../_lib/bundled-plugins';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+export async function getStaticPaths() {
+  return getDetailPlugins().map((plugin) => ({
+    params: { slug: plugin.detailSlug },
+    props: { plugin },
+  }));
+}
+
+interface Props {
+  plugin: BundledPluginRecord;
+}
+
+const { plugin } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+// Localized name + blurb resolved at render time via the `title_i18n` /
+// `description_i18n` maps shipped alongside each manifest. The static-paths
+// pass runs once for all locales, so the prop carries English baselines and
+// the per-locale lookup happens here.
+const pluginTitle = resolveBundledTitle(plugin, locale);
+const pluginDescription = resolveBundledDescription(plugin, locale);
+// `community` plugins carry a non-localized label: the i18n bucket map only
+// covers the _official buckets, so narrow before indexing it.
+const bucketLabel =
+  plugin.bucket === 'community'
+    ? 'Community'
+    : pcopy.detailBucketLabel[plugin.bucket];
+
+/*
+ * Author normalisation. First-party manifests authored by Open Design
+ * point at the org URL (`https://github.com/nexu-io`) — fine for the
+ * daemon, but on the marketing site that lands the visitor on a bare
+ * org page rather than the project repo. Map the org URL to the
+ * concrete `nexu-io/open-design` repo so the "Open Design" attribution
+ * is actionable.
+ */
+const ORG_TO_REPO: Record<string, string> = {
+  'https://github.com/nexu-io': 'https://github.com/nexu-io/open-design',
+  'https://github.com/nexu-io/': 'https://github.com/nexu-io/open-design',
+};
+const authorUrl = plugin.authorUrl
+  ? (ORG_TO_REPO[plugin.authorUrl.replace(/\/$/, '')] ?? plugin.authorUrl)
+  : undefined;
+
+const title = `${pluginTitle} · Open Design plugin`;
+const description = pluginDescription;
+
+/*
+ * Share-dialog copy. The English template stays as a fallback inside
+ * `getPluginsCopy('en')` and locale-specific share copy lives in the
+ * same table — `header-enhancer.astro`'s click handlers are shared
+ * across `/skills/<slug>/`, `/templates/<slug>/`, and
+ * `/plugins/<slug>/` via the data-* attributes, so we get the same
+ * UX without a per-page script bundle.
+ */
+const pluginUrl = `https://open-design.ai${plugin.detailHref}`;
+const shareCopy = pcopy.shareTemplate({ title: pluginTitle, url: pluginUrl });
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+      { '@type': 'ListItem', position: 2, name: pcopy.hubLabel, item: new URL('/plugins/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: pluginTitle, item: new URL(plugin.detailHref, Astro.site).toString() },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareSourceCode',
+    name: pluginTitle,
+    description,
+    codeRepository: plugin.sourceUrl,
+    programmingLanguage: 'JSON',
+    keywords: plugin.tags.join(', '),
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  },
+];
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+    <span>/</span>
+    <span aria-current="page">{pluginTitle}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">
+        {pcopy.hubLabel} · {bucketLabel}
+      </span>
+      <h1 class="display">{pluginTitle}<span class="dot">.</span></h1>
+      <p class="lead">{description}</p>
+      <div class="detail-actions">
+        <a class="btn btn-primary" href="https://github.com/nexu-io/open-design/releases" target="_blank" rel="noopener">
+          {pcopy.detailUseCta}
+        </a>
+        <a class="btn btn-ghost" href={plugin.sourceUrl} target="_blank" rel="noopener">
+          {pcopy.detailFindOnGithub}
+        </a>
+        {/*
+         * The Homepage CTA was removed per product feedback: surfacing the
+         * upstream / author homepage on a marketing detail page led visitors
+         * away from Open Design before they explored the plugin in-app. The
+         * `plugin.homepage` field stays in the manifest reader so other
+         * surfaces (the in-app catalog, JSON-LD, future authored bios) can
+         * still consume it; the marketing CTA is the only call site that
+         * removed it. The unused `pcopy.detailHomepage` i18n key stays for
+         * the same reason — it's `Partial<>` everywhere and removing it
+         * would touch 18 locale blocks for no functional gain.
+         */}
+        <button
+          type="button"
+          class="btn btn-ghost detail-share-trigger"
+          data-share-open={`plugin:${plugin.manifestId}`}
+        >
+          {pcopy.shareOpen}
+        </button>
+      </div>
+    </header>
+
+    {plugin.previewPoster && (
+      <figure class="detail-preview">
+        {plugin.previewType === 'video' && plugin.previewVideo ? (
+          /*
+           * Video templates carry both their poster and a playable MP4
+           * URL in the manifest. Use both directly; the inline
+           * controls double as the "open full" affordance, so no extra
+           * details/iframe wrapper is needed for this preview type.
+           */
+          <video
+            class="detail-preview-video"
+            controls
+            preload="metadata"
+            poster={plugin.previewPoster}
+          >
+            <source src={plugin.previewVideo} type="video/mp4" />
+            Your browser does not support video playback.
+          </video>
+        ) : plugin.previewType === 'html' && plugin.previewEntryUrl ? (
+          /*
+           * HTML-entry plugins (the `examples/` bucket) get the same
+           * click-to-expand iframe affordance the legacy
+           * `/skills/<slug>/` detail page introduced. The thumbnail is
+           * the summary of a `<details>` element — clicking opens the
+           * live iframe rendering the local `example.html` mirror that
+           * `copy-example-html.ts` produced under
+           * `out/plugins/<manifest-id>/<entry>`. The iframe loads
+           * lazily so the detail page itself stays fast; an "Open in
+           * new tab" pill in the frame's top-right offers a
+           * full-screen render for users who want to inspect the
+           * artifact standalone.
+           */
+          <details class="detail-preview-live">
+            <summary
+              class="detail-preview-thumb-trigger"
+              aria-label={pcopy.previewSummaryAria(pluginTitle)}
+            >
+              <img
+                class="detail-preview-static"
+                src={plugin.previewPoster}
+                alt={pcopy.previewImageAlt(pluginTitle)}
+                loading="eager"
+                fetchpriority="high"
+              />
+              <span class="detail-preview-thumb-overlay" aria-hidden="true">
+                <span class="detail-preview-thumb-cta">{pcopy.detailClickForLivePreview}</span>
+              </span>
+            </summary>
+            <div class="detail-preview-frame-wrap">
+              <iframe
+                src={plugin.previewEntryUrl}
+                title={pcopy.previewIframeTitle(pluginTitle)}
+                loading="lazy"
+                sandbox="allow-scripts allow-same-origin"
+                class="detail-preview-frame"
+              />
+              <a
+                class="detail-preview-popout"
+                href={plugin.previewEntryUrl}
+                target="_blank"
+                rel="noopener"
+                aria-label={pcopy.detailOpenInNewTabAria}
+              >
+                {pcopy.detailOpenInNewTab}
+              </a>
+            </div>
+          </details>
+        ) : (
+          <img
+            class="detail-preview-static"
+            src={plugin.previewPoster}
+            alt={pcopy.previewImageAlt(pluginTitle)}
+            loading="eager"
+            fetchpriority="high"
+          />
+        )}
+        <figcaption>{pcopy.detailPreviewCaption}</figcaption>
+      </figure>
+    )}
+
+    {/*
+      Share modal — same DOM shape as the legacy /skills/<slug>/
+      dialog so the global header-enhancer.astro click handlers
+      (data-share-open, data-share-copy, data-copy-link) wire up the
+      open/copy actions automatically. We get the four-channel SVG
+      jump rail (X / LinkedIn / Reddit / Facebook) for free, plus a
+      Copy-text / Copy-link pair, without bundling any new client JS.
+    */}
+    <dialog
+      class="detail-share-dialog"
+      data-share-dialog={`plugin:${plugin.manifestId}`}
+    >
+      <form method="dialog" class="detail-share-dialog-form">
+        <header class="detail-share-dialog-head">
+          <h2>{pcopy.shareTitle}</h2>
+          <button
+            type="submit"
+            class="detail-share-dialog-close"
+            aria-label={pcopy.shareDialogClose}
+            value="cancel"
+          >×</button>
+        </header>
+        <p class="detail-share-dialog-lead">{pcopy.shareLead}</p>
+        <textarea
+          class="detail-share-dialog-text"
+          readonly
+          rows="6"
+          data-share-text
+        >{shareCopy}</textarea>
+        <div class="detail-share-dialog-actions">
+          <button
+            type="button"
+            class="btn btn-primary detail-share-dialog-copy"
+            data-share-copy
+          >
+            {pcopy.shareCopyText}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost detail-share-dialog-copy-link"
+            data-copy-link={pluginUrl}
+          >
+            {pcopy.shareCopyLink}
+          </button>
+        </div>
+        <div class="detail-share-dialog-platforms">
+          <span class="detail-share-dialog-platforms-label">{pcopy.shareJumpTo}</span>
+          <a class="detail-share-platform-btn" href="https://x.com/compose/post" target="_blank" rel="noopener" aria-label="X">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+            <span class="sr-only">X</span>
+          </a>
+          <a class="detail-share-platform-btn" href="https://www.linkedin.com/feed/?shareActive=true" target="_blank" rel="noopener" aria-label="LinkedIn">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            <span class="sr-only">LinkedIn</span>
+          </a>
+          <a class="detail-share-platform-btn" href="https://www.reddit.com/submit" target="_blank" rel="noopener" aria-label="Reddit">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12.3c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 00.029-.463.33.33 0 00-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 00-.232-.095z"/></svg>
+            <span class="sr-only">Reddit</span>
+          </a>
+          <a class="detail-share-platform-btn" href="https://www.facebook.com/" target="_blank" rel="noopener" aria-label="Facebook">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            <span class="sr-only">Facebook</span>
+          </a>
+        </div>
+      </form>
+    </dialog>
+
+    <dl class="detail-meta">
+      {plugin.mode && (
+        <Fragment>
+          <dt>{pcopy.detailMode}</dt>
+          <dd>{plugin.mode}</dd>
+        </Fragment>
+      )}
+      {plugin.scenario && (
+        <Fragment>
+          <dt>{pcopy.detailScenario}</dt>
+          <dd>{plugin.scenario}</dd>
+        </Fragment>
+      )}
+      {plugin.platform && (
+        <Fragment>
+          <dt>{pcopy.detailPlatform}</dt>
+          <dd>{plugin.platform}</dd>
+        </Fragment>
+      )}
+      {plugin.surface && plugin.surface !== plugin.mode && (
+        <Fragment>
+          <dt>{pcopy.detailSurface}</dt>
+          <dd>{plugin.surface}</dd>
+        </Fragment>
+      )}
+      {plugin.authorName && (
+        <Fragment>
+          <dt>{pcopy.detailAuthor}</dt>
+          <dd>
+            {authorUrl ? (
+              <a href={authorUrl} target="_blank" rel="noopener">{plugin.authorName} ↗</a>
+            ) : plugin.authorName}
+          </dd>
+        </Fragment>
+      )}
+      <Fragment>
+        <dt>{pcopy.detailManifestId}</dt>
+        <dd><code>{plugin.manifestId}</code></dd>
+      </Fragment>
+    </dl>
+
+    {plugin.tags.length > 0 && (
+      <section class="detail-block">
+        <h2>{pcopy.detailTags}</h2>
+        <ul class="trigger-list">
+          {plugin.tags.map((t) => <li><code>{t}</code></li>)}
+        </ul>
+      </section>
+    )}
+  </article>
+</Layout>
+
+<style>
+  .detail-preview-static {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--line);
+    background: var(--paper-warm);
+  }
+  .detail-preview-video {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--line);
+    background: #000;
+  }
+</style>

@@ -148,6 +148,43 @@ describe('ExamplesTab', () => {
     expect(screen.getByText('No skills available. Is the daemon running?')).toBeTruthy();
   });
 
+  it('deduplicates duplicate skill ids so each example card renders once (#2889)', () => {
+    const onUsePrompt = vi.fn();
+    render(
+      <ExamplesTab
+        skills={[
+          skill({
+            id: 'xhs-white-editorial',
+            name: 'XHS editorial',
+            examplePrompt: 'First prompt',
+          }),
+          skill({
+            id: 'xhs-white-editorial',
+            name: 'Duplicate XHS editorial',
+            examplePrompt: 'Duplicate prompt',
+          }),
+          skill({
+            id: 'open-design-landing',
+            name: 'Open Design landing',
+            examplePrompt: 'Unique prompt',
+          }),
+        ]}
+        onUsePrompt={onUsePrompt}
+      />,
+    );
+
+    expect(screen.getAllByTestId('example-card-xhs-white-editorial')).toHaveLength(1);
+    expect(screen.getByTestId('example-card-open-design-landing')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('example-use-prompt-xhs-white-editorial'));
+    expect(onUsePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'xhs-white-editorial',
+        examplePrompt: 'First prompt',
+      }),
+    );
+  });
+
   it('filters examples by free-text search and shows an empty match state', () => {
     renderExamples();
 
@@ -283,7 +320,7 @@ describe('ExamplesTab', () => {
     expect(modal.classList.contains('ds-modal-fullscreen')).toBe(false);
     expect(within(dialog).getByRole('button', { name: /Fullscreen/i })).toBeTruthy();
 
-    const shareButton = within(dialog).getByRole('button', { name: 'Share ▾' });
+    const shareButton = within(dialog).getByRole('button', { name: /Share/i });
     fireEvent.click(shareButton);
     fireEvent.click(within(dialog).getByRole('menuitem', { name: /Export as PDF/i }));
     expect(exportAsPdf).toHaveBeenCalledWith(

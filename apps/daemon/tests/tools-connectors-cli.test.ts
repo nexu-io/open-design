@@ -464,12 +464,31 @@ describe('connectors tool CLI', () => {
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });
     const fakeGitPath = path.join(fakeBinDir, 'git');
-    await writeFile(fakeGitPath, `#!/bin/sh
+    await writeShellShim(fakeGitPath, `#!/bin/sh
 echo "fatal: repository not found" >&2
 exit 128
-`, 'utf8');
-    await chmod(fakeGitPath, 0o755);
-    process.env.PATH = fakeBinDir;
+`);
+    await writeCmdShim(fakeGitPath, '@echo off\r\necho fatal: repository not found 1>&2\r\nexit /b 128\r\n');
+    process.env.PATH = `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
+  }
+
+  async function writeShellShim(commandPath: string, script: string): Promise<void> {
+    await writeFile(commandPath, script, 'utf8');
+    await chmod(commandPath, 0o755);
+    if (process.platform !== 'win32') return;
+
+    await writeFile(`${commandPath}.cmd`, `@echo off\r\nsh "%~dp0${path.basename(commandPath)}" %*\r\nexit /b %ERRORLEVEL%\r\n`, 'utf8');
+  }
+
+  async function writeCmdShim(commandPath: string, script: string): Promise<void> {
+    if (process.platform === 'win32') {
+      await writeFile(`${commandPath}.cmd`, script, 'utf8');
+    }
+  }
+
+  async function cleanupTempDir(tmpDir: string): Promise<void> {
+    process.chdir(cwd);
+    await rm(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 
   it('appends curated useCase query params for connector listing', async () => {
@@ -635,7 +654,7 @@ exit 128
       }),
     );
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('writes bounded local design evidence snapshots from a linked folder', async () => {
@@ -717,7 +736,7 @@ exit 128
     const fontBytes = await readFile(path.join(tmpDir, 'context/local-code/cherry-studio/files/src/assets/fonts/ubuntu/Ubuntu-Regular.ttf'));
     expect(fontBytes.length).toBeGreaterThan(0);
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('prioritizes core app surfaces over nested tool buttons during local intake', async () => {
@@ -772,7 +791,7 @@ exit 128
     expect(evidenceNote).toContain('App shell and navigation');
     expect(evidenceNote).toContain('Chat and input surfaces');
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('passes a Claude Design-style design-system package audit', async () => {
@@ -855,7 +874,7 @@ exit 128
       errors: [],
     });
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when manifest docs point at old scaffold paths', async () => {
@@ -911,7 +930,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when package titles come from URL protocol text', async () => {
@@ -946,7 +965,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when SKILL.md is missing agent-discoverable frontmatter', async () => {
@@ -988,7 +1007,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when SKILL.md lacks Claude-style reusable skill sections', async () => {
@@ -1030,7 +1049,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when README.md lacks a source-backed product overview', async () => {
@@ -1072,7 +1091,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when README.md lacks a Claude-style package reuse guide', async () => {
@@ -1114,7 +1133,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when README.md lacks a concrete preview manifest', async () => {
@@ -1156,7 +1175,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when the applied UI-kit README lacks a reuse guide', async () => {
@@ -1201,7 +1220,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when build runtime icon evidence is not preserved in the package', async () => {
@@ -1258,7 +1277,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when preserved build runtime assets do not match captured evidence bytes', async () => {
@@ -1318,7 +1337,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('accepts preserved build runtime assets that match captured evidence bytes', async () => {
@@ -1378,7 +1397,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when the brand-assets preview redraws instead of referencing preserved assets', async () => {
@@ -1424,7 +1443,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when modular UI-kit components are placeholders', async () => {
@@ -1473,7 +1492,7 @@ exit 128
       expect.objectContaining({ code: 'thin_modular_ui_kit', path: 'ui_kits/app/components/' }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when the UI-kit entry does not load its modules or token CSS', async () => {
@@ -1523,7 +1542,7 @@ exit 128
       expect.objectContaining({ code: 'ui_kit_index_missing_component_references', path: 'ui_kits/app/index.html' }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when the UI-kit entry lists modules without rendering them', async () => {
@@ -1581,7 +1600,7 @@ exit 128
       expect.objectContaining({ code: 'ui_kit_index_missing_component_composition', path: 'ui_kits/app/index.html' }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when JSX components are loaded without browser runtime scripts', async () => {
@@ -1645,7 +1664,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when script-loaded JSX components do not expose browser globals', async () => {
@@ -1700,7 +1719,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when chat evidence lacks UI-kit role coverage', async () => {
@@ -1757,7 +1776,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when the app shell does not compose role components', async () => {
@@ -1810,7 +1829,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when rich binary evidence is collapsed to one asset and font', async () => {
@@ -1877,7 +1896,7 @@ exit 128
       expect.objectContaining({ code: 'insufficient_preserved_fonts', path: 'fonts/' }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when preserved fonts are not bound in token CSS', async () => {
@@ -1932,7 +1951,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when visual artifacts do not reference source-backed component names', async () => {
@@ -2004,7 +2023,7 @@ exit 128
       ]),
     });
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when focused preview cards do not apply tokens to source components', async () => {
@@ -2065,7 +2084,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when rich component evidence is not preserved as source examples outside context', async () => {
@@ -2126,7 +2145,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('warns when source-backed examples are only tiny stubs', async () => {
@@ -2191,7 +2210,7 @@ exit 128
       }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('fails a design-system package audit when evidence-backed artifacts are missing', async () => {
@@ -2228,7 +2247,7 @@ exit 128
       expect.objectContaining({ code: 'old_generated_interface' }),
     ]));
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('can audit an external Claude Design reference package without DESIGN.md', async () => {
@@ -2283,7 +2302,7 @@ exit 128
       ]),
     });
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('falls back to bounded connector directory browsing when the repository tree is too large', async () => {
@@ -2369,7 +2388,7 @@ exit 128
       }),
     );
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('continues bounded GitHub intake when repository metadata is too large', async () => {
@@ -2438,7 +2457,7 @@ exit 128
     await expect(readFile(path.join(tmpDir, 'context/github/acme-huge-ui.md'), 'utf8')).resolves.toContain('Huge Repo UI');
     await expect(readFile(path.join(tmpDir, 'context/github/acme-huge-ui/files/src/styles.css'), 'utf8')).resolves.toContain('--color-brand');
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('uses shallow local git clone before connector-backed intake', async () => {
@@ -2450,7 +2469,7 @@ exit 128
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });
     const fakeGitPath = path.join(fakeBinDir, 'git');
-    await writeFile(fakeGitPath, `#!/bin/sh
+    await writeShellShim(fakeGitPath, `#!/bin/sh
 for last do :; done
 mkdir -p "$last/src"
 mkdir -p "$last/build"
@@ -2467,8 +2486,22 @@ EOF
 printf '\\211PNG\\r\\n\\032\\n' > "$last/build/icon.png"
 printf '\\211PNG\\r\\n\\032\\n' > "$last/build/logo.png"
 printf 'font-data' > "$last/fonts/ubuntu/Ubuntu-Regular.ttf"
-`, 'utf8');
-    await chmod(fakeGitPath, 0o755);
+`);
+    await writeCmdShim(fakeGitPath, [
+      '@echo off',
+      'for %%A in (%*) do set "last=%%~A"',
+      'mkdir "%last%\\src"',
+      'mkdir "%last%\\build"',
+      'mkdir "%last%\\fonts\\ubuntu"',
+      '> "%last%\\README.md" echo # Fallback UI',
+      '> "%last%\\package.json" echo {"dependencies":{"@radix-ui/react-dialog":"latest"}}',
+      '> "%last%\\src\\styles.css" echo :root { --color-brand: #dc5b3e; --radius-md: 10px; }',
+      '> "%last%\\build\\icon.png" echo PNG',
+      '> "%last%\\build\\logo.png" echo PNG',
+      '> "%last%\\fonts\\ubuntu\\Ubuntu-Regular.ttf" echo font-data',
+      'exit /b 0',
+      '',
+    ].join('\r\n'));
     process.env.PATH = `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
 
     const encode = (value: string) => Buffer.from(value, 'utf8').toString('base64');
@@ -2547,7 +2580,7 @@ printf 'font-data' > "$last/fonts/ubuntu/Ubuntu-Regular.ttf"
     const fontBytes = await readFile(path.join(tmpDir, 'context/github/acme-rate-limited-ui/files/fonts/ubuntu/Ubuntu-Regular.ttf'));
     expect(fontBytes.length).toBeGreaterThan(0);
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('uses GitHub CLI authenticated clone before connector fallback', async () => {
@@ -2559,13 +2592,13 @@ printf 'font-data' > "$last/fonts/ubuntu/Ubuntu-Regular.ttf"
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });
     const fakeGitPath = path.join(fakeBinDir, 'git');
-    await writeFile(fakeGitPath, `#!/bin/sh
+    await writeShellShim(fakeGitPath, `#!/bin/sh
 echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2
 exit 128
-`, 'utf8');
-    await chmod(fakeGitPath, 0o755);
+`);
+    await writeCmdShim(fakeGitPath, "@echo off\r\necho fatal: could not read Username for 'https://github.com': terminal prompts disabled 1>&2\r\nexit /b 128\r\n");
     const fakeGhPath = path.join(fakeBinDir, 'gh');
-    await writeFile(fakeGhPath, `#!/bin/sh
+    await writeShellShim(fakeGhPath, `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "gh version 2.0.0"
   exit 0
@@ -2590,8 +2623,22 @@ EOF
 fi
 echo "unexpected gh args: $*" >&2
 exit 1
-`, 'utf8');
-    await chmod(fakeGhPath, 0o755);
+`);
+    await writeCmdShim(fakeGhPath, [
+      '@echo off',
+      'if "%~1"=="--version" echo gh version 2.0.0& exit /b 0',
+      'if "%~1"=="auth" if "%~2"=="status" echo Logged in to github.com account qiongyu 1>&2& exit /b 0',
+      'if "%~1"=="repo" if "%~2"=="clone" (',
+      '  mkdir "%~4\\src"',
+      '  > "%~4\\README.md" echo # Private UI',
+      '  > "%~4\\package.json" echo {"dependencies":{"@radix-ui/react-tabs":"latest"}}',
+      '  > "%~4\\src\\theme.css" echo :root { --color-brand: #f15a24; --space-md: 16px; }',
+      '  exit /b 0',
+      ')',
+      'echo unexpected gh args: %* 1>&2',
+      'exit /b 1',
+      '',
+    ].join('\r\n'));
     process.env.PATH = `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
 
     fetchMock
@@ -2629,7 +2676,7 @@ exit 1
     await expect(readFile(path.join(tmpDir, 'context/github/acme-private-ui/files/src/theme.css'), 'utf8')).resolves.toContain('--color-brand');
     expect(fetchMock).not.toHaveBeenCalled();
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 
   it('reports GitHub CLI login when connector and local clone cannot read a repository', async () => {
@@ -2641,13 +2688,13 @@ exit 1
     const fakeBinDir = path.join(tmpDir, 'bin');
     await mkdir(fakeBinDir, { recursive: true });
     const fakeGitPath = path.join(fakeBinDir, 'git');
-    await writeFile(fakeGitPath, `#!/bin/sh
+    await writeShellShim(fakeGitPath, `#!/bin/sh
 echo "fatal: repository not found" >&2
 exit 128
-`, 'utf8');
-    await chmod(fakeGitPath, 0o755);
+`);
+    await writeCmdShim(fakeGitPath, '@echo off\r\necho fatal: repository not found 1>&2\r\nexit /b 128\r\n');
     const fakeGhPath = path.join(fakeBinDir, 'gh');
-    await writeFile(fakeGhPath, `#!/bin/sh
+    await writeShellShim(fakeGhPath, `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "gh version 2.0.0"
   exit 0
@@ -2658,8 +2705,15 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
 fi
 echo "unexpected gh args: $*" >&2
 exit 1
-`, 'utf8');
-    await chmod(fakeGhPath, 0o755);
+`);
+    await writeCmdShim(fakeGhPath, [
+      '@echo off',
+      'if "%~1"=="--version" echo gh version 2.0.0& exit /b 0',
+      'if "%~1"=="auth" if "%~2"=="status" echo You are not logged into any GitHub hosts 1>&2& exit /b 1',
+      'echo unexpected gh args: %* 1>&2',
+      'exit /b 1',
+      '',
+    ].join('\r\n'));
     process.env.PATH = `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
 
     fetchMock
@@ -2684,6 +2738,6 @@ exit 1
     await expect(readFile(path.join(tmpDir, 'context/github/acme-private-ui.md'), 'utf8')).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    await rm(tmpDir, { recursive: true, force: true });
+    await cleanupTempDir(tmpDir);
   });
 });

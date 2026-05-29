@@ -37,8 +37,17 @@ describe('Trae CLI runtime adapter', () => {
     expect(runtimeDef.fallbackBins).toBeUndefined();
     expect(traeCliAgentDef.versionArgs).toEqual(['--version']);
     expect(traeCliAgentDef.versionProbeTimeoutMs).toBeGreaterThan(3000);
-    expect(runtimeDef.buildArgs('', [], [], {})).toEqual(['acp', 'serve']);
     expect(traeCliAgentDef.streamFormat).toBe('acp-json-rpc');
+  });
+
+  it('launches the ACP server with yolo mode for headless runs', () => {
+    const runtimeDef = traeCliAgentDef as RuntimeAgentDef;
+
+    expect(runtimeDef.buildArgs('', [], [], {})).toEqual([
+      'acp',
+      'serve',
+      '--yolo',
+    ]);
   });
 
   it('fetches live models from traecli acp serve', async () => {

@@ -84,6 +84,29 @@ describe("open-design sidecar contract", () => {
     expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
   });
 
+  it("accepts a mint-import-token payload with a baseDir", () => {
+    const message = {
+      input: { baseDir: "/Users/u/project" },
+      type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN,
+    };
+    expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
+  });
+
+  it("rejects malformed mint-import-token payloads", () => {
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { baseDir: "" },
+        type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN,
+      }),
+    ).toThrow(/baseDir/i);
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { baseDir: "/Users/u/project", extra: true },
+        type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN,
+      }),
+    ).toThrow(/extra/i);
+  });
+
   it("rejects register-desktop-auth payloads that are not base64-shaped", () => {
     expect(() =>
       normalizeDaemonSidecarMessage({

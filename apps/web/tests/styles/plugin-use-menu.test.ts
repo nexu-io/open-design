@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
-const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
+const indexCss = readExpandedIndexCss();
 const pluginsHomeCss = readFileSync(
   new URL('../../src/styles/home/plugins-home.css', import.meta.url),
   'utf8',
