@@ -115,25 +115,13 @@ describe('ip-allowlist', () => {
   });
 
   describe('regression: proxy trust + no XFF + allowlist', () => {
-    it('allows direct localhost when OD_TRUST_PROXY=1 and no XFF', async () => {
+    it('blocks direct localhost when OD_TRUST_PROXY=1 and no XFF (fail closed)', async () => {
       process.env.OD_TRUST_PROXY = '1';
       const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
       const req = mockReq('127.0.0.1');
       const res = mockRes();
-      let called = false;
-      await middleware(req, res, () => { called = true; });
-      expect(called).toBe(true);
-      expect(res.statusCode).toBe(200);
-    });
-
-    it('allows direct ::1 localhost when OD_TRUST_PROXY=1 and no XFF', async () => {
-      process.env.OD_TRUST_PROXY = '1';
-      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
-      const req = mockReq('::1');
-      const res = mockRes();
-      let called = false;
-      await middleware(req, res, () => { called = true; });
-      expect(called).toBe(true);
+      await middleware(req, res, () => {});
+      expect(res.statusCode).toBe(403);
     });
 
     it('still blocks non-allowlisted remote when OD_TRUST_PROXY=1 and no XFF', async () => {
@@ -148,8 +136,17 @@ describe('ip-allowlist', () => {
     it('still allows proxied loopback via XFF when OD_TRUST_PROXY=1', async () => {
       process.env.OD_TRUST_PROXY = '1';
       const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
-      // TCP peer is loopback, XFF shows loopback — should be allowed
       const req = mockReq('127.0.0.1', { 'x-forwarded-for': '127.0.0.1' });
+      const res = mockRes();
+      let called = false;
+      await middleware(req, res, () => { called = true; });
+      expect(called).toBe(true);
+    });
+
+    it('still allows direct localhost without proxy trust', async () => {
+      delete process.env.OD_TRUST_PROXY;
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      const req = mockReq('127.0.0.1');
       const res = mockRes();
       let called = false;
       await middleware(req, res, () => { called = true; });

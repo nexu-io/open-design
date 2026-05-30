@@ -49,12 +49,14 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
     if (isPublicPath(req.path, req.method)) return next();
 
     // No keys configured — allow localhost, block everyone else.
-    // Use the TCP peer directly (not effectivePeer) so the admin can
-    // bootstrap the first key via http://127.0.0.1:<port> even when
-    // OD_TRUST_PROXY is enabled without X-Forwarded-For.
+    // Use effectivePeer so a same-host proxy with OD_TRUST_PROXY=1
+    // cannot bypass auth when XFF shows a remote client. Bootstrap
+    // routes (/login, /api/auth/reset-keys) are public paths that
+    // bypass this middleware entirely and check req.socket.remoteAddress
+    // directly in server.ts.
     if (!options.enabledRef.value) {
-      const tcpPeer = req.socket?.remoteAddress;
-      if (options.isLocalPeer(tcpPeer)) return next();
+      const peer = effectivePeerFromReq(req);
+      if (options.isLocalPeer(peer)) return next();
       return rejectRequest(req, res, "No API keys configured — access from localhost only");
     }
 

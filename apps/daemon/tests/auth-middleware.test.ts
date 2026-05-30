@@ -223,13 +223,24 @@ describe('auth-middleware: degraded mode with OD_TRUST_PROXY and no XFF', () => 
     else process.env.OD_TRUST_PROXY = PREVIOUS;
   });
 
-  it('allows direct localhost when proxy trust is on but no XFF (bootstrap)', async () => {
+  it('blocks direct localhost when proxy trust is on but no XFF (fail closed)', async () => {
     process.env.OD_TRUST_PROXY = '1';
     // No keys configured, network-exposed, direct localhost request.
-    // effectivePeerFromReq would return '' (fail-closed), but degraded
-    // mode checks TCP peer directly so the admin can bootstrap the first key.
+    // effectivePeerFromReq returns '' (fail-closed). Bootstrap routes
+    // (/login, /api/auth/reset-keys) are public paths that bypass this
+    // middleware and check req.socket.remoteAddress directly in server.ts.
     const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
     const req = mockReq({ remoteAddress: '127.0.0.1' });
+    const res = mockRes();
+    await middleware(req, res, () => {});
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('allows proxied loopback via XFF when proxy trust is on', async () => {
+    process.env.OD_TRUST_PROXY = '1';
+    const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
+    const req = mockReq({ remoteAddress: '127.0.0.1' });
+    (req.headers as any)['x-forwarded-for'] = '127.0.0.1';
     const res = mockRes();
     let called = false;
     await middleware(req, res, () => { called = true; });
@@ -245,10 +256,10 @@ describe('auth-middleware: degraded mode with OD_TRUST_PROXY and no XFF', () => 
     expect(res.statusCode).toBe(401);
   });
 
-  it('allows IPv6 loopback bootstrap with proxy trust on', async () => {
-    process.env.OD_TRUST_PROXY = 'nginx';
+  it('allows direct localhost without proxy trust (no OD_TRUST_PROXY)', async () => {
+    delete process.env.OD_TRUST_PROXY;
     const middleware = createAuthMiddleware(defaultOptions({ enabledRef: { value: false }, networkExposed: true }));
-    const req = mockReq({ remoteAddress: '::1' });
+    const req = mockReq({ remoteAddress: '127.0.0.1' });
     const res = mockRes();
     let called = false;
     await middleware(req, res, () => { called = true; });
