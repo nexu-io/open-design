@@ -1671,6 +1671,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
+    expect(screen.queryByTestId('tweaks-panel-toggle')).toBeNull();
     expect(screen.queryByTestId('inspect-mode-toggle')).toBeNull();
     expect(screen.getByTestId('board-mode-toggle')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'More annotation tools' })).toBeNull();
@@ -1693,6 +1694,22 @@ describe('FileViewer tweaks toolbar', () => {
 
     clickAgentTool('draw-overlay-toggle');
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+  });
+
+  it('renders a labeled Tweaks entry point for artifacts that embed a tweak panel', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><script type="text/babel" src="tweaks-panel.jsx"></script><main>Hero</main></body></html>'
+      />,
+    );
+
+    const button = screen.getByTestId('tweaks-panel-toggle') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-label')).toBe('Tweaks');
+    expect(button.textContent).toContain('Tweaks');
   });
 
   it('keeps preview viewport selection scoped to each HTML file', async () => {

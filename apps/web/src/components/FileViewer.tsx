@@ -69,6 +69,7 @@ import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
   htmlNeedsSandboxShim,
@@ -170,6 +171,10 @@ type CloudflarePagesZoneOption = {
   status?: string;
   type?: string;
 };
+function hasEmbeddedTweaksPanel(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return hasTweaksTemplate(source) || /\btweaks-panel\.jsx\b|\bTweaksPanel\b/.test(source);
+}
 type DeployResultCard = {
   id: string;
   label: string;
@@ -4055,6 +4060,8 @@ function HtmlViewer({
   const [inspectMode, setInspectMode] = useState(false);
   const [agentToolsOpen, setAgentToolsOpen] = useState(false);
   const [drawOverlayOpen, setDrawOverlayOpen] = useState(false);
+  const [tweaksAvailable, setTweaksAvailable] = useState(false);
+  const [tweaksPanelVisible, setTweaksPanelVisible] = useState(false);
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
@@ -4489,6 +4496,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
+  const sourceHasTweaksPanel = hasEmbeddedTweaksPanel(source);
+  const tweaksBridgeRequired = hasTweaksTemplate(source);
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
@@ -4515,6 +4524,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     urlModeBridge,
     inspectMode,
     drawMode: drawOverlayOpen,
+    tweaksBridge: tweaksBridgeRequired,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
   });
@@ -4695,6 +4705,11 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
 
   useEffect(() => {
+    setTweaksAvailable(sourceHasTweaksPanel);
+    setTweaksPanelVisible(false);
+  }, [file.name, sourceHasTweaksPanel]);
+
+  useEffect(() => {
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
       if (!isActivePreviewIframeSource(ev.source)) return;
@@ -4807,6 +4822,35 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }, [effectiveDeck, isActivePreviewIframeSource, isOurPreviewIframeSource, previewStateKey]);
 
   useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as {
+        type?: string;
+        available?: boolean;
+        visible?: boolean;
+      } | null;
+      if (!data?.type) return;
+      if (data.type === '__edit_mode_available') {
+        setTweaksAvailable(true);
+        return;
+      }
+      if (data.type === '__edit_mode_dismissed') {
+        setTweaksPanelVisible(false);
+        return;
+      }
+      if (data.type === 'od:tweaks-available') {
+        setTweaksAvailable(Boolean(data.available) || sourceHasTweaksPanel);
+        return;
+      }
+      if (data.type === 'od:tweaks-panel-state') {
+        setTweaksPanelVisible(Boolean(data.visible));
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [isOurPreviewIframeSource, sourceHasTweaksPanel]);
+
+  useEffect(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({
@@ -4836,6 +4880,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     win.postMessage({ type: 'od-edit-selected-target', id }, '*');
   }
 
+  function postTweaksPanelVisible(visible: boolean, target: HTMLIFrameElement | null = iframeRef.current) {
+    const win = target?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible }, '*');
+    win.postMessage({ type: visible ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
+  }
+
   function syncBridgeModes(target: HTMLIFrameElement | null = iframeRef.current) {
     const win = target?.contentWindow;
     if (!win) return;
@@ -4847,6 +4898,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
     postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null, target);
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
+    postTweaksPanelVisible(tweaksPanelVisible, target);
   }
 
   useEffect(() => {
@@ -4854,6 +4906,10 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     if (!win) return;
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
   }, [inspectMode, srcDoc]);
+
+  useEffect(() => {
+    postTweaksPanelVisible(tweaksPanelVisible);
+  }, [tweaksPanelVisible, srcDoc]);
 
   // Mirror the bridge's `od:comment-targets` broadcast into
   // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
@@ -6095,6 +6151,32 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     activateCommentCreate();
   }
 
+  function activateTweaksTool() {
+    fireArtifactToolbarClick('tweaks');
+    const next = !tweaksPanelVisible;
+    const activateTweaks = () => {
+      setMode('preview');
+      if (next) {
+        setCommentPanelOpen(false);
+        setCommentCreateMode(false);
+        setBoardMode(false);
+        clearBoardComposer();
+        setInspectMode(false);
+        setDrawOverlayOpen(false);
+      }
+      setTweaksPanelVisible(next);
+      postTweaksPanelVisible(next);
+      closeArtifactToolMenus();
+    };
+    if (manualEditMode && next) {
+      void exitManualEditModeAfterFlush().then((ok) => {
+        if (ok) activateTweaks();
+      });
+      return;
+    }
+    activateTweaks();
+  }
+
   function activateManualEditTool() {
     fireArtifactToolbarClick('edit');
     capturePreviewScrollPosition();
@@ -6545,6 +6627,24 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 onViewport={setPreviewViewport}
                 t={t}
               />
+              {sourceHasTweaksPanel || tweaksAvailable ? (
+                <>
+                  <span className="viewer-divider" aria-hidden />
+                  <button
+                    className={`viewer-action viewer-tweaks-trigger${tweaksPanelVisible ? ' active' : ''}`}
+                    type="button"
+                    data-testid="tweaks-panel-toggle"
+                    title={tweaksAvailable ? t('fileViewer.tweaks') : t('fileViewer.tweaksUnavailable')}
+                    aria-label={t('fileViewer.tweaks')}
+                    aria-pressed={tweaksPanelVisible}
+                    disabled={!tweaksAvailable}
+                    onClick={activateTweaksTool}
+                  >
+                    <Icon name="tweaks" size={15} />
+                    <span>{t('fileViewer.tweaks')}</span>
+                  </button>
+                </>
+              ) : null}
             </>
           ) : null}
           {showPreviewToolbarControls && effectiveDeck ? (

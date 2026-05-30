@@ -62,7 +62,7 @@ export interface UrlLoadDecision {
  */
 export function hasTweaksTemplate(source: string | null | undefined): boolean {
   if (!source) return false;
-  return /\btw-(?:panel|hidden)\b/.test(source);
+  return /\btw-(?:panel|hidden)\b|\btwk-panel\b/.test(source);
 }
 
 /**

@@ -85,9 +85,14 @@ describe('hasTweaksTemplate', () => {
     expect(hasTweaksTemplate(source)).toBe(true);
   });
 
+  it('matches legacy `.twk-panel` artifacts', () => {
+    const source = '<script type="text/babel" src="tweaks-panel.jsx"></script><div className="twk-panel" />';
+    expect(hasTweaksTemplate(source)).toBe(true);
+  });
+
   it('does not match unrelated identifiers that merely contain `tw`', () => {
     expect(hasTweaksTemplate('<div class="container">tweet</div>')).toBe(false);
-    expect(hasTweaksTemplate('twk-panel, btw-panel, mtw-hidden')).toBe(false);
+    expect(hasTweaksTemplate('btwk-panel, btw-panel, mtw-hidden')).toBe(false);
   });
 
   it('returns false for empty / null / undefined input', () => {

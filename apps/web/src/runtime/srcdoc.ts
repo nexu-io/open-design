@@ -1996,12 +1996,159 @@ function injectTweaksBridge(doc: string): string {
   // opacity) so the CSS transition plays in both directions. `.tw-restore` is
   // kept permanently hidden — the host toolbar is the only entry point.
   const style = `<style data-od-tweaks-bridge-style>
+:root {
+  color-scheme: light dark;
+  --od-tweaks-bg-panel: #ffffff;
+  --od-tweaks-bg-subtle: #f6f5f2;
+  --od-tweaks-bg-muted: #ebe9e3;
+  --od-tweaks-border: #dedbd2;
+  --od-tweaks-text: #1f1f1f;
+  --od-tweaks-text-muted: #6f6a63;
+  --od-tweaks-selected: #111111;
+  --od-tweaks-shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
+  --od-tweaks-radius: 12px;
+  --od-tweaks-radius-sm: 8px;
+  --od-tweaks-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --od-tweaks-bg-panel: #222120;
+    --od-tweaks-bg-subtle: #272523;
+    --od-tweaks-bg-muted: #2e2c29;
+    --od-tweaks-border: #333128;
+    --od-tweaks-text: #e8e4dc;
+    --od-tweaks-text-muted: #9a9690;
+    --od-tweaks-selected: #f2ede4;
+    --od-tweaks-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+  }
+}
 [data-od-tweaks-hidden] .tw-panel {
   transform: translateX(calc(100% + 32px)) !important;
   opacity: 0 !important;
   pointer-events: none !important;
 }
 .tw-restore { display: none !important; }
+.twk-panel[data-omelette-chrome],
+.twk-panel {
+  background: var(--od-tweaks-bg-panel) !important;
+  color: var(--od-tweaks-text) !important;
+  border: 1px solid var(--od-tweaks-border) !important;
+  border-radius: var(--od-tweaks-radius) !important;
+  box-shadow: var(--od-tweaks-shadow-lg) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  font: 13px/1.35 var(--od-tweaks-sans) !important;
+}
+.twk-hd {
+  padding: 10px 10px 9px 12px !important;
+  border-bottom: 1px solid var(--od-tweaks-border) !important;
+}
+.twk-hd b {
+  color: var(--od-tweaks-text) !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+}
+.twk-x {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: var(--od-tweaks-radius-sm) !important;
+  color: var(--od-tweaks-text-muted) !important;
+}
+.twk-x:hover {
+  background: var(--od-tweaks-bg-subtle) !important;
+  color: var(--od-tweaks-text) !important;
+}
+.twk-body {
+  padding: 12px !important;
+  gap: 12px !important;
+  scrollbar-color: var(--od-tweaks-border) transparent !important;
+}
+.twk-lbl,
+.twk-val,
+.twk-sect,
+.twk-num-lbl,
+.twk-num-unit {
+  color: var(--od-tweaks-text-muted) !important;
+}
+.twk-row-h {
+  align-items: center !important;
+  gap: 12px !important;
+}
+.twk-row-h .twk-lbl {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+.twk-sect {
+  font-size: 11px !important;
+  letter-spacing: .04em !important;
+}
+.twk-field,
+.twk-num,
+.twk-seg {
+  background: var(--od-tweaks-bg-subtle) !important;
+  border: 1px solid var(--od-tweaks-border) !important;
+  border-radius: var(--od-tweaks-radius-sm) !important;
+}
+.twk-field:focus,
+.twk-field:focus-visible,
+.twk-seg button:focus-visible,
+.twk-toggle:focus-visible,
+.twk-btn:focus-visible,
+.twk-chip:focus-visible,
+.twk-x:focus-visible {
+  outline: 2px solid var(--od-tweaks-selected) !important;
+  outline-offset: 2px !important;
+}
+.twk-seg-thumb {
+  background: var(--od-tweaks-bg-panel) !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 1px 4px rgba(0,0,0,.08) !important;
+}
+.twk-seg button {
+  color: var(--od-tweaks-text) !important;
+  min-height: 28px !important;
+}
+.twk-toggle {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 38px !important;
+  width: 38px !important;
+  height: 22px !important;
+  padding: 2px !important;
+  position: relative !important;
+  background: var(--od-tweaks-bg-muted) !important;
+  border: 1px solid var(--od-tweaks-border) !important;
+  border-radius: 999px !important;
+}
+.twk-toggle[data-on="1"] {
+  background: var(--od-tweaks-selected) !important;
+}
+.twk-toggle i {
+  display: block !important;
+  position: static !important;
+  flex: 0 0 auto !important;
+  width: 16px !important;
+  height: 16px !important;
+  background: var(--od-tweaks-bg-panel) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.22) !important;
+  transform: translateX(0) !important;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+.twk-toggle[data-on="1"] i {
+  transform: translateX(16px) !important;
+}
+.twk-btn {
+  background: var(--od-tweaks-selected) !important;
+  border-radius: var(--od-tweaks-radius-sm) !important;
+}
+.twk-btn.secondary {
+  background: var(--od-tweaks-bg-subtle) !important;
+  color: var(--od-tweaks-text) !important;
+}
 </style>`;
   const script = `<script data-od-tweaks-bridge>(function(){
   // Synchronously hide BEFORE the artifact body parses so the panel never

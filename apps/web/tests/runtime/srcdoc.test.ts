@@ -37,6 +37,17 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
+  it('normalizes legacy twk tweak panels to Open Design chrome', () => {
+    const srcdoc = buildSrcdoc('<main><div class="twk-panel" data-omelette-chrome="">Tweaks</div></main>');
+
+    expect(srcdoc).toContain('data-od-tweaks-bridge-style');
+    expect(srcdoc).toContain('.twk-panel[data-omelette-chrome]');
+    expect(srcdoc).toContain('--od-tweaks-bg-panel');
+    expect(srcdoc).toContain('backdrop-filter: none !important');
+    expect(srcdoc).toContain('min-width: 38px !important');
+    expect(srcdoc).toContain('position: static !important');
+  });
+
   it('renders snapshot SVGs through data URLs so canvas export stays origin-clean', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 
