@@ -137,12 +137,13 @@ export function withConfiguredCustomImageModels(
 ): MediaModel[] {
   const customModels = configuredCustomImageModelIds(configuredModelList, profiles);
   if (customModels.length === 0) return models;
+  const customModelSet = new Set(customModels);
   const dynamicModels = customModels.map(customImageModelFromId);
-  return models.flatMap((model) => (
-    model.id === CUSTOM_IMAGE_MODEL_ID
-      ? dynamicModels
-      : [model]
-  ));
+  return models.flatMap((model) => {
+    if (model.id === CUSTOM_IMAGE_MODEL_ID) return dynamicModels;
+    if (customModelSet.has(model.id)) return [];
+    return [model];
+  });
 }
 
 export const IMAGE_MODELS: MediaModel[] = [
