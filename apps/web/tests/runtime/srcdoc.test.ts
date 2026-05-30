@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
@@ -41,11 +41,53 @@ describe('buildSrcdoc', () => {
     const srcdoc = buildSrcdoc('<main><div class="twk-panel" data-omelette-chrome="">Tweaks</div></main>');
 
     expect(srcdoc).toContain('data-od-tweaks-bridge-style');
+    expect(srcdoc).toContain('[data-od-tweaks-hidden] .twk-panel');
     expect(srcdoc).toContain('.twk-panel[data-omelette-chrome]');
     expect(srcdoc).toContain('--od-tweaks-bg-panel');
     expect(srcdoc).toContain('backdrop-filter: none !important');
     expect(srcdoc).toContain('min-width: 38px !important');
     expect(srcdoc).toContain('position: static !important');
+  });
+
+  it('lets the host visibility bridge control legacy twk tweak panels', async () => {
+    const parentPostMessage = vi.fn();
+    const srcdoc = buildSrcdoc('<main><div class="twk-panel" data-omelette-chrome="">Tweaks</div></main>');
+    const dom = new JSDOM(srcdoc, {
+      runScripts: 'dangerously',
+      beforeParse(win) {
+        Object.defineProperty(win, 'parent', {
+          configurable: true,
+          value: { postMessage: parentPostMessage },
+        });
+      },
+    });
+
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+
+    const panel = dom.window.document.querySelector('.twk-panel');
+    expect(panel).toBeTruthy();
+    expect(parentPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'od:tweaks-available', available: true }),
+      '*',
+    );
+    expect(parentPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'od:tweaks-panel-state', visible: true }),
+      '*',
+    );
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:tweaks-panel-visible', visible: false },
+    }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    expect(panel?.classList.contains('tw-hidden')).toBe(true);
+    expect(dom.window.document.documentElement.hasAttribute('data-od-tweaks-hidden')).toBe(true);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od:tweaks-panel-visible', visible: true },
+    }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    expect(panel?.classList.contains('tw-hidden')).toBe(false);
+    expect(dom.window.document.documentElement.hasAttribute('data-od-tweaks-hidden')).toBe(false);
   });
 
   it('renders snapshot SVGs through data URLs so canvas export stays origin-clean', () => {

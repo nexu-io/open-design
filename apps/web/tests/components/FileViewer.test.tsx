@@ -1712,6 +1712,39 @@ describe('FileViewer tweaks toolbar', () => {
     expect(button.textContent).toContain('Tweaks');
   });
 
+  it('toggles legacy twk tweak panels through the OD toolbar entry point', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><aside class="twk-panel" data-omelette-chrome="">Tweaks</aside><main>Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(frame.srcdoc).toContain('data-od-tweaks-bridge');
+    expect(frame.srcdoc).toContain('function panelEl(){ return document.querySelector(\'.tw-panel, .twk-panel\'); }');
+    expect(frame.srcdoc).toContain('[data-od-tweaks-hidden] .twk-panel');
+
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const button = screen.getByTestId('tweaks-panel-toggle') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      { type: 'od:tweaks-panel-visible', visible: true },
+      '*',
+    );
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      { type: '__activate_edit_mode' },
+      '*',
+    );
+  });
+
   it('keeps preview viewport selection scoped to each HTML file', async () => {
     const firstFile = htmlPreviewFile({ name: 'first.html', path: 'first.html' });
     const secondFile = htmlPreviewFile({ name: 'second.html', path: 'second.html' });

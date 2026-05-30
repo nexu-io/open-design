@@ -75,7 +75,7 @@ export function buildSrcdoc(
     : withSelection;
   const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
   // The tweaks bridge is always injected — it's a passive listener that
-  // toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
+  // toggles a tweaks panel's visibility in response to host postMessage. Tying
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
@@ -1990,7 +1990,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
 // drive panel visibility; bridge posts `od:tweaks-panel-state` back whenever the
 // artifact's own `× close` button or `T` shortcut flips the `.tw-hidden` class,
 // so the toolbar toggle stays in sync. Also reports `od:tweaks-available` so the
-// host can disable the toggle on artifacts without a `.tw-panel`.
+// host can disable the toggle on artifacts without a supported tweaks panel.
 function injectTweaksBridge(doc: string): string {
   // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
   // opacity) so the CSS transition plays in both directions. `.tw-restore` is
@@ -2022,7 +2022,8 @@ function injectTweaksBridge(doc: string): string {
     --od-tweaks-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
   }
 }
-[data-od-tweaks-hidden] .tw-panel {
+[data-od-tweaks-hidden] .tw-panel,
+[data-od-tweaks-hidden] .twk-panel {
   transform: translateX(calc(100% + 32px)) !important;
   opacity: 0 !important;
   pointer-events: none !important;
@@ -2159,7 +2160,7 @@ function injectTweaksBridge(doc: string): string {
   var suppressEcho = false;
   var observer = null;
 
-  function panelEl(){ return document.querySelector('.tw-panel'); }
+  function panelEl(){ return document.querySelector('.tw-panel, .twk-panel'); }
 
   function applyClassesToPanel(visible){
     var panel = panelEl();
