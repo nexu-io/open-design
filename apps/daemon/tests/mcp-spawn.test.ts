@@ -423,6 +423,66 @@ describe('spawn writes external MCP config for Claude Code', () => {
     });
   }, 30_000);
 
+  it('rejects Claude run-scoped MCP bundles for imported-folder projects', async () => {
+    const { id, dir, externalDir, conversationId } = await importFolderProject();
+
+    const runsRes = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        projectId: id,
+        message: 'imported run-scoped tools',
+        toolBundle: {
+          mcpServers: [
+            {
+              id: 'run-local',
+              transport: 'stdio',
+              command: 'node',
+            },
+          ],
+        },
+      }),
+    });
+    expect(runsRes.status).toBe(400);
+    const runsBody = (await runsRes.json()) as { error?: { message?: string } };
+    expect(runsBody.error?.message).toContain('toolBundle requires a daemon-managed project');
+
+    const chatRes = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        projectId: id,
+        message: 'imported chat-scoped tools',
+        toolBundle: {
+          mcpServers: [
+            {
+              id: 'run-local-chat',
+              transport: 'stdio',
+              command: 'node',
+            },
+          ],
+        },
+      }),
+    });
+    expect(chatRes.status).toBe(400);
+    const chatBody = (await chatRes.json()) as { error?: { message?: string } };
+    expect(chatBody.error?.message).toContain('toolBundle requires a daemon-managed project');
+
+    expect(existsSync(join(dir, '.mcp.json'))).toBe(false);
+    expect(existsSync(join(externalDir, '.mcp.json'))).toBe(false);
+    const messagesRes = await fetch(
+      `${baseUrl}/api/projects/${id}/conversations/${conversationId}/messages`,
+    );
+    expect(messagesRes.ok).toBe(true);
+    const messagesBody = (await messagesRes.json()) as {
+      messages: Array<{ content: string }>;
+    };
+    expect(messagesBody.messages.some((msg) => msg.content === 'imported run-scoped tools')).toBe(false);
+    expect(messagesBody.messages.some((msg) => msg.content === 'imported chat-scoped tools')).toBe(false);
+  });
+
   it('rejects malformed run-scoped MCP bundles before creating runs', async () => {
     const { id } = await createProject();
 

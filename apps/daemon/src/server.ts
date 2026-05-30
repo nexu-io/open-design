@@ -13014,6 +13014,20 @@ export async function startServer({
     };
   });
 
+  function runToolBundleDeliveryTargetForProject(projectId, metadata) {
+    if (typeof projectId !== 'string' || !projectId || !isSafeId(projectId)) {
+      return 'none';
+    }
+    try {
+      const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata, {
+        allowUnavailableSandboxImportedProject: true,
+      });
+      return isManagedProjectCwd(cwd, PROJECTS_DIR) ? 'managed-project' : 'external-project';
+    } catch {
+      return 'none';
+    }
+  }
+
   app.post('/api/runs', async (req, res) => {
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
@@ -13102,6 +13116,18 @@ export async function startServer({
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
     }
+    let runProject = null;
+    if (typeof meta.projectId === 'string' && meta.projectId) {
+      try {
+        runProject = getProject(db, meta.projectId);
+        assertSandboxProjectRootAvailable(runProject?.metadata);
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+        }
+        throw err;
+      }
+    }
     // MCP / SDK callers may omit agentId. Resolve it before any run-create
     // side effects so unsupported run-scoped tool bundles can fail cleanly.
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
@@ -13127,20 +13153,15 @@ export async function startServer({
     const toolBundleSupport = validateRunToolBundleForAgent(
       toolBundle.bundle,
       typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
+      {
+        deliveryTarget: runToolBundleDeliveryTargetForProject(
+          meta.projectId,
+          runProject?.metadata,
+        ),
+      },
     );
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      try {
-        const project = getProject(db, meta.projectId);
-        assertSandboxProjectRootAvailable(project?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
     }
     // MCP / SDK callers POST /api/runs with just a projectId — no
     // conversationId, no pre-created assistantMessageId — because they
@@ -13624,9 +13645,27 @@ export async function startServer({
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
+    let chatProject = null;
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      try {
+        chatProject = getProject(db, requestBody.projectId);
+        assertSandboxProjectRootAvailable(chatProject?.metadata);
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+        }
+        throw err;
+      }
+    }
     const toolBundleSupport = validateRunToolBundleForAgent(
       toolBundle.bundle,
       typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
+      {
+        deliveryTarget: runToolBundleDeliveryTargetForProject(
+          requestBody.projectId,
+          chatProject?.metadata,
+        ),
+      },
     );
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
@@ -13636,17 +13675,6 @@ export async function startServer({
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
     };
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      try {
-        const project = getProject(db, meta.projectId);
-        assertSandboxProjectRootAvailable(project?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
-        }
-        throw err;
-      }
-    }
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(meta, run));

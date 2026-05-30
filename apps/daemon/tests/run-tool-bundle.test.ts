@@ -214,5 +214,18 @@ describe('run-scoped tool bundles', () => {
       name: 'Claude Code',
       externalMcpInjection: 'claude-mcp-json',
     })).toEqual({ ok: true });
+
+    expect(validateRunToolBundleForAgent(remote, {
+      id: 'claude',
+      name: 'Claude Code',
+      externalMcpInjection: 'claude-mcp-json',
+    }, {
+      deliveryTarget: 'external-project',
+    })).toEqual({
+      ok: false,
+      message:
+        'Claude Code (claude) receives run-scoped MCP tool bundles through project .mcp.json, ' +
+        'so toolBundle requires a daemon-managed project',
+    });
   });
 });

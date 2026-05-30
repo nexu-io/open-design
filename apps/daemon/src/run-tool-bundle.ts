@@ -30,6 +30,15 @@ export type RunToolBundleValidationResult =
   | { ok: true }
   | { ok: false; message: string };
 
+export type RunToolBundleDeliveryTarget =
+  | 'managed-project'
+  | 'external-project'
+  | 'none';
+
+export interface RunToolBundleValidationOptions {
+  deliveryTarget?: RunToolBundleDeliveryTarget;
+}
+
 type RunToolBundleAgent = Pick<
   RuntimeAgentDef,
   'id' | 'name' | 'externalMcpInjection'
@@ -99,6 +108,7 @@ export function summarizeRunToolBundle(bundle: RunToolBundle | null | undefined)
 export function validateRunToolBundleForAgent(
   bundle: RunToolBundle | null | undefined,
   agent: RunToolBundleAgent | null | undefined,
+  options: RunToolBundleValidationOptions = {},
 ): RunToolBundleValidationResult {
   const servers = Array.isArray(bundle?.mcpServers) ? bundle.mcpServers : [];
   const enabledServers = servers.filter((server) => server.enabled);
@@ -110,10 +120,19 @@ export function validateRunToolBundleForAgent(
     };
   }
 
-  if (
-    agent.externalMcpInjection === 'claude-mcp-json' ||
-    agent.externalMcpInjection === 'opencode-env-content'
-  ) {
+  if (agent.externalMcpInjection === 'claude-mcp-json') {
+    if (options.deliveryTarget && options.deliveryTarget !== 'managed-project') {
+      return {
+        ok: false,
+        message:
+          `${agentLabel(agent)} receives run-scoped MCP tool bundles through project .mcp.json, ` +
+          'so toolBundle requires a daemon-managed project',
+      };
+    }
+    return { ok: true };
+  }
+
+  if (agent.externalMcpInjection === 'opencode-env-content') {
     return { ok: true };
   }
 
