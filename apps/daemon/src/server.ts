@@ -4671,7 +4671,7 @@ export async function startServer({
     const openProbePaths = new Set(['/api/health', '/api/version', '/api/daemon/status']);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
-      if (isLoopbackAddress(effectivePeerFromReq(req))) return next();
+      if (isLoopbackAddress(req.socket?.remoteAddress)) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
       if (!match || !timingSafeEqual(match[1], apiToken)) {
