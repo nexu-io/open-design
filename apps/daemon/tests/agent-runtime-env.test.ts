@@ -87,7 +87,7 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
   });
 
-  it('keeps loopback daemon tool requests off inherited HTTP proxies', () => {
+  it('keeps non-sandbox NO_PROXY behavior unchanged', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: '' },
       'http://127.0.0.1:7456',
@@ -96,12 +96,8 @@ describe('agent runtime tool environment', () => {
     );
 
     expect(env.HTTP_PROXY).toBe('http://127.0.0.1:9');
-    expect(env.NO_PROXY?.split(',')).toEqual(
-      expect.arrayContaining(['localhost', '127.0.0.1', '[::1]']),
-    );
-    if (process.platform !== 'win32') {
-      expect(env.no_proxy).toBe(env.NO_PROXY);
-    }
+    expect(env.NO_PROXY).toBe('');
+    expect(env.no_proxy).toBeUndefined();
   });
 
   it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
