@@ -890,11 +890,13 @@ export function mergeDaemonMediaProviders(
     return { ...localConfig };
   }
 
-  // First-boot: readMaskedConfig returns every provider ID but all entries are
-  // completely empty objects (no keys at all). Treat this the same as the old
-  // `{}` case — preserve local entries for the bootstrap migration sync.
+  // First-boot: fetchMediaProvidersFromDaemon() materialises every provider row
+  // as { apiKey: '', apiKeyConfigured: false, ... } even on a fresh daemon that
+  // has never stored anything. When none of those rows are semantically present,
+  // treat the payload the same as the old `{}` case — preserve local entries so
+  // the bootstrap migration sync in App.tsx can run before they are overwritten.
   const daemonHasOnlyUnconfiguredEntries = Object.values(daemonProviders)
-    .every((entry) => Object.keys(entry ?? {}).length === 0);
+    .every((entry) => !isStoredMediaProviderEntryPresent(entry));
   if (daemonHasOnlyUnconfiguredEntries) {
     return {
       ...localConfig,

@@ -365,9 +365,9 @@ describe('mergeDaemonMediaProviders', () => {
     };
 
     const merged = mergeDaemonMediaProviders(localConfig, {
-      openai: {},
-      google: {},
-      grok: {},
+      openai: { apiKey: '', apiKeyConfigured: false, apiKeyTail: '', baseUrl: '' },
+      google: { apiKey: '', apiKeyConfigured: false, apiKeyTail: '', baseUrl: '' },
+      grok: { apiKey: '', apiKeyConfigured: false, apiKeyTail: '', baseUrl: '' },
     } as unknown as Record<string, MediaProviderCredentials>);
 
     expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
@@ -666,7 +666,7 @@ describe('mergeDaemonMediaProviders', () => {
     });
   });
 
-  it('drops recoverable stale local entries when daemon returns an explicit empty row', () => {
+  it('preserves local entries when daemon returns only semantically-empty rows (indistinguishable from first-boot)', () => {
     const localConfig = {
       ...DEFAULT_CONFIG,
       mediaProviders: {
@@ -694,32 +694,9 @@ describe('mergeDaemonMediaProviders', () => {
       },
     };
 
-    expect(mergeDaemonMediaProviders(localConfig, daemonProviders).mediaProviders).toEqual({
-      'custom-image': {
-        apiKey: 'custom-local-key',
-        baseUrl: 'https://custom.example/v1',
-        model: 'custom-image-model',
-      },
-    });
-
-    expect(
-      mergeDaemonMediaProviders(localConfig, daemonProviders, {
-        preserveLocalProviderIds: new Set(['google']),
-      }).mediaProviders,
-    ).toEqual({
-      google: {
-        apiKey: 'stale-local-key',
-        apiKeyConfigured: true,
-        apiKeyTail: '1234',
-        baseUrl: 'https://stale-local.example/v1',
-        model: 'imagen-4.0-fast-generate-001',
-      },
-      'custom-image': {
-        apiKey: 'custom-local-key',
-        baseUrl: 'https://custom.example/v1',
-        model: 'custom-image-model',
-      },
-    });
+    expect(mergeDaemonMediaProviders(localConfig, daemonProviders).mediaProviders).toEqual(
+      localConfig.mediaProviders,
+    );
   });
 });
 
