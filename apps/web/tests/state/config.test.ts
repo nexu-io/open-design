@@ -424,6 +424,37 @@ describe('mergeDaemonMediaProviders', () => {
     });
   });
 
+  it('preserves enabled-only external provider drafts across explicit reloads from daemon state', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          google: {
+            apiKey: '',
+            baseUrl: '',
+            enabled: true,
+          },
+        },
+      },
+      {
+        google: {
+          apiKey: '',
+          apiKeyConfigured: false,
+          apiKeyTail: '',
+          baseUrl: '',
+          model: '',
+        },
+      },
+      { preserveLocalProviderIds: new Set(['google']) },
+    );
+
+    expect(merged.mediaProviders?.google).toEqual({
+      apiKey: '',
+      baseUrl: '',
+      enabled: true,
+    });
+  });
+
   it('refreshes ordinary saved-marker rows from daemon state when there is no unsaved local secret', () => {
     const merged = mergeDaemonMediaProviders(
       {
@@ -713,6 +744,21 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
           openai: {
             apiKey: 'sk-local',
             baseUrl: 'https://local.example/v1',
+          },
+        },
+        {},
+      ),
+    ).toBe(true);
+  });
+
+  it('returns true for enabled-only external provider state during first-boot migration', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          google: {
+            apiKey: '',
+            baseUrl: '',
+            enabled: true,
           },
         },
         {},

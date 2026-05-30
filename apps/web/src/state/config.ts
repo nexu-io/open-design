@@ -542,6 +542,7 @@ function hasRecoverableLocalMediaProviderFields(
     entry?.apiKey?.trim()
     || entry?.baseUrl?.trim()
     || entry?.model?.trim()
+    || entry?.enabled === true
     || entry?.profiles?.some(hasRecoverableLocalMediaProviderProfileFields),
   );
 }
