@@ -290,78 +290,6 @@ function shouldSuppressLifecycleExitFallback(
   );
 }
 
-type DebugAccumulator = {
-  runId: string | null;
-  events: Array<{
-    seq: number;
-    source: 'stdout' | 'agent';
-    raw: Record<string, unknown>;
-    translated?: AgentEvent | null;
-    isDup?: boolean;
-    textSample?: string;
-  }>;
-  handlerCalls: Array<{
-    handler: 'onDelta' | 'onAgentEvent';
-    kind: string;
-    textLen: number;
-    textSample: string;
-  }>;
-  renderSnapshots: Array<{
-    contentLen: number;
-    eventsLen: number;
-    textEventsLen: number;
-    textEventsTotalLen: number;
-    contentMinusText: number;
-    sample: string;
-  }>;
-};
-
-declare global {
-  interface Window {
-    __od_debug?: DebugAccumulator;
-    __od_debug_print?: () => void;
-  }
-}
-
-const DEBUG_ACCUMULATOR_LIMIT = 400;
-
-function pushBounded<T>(items: T[], item: T): void {
-  items.push(item);
-  if (items.length > DEBUG_ACCUMULATOR_LIMIT) items.splice(0, items.length - DEBUG_ACCUMULATOR_LIMIT);
-}
-
-function initDebugAccumulator(): DebugAccumulator {
-  const acc: DebugAccumulator = {
-    runId: null,
-    events: [],
-    handlerCalls: [],
-    renderSnapshots: [],
-  };
-  if (typeof window !== 'undefined') {
-    window.__od_debug = acc;
-    window.__od_debug_print = () => {
-      console.log('=== OD DEBUG DUMP ===');
-      console.log(JSON.stringify(acc, null, 2));
-      console.log('=== END DUMP ===');
-    };
-  }
-  return acc;
-}
-
-function pushDebugEvent(acc: DebugAccumulator, entry: DebugAccumulator['events'][number]) {
-  pushBounded(acc.events, entry);
-}
-
-function pushDebugHandlerCall(acc: DebugAccumulator, handler: 'onDelta' | 'onAgentEvent', event: AgentEvent) {
-  const text = event.kind === 'text' ? event.text : '';
-  pushBounded(acc.handlerCalls, {
-    handler,
-    kind: event.kind,
-    textLen: text.length,
-    textSample: text.slice(0, 50),
-  });
-}
-
 export async function streamViaDaemon({
   agentId,
   history,
@@ -694,8 +622,6 @@ async function consumeDaemonRun({
   onRunStatus,
   onRunEventId,
 }: DaemonReattachOptions & { agentId?: string }): Promise<void> {
-  const debug = initDebugAccumulator();
-  debug.runId = runId;
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
@@ -712,7 +638,6 @@ async function consumeDaemonRun({
   let serverDeclaredSuccess = false;
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
-  let lastTextDelta = '';
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
@@ -778,16 +703,8 @@ async function consumeDaemonRun({
 
           if (event.event === 'stdout') {
             const chunk = String(event.data.chunk ?? '');
-            pushDebugEvent(debug, {
-              seq: debug.events.length,
-              source: 'stdout',
-              raw: event.data as unknown as Record<string, unknown>,
-              textSample: chunk.slice(0, 50),
-            });
             acc += chunk;
-            pushDebugHandlerCall(debug, 'onDelta', { kind: 'text', text: chunk });
             handlers.onDelta(chunk);
-            pushDebugHandlerCall(debug, 'onAgentEvent', { kind: 'text', text: chunk });
             handlers.onAgentEvent({ kind: 'text', text: chunk });
             continue;
           }
@@ -799,24 +716,11 @@ async function consumeDaemonRun({
 
           if (event.event === 'agent') {
             const translated = translateAgentEvent(event.data);
-            const prevText = lastTextDelta;
-            const isDup = translated?.kind === 'text' && translated.text === prevText;
-            if (translated?.kind === 'text') lastTextDelta = translated.text;
-            pushDebugEvent(debug, {
-              seq: debug.events.length,
-              source: 'agent',
-              raw: event.data as unknown as Record<string, unknown>,
-              translated,
-              isDup,
-              textSample: translated?.kind === 'text' ? translated.text.slice(0, 50) : undefined,
-            });
             if (!translated) continue;
             if (translated.kind === 'text') {
               acc += translated.text;
-              pushDebugHandlerCall(debug, 'onDelta', translated);
               handlers.onDelta(translated.text);
             }
-            pushDebugHandlerCall(debug, 'onAgentEvent', translated);
             handlers.onAgentEvent(translated);
             continue;
           }
