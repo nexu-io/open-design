@@ -198,8 +198,10 @@ export function metadataForHomeMediaComposer(
   // seed `kind` (+ the hyperframes route discriminator) and any picked prompt
   // template, mirroring how prototype/deck defer their settings.
   if (surface === 'image') {
+    const imageModel = stringValue(inputs.model);
     return {
       kind: 'image',
+      ...(imageModel ? { imageModel } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
@@ -245,7 +247,7 @@ function fieldsForSurface(
   if (surface === 'image') {
     return [
       stringField('designSystem', 'Design system', 'Design system'),
-      selectField('model', 'Model', imageModels.map((m) => m.id), modelLabels(imageModels)),
+      { ...selectField('model', 'Model', imageModels.map((m) => m.id), modelLabels(imageModels)), required: true },
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
       selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
     ];
@@ -456,11 +458,12 @@ function validImageModel(
   const readyModelIds = mediaProviders
     ? modelIds.filter((modelId) => isMediaModelPickerReady(modelId, mediaProviders))
     : modelIds;
+  if (readyModelIds.length === 0) return '';
   if (raw === CUSTOM_IMAGE_MODEL_ID && customModels.length > 0) {
-    return readyModelIds.find((modelId) => customModels.includes(modelId)) ?? customModels[0]!;
+    return readyModelIds.find((modelId) => customModels.includes(modelId)) ?? readyModelIds[0]!;
   }
   if (readyModelIds.includes(raw)) return raw;
-  return readyModelIds[0] ?? DEFAULT_IMAGE_MODEL;
+  return readyModelIds[0] ?? '';
 }
 
 function homeAudioModels(kind: AudioKind) {

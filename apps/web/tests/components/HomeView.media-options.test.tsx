@@ -3,6 +3,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from '../../src/components/HomeView';
+import {
+  metadataForHomeMediaComposer,
+  normalizeHomeMediaInputs,
+} from '../../src/components/home-hero/media-surfaces';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
 // same Lexical contenteditable the project composer uses. It still has
@@ -203,9 +207,7 @@ describe('HomeView media composer options', () => {
     });
 
     await clickHomeRailChip('image');
-    await waitFor(() => {
-      expect(screen.getByTestId('home-hero-footer-option-model').textContent).toContain('wan2.7-image');
-    });
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy());
 
     setHomePrompt('Generate a product image.');
     await submitHome();
@@ -217,6 +219,39 @@ describe('HomeView media composer options', () => {
         }),
       }));
     });
+  });
+
+  it('keeps Home image metadata model-less when no image model is ready', () => {
+    const inputs = normalizeHomeMediaInputs(
+      'image',
+      { model: 'gpt-image-2' },
+      PROMPT_TEMPLATES,
+      [],
+      { mediaProviders: {} },
+    );
+
+    expect(inputs.model).toBe('');
+    expect(metadataForHomeMediaComposer('image', inputs, PROMPT_TEMPLATES)).toEqual({
+      kind: 'image',
+      promptTemplate: expect.objectContaining({ id: 'image-product' }),
+    });
+  });
+
+  it('blocks Home image submit when no image provider has a runnable model', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit, mediaProviders: {} });
+
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy());
+
+    setHomePrompt('Generate a product image.');
+
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('hides the full selector grid for media surfaces', async () => {
