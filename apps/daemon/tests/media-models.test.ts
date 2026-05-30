@@ -62,7 +62,7 @@ describe('runnable model filtering', () => {
   it('keeps /api/media/models Google entries to implemented image surfaces', () => {
     const response = buildDaemonModelsRegistry({
       providers: {
-        google: { enabled: true },
+        google: { enabled: true, configured: true },
       },
     });
 
@@ -71,7 +71,6 @@ describe('runnable model filtering', () => {
     expect(response.video.filter((model) => model.provider === 'google')).toEqual([]);
     expect(Object.values(response.audio).flat().filter((model) => model.provider === 'google'))
       .toEqual([]);
-    expect(ids(response.video)).toContain('google/veo-3.1-lite');
   });
 
   it('keeps /api/media/models from publishing incomplete custom-image dynamic ids', () => {
@@ -108,5 +107,22 @@ describe('runnable model filtering', () => {
 
     expect(matches).toHaveLength(1);
     expect(matches[0]?.provider).toBe('custom-image');
+  });
+
+  it('excludes models from unconfigured API-key providers', () => {
+    const response = buildDaemonModelsRegistry({ providers: {} });
+    expect(ids(response.image)).not.toContain('gpt-image-2');
+    expect(ids(response.image)).not.toContain('image-01');
+    expect(ids(response.video)).not.toContain('doubao-seedance-2-0-260128');
+  });
+
+  it('excludes models from external provider not marked configured', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        google: { configured: false },
+      },
+    });
+    expect(response.image.filter((m) => m.provider === 'google')).toEqual([]);
+    expect(response.video.filter((m) => m.provider === 'google')).toEqual([]);
   });
 });

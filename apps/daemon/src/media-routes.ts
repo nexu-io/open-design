@@ -107,7 +107,15 @@ export function buildMediaModelsResponse({
     : undefined;
   const runnableProfiles = (customImage?.profiles ?? [])
     .filter((profile) => Boolean(profile.model?.trim() && profile.baseUrl?.trim()));
-  const isRunnableCatalogModel = (model: MediaModelsResponseModel) => model.provider !== 'google';
+  const configuredProviderIds = new Set(
+    Object.entries(mediaConfig.providers ?? {})
+      .filter(([, entry]) => entry && (entry as { configured?: boolean }).configured)
+      .map(([id]) => id),
+  );
+  const isRunnableCatalogModel = (model: MediaModelsResponseModel) =>
+    model.provider === 'custom-image' || configuredProviderIds.has(model.provider);
+  const isRunnableNonGoogleModel = (model: MediaModelsResponseModel) =>
+    model.provider !== 'google' && isRunnableCatalogModel(model);
 
   return {
     providers,
@@ -115,12 +123,12 @@ export function buildMediaModelsResponse({
       imageModels,
       customImageModelList,
       runnableProfiles,
-    ),
-    video: videoModels.filter(isRunnableCatalogModel),
+    ).filter(isRunnableCatalogModel),
+    video: videoModels.filter(isRunnableNonGoogleModel),
     audio: Object.fromEntries(
       Object.entries(audioModelsByKind).map(([kind, models]) => [
         kind,
-        models.filter(isRunnableCatalogModel),
+        models.filter(isRunnableNonGoogleModel),
       ]),
     ),
     aspects,
