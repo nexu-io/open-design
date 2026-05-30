@@ -4706,7 +4706,7 @@ export async function startServer({
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     const next = typeof req.query.next === 'string' ? req.query.next : '';
-    const isLocal = isLoopbackAddress(effectivePeerFromReq(req));
+    const isLocal = isLoopbackAddress(req.socket?.remoteAddress);
     res.send(renderLoginPage(undefined, next, isLocal));
   });
 
@@ -4783,7 +4783,11 @@ export async function startServer({
   // "Reset all keys". This deletes every API key and MCP key so the
   // daemon returns to an unauthenticated state.
   app.post('/api/auth/reset-keys', express.urlencoded({ extended: false }), async (req, res) => {
-    if (!isLocalManagementRequest(req)) {
+    // Check raw TCP peer directly (not isLocalManagementRequest) so a direct
+    // localhost browser can reset keys even when OD_TRUST_PROXY is enabled
+    // without X-Forwarded-For. "Lost all keys" is the emergency case that
+    // must always work from the local machine.
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(403).send(renderLoginPage('Key reset is only available from localhost.', undefined, true));
       return;

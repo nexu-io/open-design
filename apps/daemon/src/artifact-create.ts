@@ -88,15 +88,18 @@ export async function postCreateArtifactRequest(args: {
   baseUrl: string;
   projectId: string;
   input: CreateProjectArtifactInput;
+  headers?: Record<string, string>;
 }): Promise<unknown> {
+  const headers: Record<string, string> = {
+    accept: 'application/json',
+    'content-type': 'application/json',
+    ...(args.headers ?? {}),
+  };
   const response = await fetch(
     `${args.baseUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(args.projectId)}/files`,
     {
       method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(buildCreateArtifactRequestBody(args.input)),
     },
   );
