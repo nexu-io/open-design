@@ -2233,6 +2233,33 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('returns clean Claude guidance when the CLI exits with only result metadata', async () => {
+    await withFakeClaude(
+      `console.log(JSON.stringify({
+        type: 'result',
+        is_error: false,
+        modelUsage: {},
+        permission_denials: [],
+        terminal_reason: 'completed',
+        fast_mode_state: 'off',
+        uuid: 'fake-uuid',
+      })); process.exit(1);`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.detail).toContain('Claude Code exited without producing assistant text');
+        expect(result.detail).toContain('The CLI reported the request as completed');
+        expect(result.detail).not.toContain('terminal_reason');
+        expect(result.detail).not.toContain('modelUsage');
+      },
+    );
+  });
+
   it('returns custom endpoint guidance for Claude model access failures', async () => {
     const previous = process.env.ANTHROPIC_BASE_URL;
     process.env.ANTHROPIC_BASE_URL = 'https://proxy.example.com';

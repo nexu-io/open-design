@@ -36,12 +36,15 @@ function withContext(
   message: string,
   detail: string,
   input: ClaudeCliDiagnosticInput,
+  options: { includeOutputTail?: boolean } = {},
 ): ClaudeCliDiagnostic {
   const configDir = envValue(input.env, 'CLAUDE_CONFIG_DIR');
   const baseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL');
   const diagnosticTail = redactSecrets(body(input)).replace(/\s+/g, ' ').trim().slice(-240);
   const context: string[] = [message, detail];
-  if (diagnosticTail) context.push(`Claude output: ${diagnosticTail}`);
+  if (options.includeOutputTail !== false && diagnosticTail) {
+    context.push(`Claude output: ${diagnosticTail}`);
+  }
   if (configDir) context.push(`Effective CLAUDE_CONFIG_DIR: ${configDir}.`);
   if (baseUrl) context.push('ANTHROPIC_BASE_URL is set for this Claude Code process.');
   return {
@@ -49,6 +52,24 @@ function withContext(
     detail: redactSecrets(context.filter(Boolean).join(' ')),
     retryable: true,
   };
+}
+
+function hasOnlyClaudeResultMetadata(text: string): boolean {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .some((line) => {
+      try {
+        const parsed = JSON.parse(line) as {
+          type?: unknown;
+          terminal_reason?: unknown;
+        };
+        return parsed.type === 'result' && parsed.terminal_reason === 'completed';
+      } catch {
+        return false;
+      }
+    });
 }
 
 export function diagnoseClaudeCliFailure(
@@ -61,6 +82,15 @@ export function diagnoseClaudeCliFailure(
   const normalized = text.toLowerCase();
   const hasCustomBaseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL') !== null;
   const hasConfigDir = envValue(input.env, 'CLAUDE_CONFIG_DIR') !== null;
+
+  if (hasOnlyClaudeResultMetadata(text)) {
+    return withContext(
+      'Claude Code exited without producing assistant text.',
+      'The CLI reported the request as completed, but Open Design did not receive the required smoke-test reply. Run `claude -p "Reply with only: ok" --output-format stream-json --verbose` in the same environment to see the earlier Claude Code diagnostic, then retry Open Design.',
+      input,
+      { includeOutputTail: false },
+    );
+  }
 
   const customEndpointConnectionFailure =
     hasCustomBaseUrl &&
