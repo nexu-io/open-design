@@ -77,6 +77,15 @@ describe('project export manifest route', () => {
     expect(response.ok).toBe(true);
   }
 
+  async function renameFile(projectId: string, from: string, to: string): Promise<void> {
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/files/rename`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ from, to }),
+    });
+    expect(response.ok).toBe(true);
+  }
+
   it('lists exportable project files and artifact sidecar metadata without exposing sidecars', async () => {
     const projectId = await createProject();
     await writeFile(projectId, {
@@ -212,6 +221,67 @@ describe('project export manifest route', () => {
       role: 'entry',
       reasons: expect.arrayContaining(['artifact-entry', 'project-entry-file']),
     });
+  });
+
+  it('keeps artifact entry refs current when a referenced file is renamed', async () => {
+    const projectId = await createProject({ kind: 'prototype' });
+    await writeFile(projectId, {
+      name: 'index.html',
+      content: '<!doctype html><main>fallback</main>',
+    });
+    await writeFile(projectId, {
+      name: 'reviewed.html',
+      content: '<!doctype html><main>reviewed</main>',
+    });
+    await writeFile(projectId, {
+      name: 'preview/wrapper.html',
+      content: '<!doctype html><iframe src="../reviewed.html"></iframe>',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Review wrapper',
+        entry: 'reviewed.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        primary: 'reviewed.html',
+        supportingFiles: ['reviewed.html'],
+      },
+    });
+
+    await renameFile(projectId, 'reviewed.html', 'reviewed-renamed.html');
+
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/export/manifest`);
+    expect(response.ok).toBe(true);
+    const body = await response.json() as {
+      entryFile: string;
+      files: Array<{ name: string; role: string; reasons: string[] }>;
+    };
+
+    expect(body.entryFile).toBe('reviewed-renamed.html');
+    expect(body.files.find((file) => file.name === 'reviewed-renamed.html')).toMatchObject({
+      role: 'entry',
+      reasons: expect.arrayContaining(['artifact-entry', 'artifact-primary', 'project-entry-file']),
+    });
+
+    const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    expect(filesResponse.ok).toBe(true);
+    const filesBody = await filesResponse.json() as {
+      files: Array<{
+        name: string;
+        artifactManifest?: {
+          entry?: string;
+          primary?: string | boolean;
+          supportingFiles?: string[];
+        };
+      }>;
+    };
+    expect(filesBody.files.find((file) => file.name === 'preview/wrapper.html')?.artifactManifest)
+      .toMatchObject({
+        entry: 'reviewed-renamed.html',
+        primary: 'reviewed-renamed.html',
+        supportingFiles: ['reviewed-renamed.html'],
+      });
   });
 
   it('rejects invalid project ids before listing files', async () => {

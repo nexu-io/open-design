@@ -880,6 +880,7 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   await projectFileRenameTestHooks.beforeCommit?.({ source, target: targetPath });
   await renameFilePath(source, targetPath, { noOverwrite: true });
   await commitArtifactManifestRename(manifestRename, newName);
+  await updateArtifactManifestRefsForRename(dir, oldName, newName);
 
   const st = await stat(targetPath);
   const manifest = await readManifestForPath(dir, newName);
@@ -997,6 +998,153 @@ async function commitArtifactManifestRename(manifestRename, newName) {
     }
   }
   await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
+}
+
+async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
+  const manifests = [];
+  await collectArtifactManifestFiles(dir, '', manifests);
+  for (const manifestFile of manifests) {
+    const ownerName = ownerNameForArtifactManifest(manifestFile.relPath);
+    if (!ownerName) continue;
+    let raw;
+    try {
+      raw = await readFile(manifestFile.fullPath, 'utf8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
+    }
+    const parsed = parseManifest(raw);
+    if (!parsed) continue;
+
+    const updated = rewriteArtifactManifestRenameRefs(parsed, {
+      ownerName,
+      oldName,
+      newName,
+    });
+    if (!updated.changed) continue;
+
+    const validated = validateArtifactManifestInput(updated.manifest, ownerName);
+    if (!validated.ok || !validated.value) continue;
+    await writeFile(manifestFile.fullPath, JSON.stringify(validated.value, null, 2));
+  }
+}
+
+async function collectArtifactManifestFiles(dir, relDir, out) {
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return;
+    throw err;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await collectArtifactManifestFiles(fullPath, relPath, out);
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith('.artifact.json')) {
+      out.push({ relPath, fullPath });
+    }
+  }
+}
+
+function ownerNameForArtifactManifest(manifestName) {
+  const suffix = '.artifact.json';
+  if (!manifestName.endsWith(suffix)) return null;
+  return manifestName.slice(0, -suffix.length);
+}
+
+function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newName }) {
+  let changed = false;
+  const next = { ...manifest };
+
+  const entry = rewriteManifestRefForRename(next.entry, ownerName, oldName, newName, {
+    preferProjectRoot: true,
+  });
+  if (entry.changed) {
+    next.entry = entry.value;
+    changed = true;
+  }
+
+  if (typeof next.primary === 'string') {
+    const primary = rewriteManifestRefForRename(next.primary, ownerName, oldName, newName, {
+      preferProjectRoot: true,
+    });
+    if (primary.changed) {
+      next.primary = primary.value;
+      changed = true;
+    }
+  }
+
+  if (Array.isArray(next.supportingFiles)) {
+    const supportingFiles = next.supportingFiles.map((ref) => {
+      const updated = rewriteManifestRefForRename(ref, ownerName, oldName, newName);
+      if (updated.changed) changed = true;
+      return updated.value;
+    });
+    if (changed) next.supportingFiles = supportingFiles;
+  }
+
+  return { changed, manifest: next };
+}
+
+function rewriteManifestRefForRename(
+  ref,
+  ownerName,
+  oldName,
+  newName,
+  options = {},
+) {
+  if (typeof ref !== 'string') return { changed: false, value: ref };
+  const normalized = ref.replace(/\\/g, '/').trim();
+  if (!normalized) return { changed: false, value: ref };
+
+  if (options.preferProjectRoot && normalizeManifestProjectRootRef(normalized) === oldName) {
+    return { changed: true, value: newName };
+  }
+
+  if (normalizeManifestProjectRef(normalized, ownerName) === oldName) {
+    return {
+      changed: true,
+      value: relativeManifestRefForOwner(ownerName, newName),
+    };
+  }
+
+  if (normalized === oldName) {
+    return { changed: true, value: newName };
+  }
+
+  return { changed: false, value: ref };
+}
+
+function relativeManifestRefForOwner(ownerName, targetName) {
+  const ownerDir = path.posix.dirname(ownerName);
+  if (ownerDir === '.') return targetName;
+  const relative = path.posix.relative(ownerDir, targetName);
+  if (!relative || relative === '.' || relative.startsWith('../') || relative.includes('/../')) {
+    return targetName;
+  }
+  return relative;
+}
+
+function normalizeManifestProjectRootRef(ref) {
+  return normalizeManifestProjectRef(ref, '');
+}
+
+function normalizeManifestProjectRef(ref, ownerName) {
+  if (typeof ref !== 'string' || !ref.trim()) return null;
+  const value = ref.trim().replace(/\\/g, '/');
+  if (value.includes('\0') || value.startsWith('/')) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
+  const ownerDir = path.posix.dirname(ownerName);
+  const joined = ownerDir === '.' ? value : `${ownerDir}/${value}`;
+  const normalized = path.posix.normalize(joined).replace(/^\.\//, '');
+  if (!normalized || normalized === '.' || normalized.startsWith('../')) return null;
+  if (normalized.split('/').some((segment) => segment === '..' || segment === '.')) return null;
+  return normalized;
 }
 
 export async function removeProjectDir(projectsRoot, projectId) {
