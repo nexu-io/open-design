@@ -357,6 +357,48 @@ describe('Google Vertex media generation', () => {
     })).rejects.toThrow(/Google Vertex config file is invalid/);
   });
 
+  it.each([
+    'OD_GOOGLE_VERTEX_CONFIG',
+    'AGENT_SOUL_GOOGLE_VERTEX_CONFIG',
+  ] as const)('fails when explicit %s points at a missing config instead of falling back', async (envName) => {
+    delete process.env.OD_GOOGLE_VERTEX_CONFIG;
+    delete process.env.AGENT_SOUL_GOOGLE_VERTEX_CONFIG;
+    process.env[envName] = path.join(root, `${envName.toLowerCase()}-missing.json`);
+    process.env.XDG_CONFIG_HOME = path.join(root, 'xdg-config');
+    const defaultConfigPath = path.join(
+      process.env.XDG_CONFIG_HOME,
+      'open-design',
+      'google-vertex-config.json',
+    );
+    await mkdir(path.dirname(defaultConfigPath), { recursive: true });
+    await writeFile(defaultConfigPath, JSON.stringify({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      project_id: PROJECT_ID,
+      image_location: 'us-central1',
+    }), 'utf8');
+    await writeAdc({
+      type: 'authorized_user',
+      client_id: 'client-id',
+      client_secret: 'client-secret',
+      refresh_token: 'refresh-token',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with explicit missing config.',
+      output: 'vertex-explicit-missing-config.png',
+    })).rejects.toThrow(new RegExp(`Google Vertex config file not found for ${envName}`));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('reports a broken service_account_key_file instead of the generic not-configured message', async () => {
     const brokenKeyPath = path.join(root, 'broken-key.json');
     await writeFile(brokenKeyPath, 'NOT VALID JSON {{{', 'utf8');
@@ -443,6 +485,26 @@ describe('Google Vertex media generation', () => {
       prompt: 'Should fail with ADC parse error.',
       output: 'vertex-broken-adc.png',
     })).rejects.toThrow(/Google ADC file is invalid/);
+  });
+
+  it('reports missing ADC credentials while deriving the project id', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      image_location: 'us-central1',
+    });
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with missing ADC file.',
+      output: 'vertex-missing-adc.png',
+    })).rejects.toThrow(/Google ADC file not found/);
   });
 
   it('reports missing project_id when service_account is configured but project_id is absent', async () => {

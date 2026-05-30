@@ -2015,25 +2015,29 @@ async function readGoogleVertexMediaConfig(): Promise<GoogleVertexConfig> {
   const explicit =
     process.env.OD_GOOGLE_VERTEX_CONFIG?.trim();
   const legacyExplicit = process.env.AGENT_SOUL_GOOGLE_VERTEX_CONFIG?.trim();
-  const paths = [
-    ...(explicit ? [expandHomePath(explicit)] : []),
-    googleVertexDefaultConfigPath(),
-    ...(legacyExplicit ? [expandHomePath(legacyExplicit)] : []),
-    path.join(os.homedir(), '.config/agent-soul/google-vertex-config.json'),
+  const candidates: Array<{ file: string; required: boolean; source: string }> = [
+    ...(explicit ? [{ file: expandHomePath(explicit), required: true, source: 'OD_GOOGLE_VERTEX_CONFIG' }] : []),
+    ...(legacyExplicit ? [{ file: expandHomePath(legacyExplicit), required: true, source: 'AGENT_SOUL_GOOGLE_VERTEX_CONFIG' }] : []),
+    { file: googleVertexDefaultConfigPath(), required: false, source: 'Open Design default Google Vertex config' },
+    { file: path.join(os.homedir(), '.config/agent-soul/google-vertex-config.json'), required: false, source: 'Agent Soul default Google Vertex config' },
   ];
-  for (const file of paths) {
+  for (const { file, required, source } of candidates) {
     try {
       const raw = await readFile(file, 'utf8');
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw) as unknown;
       } catch {
-        throw new Error(`Google Vertex config file is invalid: ${file}`);
+        throw new Error(`Google Vertex config file is invalid for ${source}: ${file}`);
       }
       if (isRecord(parsed)) return normalizeGoogleVertexConfig(parsed);
-      throw new Error(`Google Vertex config file is invalid: ${file}`);
+      throw new Error(`Google Vertex config file is invalid for ${source}: ${file}`);
     } catch (err) {
-      if (errorStringProp(err, 'code') !== 'ENOENT') throw err;
+      if (errorStringProp(err, 'code') === 'ENOENT') {
+        if (required) throw new Error(`Google Vertex config file not found for ${source}: ${file}`);
+        continue;
+      }
+      throw err;
     }
   }
   return {
