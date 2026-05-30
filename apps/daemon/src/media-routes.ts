@@ -65,6 +65,68 @@ export function resolveLegacyMediaRouteGrant(input: {
   return { ok: true, grant: input.grant };
 }
 
+type MediaModelsResponseModel = { provider: string; [key: string]: unknown };
+type MediaModelsResponseConfig = {
+  providers?: Record<string, {
+    model?: string;
+    baseUrl?: string;
+    profiles?: Array<{ model?: string; baseUrl?: string }>;
+  }>;
+};
+
+export function buildMediaModelsResponse({
+  mediaConfig,
+  providers,
+  imageModels,
+  videoModels,
+  audioModelsByKind,
+  aspects,
+  videoLengthsSec,
+  audioDurationsSec,
+  withConfiguredCustomImageModels,
+}: {
+  mediaConfig: MediaModelsResponseConfig;
+  providers: unknown;
+  imageModels: MediaModelsResponseModel[];
+  videoModels: MediaModelsResponseModel[];
+  audioModelsByKind: Record<string, MediaModelsResponseModel[]>;
+  aspects: readonly string[];
+  videoLengthsSec: readonly number[];
+  audioDurationsSec: readonly number[];
+  withConfiguredCustomImageModels: (
+    models: MediaModelsResponseModel[],
+    configuredModelList: string | null | undefined,
+    profiles?: Array<{ model?: string; baseUrl?: string }> | null,
+  ) => MediaModelsResponseModel[];
+}) {
+  const customImage = mediaConfig.providers?.['custom-image'];
+  const customImageModelList = customImage?.baseUrl?.trim()
+    ? customImage.model
+    : undefined;
+  const runnableProfiles = (customImage?.profiles ?? [])
+    .filter((profile) => Boolean(profile.model?.trim() && profile.baseUrl?.trim()));
+  const isRunnableCatalogModel = (model: MediaModelsResponseModel) => model.provider !== 'google';
+
+  return {
+    providers,
+    image: withConfiguredCustomImageModels(
+      imageModels,
+      customImageModelList,
+      runnableProfiles,
+    ),
+    video: videoModels.filter(isRunnableCatalogModel),
+    audio: Object.fromEntries(
+      Object.entries(audioModelsByKind).map(([kind, models]) => [
+        kind,
+        models.filter(isRunnableCatalogModel),
+      ]),
+    ),
+    aspects,
+    videoLengthsSec,
+    audioDurationsSec,
+  };
+}
+
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
@@ -220,29 +282,17 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   };
   app.get('/api/media/models', async (_req, res) => {
     const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
-    const customImage = mediaConfig.providers['custom-image'];
-    const runnableProfiles = (customImage?.profiles ?? [])
-      .filter((p: { model?: string; baseUrl: string }) => Boolean(p.model?.trim() && p.baseUrl?.trim()));
-    const imageModels = withConfiguredCustomImageModels(
-      IMAGE_MODELS,
-      customImage?.model,
-      runnableProfiles,
-    );
-
-    res.json({
+    res.json(buildMediaModelsResponse({
+      mediaConfig,
       providers: MEDIA_PROVIDERS,
-      image: imageModels,
-      video: (VIDEO_MODELS as Array<{ provider: string }>).filter((m) => m.provider !== 'google'),
-      audio: Object.fromEntries(
-        Object.entries(AUDIO_MODELS_BY_KIND).map(([kind, models]) => [
-          kind,
-          (models as Array<{ provider: string }>).filter((m) => m.provider !== 'google'),
-        ]),
-      ),
+      imageModels: IMAGE_MODELS,
+      videoModels: VIDEO_MODELS,
+      audioModelsByKind: AUDIO_MODELS_BY_KIND,
       aspects: MEDIA_ASPECTS,
       videoLengthsSec: VIDEO_LENGTHS_SEC,
       audioDurationsSec: AUDIO_DURATIONS_SEC,
-    });
+      withConfiguredCustomImageModels,
+    }));
   });
 
   // Live AIHubMix media catalogue. The static IMAGE_MODELS registry only
