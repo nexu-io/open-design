@@ -195,6 +195,7 @@ export interface Conversation {
   title: string | null;
   createdAt: number;
   updatedAt: number;
+  totalDurationMs?: number;
   latestRun?: {
     status: ChatRunStatus;
     startedAt?: number;

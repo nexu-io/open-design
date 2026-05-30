@@ -752,12 +752,31 @@ export function listConversations(db: SqliteDb, projectId: string) {
                  AND m.run_status IS NOT NULL
             )
            WHERE rn = 1
+        ),
+        total_run_durations AS (
+          SELECT m.conversation_id AS conversationId,
+                 SUM(
+                   CASE
+                     WHEN CAST(m.ended_at AS INTEGER) >= CAST(m.started_at AS INTEGER)
+                       THEN CAST(m.ended_at AS INTEGER) - CAST(m.started_at AS INTEGER)
+                     ELSE 0
+                   END
+                 ) AS totalDurationMs
+            FROM messages m
+            JOIN project_conversations c ON c.id = m.conversation_id
+           WHERE m.role = 'assistant'
+             AND m.run_status IN ('succeeded', 'failed', 'canceled')
+             AND m.started_at IS NOT NULL
+             AND m.ended_at IS NOT NULL
+           GROUP BY m.conversation_id
         )
         SELECT c.id, c.projectId, c.title, c.createdAt, c.updatedAt,
                lr.latestRunStatus, lr.latestRunStartedAt,
-               lr.latestRunEndedAt, lr.latestRunEventsJson
+               lr.latestRunEndedAt, lr.latestRunEventsJson,
+               trd.totalDurationMs
           FROM project_conversations c
           LEFT JOIN latest_runs lr ON lr.conversationId = c.id
+          LEFT JOIN total_run_durations trd ON trd.conversationId = c.id
          ORDER BY c.updatedAt DESC`,
     )
     .all(projectId)).map(normalizeConversation);
@@ -775,6 +794,7 @@ export function getConversation(db: SqliteDb, id: string) {
   return {
     ...normalizeConversation(r),
     latestRun: latestConversationRunSummary(db, r.id) ?? undefined,
+    ...numberProperty('totalDurationMs', totalConversationRunDurationMs(db, r.id)),
   };
 }
 
@@ -791,8 +811,14 @@ function normalizeConversation(r: DbRow) {
     title: r.title ?? null,
     createdAt: Number(r.createdAt),
     updatedAt: Number(r.updatedAt),
+    ...numberProperty('totalDurationMs', r.totalDurationMs),
     latestRun: latestRun ?? undefined,
   };
+}
+
+function numberProperty(key: string, value: unknown) {
+  const n = value == null ? undefined : Number(value);
+  return typeof n === 'number' && Number.isFinite(n) ? { [key]: n } : {};
 }
 
 function latestConversationRunSummary(db: SqliteDb, conversationId: string) {
@@ -811,6 +837,27 @@ function latestConversationRunSummary(db: SqliteDb, conversationId: string) {
     )
     .get(conversationId) as DbRow | undefined;
   return conversationRunSummaryFromRow(row);
+}
+
+function totalConversationRunDurationMs(db: SqliteDb, conversationId: string): number | undefined {
+  const row = db
+    .prepare(
+      `SELECT SUM(
+                CASE
+                  WHEN CAST(ended_at AS INTEGER) >= CAST(started_at AS INTEGER)
+                    THEN CAST(ended_at AS INTEGER) - CAST(started_at AS INTEGER)
+                  ELSE 0
+                END
+              ) AS totalDurationMs
+         FROM messages
+        WHERE conversation_id = ?
+          AND role = 'assistant'
+          AND run_status IN ('succeeded', 'failed', 'canceled')
+          AND started_at IS NOT NULL
+          AND ended_at IS NOT NULL`,
+    )
+    .get(conversationId) as DbRow | undefined;
+  return row?.totalDurationMs == null ? undefined : Number(row.totalDurationMs);
 }
 
 function conversationRunSummaryFromRow(row: DbRow | undefined) {
