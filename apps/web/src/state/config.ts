@@ -890,7 +890,12 @@ export function mergeDaemonMediaProviders(
     return { ...localConfig };
   }
 
-  if (Object.keys(daemonProviders).length === 0) {
+  // First-boot: readMaskedConfig returns every provider ID but all entries are
+  // completely empty objects (no keys at all). Treat this the same as the old
+  // `{}` case — preserve local entries for the bootstrap migration sync.
+  const daemonHasOnlyUnconfiguredEntries = Object.values(daemonProviders)
+    .every((entry) => Object.keys(entry ?? {}).length === 0);
+  if (daemonHasOnlyUnconfiguredEntries) {
     return {
       ...localConfig,
       mediaProviders: Object.fromEntries(

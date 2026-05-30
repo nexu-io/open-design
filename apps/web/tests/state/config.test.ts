@@ -14,7 +14,7 @@ import {
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from '../../src/state/config';
-import type { AppConfig } from '../../src/types';
+import type { AppConfig, MediaProviderCredentials } from '../../src/types';
 
 const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
@@ -349,6 +349,26 @@ describe('mergeDaemonMediaProviders', () => {
     };
 
     const merged = mergeDaemonMediaProviders(localConfig, {});
+
+    expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
+  });
+
+  it('keeps local media providers when daemon returns all-empty provider rows (first-boot migration)', () => {
+    const localConfig = {
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        openai: {
+          apiKey: 'sk-local',
+          baseUrl: 'https://local.example/v1',
+        },
+      },
+    };
+
+    const merged = mergeDaemonMediaProviders(localConfig, {
+      openai: {},
+      google: {},
+      grok: {},
+    } as unknown as Record<string, MediaProviderCredentials>);
 
     expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
   });
