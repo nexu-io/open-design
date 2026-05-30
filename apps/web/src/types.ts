@@ -52,6 +52,7 @@ import type {
   Project,
   ProjectPlatform,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
@@ -86,6 +87,7 @@ export type {
   OrbitRunSummary,
   OrbitStatusResponse,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewVisualMarkKind,
 } from '@open-design/contracts';
@@ -172,6 +174,7 @@ export interface MediaProviderCredentials {
   model?: string;
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
+  source?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -520,4 +523,5 @@ export type {
 export interface OpenTabsState {
   tabs: ProjectWorkspaceTabId[];
   active: ProjectWorkspaceTabId | null;
+  hasSavedState?: boolean;
 }

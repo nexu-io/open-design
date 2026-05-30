@@ -1,12 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import postcss, { type Rule } from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
 describe('plugin info preview pane styles', () => {
   it('keeps plugin preview sidebar content away from the pane edges', () => {
-    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const css = readExpandedIndexCss();
     const root = postcss.parse(css, { from: 'src/index.css' });
     const topLevelRules = root.nodes.filter(
       (node): node is Rule => node.type === 'rule',

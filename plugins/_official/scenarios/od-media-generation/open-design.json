@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "od-media-generation",
   "title": "Media generation (default scenario)",
+  "title_i18n": {
+    "en": "Media generation (default scenario)",
+    "zh-CN": "媒体生成（默认场景）",
+    "zh-TW": "媒體生成（預設場景）",
+    "ja": "メディア生成（デフォルトシナリオ）",
+    "ko": "미디어 생성 (기본 시나리오)",
+    "de": "Medienerzeugung (Standard-Szenario)",
+    "fr": "Génération de médias (scénario par défaut)",
+    "ru": "Генерация медиа (сценарий по умолчанию)",
+    "es": "Generación de medios (escenario predeterminado)",
+    "pt-BR": "Geração de mídia (cenário padrão)",
+    "it": "Generazione media (scenario predefinito)",
+    "vi": "Tạo media (kịch bản mặc định)",
+    "pl": "Generowanie mediów (scenariusz domyślny)",
+    "id": "Pembuatan media (skenario default)",
+    "nl": "Mediageneratie (standaardscenario)",
+    "ar": "توليد الوسائط (السيناريو الافتراضي)",
+    "tr": "Medya üretimi (varsayılan senaryo)",
+    "uk": "Генерація медіа (типовий сценарій)"
+  },
   "version": "0.1.0",
   "description": "Default scenario plugin for image, video, and audio projects. Routes through the media-* atoms based on the project kind and wraps the result in a live artifact.",
+  "description_i18n": {
+    "en": "Default scenario plugin for image, video, and audio projects. Routes through the media-* atoms based on the project kind and wraps the result in a live artifact.",
+    "zh-CN": "面向图像、视频和音频项目的默认场景插件。按项目类型路由到 media-* atom，把结果包成 live artifact。",
+    "zh-TW": "面向影像、影片和音訊專案的預設場景外掛。按專案類型路由到 media-* atom，把結果包成 live artifact。",
+    "ja": "画像、動画、音声プロジェクト向けのデフォルトシナリオプラグイン。プロジェクト種別に応じて media-* atom にルーティングし、結果をライブアーティファクトにラップします。",
+    "ko": "이미지, 비디오, 오디오 프로젝트를 위한 기본 시나리오 플러그인. 프로젝트 종류에 따라 media-* atom으로 라우팅하고 결과를 라이브 산출물로 감쌉니다.",
+    "de": "Standardszenario-Plugin für Bild-, Video- und Audio-Projekte. Routet projektabhängig zu den media-*-Atoms und verpackt das Ergebnis in ein Live-Artefakt.",
+    "fr": "Plugin de scénario par défaut pour les projets image, vidéo et audio. Route vers les atoms media-* selon le type de projet et emballe le résultat en live artifact.",
+    "ru": "Плагин сценария по умолчанию для проектов с изображением, видео и аудио. Маршрутизирует через media-* atoms в зависимости от типа проекта и оборачивает результат в живой артефакт.",
+    "es": "Plugin de escenario por defecto para proyectos de imagen, video y audio. Enruta por los atoms media-* según el tipo de proyecto y envuelve el resultado en un live artifact.",
+    "pt-BR": "Plugin de cenário padrão para projetos de imagem, vídeo e áudio. Roteia pelos atoms media-* conforme o tipo de projeto e empacota o resultado em um live artifact.",
+    "it": "Plugin scenario predefinito per progetti immagine, video e audio. Instrada attraverso gli atoms media-* in base al tipo di progetto e avvolge il risultato in un live artifact.",
+    "vi": "Plugin kịch bản mặc định cho dự án hình ảnh, video và âm thanh. Định tuyến qua các atom media-* theo loại dự án và gói kết quả thành live artifact.",
+    "pl": "Domyślna wtyczka scenariusza dla projektów obrazu, wideo i audio. Trasuje przez atoms media-* w zależności od typu projektu i opakowuje wynik w live artifact.",
+    "id": "Plugin skenario default untuk proyek gambar, video, dan audio. Merutekan via atom media-* sesuai jenis proyek dan membungkus hasilnya dalam live artifact.",
+    "nl": "Standaardscenarioplug-in voor beeld-, video- en audioprojecten. Routeert via media-*-atoms op basis van het projecttype en verpakt het resultaat in een live artefact.",
+    "ar": "إضافة سيناريو افتراضية لمشاريع الصور والفيديو والصوت. توجِّه عبر atoms media-* حسب نوع المشروع وتضع النتيجة في عنصر مباشر.",
+    "tr": "Görsel, video ve ses projeleri için varsayılan senaryo eklentisi. Proje türüne göre media-* atomlarına yönlendirir ve sonucu canlı çıktıya sarar.",
+    "uk": "Типовий плагін сценарію для проєктів зображень, відео та аудіо. Маршрутизує через media-* atoms залежно від типу проєкту та обгортає результат у живий артефакт."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -35,19 +75,30 @@
       "stages": [
         {
           "id": "discovery",
-          "atoms": ["discovery-question-form"]
+          "atoms": [
+            "discovery-question-form"
+          ]
         },
         {
           "id": "plan",
-          "atoms": ["todo-write"]
+          "atoms": [
+            "todo-write"
+          ]
         },
         {
           "id": "generate",
-          "atoms": ["media-image", "media-video", "media-audio", "live-artifact"]
+          "atoms": [
+            "media-image",
+            "media-video",
+            "media-audio",
+            "live-artifact"
+          ]
         },
         {
           "id": "critique",
-          "atoms": ["critique-theater"],
+          "atoms": [
+            "critique-theater"
+          ],
           "repeat": true,
           "until": "critique.score>=4 || iterations>=3"
         }
@@ -74,7 +125,11 @@
         "required": false,
         "label": "Media kind",
         "placeholder": "image",
-        "options": ["image", "video", "audio"],
+        "options": [
+          "image",
+          "video",
+          "audio"
+        ],
         "default": "image"
       },
       {
@@ -97,7 +152,13 @@
         "required": false,
         "label": "Aspect",
         "placeholder": "16:9",
-        "options": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:3",
+          "3:4"
+        ],
         "default": "16:9"
       }
     ]

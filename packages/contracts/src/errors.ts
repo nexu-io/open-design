@@ -14,6 +14,21 @@ export const API_ERROR_CODES = [
   'AGENT_AUTH_REQUIRED',
   'AGENT_EXECUTION_FAILED',
   'AGENT_PROMPT_TOO_LARGE',
+  'AMR_MODEL_UNAVAILABLE',
+  'AMR_AUTH_REQUIRED',
+  'AMR_INSUFFICIENT_BALANCE',
+  // The agent emitted a fabricated Markdown role marker
+  // (`## user` / `## assistant` / `## system`) inside its own response.
+  // The chat host parses those lowercase lines as real turn
+  // boundaries, so an emission is a prompt-injection attempt the model
+  // committed against itself (issue #3247; same class as #2102 /
+  // #2464). The daemon detects the marker in the stream, truncates
+  // emission at that point, and terminates the agent subprocess
+  // (SIGTERM with SIGKILL fallback) so no further tokens or
+  // `tool_use` blocks reach the dispatcher. Emitted by
+  // `server.ts::abortForRoleMarker` alongside the existing
+  // `fabricated_role_marker` warning event. Retryable.
+  'ROLE_MARKER_HALLUCINATION',
   'PROJECT_NOT_FOUND',
   // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
   // is not in the project, or has no messages to synthesize a handoff from.

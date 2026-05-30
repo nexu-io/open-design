@@ -248,6 +248,15 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('**platformTargets**');
   });
 
+  it('tells artifact generation to summarize instead of dumping raw HTML source into chat', () => {
+    const prompt = composeSystemPrompt({
+      metadata: { kind: 'prototype', fidelity: 'production' } as any,
+    });
+
+    expect(prompt).toContain('Do not dump the full raw HTML source back into chat');
+    expect(prompt).toContain('the assistant message should only summarize the result');
+  });
+
   it('uses the primary skill surface when composed skill modes conflict', () => {
     const prompt = composeSystemPrompt({
       skillMode: 'image',
@@ -379,6 +388,19 @@ describe('composeSystemPrompt', () => {
       });
       expect(prompt).toContain('- `github`\n');
       expect(prompt).not.toContain('- `github` (github)');
+    });
+
+    it('keeps external MCP tools visible when OD-owned media execution is disabled', () => {
+      const prompt = composeSystemPrompt({
+        connectedExternalMcp: [{ id: 'external-media', label: 'External media' }],
+        metadata: { kind: 'image' },
+        mediaExecution: { mode: 'disabled' },
+      });
+
+      expect(prompt).toContain('## External MCP servers — already authenticated');
+      expect(prompt).toContain('`external-media`');
+      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).not.toContain('## Media generation contract');
     });
   });
 

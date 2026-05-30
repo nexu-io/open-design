@@ -1,0 +1,1062 @@
+/* ----- Entry sidebar adopt pill ----- */
+.pet-pill {
+  position: relative;
+  height: 24px;
+  padding: 0;
+  gap: 0;
+  cursor: default;
+}
+.pet-pill .pet-pill-glyph {
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  justify-content: center;
+}
+.pet-pill > .pet-pill-main,
+.pet-pill > .pet-pill-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 7px;
+}
+.pet-pill > .pet-pill-main {
+  gap: 5px;
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+}
+.pet-pill > .pet-pill-toggle {
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  color: var(--text-muted);
+}
+.pet-pill > .pet-pill-main:hover,
+.pet-pill > .pet-pill-toggle:hover {
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.pet-pill-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 0;
+  background: var(--border);
+}
+.pet-pill-fresh {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-tint);
+}
+.pet-pill-fresh > .pet-pill-divider {
+  background: var(--accent);
+  opacity: 0.35;
+}
+.pet-pill-fresh:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.pet-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  margin-left: 2px;
+}
+
+/* ----- Settings → Pets ----- */
+.pet-wake-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pet-source-head {
+  margin-top: 14px;
+  display: grid;
+  gap: 4px;
+}
+.pet-source-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.pet-source-head .hint {
+  margin: 0;
+}
+.pet-action-status {
+  margin: 10px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
+  color: var(--accent-strong);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.pet-action-status span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pet-current-summary {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+.pet-current-summary__sprite {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--pet-accent, var(--accent)) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pet-accent, var(--accent)) 30%, var(--border));
+}
+.pet-current-summary__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.pet-current-summary__label {
+  color: var(--text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pet-current-summary__copy strong {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pet-current-summary__copy span:last-child {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seg-btn.small {
+  padding: 4px 10px !important;
+  font-size: 12px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.seg-btn.small.active {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+.seg-btn.small[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pet source tabs — pill row that splits the panel into three
+   exclusive surfaces (built-in / custom / community). Sits flush
+   between the section head and the active tab's content so the user
+   reads it as "pick a source, then pick a pet inside it". */
+.pet-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.pet-tabs-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pet-tabs-top-row .subtab-pill {
+  flex: 0 0 auto;
+}
+.pet-tabs-hint {
+  margin: 0;
+}
+
+.pet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* The Community tab stacks the codex grid + hatch panel; flatten
+   their default top margins so the spacing reads as one column
+   rather than two ad-hoc cards. */
+.pet-community {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+}
+.pet-community .pet-codex,
+.pet-community .pet-hatch {
+  margin-top: 0;
+}
+
+/* Custom tab dashed wrapper — strip the top margin so it tucks
+   directly under the tab pills. */
+.pet-tabs + .pet-custom,
+.pet-tabs + div + .pet-custom {
+  margin-top: 4px;
+}
+
+/* Highlight the codex card whose name + image match the user's
+   current adoption (community pets land in the custom slot, so we
+   piggy-back on the same "active" affordance used by built-ins). */
+.pet-codex-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.pet-card {
+  --pet-accent: var(--accent);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+.pet-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.pet-card.active {
+  border-color: var(--pet-accent);
+  box-shadow: 0 0 0 1px var(--pet-accent) inset;
+  background: var(--bg-panel);
+}
+.pet-card-glyph {
+  font-size: 28px;
+  line-height: 1;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--pet-accent) 14%, transparent);
+}
+.pet-card-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.pet-card-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+.pet-card-flavor {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.pet-card-cta,
+.pet-card-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.pet-card-badge {
+  background: color-mix(in srgb, var(--pet-accent) 16%, transparent);
+  border-color: var(--pet-accent);
+  color: var(--pet-accent);
+}
+
+.pet-custom {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border-strong);
+  background: var(--bg-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pet-custom-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pet-custom-head h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.pet-custom-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+.pet-custom-sprite {
+  font-size: 32px;
+  line-height: 1;
+  width: 48px;
+  height: 48px;
+  /* Lock the sprite to a perfect square inside the flex preview row.
+     Without `flex-shrink: 0`, a long pet name or greeting in the
+     adjacent bubble shrinks the 48px box horizontally, squashing
+     the sprite and breaking the round halo. */
+  flex: 0 0 48px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--pet-accent, var(--accent)) 14%, transparent);
+}
+.pet-custom-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  color: var(--text);
+  /* Allow the text column to shrink past its intrinsic content width
+     so long greetings wrap instead of pushing the sprite. */
+  min-width: 0;
+}
+.pet-custom-bubble strong {
+  color: var(--pet-accent, var(--accent));
+}
+.pet-custom-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.pet-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.pet-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+}
+.pet-swatch.active {
+  border-color: var(--text-strong);
+}
+.pet-swatch-picker {
+  width: 22px;
+  height: 22px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* ============================================================
+   Pet — discovery surfaces (welcome teaser, composer)
+   ============================================================ */
+
+/* ----- Welcome dialog teaser ----- */
+.welcome-pet-teaser {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-soft) 100%);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  width: 100%;
+}
+.welcome-pet-teaser:hover {
+  filter: brightness(1.02);
+}
+.welcome-pet-glyph {
+  font-size: 24px;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.welcome-pet-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.welcome-pet-copy strong {
+  font-size: 12.5px;
+  color: var(--text-strong);
+}
+.welcome-pet-copy span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+.welcome-pet-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--accent-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ----- Composer pet button + popover ----- */
+.composer-pet-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.composer-pet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.composer-pet:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.composer-pet.adopted {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+}
+.composer-pet-glyph {
+  font-size: 14px;
+  line-height: 1;
+}
+.composer-pet-label {
+  font-weight: 500;
+}
+.composer-pet-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 260px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.composer-pet-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 2px 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.composer-pet-menu-head strong {
+  font-size: 12px;
+  color: var(--text-strong);
+}
+.composer-pet-menu-head span {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+.composer-pet-menu-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.composer-pet-menu-row:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-pet-menu-row.toggle {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.composer-pet-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.composer-pet-menu-pet {
+  --pet-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+.composer-pet-menu-pet:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.composer-pet-menu-pet.active {
+  border-color: var(--pet-accent);
+  background: color-mix(in srgb, var(--pet-accent) 12%, transparent);
+  color: var(--text);
+}
+.composer-pet-menu-pet span:first-child {
+  font-size: 18px;
+  line-height: 1;
+}
+.composer-pet-menu-row.settings {
+  border-top: 1px solid var(--border-soft);
+  margin-top: 2px;
+  padding-top: 8px;
+  border-radius: 0;
+  border-bottom: 1px solid transparent;
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+}
+
+/* ============================================================
+   Composer — consolidated Tools popover
+   ------------------------------------------------------------
+   The leading @ glyph now opens a single tabbed popover
+   containing MCP / Import / Pet quick actions plus a shortcut
+   to the full Settings dialog. Replaces three standalone row
+   buttons that were overflowing in narrow chats.
+   ============================================================ */
+.composer-tools-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.composer-tools-trigger {
+  position: relative;
+}
+.composer-tools-at {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0;
+  color: currentColor;
+  transform: translateY(-0.5px);
+}
+.composer-tools-trigger.active {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-tools-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.composer-tools-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+}
+.composer-tools-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 6px 6px;
+  font-size: 11.5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 0;
+}
+.composer-tools-tab:hover { color: var(--text); }
+.composer-tools-tab.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.composer-tools-tab-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 13px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.composer-tools-tab > svg,
+[role='tab'] > svg {
+  display: block;
+  flex: none;
+  align-self: center;
+}
+.composer-tools-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.composer-tools-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 2px 6px;
+}
+.composer-tools-segments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.composer-tools-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  min-width: 0;
+}
+.composer-tools-segment:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+.composer-tools-segment.active {
+  background: var(--bg-panel);
+  color: var(--text);
+  border-color: var(--border);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+.composer-tools-segment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-tools-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+}
+.composer-tools-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.composer-tools-empty {
+  padding: 14px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+}
+.composer-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.composer-tools-section-label {
+  padding: 4px 6px 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.composer-tools-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  width: 100%;
+}
+.composer-tools-row:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-tools-row.active {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.composer-tools-row-body {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.composer-tools-row-body strong {
+  font-weight: 500;
+  font-size: 12px;
+}
+.composer-tools-row-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-transform: lowercase;
+}
+/* Plugins panel — each row is a horizontal split: the main button
+   applies the plugin, the side button opens the details modal. */
+.composer-tools-row--plugin {
+  padding: 0;
+  gap: 0;
+}
+.composer-tools-row--plugin .composer-tools-row-body {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.composer-tools-row--plugin .composer-tools-row-meta {
+  text-transform: none;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.composer-tools-row-main {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  min-width: 0;
+}
+.composer-tools-row-main:hover {
+  background: var(--bg-subtle);
+}
+.composer-tools-row-main:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.composer-tools-row-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.composer-tools-row-side:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.composer-tools-row-pending {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+.composer-tools-row-action {
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0;
+  margin-top: 4px;
+  padding-top: 8px;
+  color: var(--text-muted);
+}
+.composer-tools-row-action:hover { color: var(--text); }
+.composer-tools-row-toggle {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.composer-tools-pet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.composer-tools-pet-head {
+  padding: 0 4px 4px;
+}
+.composer-tools-pet-head .hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.composer-tools-pet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 0 2px;
+}
+.composer-tools-pet-item {
+  --pet-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.composer-tools-pet-item:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.composer-tools-pet-item.active {
+  border-color: var(--pet-accent);
+  background: color-mix(in srgb, var(--pet-accent) 12%, transparent);
+  color: var(--text);
+}
+.composer-tools-pet-item span:first-child {
+  font-size: 18px;
+  line-height: 1;
+}
+.composer-tools-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  width: 100%;
+}
+.composer-tools-settings:hover {
+  background: var(--bg-subtle);
+}
+
+/* ============================================================
+   Pet — uploaded image / spritesheet rendering
+   ------------------------------------------------------------
+   The face element switches between an emoji glyph and an
+   image/spritesheet via the PetSpriteFace component. Static
+   images inherit the float animation from .pet-sprite-glyph;
+   spritesheets get their own pet-frames keyframes which the
+   component drives with an inline `animation: …` string so
+   each pet can choose its own (frames, fps) combo.
+   ============================================================ */
+.pet-image {
+  display: inline-block;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  width: 100%;
+  height: 100%;
+  /* Pixel art-friendly upscale so 32×32 sheets stay crisp at 56 px. */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+}
+.pet-image.static {
+  /* Single static image — let the parent .pet-sprite-glyph float
+     animation drive subtle movement. */
+  background-size: contain;
+  background-position: center;
+}
+
+/* Spritesheet keyframe used by PetSpriteFace inline animation. The
+   from/to span 0% → 100%, which CSS resolves against
+   (container_width − background_width). With background-size set to
+   `${frames * 100}% 100%` each `steps()` tick lands on a frame edge. */
+@keyframes pet-frames {
+  from { background-position-x: 0%; }
+  to { background-position-x: 100%; }
+}
+
+/* Full-atlas mode: the sprite renders the active row from a Codex
+   8x9 grid. background-position-y is set inline to the row offset and
+   the keyframe walks frames inside that row. We use a CSS variable
+   for the endpoint so a single keyframe block can drive any row's
+   `frames`/`cols` combination — `--pet-atlas-end-x` is set per row by
+   PetSpriteFace based on `frames / (cols - 1) * 100%`. */
+.pet-image.atlas {
+  background-repeat: no-repeat;
+  /* The sprite element switches rows on the fly; smooth out the
+     row transitions so direction changes feel less jarring without
+     blurring the per-frame `steps()` cadence. */
+  transition: background-position-y 220ms ease;
+}
+@keyframes pet-atlas-frames {
+  from { background-position-x: 0%; }
+  to { background-position-x: var(--pet-atlas-end-x, 100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-image.frames,
+  .pet-image.atlas { animation: none !important; background-position-x: 0% !important; }
+}
+
+/* PetSettings — upload row, frames/fps grid, error caption */
+.pet-image-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+.pet-image-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.seg-btn.small.ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.seg-btn.small.ghost:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.pet-image-error {
+  color: var(--red) !important;
+}
+.pet-image-frames {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.pet-image-frames .field input {
+  width: 100%;
+}
+
+/* Make the custom-pet preview / settings sprite respect the rounded
+   accent halo used for emoji glyphs even when an image is rendered. */
+.pet-custom-sprite {
+  overflow: hidden;
+}
+

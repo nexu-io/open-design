@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -228,6 +228,46 @@ describe('POST /api/import/folder', () => {
       project: { metadata: { baseDir?: string } };
     };
     expect(after.project.metadata.baseDir).toBe(originalBaseDir);
+  });
+
+  it('writes generated artifact files into metadata.baseDir instead of the daemon projects dir', async () => {
+    const real = makeFolder();
+    await writeFile(path.join(real, 'index.html'), '<!doctype html>');
+    const importResp = await importFolder({ baseDir: real });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as {
+      project: { id: string; metadata: { baseDir: string } };
+    };
+
+    const saveResp = await fetch(`${baseUrl}/api/projects/${project.id}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        artifact: true,
+        artifactManifest: {
+          exports: ['html'],
+          kind: 'html',
+          renderer: 'html',
+          title: 'Generated',
+        },
+        content: '<!doctype html><h1>Generated</h1>',
+        name: 'generated.html',
+      }),
+    });
+
+    expect(saveResp.status).toBe(200);
+    expect(await readFile(path.join(project.metadata.baseDir, 'generated.html'), 'utf8')).toContain(
+      'Generated',
+    );
+    expect(
+      await readFile(path.join(project.metadata.baseDir, 'generated.html.artifact.json'), 'utf8'),
+    ).toContain('"entry": "generated.html"');
+
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    await expect(stat(path.join(dataDir, 'projects', project.id, 'generated.html'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('refuses raw reads through a descendant symlink that escapes the folder', async () => {

@@ -13,7 +13,6 @@ import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { ChatMessage, ProjectFile } from '../../src/types';
 
 beforeAll(() => {
-  if (window.localStorage) return;
   const store = new Map<string, string>();
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
@@ -191,6 +190,85 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
 
     const matches = screen.queryAllByText('claude-opus-4-7-max');
     expect(matches.length).toBe(1);
+  });
+
+  it('renders bare URLs in status details as links', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          runStatus: 'failed',
+          events: [
+            {
+              kind: 'status',
+              label: 'error',
+              detail:
+                'AMR Cloud reported insufficient balance. Recharge at https://open-design.ai/amr/wallet, then retry.',
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        onFeedback={vi.fn()}
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/wallet' });
+    expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/wallet');
+    expect(link.classList.contains('md-link')).toBe(true);
+  });
+});
+
+describe('AssistantMessage question forms', () => {
+  it('renders only the first question form for a repeated form id in one assistant turn', () => {
+    const firstForm = [
+      '<question-form id="discovery" title="Quick brief — tailored">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'audience',
+            label: 'Who is this for?',
+            type: 'text',
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+    const duplicateForm = [
+      '<question-form id="discovery" title="Quick brief — 30 seconds">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'output',
+            label: 'What are we making?',
+            type: 'radio',
+            required: true,
+            options: ['Slide deck / pitch', 'Dashboard / tool UI'],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'text',
+              text: `${firstForm}\n\nFirst answer the tailored brief:\n\n${duplicateForm}`,
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+      />,
+    );
+
+    expect(screen.getByText('Quick brief — tailored')).toBeTruthy();
+    expect(screen.getByText('Who is this for?')).toBeTruthy();
+    expect(screen.queryByText('Quick brief — 30 seconds')).toBeNull();
+    expect(screen.queryByText('What are we making?')).toBeNull();
   });
 });
 

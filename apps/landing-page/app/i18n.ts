@@ -159,6 +159,13 @@ export interface HeaderCopy {
   nav: {
     /** Top-level dropdown grouping the four catalog facets. */
     library: string;
+    /**
+     * Trigger label for the Plugins dropdown. The dropdown groups Templates,
+     * Skills, Systems and Craft under one parent — surfaced as "Plugins"
+     * since the new `/plugins/` hub. Kept distinct from `library` so each
+     * locale can pick the term that reads naturally as a button.
+     */
+    plugins: string;
     skills: string;
     systems: string;
     templates: string;
@@ -166,6 +173,8 @@ export interface HeaderCopy {
     /** Standalone link to the YouTube tutorials channel. */
     tutorials: string;
     blog: string;
+    /** External community / contributors page (currently a Vercel deploy). */
+    community: string;
     contact: string;
   };
   download: string;
@@ -689,6 +698,8 @@ export interface LandingUiCopy {
     summary: string;
     catalog: string;
     openDesign: string;
+    products: string;
+    resources: string;
     official: string;
     quickstart: string;
     agents: string;
@@ -700,7 +711,11 @@ export interface LandingUiCopy {
     contributors: string;
     releases: string;
     discord: string;
+    xTwitter: string;
     rss: string;
+    sisterProjects: string;
+    htmlAnything: string;
+    nexuIo: string;
     bottomLeft: string;
     bottomRight: string;
   };
@@ -951,12 +966,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: 'Library',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systems',
         templates: 'Templates',
         craft: 'Craft',
         tutorials: 'Tutorials',
         blog: 'Blog',
+        community: 'Community',
         contact: 'Contact',
       },
       download: 'Download',
@@ -982,12 +999,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: '柏林 / 开放 / 地球',
       nav: {
         library: '资源库',
+        plugins: '插件',
         skills: '技能',
         systems: '设计系统',
         templates: '模板',
         craft: '工艺',
         tutorials: '教程',
         blog: '博客',
+        community: '社区',
         contact: '联系',
       },
       download: '下载',
@@ -1013,12 +1032,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: '柏林 / 開放 / 地球',
       nav: {
         library: '資源庫',
+        plugins: '外掛',
         skills: '技能',
         systems: '設計系統',
         templates: '模板',
         craft: '工藝',
         tutorials: '教程',
         blog: '部落格',
+        community: '社群',
         contact: '聯絡',
       },
       download: '下載',
@@ -1044,12 +1065,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: 'ライブラリ',
+        plugins: 'プラグイン',
         skills: 'スキル',
         systems: 'システム',
         templates: 'テンプレート',
         craft: 'クラフト',
         tutorials: 'チュートリアル',
         blog: 'ブログ',
+        community: 'コミュニティ',
         contact: '連絡',
       },
       download: 'ダウンロード',
@@ -1075,12 +1098,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Open / Earth',
       nav: {
         library: '라이브러리',
+        plugins: '플러그인',
         skills: '스킬',
         systems: '시스템',
         templates: '템플릿',
         craft: '크래프트',
         tutorials: '튜토리얼',
         blog: '블로그',
+        community: '커뮤니티',
         contact: '문의',
       },
       download: '다운로드',
@@ -1106,12 +1131,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Offen / Erde',
       nav: {
         library: 'Bibliothek',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systeme',
         templates: 'Vorlagen',
         craft: 'Gestaltung',
         tutorials: 'Tutorials',
         blog: 'Blog',
+        community: 'Community',
         contact: 'Kontakt',
       },
       download: 'Download',
@@ -1137,12 +1164,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Ouvert / Terre',
       nav: {
         library: 'Bibliothèque',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Systèmes',
         templates: 'Modèles',
         craft: 'Conception',
         tutorials: 'Tutoriels',
         blog: 'Blog',
+        community: 'Communauté',
         contact: 'Contact',
       },
       download: 'Télécharger',
@@ -1168,12 +1197,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Берлин / Open / Earth',
       nav: {
         library: 'Библиотека',
+        plugins: 'Плагины',
         skills: 'Skills',
         systems: 'Системы',
         templates: 'Шаблоны',
         craft: 'Правила',
         tutorials: 'Уроки',
         blog: 'Блог',
+        community: 'Сообщество',
         contact: 'Контакт',
       },
       download: 'Скачать',
@@ -1199,12 +1230,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlín / Abierto / Tierra',
       nav: {
         library: 'Biblioteca',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Sistemas',
         templates: 'Plantillas',
         craft: 'Oficio',
         tutorials: 'Tutoriales',
         blog: 'Blog',
+        community: 'Comunidad',
         contact: 'Contacto',
       },
       download: 'Descargar',
@@ -1230,12 +1263,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlim / Aberto / Terra',
       nav: {
         library: 'Biblioteca',
+        plugins: 'Plugins',
         skills: 'Skills',
         systems: 'Sistemas',
         templates: 'Modelos',
         craft: 'Ofício',
         tutorials: 'Tutoriais',
         blog: 'Blog',
+        community: 'Comunidade',
         contact: 'Contato',
       },
       download: 'Baixar',
@@ -1261,12 +1296,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlino / Aperto / Terra',
       nav: {
         library: 'Libreria',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Sistemi',
         templates: 'Template',
         craft: 'Regole',
         tutorials: 'Tutorial',
         blog: 'Blog',
+        community: 'Comunità',
         contact: 'Contatto',
       },
       download: 'Scarica',
@@ -1292,12 +1329,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Mở / Trái Đất',
       nav: {
         library: 'Thư viện',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Hệ thống',
         templates: 'Mẫu',
         craft: 'Quy tắc',
         tutorials: 'Hướng dẫn',
         blog: 'Blog',
+        community: 'Cộng đồng',
         contact: 'Liên hệ',
       },
       download: 'Tải xuống',
@@ -1323,12 +1362,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Otwarte / Ziemia',
       nav: {
         library: 'Biblioteka',
+        plugins: 'Wtyczki',
         skills: 'Skills',
         systems: 'Systemy',
         templates: 'Szablony',
         craft: 'Reguły',
         tutorials: 'Samouczki',
         blog: 'Blog',
+        community: 'Społeczność',
         contact: 'Kontakt',
       },
       download: 'Pobierz',
@@ -1354,12 +1395,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Terbuka / Bumi',
       nav: {
         library: 'Pustaka',
+        plugins: 'Plugin',
         skills: 'Skill',
         systems: 'Sistem',
         templates: 'Templat',
         craft: 'Aturan',
         tutorials: 'Tutorial',
         blog: 'Blog',
+        community: 'Komunitas',
         contact: 'Kontak',
       },
       download: 'Unduh',
@@ -1385,12 +1428,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlijn / Open / Aarde',
       nav: {
         library: 'Bibliotheek',
+        plugins: 'Plug-ins',
         skills: 'Skills',
         systems: 'Systemen',
         templates: 'Sjablonen',
         craft: 'Regels',
         tutorials: 'Tutorials',
         blog: 'Blog',
+        community: 'Community',
         contact: 'Contact',
       },
       download: 'Download',
@@ -1416,12 +1461,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'برلين / مفتوح / الأرض',
       nav: {
         library: 'المكتبة',
+        plugins: 'الإضافات',
         skills: 'Skills',
         systems: 'أنظمة',
         templates: 'قوالب',
         craft: 'حرفة',
         tutorials: 'الدروس',
         blog: 'المدونة',
+        community: 'المجتمع',
         contact: 'تواصل',
       },
       download: 'تنزيل',
@@ -1447,12 +1494,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Berlin / Açık / Dünya',
       nav: {
         library: 'Kütüphane',
+        plugins: 'Eklentiler',
         skills: 'Skill',
         systems: 'Sistemler',
         templates: 'Şablonlar',
         craft: 'Kurallar',
         tutorials: 'Eğitimler',
         blog: 'Blog',
+        community: 'Topluluk',
         contact: 'İletişim',
       },
       download: 'İndir',
@@ -1478,12 +1527,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       brandMetaBody: 'Берлін / Open / Earth',
       nav: {
         library: 'Бібліотека',
+        plugins: 'Плагіни',
         skills: 'Skills',
         systems: 'Системи',
         templates: 'Шаблони',
         craft: 'Правила',
         tutorials: 'Туторіали',
         blog: 'Блог',
+        community: 'Спільнота',
         contact: 'Контакт',
       },
       download: 'Завантажити',
@@ -2948,6 +2999,8 @@ const LANDING_UI_COPY: LandingUiCopy = {
       'The official open-source, local-first alternative to Claude Design. Apache-2.0, BYOK at every layer.',
     catalog: 'Catalog',
     openDesign: 'Open Design',
+    products: 'Products',
+    resources: 'Resources',
     official: 'Official source page',
     quickstart: 'Quickstart',
     agents: 'Agents locaux',
@@ -2959,7 +3012,11 @@ const LANDING_UI_COPY: LandingUiCopy = {
     contributors: 'Contributors',
     releases: 'Releases',
     discord: 'Discord',
+    xTwitter: 'X / Twitter',
     rss: 'RSS',
+    sisterProjects: 'Sister projects',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Issue Nº 26',
     bottomRight: 'Berlin / Open / Earth · 52.5200° N · 13.4050° E',
   },
@@ -3227,6 +3284,8 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       summary:
         '官方开源、本地优先的 Claude Design 替代方案。Apache-2.0，所有层都 BYOK。',
       catalog: '目录',
+      products: '产品',
+      resources: '资源',
       official: '官方来源页',
       quickstart: '快速开始',
       agents: 'Agent',
@@ -3238,7 +3297,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       contributors: '贡献者',
       releases: '版本发布',
       discord: 'Discord',
+      xTwitter: 'X / Twitter',
       rss: 'RSS',
+      sisterProjects: '姊妹项目',
+      htmlAnything: 'HTML Anything',
+      nexuIo: 'nexu.io',
       bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRight: '柏林 / 开放 / 地球 · 52.5200° N · 13.4050° E',
     },
@@ -3502,6 +3565,8 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       summary:
         '官方開源、本地優先的 Claude Design 替代方案。Apache-2.0，每一層都 BYOK。',
       catalog: '目錄',
+      products: '產品',
+      resources: '資源',
       official: '官方來源頁',
       quickstart: '快速開始',
       agents: 'Agent',
@@ -3513,7 +3578,11 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       contributors: '貢獻者',
       releases: '版本發布',
       discord: 'Discord',
+      xTwitter: 'X / Twitter',
       rss: 'RSS',
+      sisterProjects: '姊妹專案',
+      htmlAnything: 'HTML Anything',
+      nexuIo: 'nexu.io',
       bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 卷 / 第 26 期',
       bottomRight: '柏林 / 開放 / 地球 · 52.5200° N · 13.4050° E',
     },
@@ -3907,6 +3976,8 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     summary:
       'Claude Design の公式オープンソース、ローカル優先の代替。Apache-2.0、すべての層で BYOK。',
     catalog: 'カタログ',
+    products: 'プロダクト',
+    resources: 'リソース',
     official: '公式ソースページ',
     quickstart: 'クイックスタート',
     agents: 'Agent',
@@ -3921,11 +3992,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / 第 01 巻 / 第 26 号',
     bottomRight: 'ベルリン / オープン / 地球 · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: '姉妹プロジェクト',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   ko: {
     summary:
       'Claude Design의 공식 오픈소스, 로컬 우선 대안입니다. Apache-2.0, 모든 계층에서 BYOK.',
     catalog: '카탈로그',
+    products: '제품',
+    resources: '리소스',
     official: '공식 소스 페이지',
     quickstart: '빠른 시작',
     agents: 'Agent',
@@ -3940,11 +4017,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / 01권 / 26호',
     bottomRight: '베를린 / 오픈 / 지구 · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: '자매 프로젝트',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   de: {
     summary:
       'Die offizielle quelloffene, lokal zuerst gedachte Alternative zu Claude Design. Apache-2.0, BYOK auf jeder Ebene.',
     catalog: 'Katalog',
+    products: 'Produkte',
+    resources: 'Ressourcen',
     official: 'Offizielle Quellseite',
     quickstart: 'Schnellstart',
     agents: 'Agenten',
@@ -3959,11 +4042,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Band 01 / Ausgabe Nr. 26',
     bottomRight: 'Berlin / Offen / Erde · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Schwesterprojekte',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   fr: {
     summary:
       "L'alternative officielle open source et locale d'abord à Claude Design. Apache-2.0, BYOK à chaque couche.",
     catalog: 'Catalogue',
+    products: 'Produits',
+    resources: 'Ressources',
     official: 'Page source officielle',
     quickstart: 'Démarrage rapide',
     agents: 'Lokale agents',
@@ -3978,11 +4067,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Numéro 26',
     bottomRight: 'Berlin / Ouvert / Terre · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Projets sœurs',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   ru: {
     summary:
       'Официальная открытая и локально ориентированная альтернатива Claude Design. Apache-2.0, BYOK на каждом уровне.',
     catalog: 'Каталог',
+    products: 'Продукты',
+    resources: 'Ресурсы',
     official: 'Официальная страница источника',
     quickstart: 'Быстрый старт',
     agents: 'Агенты',
@@ -3997,11 +4092,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Том 01 / Выпуск № 26',
     bottomRight: 'Берлин / Открыто / Земля · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Родственные проекты',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   es: {
     summary:
       'La alternativa oficial de código abierto y local-first a Claude Design. Apache-2.0, BYOK en cada capa.',
     catalog: 'Catálogo',
+    products: 'Productos',
+    resources: 'Recursos',
     official: 'Página fuente oficial',
     quickstart: 'Inicio rápido',
     agents: 'Agentes',
@@ -4016,11 +4117,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volumen 01 / Número 26',
     bottomRight: 'Berlín / Abierto / Tierra · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Proyectos relacionados',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   'pt-br': {
     summary:
       'A alternativa oficial, de código aberto e local-first ao Claude Design. Apache-2.0, BYOK em todas as camadas.',
     catalog: 'Catálogo',
+    products: 'Produtos',
+    resources: 'Recursos',
     official: 'Página oficial de origem',
     quickstart: 'Início rápido',
     agents: 'Agentes',
@@ -4035,11 +4142,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Edição Nº 26',
     bottomRight: 'Berlim / Aberto / Terra · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Projetos irmãos',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   it: {
     summary:
       "L'alternativa ufficiale open source e locale-first a Claude Design. Apache-2.0, BYOK a ogni livello.",
     catalog: 'Catalogo',
+    products: 'Prodotti',
+    resources: 'Risorse',
     official: 'Pagina sorgente ufficiale',
     quickstart: 'Avvio rapido',
     agents: 'Agent',
@@ -4054,11 +4167,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Numero 26',
     bottomRight: 'Berlino / Aperto / Terra · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Progetti correlati',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   vi: {
     summary:
       'Lựa chọn chính thức, mã nguồn mở và ưu tiên cục bộ thay Claude Design. Apache-2.0, BYOK ở mọi lớp.',
     catalog: 'Danh mục',
+    products: 'Sản phẩm',
+    resources: 'Tài nguyên',
     official: 'Trang nguồn chính thức',
     quickstart: 'Bắt đầu nhanh',
     agents: 'Agent',
@@ -4073,11 +4192,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Tập 01 / Số 26',
     bottomRight: 'Berlin / Mở / Trái đất · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Dự án liên quan',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   pl: {
     summary:
       'Oficjalna, otwartoźródłowa i lokalna alternatywa dla Claude Design. Apache-2.0, BYOK na każdej warstwie.',
     catalog: 'Katalog',
+    products: 'Produkty',
+    resources: 'Zasoby',
     official: 'Oficjalna strona źródłowa',
     quickstart: 'Szybki start',
     agents: 'Agenci',
@@ -4092,11 +4217,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Tom 01 / Numer 26',
     bottomRight: 'Berlin / Otwarte / Ziemia · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Projekty siostrzane',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   id: {
     summary:
       'Alternatif resmi, sumber terbuka, dan mengutamakan lokal untuk Claude Design. Apache-2.0, BYOK di setiap lapisan.',
     catalog: 'Katalog',
+    products: 'Produk',
+    resources: 'Sumber daya',
     official: 'Halaman sumber resmi',
     quickstart: 'Mulai cepat',
     agents: 'Agent',
@@ -4111,11 +4242,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Edisi Nº 26',
     bottomRight: 'Berlin / Terbuka / Bumi · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Proyek terkait',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   nl: {
     summary:
       'Het officiële open-source en local-first alternatief voor Claude Design. Apache-2.0, BYOK in elke laag.',
     catalog: 'Catalogus',
+    products: 'Producten',
+    resources: 'Bronnen',
     official: 'Officiële bronpagina',
     quickstart: 'Snelstart',
     agents: 'Agents',
@@ -4130,11 +4267,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Volume 01 / Editie Nº 26',
     bottomRight: 'Berlijn / Open / Aarde · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'Zusterprojecten',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   ar: {
     summary:
       'البديل الرسمي مفتوح المصدر والمحلي أولاً لـ Claude Design. Apache-2.0 وBYOK في كل طبقة.',
     catalog: 'الفهرس',
+    products: 'المنتجات',
+    resources: 'الموارد',
     official: 'صفحة المصدر الرسمية',
     quickstart: 'البدء السريع',
     agents: 'الوكلاء',
@@ -4149,11 +4292,17 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     rss: 'RSS',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / المجلد 01 / العدد 26',
     bottomRight: 'برلين / مفتوح / الأرض · 52.5200° N · 13.4050° E',
+    xTwitter: 'X / Twitter',
+    sisterProjects: 'المشاريع الشقيقة',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
   },
   tr: {
     summary:
       "Claude Design için resmi, açık kaynak ve yerel öncelikli alternatif. Apache-2.0, her katmanda BYOK.",
     catalog: 'Katalog',
+    products: 'Ürünler',
+    resources: 'Kaynaklar',
     official: 'Resmi kaynak sayfası',
     quickstart: 'Hızlı başlangıç',
     agents: 'Agentlar',
@@ -4165,7 +4314,11 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     contributors: 'Katkıda bulunanlar',
     releases: 'Sürümler',
     discord: 'Discord',
+    xTwitter: 'X / Twitter',
     rss: 'RSS',
+    sisterProjects: 'Kardeş projeler',
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Cilt 01 / Sayı Nº 26',
     bottomRight: 'Berlin / Açık / Dünya · 52.5200° N · 13.4050° E',
   },
@@ -4173,6 +4326,8 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     summary:
       'Офіційна відкрита та локально орієнтована альтернатива Claude Design. Apache-2.0, BYOK на кожному рівні.',
     catalog: 'Каталог',
+    products: 'Продукти',
+    resources: 'Ресурси',
     official: 'Офіційна сторінка джерела',
     quickstart: 'Швидкий старт',
     agents: 'Агенти',
@@ -4184,7 +4339,11 @@ const LOCALIZED_LANDING_FOOTER_COPY: Partial<
     contributors: 'Учасники',
     releases: 'Релізи',
     discord: 'Discord',
+    xTwitter: 'X / Twitter',
     rss: 'RSS',
+    sisterProjects: "Пов'язані проєкти",
+    htmlAnything: 'HTML Anything',
+    nexuIo: 'nexu.io',
     bottomLeft: '● Open Design · Apache-2.0 · 2026 / Том 01 / Випуск № 26',
     bottomRight: 'Берлін / Відкрито / Земля · 52.5200° N · 13.4050° E',
   },

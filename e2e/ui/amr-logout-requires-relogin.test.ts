@@ -1,0 +1,100 @@
+import { mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { expect, test } from '@playwright/test';
+
+import { writeFakeVelaBin } from '@/amr';
+import {
+  createProjectViaApi,
+  gotoProject,
+  openSettingsDialog,
+  putAppConfig,
+  seedBrowserConfig,
+  sendPrompt,
+} from '@/playwright/amr';
+
+test('after local Sign out, AMR runs require re-login and Settings keeps AMR selected', async ({ page }) => {
+  const root = join(tmpdir(), `open-design-amr-logout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const successVelaBin = await writeFakeVelaBin(join(root, 'bin-success'), {
+    assistantText: 'Hello from the e2e fake vela.',
+    requireLoginConfig: false,
+  });
+  const reloginVelaBin = await writeFakeVelaBin(join(root, 'bin-relogin'), {
+    failAuthAtPrompt: true,
+  });
+  await mkdir(root, { recursive: true });
+  let loggedIn = true;
+
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      json: loggedIn
+        ? {
+            loggedIn: true,
+            profile: 'local',
+            configPath: '/tmp/.amr/config.json',
+            user: { id: 'logout-ui', email: 'logout-ui@example.com' },
+          }
+        : {
+            loggedIn: false,
+            profile: 'local',
+            configPath: '/tmp/.amr/config.json',
+            user: null,
+          },
+    });
+  });
+
+  await page.route('**/api/integrations/vela/logout', async (route) => {
+    loggedIn = false;
+    await route.fulfill({ json: { ok: true } });
+  });
+
+  const config = {
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: '',
+    model: '',
+    agentId: 'amr',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {
+      amr: { model: 'default', reasoning: 'default' },
+    },
+    agentCliEnv: {
+      amr: { VELA_BIN: successVelaBin },
+    },
+  };
+
+  await seedBrowserConfig(page, config);
+  await putAppConfig(page, config);
+
+  const projectId = `amr-logout-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
+  await createProjectViaApi(page, projectId, 'AMR logout requires relogin');
+  await gotoProject(page, projectId);
+
+  const settings = await openSettingsDialog(page);
+  await settings.getByRole('tab', { name: /Local CLI/i }).click();
+  const signOut = settings.getByRole('button', { name: /^Sign out$/ });
+  await expect(signOut).toBeVisible();
+  await signOut.click();
+  await expect(settings.getByRole('button', { name: /^Sign in$/ })).toBeVisible({ timeout: 10_000 });
+  await expect(settings.getByRole('button', { name: /^AMR\b/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(settings).toHaveCount(0);
+  await putAppConfig(page, {
+    ...config,
+    agentCliEnv: {
+      amr: { VELA_BIN: reloginVelaBin },
+    },
+  });
+  await sendPrompt(page, 'AMR logout should require relogin');
+
+  await expect(page.locator('.msg.error')).toContainText(/sign in again|login missing|expired|ACP session exited before completion/i, { timeout: 15_000 });
+
+  const configResponse = await page.request.get('/api/app-config');
+  expect(configResponse.ok(), await configResponse.text()).toBeTruthy();
+  const body = (await configResponse.json()) as { config?: { agentId?: string } };
+  expect(body.config?.agentId).toBe('amr');
+});

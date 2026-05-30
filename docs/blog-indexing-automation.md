@@ -14,7 +14,7 @@ doc is its concrete implementation in `nexu-io/open-design`.
 | Trigger | Job | Outcome |
 |---|---|---|
 | `landing-page-ci` | `lint-blog-seo.ts` + `check-blog-url-changes.ts` | Changed posts are checked for frontmatter, internal/external links, rendered canonical/JSON-LD/OG metadata, and slug delete/rename redirects before they can merge. |
-| `landing-page-deploy` finishes successfully on `main` | `blog-indexing-on-deploy.yml` | New blog URLs are detected, verified ready, submitted to IndexNow, the sitemap-index is re-submitted to GSC, baseline URL Inspection is captured, and baseline Search Analytics is queried. |
+| `landing-page-production` promotion finishes successfully | `blog-indexing-on-deploy.yml` | New blog URLs are detected, verified ready, submitted to IndexNow, the sitemap-index is re-submitted to GSC, baseline URL Inspection is captured, and baseline Search Analytics is queried. Staging deploys (`landing-page-staging`) never trigger this. |
 | Daily `cron: 0 2 * * *` | `blog-indexing-monitor.yml` | Every blog post in the T+1 / T+3 / T+7 / T+14 window is re-inspected; GSC Search Analytics is refreshed; stall and low-traffic issues are opened/refreshed when needed. |
 | Daily `cron: 0 2 * * *` (10:00 Asia/Shanghai) | `blog-3day-report.yml` | T-3 cohort + 30-day rolling cohort traffic digest written to `docs/blog-traffic-digest.md` via the `automation/blog-traffic-digest` PR, with an optional Feishu group push. Read-only against GSC. |
 | Manual `workflow_dispatch` | `blog-indexing-monitor.yml` | Maintainers can dry-run or explicitly publish a token-gated dev.to/Hashnode cross-post with canonical URL pointing back to Open Design. |
@@ -58,10 +58,19 @@ content / SEO issue.
 
 ## Architecture
 
+Because production is a manual promotion that can bundle several merged
+posts, `detect-changed-urls` diffs from the `blog-indexed-prod` git tag (the
+last commit this workflow successfully indexed) rather than `HEAD^`. The tag
+is force-advanced to the deployed commit at the end of a successful run, so
+the next promotion picks up exactly the posts merged in between. On the very
+first run the tag does not exist yet and the workflow bootstraps from `HEAD^`
+— create the tag manually (`git tag blog-indexed-prod <sha>; git push origin
+blog-indexed-prod`) if an initial multi-commit backfill is needed.
+
 ```
-landing-page-deploy ──success──▶ blog-indexing-on-deploy
+landing-page-production ──success──▶ blog-indexing-on-deploy
                                         │
-                       detect-changed-urls
+                       detect-changed-urls (base = blog-indexed-prod tag)
                                         │
                        verify-readiness (200 / canonical / sitemap)
                                         │
@@ -224,7 +233,7 @@ The expected steady state:
 - Renames are handled as both a redirect requirement for the old slug
   and a newly deployed URL for the destination slug, so the new page is
   included in the post-deploy readiness and baseline inspection flow.
-- New post ships → `landing-page-deploy` runs → `blog-indexing-on-deploy`
+- New post ships → `landing-page-production` promotion runs → `blog-indexing-on-deploy`
   runs → IndexNow is called, GSC sitemap is submitted, and the bot PR
   opens with the baseline verdict plus any available 7d/28d traffic
   metrics.

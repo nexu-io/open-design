@@ -109,8 +109,17 @@ mac_zip="open-design-$RELEASE_VERSION$asset_version_suffix-mac-arm64.zip"
 mac_intel_dmg="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.dmg"
 mac_intel_zip="open-design-$RELEASE_VERSION$mac_intel_asset_suffix-mac-x64.zip"
 win_installer="open-design-$RELEASE_VERSION$win_asset_suffix-win-x64-setup.exe"
+win_portable_zip="open-design-$RELEASE_VERSION$win_asset_suffix-win-x64-portable.zip"
 linux_appimage="open-design-$RELEASE_VERSION$linux_asset_suffix-linux-x64.AppImage"
 metadata_path="$release_root/metadata.json"
+win_include_zip="${WIN_INCLUDE_ZIP:-true}"
+case "$win_include_zip" in
+  true | false) ;;
+  *)
+    echo "unsupported WIN_INCLUDE_ZIP: $win_include_zip" >&2
+    exit 1
+    ;;
+esac
 
 if [ "$ENABLE_MAC" = "true" ]; then
   upload "$release_root/mac/$mac_dmg" "$version_prefix/$mac_dmg" "application/x-apple-diskimage" "public, max-age=31536000, immutable"
@@ -139,6 +148,13 @@ if [ "$ENABLE_WIN" = "true" ]; then
     echo "win_installer_url=$public_origin/$version_prefix/$win_installer"
     echo "win_feed_url=$public_origin/$latest_prefix/latest.yml"
   } >> "$GITHUB_OUTPUT"
+  if [ "$win_include_zip" = "true" ]; then
+    upload "$release_root/win/$win_portable_zip" "$version_prefix/$win_portable_zip" "application/zip" "public, max-age=31536000, immutable"
+    upload "$release_root/win/$win_portable_zip.sha256" "$version_prefix/$win_portable_zip.sha256" "text/plain; charset=utf-8" "public, max-age=31536000, immutable"
+    {
+      echo "win_portable_zip_url=$public_origin/$version_prefix/$win_portable_zip"
+    } >> "$GITHUB_OUTPUT"
+  fi
 fi
 
 if [ "$ENABLE_MAC_INTEL" = "true" ]; then
@@ -177,6 +193,8 @@ MAC_ZIP="$mac_zip" \
 MAC_INTEL_DMG="$mac_intel_dmg" \
 MAC_INTEL_ZIP="$mac_intel_zip" \
 WIN_INSTALLER="$win_installer" \
+WIN_PORTABLE_ZIP="$win_portable_zip" \
+WIN_INCLUDE_ZIP="$win_include_zip" \
 LINUX_APPIMAGE="$linux_appimage" \
 MAC_ARTIFACT_MODE="$mac_artifact_mode" \
 METADATA_PATH="$metadata_path" \
@@ -236,6 +254,12 @@ if (enabled("ENABLE_MAC")) {
   };
 }
 if (enabled("ENABLE_WIN")) {
+  const winArtifacts = {
+    installer: fileEntry("win", env.WIN_INSTALLER, "application/vnd.microsoft.portable-executable"),
+  };
+  if (env.WIN_INCLUDE_ZIP !== "false") {
+    winArtifacts.portableZip = fileEntry("win", env.WIN_PORTABLE_ZIP, "application/zip");
+  }
   platforms.win = {
     arch: "x64",
     enabled: true,
@@ -245,9 +269,7 @@ if (enabled("ENABLE_WIN")) {
       url: url(versionPrefix, "latest.yml"),
     },
     signed: false,
-    artifacts: {
-      installer: fileEntry("win", env.WIN_INSTALLER, "application/vnd.microsoft.portable-executable"),
-    },
+    artifacts: winArtifacts,
   };
 }
 if (enabled("ENABLE_LINUX")) {

@@ -3,8 +3,14 @@ import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { projectFileUrl } from '../providers/registry';
+import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import { buildSrcdoc } from '../runtime/srcdoc';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import {
+  createFileSystemReadError,
+  FILE_SYSTEM_READ_ERROR_MESSAGE,
+  isFileSystemReadError,
+} from '../utils/fileSystemErrors';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -46,6 +52,70 @@ type DesignFilesGroupMode = 'kind' | 'modified';
 type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
 type SortKey = 'name' | 'kind' | 'mtime';
 type SortDir = 'asc' | 'desc';
+
+// Storage key for per-project view state. Bump the version suffix (v1 → v2) when
+// removing or renaming a persisted field — just adding an optional field is safe
+// without a version bump. No cleanup of old keys on project deletion; the keys
+// are small preference blobs and orphan gracefully.
+const VIEW_STATE_KEY_PREFIX = 'od:design-files:view-state:v1:';
+
+const DEFAULT_SORT_KEY: SortKey = 'mtime';
+const DEFAULT_SORT_DIR: SortDir = 'desc';
+const DEFAULT_PAGE_SIZE: number | 'all' = 30;
+const PAGE_SIZE_OPTIONS = [15, 30, 45, 60, 'all'] as const;
+
+interface PersistedViewState {
+  sortKey?: SortKey;
+  sortDir?: SortDir;
+  pageSize?: number | 'all';
+  kindFilter?: string[];
+}
+
+function readViewState(projectId: string): PersistedViewState {
+  try {
+    if (typeof window === 'undefined') return {};
+    const raw = localStorage.getItem(VIEW_STATE_KEY_PREFIX + projectId);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as PersistedViewState;
+  } catch {
+    return {};
+  }
+}
+
+function writeViewState(projectId: string, state: PersistedViewState): void {
+  try {
+    localStorage.setItem(VIEW_STATE_KEY_PREFIX + projectId, JSON.stringify(state));
+  } catch {
+    // localStorage unavailable (private mode, quota exceeded) — silently skip
+  }
+}
+
+function isSortKey(v: unknown): v is SortKey {
+  return v === 'name' || v === 'kind' || v === 'mtime';
+}
+
+function isSortDir(v: unknown): v is SortDir {
+  return v === 'asc' || v === 'desc';
+}
+
+function isPageSize(v: unknown): v is number | 'all' {
+  return (PAGE_SIZE_OPTIONS as ReadonlyArray<unknown>).includes(v);
+}
+
+// Validate that a value is one of the known ProjectFileKind literals. This
+// guards against stored values that were valid under a previous schema but
+// are no longer part of the union — they are silently dropped rather than
+// poisoning the kindFilter state.
+const VALID_KIND_SET: ReadonlySet<string> = new Set<ProjectFileKind>([
+  'html', 'image', 'video', 'audio', 'sketch', 'text',
+  'code', 'pdf', 'document', 'presentation', 'spreadsheet', 'binary',
+]);
+
+function isProjectFileKind(v: unknown): v is ProjectFileKind {
+  return typeof v === 'string' && VALID_KIND_SET.has(v);
+}
 type FileSystemEntryWithReader = FileSystemEntry & {
   createReader?: () => FileSystemDirectoryReader;
 };
@@ -133,6 +203,7 @@ export function DesignFilesPanel({
   const analytics = useAnalytics();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
@@ -140,8 +211,27 @@ export function DesignFilesPanel({
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sortKey, setSortKey] = useState<SortKey>('mtime');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  // Read once at mount; projectId is stable for this component instance
+  // (parent uses key={projectId} to remount on project switch).
+  const savedViewState = useRef(readViewState(projectId));
+  // Guard for the persist useEffect: skip the initial write so we only
+  // flush to localStorage when the user actually changes a preference.
+  // Without this, every project the user opens gets a default-value entry
+  // written on first render, making stale-key garbage grow unbounded.
+  // Note: React 18 StrictMode (active in next dev) fires effects twice,
+  // keeping refs intact across the simulated remount. This means the guard
+  // fires on the first effect run, sets the ref true, and the second run
+  // then writes the defaults. The result is a harmless default-value entry
+  // for the project; subsequent user changes overwrite it correctly. The
+  // invariant ("no write without a user action") only holds in production
+  // builds where StrictMode is not active.
+  const viewStateHasMounted = useRef(false);
+  const [sortKey, setSortKey] = useState<SortKey>(
+    () => isSortKey(savedViewState.current.sortKey) ? savedViewState.current.sortKey : DEFAULT_SORT_KEY,
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => isSortDir(savedViewState.current.sortDir) ? savedViewState.current.sortDir : DEFAULT_SORT_DIR,
+  );
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
@@ -153,7 +243,13 @@ export function DesignFilesPanel({
   >(new Set());
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [dayBoundary, setDayBoundary] = useState(() => Date.now());
-  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
+  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => {
+    const { kindFilter: kf } = savedViewState.current;
+    if (!Array.isArray(kf) || kf.length === 0) return new Set();
+    // Validate each stored value against the current ProjectFileKind union so
+    // stale values from a prior schema (e.g. a renamed kind) are dropped silently.
+    return new Set(kf.filter(isProjectFileKind));
+  });
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const [currentDir, setCurrentDir] = useState<string>('');
@@ -198,7 +294,12 @@ export function DesignFilesPanel({
   // Drop any selected-filter kinds that no longer appear in the file list
   // (e.g. after a delete leaves the kind empty). Keeps the filter UI honest
   // and prevents a stale filter from silently hiding everything.
+  // Guard: skip when no kinds are available yet — availableKinds is empty only
+  // when files haven't loaded. Running cleanup against an empty set would
+  // clear a kindFilter that was correctly restored from localStorage before
+  // the async file list arrived.
   useEffect(() => {
+    if (availableKinds.length === 0) return;
     setKindFilter((prev) => {
       if (prev.size === 0) return prev;
       const present = new Set(availableKinds);
@@ -228,7 +329,9 @@ export function DesignFilesPanel({
   }, [filteredFiles, sortKey, sortDir]);
 
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<number | 'all'>(30);
+  const [pageSize, setPageSize] = useState<number | 'all'>(
+    () => isPageSize(savedViewState.current.pageSize) ? savedViewState.current.pageSize : DEFAULT_PAGE_SIZE,
+  );
 
   const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
@@ -268,6 +371,23 @@ export function DesignFilesPanel({
   useEffect(() => {
     setPage(0);
   }, [pageSize]);
+
+  // Persist view state so it survives navigation (the panel remounts via
+  // key={projectId} when the user tabs away and back).
+  // Skip the initial render: we only want to write when the user actually
+  // changes a preference, not on every project the user visits.
+  useEffect(() => {
+    if (!viewStateHasMounted.current) {
+      viewStateHasMounted.current = true;
+      return;
+    }
+    writeViewState(projectId, {
+      sortKey,
+      sortDir,
+      pageSize,
+      kindFilter: Array.from(kindFilter),
+    });
+  }, [projectId, sortKey, sortDir, pageSize, kindFilter]);
 
   // Reset to the first page when the filter changes — the previous page
   // index may no longer exist (or may now sit past the new totalPages).
@@ -816,8 +936,14 @@ export function DesignFilesPanel({
     ev.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
-    const dropped = await filesFromDataTransfer(ev.dataTransfer);
-    if (dropped.length > 0) onUploadFiles(dropped);
+    setDropReadError(null);
+    try {
+      const dropped = await filesFromDataTransfer(ev.dataTransfer);
+      if (dropped.length > 0) onUploadFiles(dropped);
+    } catch (error) {
+      if (!isFileSystemReadError(error)) throw error;
+      setDropReadError(FILE_SYSTEM_READ_ERROR_MESSAGE);
+    }
   }
 
   async function handlePluginFolderAgentAction(
@@ -1018,18 +1144,23 @@ export function DesignFilesPanel({
       </div>
     ) : null;
 
+  const visibleUploadError = uploadError ?? dropReadError;
+
   return (
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
         <div className="df-body">
-          {uploadError && !preview ? (
+          {visibleUploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
-              <span>{uploadError}</span>
-              {onClearUploadError ? (
+              <span>{visibleUploadError}</span>
+              {onClearUploadError || dropReadError ? (
                 <button
                   type="button"
                   data-testid="upload-error-dismiss"
-                  onClick={onClearUploadError}
+                  onClick={() => {
+                    setDropReadError(null);
+                    onClearUploadError?.();
+                  }}
                 >
                   Dismiss
                 </button>
@@ -1209,6 +1340,7 @@ export function DesignFilesPanel({
                       <label>
                         {t('designFiles.perPage')}:
                         <select
+                          data-testid="df-page-size-select"
                           value={pageSize === 'all' ? 'all' : pageSize}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -1481,7 +1613,7 @@ function DfPreview({
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
           <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
         ) : file.kind === 'html' ? (
-          <iframe title={file.name} src={url} sandbox="allow-scripts" />
+          <HtmlPreviewThumbnail projectId={projectId} file={file} />
         ) : file.kind === 'video' ? (
           <video
             src={`${url}?v=${Math.round(file.mtime)}`}
@@ -1544,6 +1676,46 @@ function DfPreview({
   );
 }
 
+function HtmlPreviewThumbnail({
+  projectId,
+  file,
+}: {
+  projectId: string;
+  file: ProjectFile;
+}) {
+  const url = projectFileUrl(projectId, file.name);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`${url}?v=${Math.round(file.mtime)}`)
+      .then((response) => (response.ok ? response.text() : null))
+      .then((html) => {
+        if (cancelled || html === null) return;
+        setSrcDoc(buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) }));
+      })
+      .catch(() => {
+        if (!cancelled) setSrcDoc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.mtime, file.name, projectId, url]);
+
+  return (
+    <iframe
+      title={file.name}
+      src={srcDoc ? undefined : url}
+      srcDoc={srcDoc ?? undefined}
+      sandbox="allow-scripts allow-downloads"
+    />
+  );
+}
+
+function baseDirForFile(name: string): string {
+  const index = name.lastIndexOf('/');
+  return index >= 0 ? name.slice(0, index + 1) : '';
+}
+
 function kindSortPriority(kind: ProjectFileKind): number {
   if (kind === 'html') return 0;
   if (kind === 'text') return 1;
@@ -1594,11 +1766,17 @@ function dateDaysBefore(date: Date, days: number): Date {
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
   const items = Array.from(dataTransfer.items ?? []);
-  if (items.length === 0) return Array.from(dataTransfer.files ?? []);
+  const fallbackFiles = Array.from(dataTransfer.files ?? []);
+  if (items.length === 0) return fallbackFiles;
 
-  const files = await Promise.all(items.map(filesFromDataTransferItem));
-  const flattened = files.flat();
-  return flattened.length > 0 ? flattened : Array.from(dataTransfer.files ?? []);
+  const results = await Promise.allSettled(items.map(filesFromDataTransferItem));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) {
+    if (fallbackFiles.length > 0) return fallbackFiles;
+    throw rejected.reason;
+  }
+  const files = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return files.length > 0 ? files : fallbackFiles;
 }
 
 async function filesFromDataTransferItem(item: DataTransferItem): Promise<File[]> {
@@ -1628,11 +1806,19 @@ async function filesFromFileSystemEntry(entry: FileSystemEntry): Promise<File[]>
 }
 
 function fileFromEntry(entry: FileSystemFileEntryWithFile): Promise<File> {
-  return new Promise((resolve, reject) => entry.file(resolve, reject));
+  return new Promise((resolve, reject) => {
+    entry.file(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped file', error));
+    });
+  });
 }
 
 function readEntryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
-  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+  return new Promise((resolve, reject) => {
+    reader.readEntries(resolve, (error) => {
+      reject(createFileSystemReadError('Could not read dropped folder', error));
+    });
+  });
 }
 
 function kindGlyph(kind: ProjectFileKind): string {

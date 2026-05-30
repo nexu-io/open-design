@@ -32,10 +32,11 @@
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
+import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
 const ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX = 'ElevenLabs voice list could not be loaded';
@@ -371,6 +372,9 @@ export interface ComposeInput {
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
+  // Run-scoped media policy. Defaults to enabled when omitted so existing
+  // local OD behavior keeps the same media prompt contract.
+  mediaExecution?: MediaExecutionPolicy | undefined;
 }
 
 export function composeSystemPrompt({
@@ -405,6 +409,7 @@ export function composeSystemPrompt({
   locale,
   userInstructions,
   projectInstructions,
+  mediaExecution,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -557,7 +562,13 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = renderMetadataBlock(
+    metadata,
+    template,
+    audioVoiceOptions,
+    audioVoiceOptionsError,
+    mediaExecution,
+  );
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -602,10 +613,10 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'video'
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
-    parts.push(MEDIA_GENERATION_CONTRACT);
+    parts.push(renderMediaGenerationContract(mediaExecution));
   }
 
-  if (includeCodexImagegenOverride) {
+  if (includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
     const codexImagegenOverride = renderCodexImagegenOverride(
       agentId,
       metadata,
@@ -649,6 +660,23 @@ export function composeSystemPrompt({
       "\n\n---\n\n## Clarifying questions\n\nWhen you need a mid-conversation clarification AND the natural answer is one of a small finite set of choices (2-4 options per question), call the `AskUserQuestion` tool instead of writing a bulleted list in markdown. The host chat renders the tool call as inline choice buttons; a markdown list renders as plain text and forces the user to type a reply. Skip the tool when the answer is naturally free-form text, when the answer needs more than ~4 options, or when you only have one yes/no choice to ask. First-turn discovery still uses the `<question-form id=\"discovery\">` workflow described earlier; `AskUserQuestion` is for follow-ups only.\n\n**When you call `AskUserQuestion`, that tool call is the entire response.** Do NOT also write the same questions or options as markdown text alongside it, do NOT add a trailing prose paragraph like \"what sounds right?\", do NOT hedge by listing the options twice. Emit the tool call and stop generating tokens. The host is waiting on the tool's `tool_result` and will resume your turn the moment the user answers. Anything you write before, between, or after the tool call in the same message just duplicates what the card already shows and confuses the user.",
     );
   }
+
+  // Pinned LAST so recency bias reinforces the role-marker prohibition.
+  // This is the canonical anti-roleplay instruction;
+  parts.push(
+    "\n\n---\n\n## CRITICAL: Never fabricate conversation turns\n\n" +
+    "The text you emit is processed by a chat host that interprets lines " +
+    "starting with \`## user\`, \`## assistant\`, or \`## system\` as real " +
+    "turn boundaries. Emitting these lines causes the host to treat your " +
+    "fabricated text as a real user request and execute unauthorised actions.\n\n" +
+    "**FORBIDDEN — you MUST NOT:**\n" +
+    "- Emit any line starting with \`## user\`, \`## assist\`, \`## assistant\`, or \`## system\`\n" +
+    "- Roleplay multiple turns inside a single response\n" +
+    "- Invent a user message and then reply to it\n\n" +
+    "The host will truncate your response at the first role-marker line — " +
+    "any text after it is lost. If you feel the urge to simulate a dialogue, " +
+    "stop and ask the user a real question instead.",
+  );
 
   return parts.join('');
 }
@@ -757,6 +785,31 @@ export function shouldRenderCodexImagegenOverride(
   );
 }
 
+function shouldAllowCodexImagegenOverride(
+  metadata: ProjectMetadata | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): boolean {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode !== 'enabled') return false;
+  if (
+    Array.isArray(mediaExecution?.allowedSurfaces) &&
+    mediaExecution.allowedSurfaces.length > 0 &&
+    !mediaExecution.allowedSurfaces.includes('image')
+  ) {
+    return false;
+  }
+  const model = resolveCodexImagegenModelId(metadata);
+  if (
+    model &&
+    Array.isArray(mediaExecution?.allowedModels) &&
+    mediaExecution.allowedModels.length > 0 &&
+    !mediaExecution.allowedModels.includes(model)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function renderCodexImagegenOverride(
   agentId: string | null | undefined,
   metadata: ProjectMetadata | undefined,
@@ -813,6 +866,7 @@ function renderMetadataBlock(
   template: ProjectTemplate | undefined,
   audioVoiceOptions: AudioVoiceOption[] | undefined,
   audioVoiceOptionsError: string | undefined,
+  mediaExecution: MediaExecutionPolicy | undefined,
 ): string {
   if (!metadata) return '';
   const lines: string[] = [];
@@ -858,6 +912,9 @@ function renderMetadataBlock(
     );
     lines.push(
       '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
+    );
+    lines.push(
+      '- **artifact-output rule**: when you generate an HTML artifact, keep conversational prose concise and product-facing. Do not dump the full raw HTML source back into chat; the artifact/file is the source of truth and the assistant message should only summarize the result.',
     );
   }
   if (metadata.includeLandingPage) {
@@ -918,9 +975,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'image',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`',
+      mediaExecution,
+    ));
   }
   if (metadata.kind === 'video') {
     lines.push(
@@ -940,9 +999,11 @@ function renderMetadataBlock(
       lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
     lines.push('');
-    lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'video',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
+      mediaExecution,
+    ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
@@ -992,9 +1053,11 @@ function renderMetadataBlock(
       );
     }
     lines.push('');
-    lines.push(
-      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
-    );
+    lines.push(renderMediaMetadataAction(
+      'audio',
+      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
+      mediaExecution,
+    ));
   }
 
   if (metadata.inspirationDesignSystemIds && metadata.inspirationDesignSystemIds.length > 0) {
@@ -1135,6 +1198,19 @@ function renderMetadataBlock(
   }
 
   return lines.join('\n');
+}
+
+function renderMediaMetadataAction(
+  surface: MediaSurface,
+  command: string,
+  mediaExecution: MediaExecutionPolicy | undefined,
+): string {
+  const article = surface === 'audio' ? 'an' : 'a';
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode === 'disabled') {
+    return `This is ${article} **${surface}** project, but Open Design-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+  }
+  return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }
 
 function shouldRenderElevenLabsVoiceOptions(

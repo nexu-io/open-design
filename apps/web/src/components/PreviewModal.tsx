@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
@@ -17,15 +18,19 @@ export interface PreviewView {
   // button that re-fires onView for this view id, instead of sitting
   // at the loading state forever. Issue #860.
   error?: string | null;
-  // Set when the underlying skill ships no HTML preview at all (its
+  // Set when the underlying surface ships no HTML preview at all (its
   // `od.preview.type` is `image`, `markdown`, etc.). The modal renders
   // a calm "no shipped preview" placeholder instead of the loading or
-  // error states — fetching `/api/skills/:id/example` for those skills
-  // returns 404 today and the resulting "Couldn't load this example."
-  // copy is misleading. `kind` carries the raw preview-type token so
-  // copy can be shaped per kind ("markdown document", "image asset",
-  // …). Mutually exclusive with `html` and `error`. Issue #897.
-  unavailable?: { kind: string } | null;
+  // error states — fetching `/api/skills/:id/example` (or the symmetric
+  // plugin route) returns 404 today and the resulting "Couldn't load
+  // this example." copy is misleading. `kind` carries the raw
+  // preview-type token so copy can be shaped per kind ("markdown
+  // document", "image asset", …). `noun` carries the surface kind so
+  // the placeholder reads with the right word — "skill" on the Skills
+  // tab, "plugin" on Community/Plugins cards, "template" on
+  // design-template (deck) cards. Mutually exclusive with `html` and
+  // `error`. Issues #897, #2840, #3216.
+  unavailable?: { kind: string; noun?: 'skill' | 'plugin' | 'template' } | null;
   // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
   // print-all-slides behavior survive the sandboxed export path.
   deck?: boolean;
@@ -74,6 +79,82 @@ export interface PreviewPrimaryAction {
   testId?: string;
 }
 
+export interface PreviewShareTarget {
+  title?: string;
+  description?: string;
+  url?: string | null;
+}
+
+type SocialSharePlatform =
+  | 'x'
+  | 'reddit'
+  | 'facebook'
+  | 'linkedin'
+  | 'instagram'
+  | 'xiaohongshu';
+
+const SOCIAL_SHARE_PLATFORMS: Array<{
+  platform: SocialSharePlatform;
+  labelKey:
+    | 'preview.shareToX'
+    | 'preview.shareToReddit'
+    | 'preview.shareToFacebook'
+    | 'preview.shareToLinkedIn'
+    | 'preview.shareToInstagram'
+    | 'preview.shareToXiaohongshu';
+  mark: string;
+  mode: 'intent' | 'copy-open';
+  entryUrl?: string;
+}> = [
+  { platform: 'x', labelKey: 'preview.shareToX', mark: 'X', mode: 'intent' },
+  { platform: 'reddit', labelKey: 'preview.shareToReddit', mark: 'R', mode: 'intent' },
+  { platform: 'facebook', labelKey: 'preview.shareToFacebook', mark: 'f', mode: 'intent' },
+  { platform: 'linkedin', labelKey: 'preview.shareToLinkedIn', mark: 'in', mode: 'intent' },
+  {
+    platform: 'instagram',
+    labelKey: 'preview.shareToInstagram',
+    mark: 'IG',
+    mode: 'copy-open',
+    entryUrl: 'https://www.instagram.com/',
+  },
+  {
+    platform: 'xiaohongshu',
+    labelKey: 'preview.shareToXiaohongshu',
+    mark: '小',
+    mode: 'copy-open',
+    entryUrl: 'https://www.xiaohongshu.com/',
+  },
+];
+
+function buildSocialShareUrl(
+  platform: SocialSharePlatform,
+  args: { url: string; title: string; text: string },
+): string | null {
+  const params = new URLSearchParams();
+  switch (platform) {
+    case 'x':
+      params.set('url', args.url);
+      params.set('text', args.text);
+      return `https://twitter.com/intent/tweet?${params.toString()}`;
+    case 'reddit':
+      params.set('url', args.url);
+      params.set('title', args.title);
+      return `https://www.reddit.com/submit?${params.toString()}`;
+    case 'facebook':
+      params.set('u', args.url);
+      params.set('quote', args.text);
+      return `https://www.facebook.com/sharer/sharer.php?${params.toString()}`;
+    case 'linkedin':
+      params.set('url', args.url);
+      return `https://www.linkedin.com/sharing/share-offsite/?${params.toString()}`;
+    case 'instagram':
+    case 'xiaohongshu':
+      return null;
+  }
+  const exhaustive: never = platform;
+  return exhaustive;
+}
+
 interface Props {
   title: string;
   subtitle?: string;
@@ -106,6 +187,9 @@ interface Props {
   // affordance reads consistently across HTML / design-system / media
   // variants.
   headerExtras?: ReactNode;
+  // Social-share target for the active preview. Callers must pass an explicit
+  // recipient-openable URL before the modal exposes copy/social actions.
+  shareTarget?: PreviewShareTarget;
   // Optional analytics callbacks. Fires when the user clicks the
   // chrome-level affordances (fullscreen, share trigger, sidebar
   // toggle). Callers wire these to their surface's tracking helper.
@@ -121,9 +205,9 @@ interface Props {
 }
 
 // A full-screen overlay that renders an iframe of arbitrary HTML, with an
-// optional tab bar for multiple views, a Share menu (PDF / HTML / ZIP /
-// open-in-new-tab), and a Fullscreen toggle. Used by both the design-system
-// preview and the example card preview, so the two paths feel identical.
+// optional tab bar for multiple views, a merged Share menu, and a Fullscreen
+// toggle. Used by both the design-system preview and the example card preview,
+// so the two paths feel identical.
 export function PreviewModal({
   title,
   subtitle,
@@ -136,6 +220,7 @@ export function PreviewModal({
   designWidth = 1280,
   primaryAction,
   headerExtras,
+  shareTarget,
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -146,12 +231,16 @@ export function PreviewModal({
     ? initialViewId
     : views[0]?.id ?? '';
   const [activeId, setActiveId] = useState<string>(initial);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [templateShareOpen, setTemplateShareOpen] = useState(false);
+  const [copyShareFeedback, setCopyShareFeedback] = useState<{
+    key: string;
+    ok: boolean;
+  } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(
     sidebar?.defaultOpen ?? false,
   );
-  const shareRef = useRef<HTMLDivElement | null>(null);
+  const templateShareRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageFrameRef = useRef<HTMLDivElement | null>(null);
   const [stageSize, setStageSize] = useState<{ w: number; h: number }>({
@@ -213,15 +302,19 @@ export function PreviewModal({
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // Close share popover on outside click / Escape.
+  // Close header popovers on outside click / Escape.
   useEffect(() => {
-    if (!shareOpen) return;
+    if (!templateShareOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (!shareRef.current) return;
-      if (!shareRef.current.contains(e.target as Node)) setShareOpen(false);
+      const target = e.target as Node;
+      if (templateShareOpen && !templateShareRef.current?.contains(target)) {
+        setTemplateShareOpen(false);
+      }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShareOpen(false);
+      if (e.key === 'Escape') {
+        setTemplateShareOpen(false);
+      }
     };
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
@@ -229,7 +322,7 @@ export function PreviewModal({
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('keydown', onKey);
     };
-  }, [shareOpen]);
+  }, [templateShareOpen]);
 
   // Lock body scroll while open.
   useEffect(() => {
@@ -277,6 +370,29 @@ export function PreviewModal({
     [activeHtml, activeDeck],
   );
   const exportTitle = exportTitleFor(activeView?.id ?? '');
+  const canExportFiles = Boolean(activeHtml);
+  const previewShareTitle = shareTarget?.title || exportTitle || title;
+  const previewShareUrl = typeof shareTarget?.url === 'string' ? shareTarget.url : '';
+  const previewShareText = t('preview.shareTextDefault', { title: previewShareTitle });
+  const previewShareCopy = previewShareUrl
+    ? `${previewShareText}\n${previewShareUrl}`
+    : previewShareText;
+  const previewShareUrlDisplay = previewShareUrl
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '');
+  const socialShareTargets = useMemo(
+    () => SOCIAL_SHARE_PLATFORMS.map((item) => ({
+      ...item,
+      href: item.mode === 'intent' && previewShareUrl
+        ? buildSocialShareUrl(item.platform, {
+          url: previewShareUrl,
+          title: previewShareText,
+          text: previewShareText,
+        })
+        : item.entryUrl ?? '',
+    })),
+    [previewShareText, previewShareUrl],
+  );
 
   // Only down-scale: when the stage is wider than the design viewport we
   // render the iframe at native size instead of upscaling pixels.
@@ -319,7 +435,30 @@ export function PreviewModal({
     setFullscreen(false);
   }
 
+  async function copyPreviewShare(text: string, key: string): Promise<boolean> {
+    if (!text) return false;
+    const ok = await copyToClipboard(text);
+    setCopyShareFeedback({ key, ok });
+    window.setTimeout(() => {
+      setCopyShareFeedback((current) => (
+        current?.key === key ? null : current
+      ));
+    }, 1600);
+    return ok;
+  }
+
+  function openShareDestination(url: string, pendingWindow?: Window | null) {
+    if (pendingWindow) {
+      pendingWindow.opener = null;
+      pendingWindow.location.href = url;
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
   const showTabs = views.length > 1;
+  const showTemplateShareMenu = !isCustomView || Boolean(shareTarget?.url);
+  const canOpenTemplateShareMenu = canExportFiles || Boolean(previewShareUrl);
 
   return (
     <div className="ds-modal-backdrop" role="dialog" aria-modal="true" aria-label={`${title} preview`}>
@@ -406,81 +545,218 @@ export function PreviewModal({
               >
                 {fullscreen ? t('preview.exit') : t('preview.fullscreen')}
               </button>
-              {isCustomView ? null : (
-                <div className="share-menu" ref={shareRef}>
+              {showTemplateShareMenu ? (
+                <div className="share-menu template-share-menu" ref={templateShareRef}>
                   <button
-                    className="ghost"
+                    className="ghost template-share-trigger"
                     aria-haspopup="menu"
-                    aria-expanded={shareOpen}
+                    aria-expanded={templateShareOpen}
                     onClick={() => {
                       onShareClick?.();
-                      setShareOpen((v) => !v);
+                      setTemplateShareOpen((v) => !v);
                     }}
-                    disabled={!activeHtml}
+                    disabled={!canOpenTemplateShareMenu}
                   >
-                    {t('preview.shareMenu')}
+                    <Icon name="share" size={12} />
+                    <span>{t('preview.shareMenu')}</span>
+                    <Icon name="chevron-down" size={12} />
                   </button>
-                  {shareOpen ? (
-                    <div className="share-menu-popover" role="menu">
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          onSharePopoverItemClick?.('pdf');
-                          setShareOpen(false);
-                          if (activeHtml)
-                            exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
-                        }}
-                      >
-                        <span className="share-menu-icon">📄</span>
-                        <span>{t('common.exportPdf')}</span>
-                      </button>
-                      <div className="share-menu-divider" />
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          onSharePopoverItemClick?.('zip');
-                          setShareOpen(false);
-                          if (activeHtml) exportAsZip(activeHtml, exportTitle);
-                        }}
-                      >
-                        <span className="share-menu-icon">🗜</span>
-                        <span>{t('common.exportZip')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          onSharePopoverItemClick?.('html');
-                          setShareOpen(false);
-                          if (activeHtml) exportAsHtml(activeHtml, exportTitle);
-                        }}
-                      >
-                        <span className="share-menu-icon">🌐</span>
-                        <span>{t('common.exportHtml')}</span>
-                      </button>
-                      <div className="share-menu-divider" />
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          onSharePopoverItemClick?.('open_in_new_tab');
-                          setShareOpen(false);
-                          openInNewTab();
-                        }}
-                      >
-                        <span className="share-menu-icon">↗</span>
-                        <span>{t('preview.openInNewTab')}</span>
-                      </button>
+                  {templateShareOpen ? (
+                    <div className="share-menu-popover template-share-popover" role="menu">
+                      <div className="template-share-summary">
+                        <span className="template-share-summary__eyebrow">
+                          {t('preview.shareTemplateBadge')}
+                        </span>
+                        <strong>{previewShareTitle}</strong>
+                        {previewShareUrlDisplay ? (
+                          <span>{previewShareUrlDisplay}</span>
+                        ) : null}
+                      </div>
+                      {previewShareUrl ? (
+                        <>
+                          <section className="template-share-section">
+                            <div className="template-share-section__label">
+                              {t('preview.shareSocialGroup')}
+                            </div>
+                            <div className="template-share-platform-grid">
+                              {socialShareTargets.map((item) => (
+                                <a
+                                  key={item.platform}
+                                  className={`template-share-platform template-share-platform--${item.platform}`}
+                                  role="menuitem"
+                                  href={item.href || undefined}
+                                  target={item.href ? '_blank' : undefined}
+                                  rel={item.href ? 'noreferrer noopener' : undefined}
+                                  aria-disabled={item.href ? undefined : 'true'}
+                                  tabIndex={item.href ? undefined : -1}
+                                  onClick={(event) => {
+                                    if (!item.href) {
+                                      event.preventDefault();
+                                      return;
+                                    }
+                                    if (item.mode === 'copy-open') {
+                                      event.preventDefault();
+                                      const shareWindow = window.open('about:blank', '_blank');
+                                      const feedbackKey = `social-${item.platform}`;
+                                      void copyPreviewShare(previewShareCopy, feedbackKey).then((ok) => {
+                                        if (!ok || !item.href) {
+                                          shareWindow?.close();
+                                          return;
+                                        }
+                                        setTemplateShareOpen(false);
+                                        openShareDestination(item.href, shareWindow);
+                                      });
+                                      return;
+                                    }
+                                    setTemplateShareOpen(false);
+                                  }}
+                                >
+                                  <span className="template-share-platform__mark">
+                                    {item.mark}
+                                  </span>
+                                  <span>
+                                    {copyShareFeedback?.key === `social-${item.platform}`
+                                      ? copyShareFeedback.ok
+                                        ? t('preview.shareCopied')
+                                        : t('preview.shareCopyFailed')
+                                      : t(item.labelKey)}
+                                  </span>
+                                </a>
+                              ))}
+                            </div>
+                          </section>
+                          <section className="template-share-section">
+                            <div className="template-share-section__label">
+                              {t('preview.shareCopyGroup')}
+                            </div>
+                            <button
+                              type="button"
+                              className="share-menu-item"
+                              role="menuitem"
+                              onClick={() => copyPreviewShare(previewShareUrl, 'link')}
+                            >
+                              <span className="share-menu-icon">
+                                <Icon
+                                  name={
+                                    copyShareFeedback?.key === 'link'
+                                      ? copyShareFeedback.ok
+                                        ? 'check'
+                                        : 'close'
+                                      : 'link'
+                                  }
+                                  size={14}
+                                />
+                              </span>
+                              <span>
+                                {copyShareFeedback?.key === 'link'
+                                  ? copyShareFeedback.ok
+                                    ? t('preview.shareCopied')
+                                    : t('preview.shareCopyFailed')
+                                  : t('preview.copyTemplateLink')}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="share-menu-item"
+                              role="menuitem"
+                              onClick={() => copyPreviewShare(previewShareCopy, 'text')}
+                            >
+                              <span className="share-menu-icon">
+                                <Icon
+                                  name={
+                                    copyShareFeedback?.key === 'text'
+                                      ? copyShareFeedback.ok
+                                        ? 'check'
+                                        : 'close'
+                                      : 'copy'
+                                  }
+                                  size={14}
+                                />
+                              </span>
+                              <span>
+                                {copyShareFeedback?.key === 'text'
+                                  ? copyShareFeedback.ok
+                                    ? t('preview.shareCopied')
+                                    : t('preview.shareCopyFailed')
+                                  : t('preview.copyShareText')}
+                              </span>
+                            </button>
+                          </section>
+                        </>
+                      ) : null}
+                      {canExportFiles ? (
+                        <section className="template-share-section">
+                          <div className="template-share-section__label">
+                            {t('preview.shareExportGroup')}
+                          </div>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              onSharePopoverItemClick?.('pdf');
+                              setTemplateShareOpen(false);
+                              if (activeHtml) {
+                                exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
+                              }
+                            }}
+                          >
+                            <span className="share-menu-icon">
+                              <Icon name="file" size={14} />
+                            </span>
+                            <span>{t('common.exportPdf')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              onSharePopoverItemClick?.('zip');
+                              setTemplateShareOpen(false);
+                              if (activeHtml) exportAsZip(activeHtml, exportTitle);
+                            }}
+                          >
+                            <span className="share-menu-icon">
+                              <Icon name="download" size={14} />
+                            </span>
+                            <span>{t('common.exportZip')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              onSharePopoverItemClick?.('html');
+                              setTemplateShareOpen(false);
+                              if (activeHtml) exportAsHtml(activeHtml, exportTitle);
+                            }}
+                          >
+                            <span className="share-menu-icon">
+                              <Icon name="file-code" size={14} />
+                            </span>
+                            <span>{t('common.exportHtml')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              onSharePopoverItemClick?.('open_in_new_tab');
+                              setTemplateShareOpen(false);
+                              openInNewTab();
+                            }}
+                          >
+                            <span className="share-menu-icon">
+                              <Icon name="external-link" size={14} />
+                            </span>
+                            <span>{t('preview.openInNewTab')}</span>
+                          </button>
+                        </section>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
-              )}
+              ) : null}
               {headerExtras}
             </div>
           </div>
@@ -502,20 +778,42 @@ export function PreviewModal({
               // 404 into the generic "Couldn't load this example." copy
               // — misleading, since nothing failed: there's just no
               // preview to render. Show a calm placeholder pointing the
-              // user at "Use this prompt" instead. Issue #897.
-              <div
-                className="ds-modal-empty ds-modal-unavailable"
-                data-testid="preview-unavailable"
-              >
-                <div className="ds-modal-unavailable-title">
-                  {t('preview.unavailableTitle')}
-                </div>
-                <div className="ds-modal-unavailable-body">
-                  {t('preview.unavailableBody', {
-                    kind: activeUnavailable.kind || 'preview',
-                  })}
-                </div>
-              </div>
+              // user at "Use this prompt" instead. Issues #897, #2840.
+              //
+              // `noun` lets the same placeholder read with the right
+              // word per surface — Skills tab, Community/Plugins,
+              // design-template (deck) cards. Defaults to 'skill' so
+              // pre-noun callers keep their existing copy. Issue #3216.
+              (() => {
+                const nounKey = ((): 'preview.nounSkill' | 'preview.nounPlugin' | 'preview.nounTemplate' => {
+                  switch (activeUnavailable.noun) {
+                    case 'plugin':
+                      return 'preview.nounPlugin';
+                    case 'template':
+                      return 'preview.nounTemplate';
+                    case 'skill':
+                    default:
+                      return 'preview.nounSkill';
+                  }
+                })();
+                const noun = t(nounKey);
+                return (
+                  <div
+                    className="ds-modal-empty ds-modal-unavailable"
+                    data-testid="preview-unavailable"
+                  >
+                    <div className="ds-modal-unavailable-title">
+                      {t('preview.unavailableTitle', { noun })}
+                    </div>
+                    <div className="ds-modal-unavailable-body">
+                      {t('preview.unavailableBody', {
+                        kind: activeUnavailable.kind || 'preview',
+                        noun,
+                      })}
+                    </div>
+                  </div>
+                );
+              })()
             ) : activeError ? (
               // Distinct error state so a fetch failure stops looking
               // like an indefinite "Loading…". The Retry button re-fires

@@ -19,6 +19,8 @@
  * `tool_use` event when that block stops.
  */
 
+import { createRoleMarkerGuard, type RoleMarkerGuard } from './role-marker-guard.js';
+
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
 type BlockState = { type?: unknown; name?: unknown; id?: unknown; input: string };
@@ -46,9 +48,47 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   // newer builds that already streamed deltas, otherwise the message would
   // duplicate.
   const textStreamed = new Set<string>();
+  // Per-message role-marker guards for cross-chunk detection (#3247).
+  const roleGuards = new Map<string, RoleMarkerGuard>();
 
   function blockKey(index: unknown): string {
     return `${currentMessageId ?? 'anon'}:${index}`;
+  }
+
+  // Per-message role-marker guard (#3247). Covers text_delta ONLY.
+  //
+  // Why not thinking_delta: extended thinking is rendered to a
+  // separate `kind: 'thinking'` payload and is never folded into
+  // `m.content` by `buildDaemonTranscript` (apps/web/src/providers/daemon.ts),
+  // so it cannot be re-serialized as a turn boundary on the next
+  // round-trip — it is not a #3247 re-injection vector. Models
+  // routinely emit literal `## user` / `## assistant` lines in
+  // chain-of-thought when reasoning about conversation structure,
+  // and with kill-on-detection wired in server.ts a guard on the
+  // thinking channel would abort otherwise-legitimate runs without
+  // any compensating security benefit. See PR #3303 review
+  // r3324xxxxxx. Thinking is passed through unguarded; only the
+  // user-visible text channel is policed.
+  function emitSafeText(msgId: string | null, text: string, eventType: string = 'text_delta') {
+    if (eventType !== 'text_delta' || !msgId) {
+      onEvent({ type: eventType, delta: text });
+      return;
+    }
+    let guard = roleGuards.get(msgId);
+    if (!guard) {
+      guard = createRoleMarkerGuard(msgId);
+      roleGuards.set(msgId, guard);
+    }
+    if (guard.contaminated) return;
+
+    const safe = guard.feedText(text);
+    if (safe.length > 0) {
+      onEvent({ type: eventType, delta: safe });
+    }
+    if (guard.contaminated) {
+      const warn = guard.warningEvent();
+      if (warn) onEvent(warn);
+    }
   }
 
   function feed(chunk: string) {
@@ -143,14 +183,14 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
           typeof block.text === 'string' &&
           block.text.length > 0
         ) {
-          onEvent({ type: 'text_delta', delta: block.text });
+          emitSafeText(msgId, block.text);
         } else if (
           !alreadyStreamed &&
           block.type === 'thinking' &&
           typeof block.thinking === 'string' &&
           block.thinking.length > 0
         ) {
-          onEvent({ type: 'thinking_delta', delta: block.thinking });
+          emitSafeText(msgId, block.thinking, 'thinking_delta');
         }
       }
       // Surface the turn_end signal now that every tool_use in this
@@ -194,6 +234,8 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
 
   function handleStreamEvent(ev: Record<string, unknown>) {
     if (ev.type === 'message_start') {
+      // Clean up per-message role-marker guard from the previous message.
+      if (currentMessageId) roleGuards.delete(currentMessageId);
       currentMessageId = isRecord(ev.message) && typeof ev.message.id === 'string' ? ev.message.id : null;
       if (typeof ev.ttft_ms === 'number') {
         onEvent({ type: 'status', label: 'streaming', ttftMs: ev.ttft_ms });
@@ -217,12 +259,12 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
 
       if (delta.type === 'text_delta' && typeof delta.text === 'string') {
         if (currentMessageId) textStreamed.add(currentMessageId);
-        onEvent({ type: 'text_delta', delta: delta.text });
+        emitSafeText(currentMessageId, delta.text);
         return;
       }
       if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
         if (currentMessageId) textStreamed.add(currentMessageId);
-        onEvent({ type: 'thinking_delta', delta: delta.thinking });
+        emitSafeText(currentMessageId, delta.thinking, 'thinking_delta');
         return;
       }
       if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {

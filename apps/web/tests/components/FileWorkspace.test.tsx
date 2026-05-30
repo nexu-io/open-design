@@ -151,6 +151,44 @@ function changeInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function renderDesignFilesPanel(overrides: Partial<React.ComponentProps<typeof DesignFilesPanel>> = {}) {
+  const props: React.ComponentProps<typeof DesignFilesPanel> = {
+    projectId: 'project-1',
+    files: [],
+    liveArtifacts: [],
+    onRefreshFiles: vi.fn(),
+    onOpenFile: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
+    onRenameFile: vi.fn(),
+    onDeleteFile: vi.fn(),
+    onDeleteFiles: vi.fn(),
+    onUpload: vi.fn(),
+    onUploadFiles: vi.fn(),
+    onPaste: vi.fn(),
+    onNewSketch: vi.fn(),
+    ...overrides,
+  };
+  return render(<DesignFilesPanel {...props} />);
+}
+
+function unreadableDropDataTransfer(fallbackFiles: File[] = []) {
+  return {
+    files: fallbackFiles,
+    items: [
+      {
+        webkitGetAsEntry: () => ({
+          isFile: true,
+          isDirectory: false,
+          name: 'stale.png',
+          file: (_done: (file: File) => void, fail?: (error: DOMException) => void) => {
+            fail?.(new DOMException('missing', 'NotFoundError'));
+          },
+        }),
+      },
+    ],
+  };
+}
+
 describe('FileWorkspace upload input', () => {
   it('keeps the Design Files picker aligned with drag-and-drop file support', () => {
     const markup = renderToStaticMarkup(
@@ -258,6 +296,35 @@ describe('FileWorkspace upload input', () => {
         'Uploaded 1 file(s), but 1 failed (permission denied).',
       );
     });
+  });
+
+  it('falls back to the browser file list when a dragged entry cannot be read', async () => {
+    const fallbackFile = new File(['mock'], 'fallback.png', { type: 'image/png' });
+    const onUploadFiles = vi.fn();
+    const { container } = renderDesignFilesPanel({ onUploadFiles });
+
+    fireEvent.drop(container.querySelector('.df-drop')!, {
+      dataTransfer: unreadableDropDataTransfer([fallbackFile]),
+    });
+
+    await waitFor(() => expect(onUploadFiles).toHaveBeenCalledWith([fallbackFile]));
+    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+  });
+
+  it('shows a recoverable read error when a dragged entry disappears before import', async () => {
+    const onUploadFiles = vi.fn();
+    const { container } = renderDesignFilesPanel({ onUploadFiles });
+
+    fireEvent.drop(container.querySelector('.df-drop')!, {
+      dataTransfer: unreadableDropDataTransfer(),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
+        'Could not read one or more dropped files or folders',
+      );
+    });
+    expect(onUploadFiles).not.toHaveBeenCalled();
   });
 
   it('hides the workspace focus control while the chat pane is open', () => {

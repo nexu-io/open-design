@@ -48,9 +48,13 @@ web-prototype/
 2. **Read `references/layouts.md`** so you know which section skeletons exist. Don't write a section type that isn't covered — pick the closest layout and adapt.
 3. **Read the active DESIGN.md** (already injected into your system prompt). Map its colors to the six `:root` variables in the seed; don't introduce new tokens.
 
-### Step 1 — Copy the seed
+### Step 1 — Prepare the artifact from the seed
 
-Copy `assets/template.html` to the project root as `index.html`. Replace the six `:root` variables with the active design system's tokens. Replace the page `<title>` and the topnav brand.
+Choose one kebab-case artifact slug before composing the page. Use `assets/template.html` as the seed for the final artifact HTML.
+
+Do not write a project-root HTML draft with file-write before emitting the final `<artifact>`. The live-artifact output is the canonical HTML file for this generation turn; an extra `index.html`, `cast.html`, or brief-derived draft can be stranded beside it as an orphan.
+
+Replace the six `:root` variables with the active design system's tokens. Replace the page `<title>` and the topnav brand.
 
 ### Step 2 — Plan the section list
 
@@ -67,7 +71,7 @@ State the chosen list in one sentence to the user *before* writing — they can 
 
 ### Step 3 — Paste and fill
 
-For each chosen layout, copy the `<section>` block from `layouts.md` into `<main id="content">` of your `index.html`. Replace bracketed `[REPLACE]` strings with real, specific copy from the user's brief. **No filler** — if a slot is empty, the section is the wrong choice; pick a different layout.
+For each chosen layout, copy the `<section>` block from `layouts.md` into `<main id="content">` of the artifact HTML. Replace bracketed `[REPLACE]` strings with real, specific copy from the user's brief. **No filler** — if a slot is empty, the section is the wrong choice; pick a different layout.
 
 ### Step 4 — Self-check
 
@@ -75,7 +79,7 @@ Run through `references/checklist.md` top to bottom. Every P0 item must pass bef
 
 ### Step 5 — Emit the artifact
 
-Wrap `index.html` in `<artifact>` tags. One sentence before describing what's there. Stop after `</artifact>`.
+Wrap the completed HTML in `<artifact>` tags using the artifact slug as the `identifier`. One sentence before describing what's there. Stop after `</artifact>`.
 
 ## Hard rules (the seed protects most of these — don't fight it)
 
@@ -93,5 +97,7 @@ Wrap `index.html` in `<artifact>` tags. One sentence before describing what's th
 <html>...</html>
 </artifact>
 ```
+
+Open Design derives the canonical HTML artifact from this identifier. Do not also write another root HTML file for the same generation turn.
 
 One sentence before the artifact. Nothing after.

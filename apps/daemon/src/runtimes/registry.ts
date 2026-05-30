@@ -1,9 +1,11 @@
+import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
 import { codexAgentDef } from './defs/codex.js';
 import { devinAgentDef } from './defs/devin.js';
 import { geminiAgentDef } from './defs/gemini.js';
 import { opencodeAgentDef } from './defs/opencode.js';
 import { hermesAgentDef } from './defs/hermes.js';
+import { traeCliAgentDef } from './defs/trae-cli.js';
 import { grokBuildAgentDef } from './defs/grok-build.js';
 import { kimiAgentDef } from './defs/kimi.js';
 import { cursorAgentDef } from './defs/cursor-agent.js';
@@ -15,16 +17,21 @@ import { kiroAgentDef } from './defs/kiro.js';
 import { kiloAgentDef } from './defs/kilo.js';
 import { vibeAgentDef } from './defs/vibe.js';
 import { deepseekAgentDef } from './defs/deepseek.js';
+import { aiderAgentDef } from './defs/aider.js';
+import { antigravityAgentDef } from './defs/antigravity.js';
+import { reasonixAgentDef } from './defs/reasonix.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
 
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
+  amrAgentDef,
   claudeAgentDef,
   codexAgentDef,
   devinAgentDef,
   geminiAgentDef,
   opencodeAgentDef,
   hermesAgentDef,
+  traeCliAgentDef,
   grokBuildAgentDef,
   kimiAgentDef,
   cursorAgentDef,
@@ -36,6 +43,9 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   kiloAgentDef,
   vibeAgentDef,
   deepseekAgentDef,
+  aiderAgentDef,
+  antigravityAgentDef,
+  reasonixAgentDef,
 ];
 
 export function readLocalAgentProfileDefs(

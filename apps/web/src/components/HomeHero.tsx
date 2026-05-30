@@ -538,6 +538,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onAddFiles(files);
   }
 
+  function clearSelectedPromptExample() {
+    if (selectedPromptExample) {
+      onPromptChange('');
+    }
+    setSelectedPromptExample(null);
+  }
+
   function usePromptExample(example: string) {
     setSelectedPromptExample({
       label: promptExampleChipLabel(example),
@@ -707,15 +714,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   <span className="home-hero__active-dot" aria-hidden />
                   <span>{activePluginTitle}</span>
                 </button>
-                <button
-                  type="button"
-                  className="home-hero__active-clear"
-                  onClick={onClearActivePlugin}
-                  aria-label={t('homeHero.clearActivePlugin')}
-                  title={t('homeHero.clearActivePlugin')}
-                >
-                  ×
-                </button>
+                {activeCreateChip ? null : (
+                  <button
+                    type="button"
+                    className="home-hero__active-clear"
+                    onClick={onClearActivePlugin}
+                    aria-label={t('homeHero.clearActivePlugin')}
+                    title={t('homeHero.clearActivePlugin')}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             ) : null}
             {activeSkillTitle ? (
@@ -746,7 +755,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                 <button
                   type="button"
                   className="home-hero__active-clear"
-                  onClick={() => setSelectedPromptExample(null)}
+                  onClick={clearSelectedPromptExample}
                   aria-label={t('common.close')}
                   title={t('common.close')}
                 >

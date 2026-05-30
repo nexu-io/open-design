@@ -132,14 +132,17 @@ describe('daemon origin validation middleware', () => {
 
   beforeAll(
     () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         // Start on port 0 to get a dynamic port, then rebuild with real port
         const tempApp = makeTestApp(0);
         const tempServer = tempApp.listen(0, '127.0.0.1', () => {
           port = getListeningPort(tempServer);
           tempServer.close(() => {
             const realApp = makeTestApp(port);
-            server = realApp.listen(port, '127.0.0.1', resolve);
+            server = realApp.listen(port, '127.0.0.1', (err?: Error) => {
+              if (err) reject(err);
+              else resolve();
+            });
           });
         });
       }),
@@ -448,14 +451,17 @@ describe('origin validation: non-loopback bind host', () => {
 
   beforeAll(
     () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         // Start on port 0 to get a dynamic port, then rebuild with real port
         const tempApp = makeTestApp(0, nonLoopbackHost);
         const tempServer = tempApp.listen(0, '127.0.0.1', () => {
           port = getListeningPort(tempServer);
           tempServer.close(() => {
             const realApp = makeTestApp(port, nonLoopbackHost);
-            server = realApp.listen(port, '127.0.0.1', resolve);
+            server = realApp.listen(port, '127.0.0.1', (err?: Error) => {
+              if (err) reject(err);
+              else resolve();
+            });
           });
         });
       }),

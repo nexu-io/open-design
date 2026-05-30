@@ -100,7 +100,7 @@ async function probeVersionAtPath(
   try {
     const { stdout } = await execAgentFile(resolved, def.versionArgs, {
       env,
-      timeout: 3000,
+      timeout: def.versionProbeTimeoutMs ?? 3000,
     });
     const version = String(stdout).trim().split('\n')[0] ?? null;
     return { kind: 'spawned', version };
@@ -213,6 +213,7 @@ function stripFns(
     helpArgs,
     capabilityFlags,
     fallbackBins,
+    versionProbeTimeoutMs,
     maxPromptArgBytes,
     env,
     ...rest
