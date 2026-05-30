@@ -1997,7 +1997,16 @@ async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderC
         'Google Vertex service account credentials are missing — set service_account_json or service_account_key_file in the config',
       );
     }
-    if (!(await resolveGoogleVertexProjectId(config))) {
+    try {
+      if (!(await resolveGoogleVertexProjectId(config))) {
+        throw new Error(
+          'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
+        );
+      }
+    } catch (err: unknown) {
+      // Let specific Google credential errors bubble (ADC file missing, invalid JSON, etc.)
+      // instead of rewriting them to the generic "project id is missing" message.
+      if (err instanceof Error && /^Google\b/.test(err.message)) throw err;
       throw new Error(
         'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
       );

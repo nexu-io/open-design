@@ -376,12 +376,18 @@ export function withConfiguredCustomImageModels(
 ): MediaModel[] {
   const customModels = configuredCustomImageModelIds(configuredModelList, profiles);
   if (customModels.length === 0) return models;
+  const customModelSet = new Set(customModels);
   const dynamicModels = customModels.map(customImageModelFromId);
-  return models.flatMap((model) => (
-    model.id === CUSTOM_IMAGE_MODEL_ID
-      ? dynamicModels
-      : [model]
-  ));
+  return models.flatMap((model) => {
+    // Replace the generic custom-image placeholder with the dynamic entries.
+    if (model.id === CUSTOM_IMAGE_MODEL_ID) return dynamicModels;
+    // Suppress built-in entries whose IDs are shadowed by a custom profile —
+    // the daemon routes shadowed ids through the custom-image endpoint, so
+    // showing the OpenAI (or other built-in) record alongside would create
+    // duplicate indistinguishable picker entries.
+    if (customModelSet.has(model.id)) return [];
+    return [model];
+  });
 }
 
 /**
