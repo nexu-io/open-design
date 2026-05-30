@@ -220,17 +220,25 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   };
   app.get('/api/media/models', async (_req, res) => {
     const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
+    const customImage = mediaConfig.providers['custom-image'];
+    const runnableProfiles = (customImage?.profiles ?? [])
+      .filter((p: { model?: string; baseUrl: string }) => Boolean(p.model?.trim() && p.baseUrl?.trim()));
     const imageModels = withConfiguredCustomImageModels(
       IMAGE_MODELS,
-      mediaConfig.providers['custom-image']?.model,
-      mediaConfig.providers['custom-image']?.profiles,
+      customImage?.model,
+      runnableProfiles,
     );
 
     res.json({
       providers: MEDIA_PROVIDERS,
       image: imageModels,
-      video: VIDEO_MODELS,
-      audio: AUDIO_MODELS_BY_KIND,
+      video: (VIDEO_MODELS as Array<{ provider: string }>).filter((m) => m.provider !== 'google'),
+      audio: Object.fromEntries(
+        Object.entries(AUDIO_MODELS_BY_KIND).map(([kind, models]) => [
+          kind,
+          (models as Array<{ provider: string }>).filter((m) => m.provider !== 'google'),
+        ]),
+      ),
       aspects: MEDIA_ASPECTS,
       videoLengthsSec: VIDEO_LENGTHS_SEC,
       audioDurationsSec: AUDIO_DURATIONS_SEC,
