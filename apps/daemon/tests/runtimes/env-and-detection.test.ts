@@ -957,6 +957,22 @@ test('spawnEnvForAgent strips ANTHROPIC_API_KEY case-insensitively for the claud
   assert.equal(env.PATH, '/usr/bin');
 });
 
+test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when claude resolves to OpenClaude fallback', () => {
+  const env = spawnEnvForAgent(
+    'claude',
+    {
+      ANTHROPIC_API_KEY: 'sk-openclaude',
+      PATH: '/usr/bin',
+    },
+    {},
+    {},
+    { resolvedBin: '/tools/openclaude' },
+  );
+
+  assert.equal(env.ANTHROPIC_API_KEY, 'sk-openclaude');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
 test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () => {
   for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {

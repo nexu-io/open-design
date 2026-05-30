@@ -15,6 +15,9 @@ import {
 } from '../sandbox-mode.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
+type SpawnEnvOptions = {
+  resolvedBin?: string | null;
+};
 
 const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -51,6 +54,7 @@ export function spawnEnvForAgent(
   baseEnv: RuntimeEnvMap,
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
+  options: SpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
   const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const env = mergeProxyAwareEnv(
@@ -75,7 +79,9 @@ export function spawnEnvForAgent(
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
-    stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
+    if (!isOpenClaudeExecutable(options.resolvedBin)) {
+      stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
+    }
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
@@ -86,6 +92,15 @@ export function spawnEnvForAgent(
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+}
+
+function isOpenClaudeExecutable(resolvedBin: string | null | undefined): boolean {
+  if (typeof resolvedBin !== 'string' || !resolvedBin.trim()) return false;
+  const base = path
+    .basename(resolvedBin.trim().replace(/\\/g, '/'))
+    .replace(/\.(exe|cmd|bat)$/i, '')
+    .toLowerCase();
+  return base === 'openclaude';
 }
 
 function sandboxRuntimeConfigForBaseEnv(

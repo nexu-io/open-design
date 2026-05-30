@@ -11315,6 +11315,8 @@ export async function startServer({
                 ...(def.env || {}),
               },
               configuredAgentEnv,
+              undefined,
+              { resolvedBin: agentLaunch.selectedPath },
             ),
             agentLaunch,
           )
@@ -11697,6 +11699,8 @@ export async function startServer({
         ...(def.env || {}),
       },
       configuredAgentEnv,
+      undefined,
+      { resolvedBin: agentLaunch.selectedPath },
     );
     if (def.id === 'amr') {
       const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
@@ -12650,6 +12654,7 @@ export async function startServer({
           stderrTail: agentStderrTail,
           stdoutTail: agentStdoutTail,
           env: spawnedAgentEnv,
+          resolvedBin: agentLaunch.selectedPath,
         });
         // A non-zero exit whose output reads as an auth / quota / upstream
         // problem (typical of Claude Code, codex, …) gets the specific code
