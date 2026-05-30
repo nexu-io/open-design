@@ -33,7 +33,7 @@
   <a href="#디자인-시스템"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
   <a href="#내장-skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
-  <a href="QUICKSTART.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
+  <a href="QUICKSTART.ko.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
 
 <p align="center"><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português (Brasil)</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <b>한국어</b> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
@@ -332,7 +332,7 @@ pnpm tools-dev run web
 
 Windows 사용자는 네이티브 설치 경로와 작은 더블 클릭 런처에 대해서는 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md)를 참고하세요.
 
-데스크톱/백그라운드 시작, 고정 포트 재시작, 미디어 생성 dispatcher 확인(`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`)은 [`QUICKSTART.md`](QUICKSTART.md)를 참고하세요.
+데스크톱/백그라운드 시작, 고정 포트 재시작, 미디어 생성 dispatcher 확인(`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`)은 [`QUICKSTART.ko.md`](QUICKSTART.ko.md)를 참고하세요.
 
 첫 번째 로드 시:
 
@@ -360,7 +360,7 @@ Daemon은 저장소 루트에 하나의 숨겨진 폴더를 소유합니다. 그
 | 초기 상태로 재설정 | `pnpm tools-dev stop`, `rm -rf .od`, `pnpm tools-dev run web` 재실행 |
 | 다른 위치로 이동 | 아직 지원되지 않음 — 경로가 저장소 상대 경로로 하드코딩됨 |
 
-전체 파일 맵, 스크립트, 트러블슈팅 → [`QUICKSTART.md`](QUICKSTART.md).
+전체 파일 맵, 스크립트, 트러블슈팅 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
 
 ## 저장소 구조
 
@@ -719,7 +719,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 - **디자인 시스템 추가** — 9섹션 스키마를 사용하여 [`design-systems/<brand>/`](design-systems/)에 `DESIGN.md`를 드롭하세요.
 - **새 코딩 에이전트 CLI 연결** — [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts)에 항목 하나 추가.
 
-전체 설명, 병합 기준, 코드 스타일, 받지 않는 것 → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md), [Français](CONTRIBUTING.fr.md), [简体中文](CONTRIBUTING.zh-CN.md)).
+전체 설명, 병합 기준, 코드 스타일, 받지 않는 것 → [`CONTRIBUTING.ko.md`](CONTRIBUTING.ko.md) ([English](CONTRIBUTING.md), [Deutsch](CONTRIBUTING.de.md), [Français](CONTRIBUTING.fr.md), [简体中文](CONTRIBUTING.zh-CN.md)).
 
 ## 컨트리뷰터
 
