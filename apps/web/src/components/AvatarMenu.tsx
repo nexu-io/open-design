@@ -89,7 +89,13 @@ export function AvatarMenu({
         title={t('avatar.title')}
         aria-label={t('avatar.title')}
       >
-        <Icon name="settings" size={17} />
+        {config.mode === 'api' ? (
+          <AgentIcon id={config.apiProtocol === 'openai' ? 'codex' : config.apiProtocol} size={17} />
+        ) : currentAgent ? (
+          <AgentIcon id={currentAgent.id} size={17} />
+        ) : (
+          <Icon name="settings" size={17} />
+        )}
       </button>
       {open ? (
         <div className="avatar-popover" role="menu">
@@ -172,10 +178,10 @@ export function AvatarMenu({
                 </button>
               ))}
               {currentAgent &&
-              currentAgent.available &&
-              ((currentAgent.models && currentAgent.models.length > 0) ||
-                (currentAgent.reasoningOptions &&
-                  currentAgent.reasoningOptions.length > 0)) ? (
+                currentAgent.available &&
+                ((currentAgent.models && currentAgent.models.length > 0) ||
+                  (currentAgent.reasoningOptions &&
+                    currentAgent.reasoningOptions.length > 0)) ? (
                 <div className="avatar-model-section">
                   <div className="avatar-section-label">
                     {t('avatar.modelSection')}
@@ -200,9 +206,9 @@ export function AvatarMenu({
                             actually shows the active selection rather
                             than collapsing to "Default". */}
                         {currentModelId &&
-                        !currentAgent.models.some(
-                          (m) => m.id === currentModelId,
-                        ) ? (
+                          !currentAgent.models.some(
+                            (m) => m.id === currentModelId,
+                          ) ? (
                           <option value={currentModelId}>
                             {currentModelId}{' '}
                             {t('avatar.customSuffix')}
@@ -212,7 +218,7 @@ export function AvatarMenu({
                     </label>
                   ) : null}
                   {currentAgent.reasoningOptions &&
-                  currentAgent.reasoningOptions.length > 0 ? (
+                    currentAgent.reasoningOptions.length > 0 ? (
                     <label className="avatar-select-row">
                       <span className="avatar-select-label">
                         {t('avatar.reasoningLabel')}
