@@ -237,6 +237,74 @@ test('attachAcpSession includes image attachments as ACP resource links', () => 
   });
 });
 
+test('attachAcpSession converts cumulative ACP message snapshots into deltas', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe the project',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven — managed AI agents' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven — managed AI agents' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Agent Haven', ' — managed AI agents']);
+});
+
+test('attachAcpSession keeps incremental ACP message chunks unchanged', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe the project',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: ' — managed AI agents' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Agent Haven', ' — managed AI agents']);
+});
+
 test('attachAcpSession exposes abort and sends session cancel after session creation', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
@@ -326,6 +394,10 @@ function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
 
 function writeAcpResult(child: FakeAcpChild, id: number, result: unknown): void {
   child.stdout.write(`${JSON.stringify({ id, result })}\n`);
+}
+
+function writeAcpUpdate(child: FakeAcpChild, update: unknown): void {
+  child.stdout.write(`${JSON.stringify({ method: 'session/update', params: { update } })}\n`);
 }
 
 function agentModelStatuses(events: Array<{ event: string; payload: unknown }>): unknown[] {

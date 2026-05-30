@@ -1531,11 +1531,33 @@ export function DesignSystemDetailView({
         },
         handlers: {
           onDelta: (delta) => {
-            updateAssistant((message) => ({
-              ...message,
-              content: message.content + delta,
-              events: [...(message.events ?? []), { kind: 'text', text: delta }],
-            }));
+            updateAssistant((message) => {
+              const newContent = message.content + delta;
+              const newEvents = [...(message.events ?? []), { kind: 'text' as const, text: delta }];
+              const textEvents = newEvents.filter((e) => e.kind === 'text');
+              const textTotal = textEvents.reduce((sum, e) => sum + e.text.length, 0);
+              if (typeof window !== 'undefined') {
+                const d = window.__od_debug;
+                if (d) {
+                  d.renderSnapshots.push({
+                    contentLen: newContent.length,
+                    eventsLen: newEvents.length,
+                    textEventsLen: textEvents.length,
+                    textEventsTotalLen: textTotal,
+                    contentMinusText: newContent.length - textTotal,
+                    sample: newContent.slice(0, 50),
+                  });
+                  if (d.renderSnapshots.length > 400) {
+                    d.renderSnapshots.splice(0, d.renderSnapshots.length - 400);
+                  }
+                }
+              }
+              return {
+                ...message,
+                content: newContent,
+                events: newEvents,
+              };
+            });
           },
           onAgentEvent: (event: AgentEvent) => {
             if (event.kind === 'text') return;
