@@ -109,7 +109,14 @@ export function buildMediaModelsResponse({
     .filter((profile) => Boolean(profile.model?.trim() && profile.baseUrl?.trim()));
   const configuredProviderIds = new Set(
     Object.entries(mediaConfig.providers ?? {})
-      .filter(([, entry]) => entry && (entry as { configured?: boolean }).configured)
+      .filter(([, entry]) => {
+        if (!entry) return false;
+        const e = entry as { configured?: boolean; ready?: boolean };
+        if (!e.configured) return false;
+        // External providers with a readiness probe (e.g. Google Vertex) must
+        // also be ready; providers without a ready field are treated as ready.
+        return e.ready === undefined || e.ready === true;
+      })
       .map(([id]) => id),
   );
   const isRunnableCatalogModel = (model: MediaModelsResponseModel) =>

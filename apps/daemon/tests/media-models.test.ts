@@ -125,4 +125,14 @@ describe('runnable model filtering', () => {
     expect(response.image.filter((m) => m.provider === 'google')).toEqual([]);
     expect(response.video.filter((m) => m.provider === 'google')).toEqual([]);
   });
+
+  it('excludes models from external provider whose readiness probe failed', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        google: { configured: true, ready: false },
+      },
+    });
+    expect(ids(response.image)).not.toContain('imagen-4');
+    expect(ids(response.image)).not.toContain('gemini-3-pro-image-preview');
+  });
 });
