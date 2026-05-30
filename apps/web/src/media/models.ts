@@ -36,6 +36,7 @@ export type MediaProviderId =
   | 'imagerouter'
   | 'custom-image'
   | 'comfyui'
+  | 'custom-media-router'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -141,6 +142,14 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
     customModelPlaceholder: 'my-image-model',
+  },
+  {
+    id: 'custom-media-router',
+    label: 'Custom Media Router',
+    hint: 'OpenAI-compatible image + video gateway',
+    integrated: true,
+    supportsCustomModel: true,
+    customModelPlaceholder: 'auto or provider/model-id',
   },
   {
     id: 'comfyui',
@@ -425,6 +434,13 @@ export const IMAGE_MODELS: MediaModel[] = [
     provider: 'custom-image',
     caps: ['t2i', 'i2i'],
   },
+  {
+    id: 'custom-media-image',
+    label: 'custom-media-image',
+    hint: 'Custom Media Router · image',
+    provider: 'custom-media-router',
+    caps: ['t2i', 'i2i'],
+  },
 
   // Black Forest Labs FLUX family.
   { id: 'flux-1.1-pro', label: 'flux-1.1-pro', hint: 'BFL · flagship', provider: 'bfl', caps: ['t2i', 'i2i'] },
@@ -527,6 +543,13 @@ export const VIDEO_MODELS: MediaModel[] = [
     hint: 'ImageRouter · Google',
     provider: 'imagerouter',
     caps: ['t2v'],
+  },
+  {
+    id: 'custom-media-video',
+    label: 'custom-media-video',
+    hint: 'Custom Media Router · video',
+    provider: 'custom-media-router',
+    caps: ['t2v', 'i2v'],
   },
 
   // Kuaishou Kling.

@@ -161,6 +161,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
   },
   {
+    label: 'Token Table',
+    protocol: 'openai',
+    baseUrl: 'https://tokentable.asia/v1',
+    model: 'auto',
+    models: ['auto'],
+  },
+  {
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',

@@ -133,6 +133,8 @@ const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
 const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
+const CUSTOM_MEDIA_IMAGE_MODEL_ID = 'custom-media-image';
+const CUSTOM_MEDIA_VIDEO_MODEL_ID = 'custom-media-video';
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -513,6 +515,16 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'custom-image' && surface === 'image') {
       const result = await renderCustomOpenAIImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'custom-media-router' && surface === 'image') {
+      const result = await renderCustomMediaRouterImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'custom-media-router' && surface === 'video') {
+      const result = await renderCustomMediaRouterVideo(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -910,6 +922,97 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
     bytes,
     providerNote: `custom-image/${wireModel} · ${body.size} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function customMediaRouterWireModel(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  placeholderModel: string,
+): string {
+  return (
+    credentials.model
+    || (ctx.wireModel !== placeholderModel ? ctx.wireModel : '')
+  ).trim();
+}
+
+function customMediaRouterHeaders(credentials: ProviderConfig): Record<string, string> {
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (credentials.apiKey) {
+    headers.authorization = `Bearer ${credentials.apiKey}`;
+  }
+  return headers;
+}
+
+function customMediaRouterBaseUrl(credentials: ProviderConfig): string {
+  const baseUrl = (credentials.baseUrl || '').trim();
+  if (!baseUrl) {
+    throw new Error(
+      'Custom Media Router base URL required — configure an OpenAI-compatible media endpoint in Settings',
+    );
+  }
+  return baseUrl;
+}
+
+async function renderCustomMediaRouterImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  const baseUrl = customMediaRouterBaseUrl(credentials);
+  const wireModel = customMediaRouterWireModel(ctx, credentials, CUSTOM_MEDIA_IMAGE_MODEL_ID);
+  if (!wireModel) {
+    throw new Error(
+      'Custom Media Router image model required — configure the provider model in Settings',
+    );
+  }
+
+  const size = imageRouterSizeFor(ctx.aspect, 'image');
+  const resp = await fetch(buildOpenAIImageUrl(baseUrl, false), {
+    method: 'POST',
+    headers: customMediaRouterHeaders(credentials),
+    body: JSON.stringify({
+      prompt: ctx.prompt || 'A high-quality reference image.',
+      model: wireModel,
+      size,
+      response_format: 'b64_json',
+    }),
+  });
+  const data = await parseOpenAICompatibleJson(resp, 'custom media router image');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'custom media router image');
+  return {
+    bytes,
+    providerNote: `custom-media-router/${wireModel} · ${size} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderCustomMediaRouterVideo(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  const baseUrl = customMediaRouterBaseUrl(credentials);
+  const wireModel = customMediaRouterWireModel(ctx, credentials, CUSTOM_MEDIA_VIDEO_MODEL_ID);
+  if (!wireModel) {
+    throw new Error(
+      'Custom Media Router video model required — configure the provider model in Settings',
+    );
+  }
+
+  const seconds = typeof ctx.length === 'number' ? ctx.length : 'auto';
+  const size = imageRouterSizeFor(ctx.aspect, 'video');
+  const resp = await fetch(buildOpenAIVideoUrl(baseUrl), {
+    method: 'POST',
+    headers: customMediaRouterHeaders(credentials),
+    body: JSON.stringify({
+      prompt: ctx.prompt || 'A short cinematic clip.',
+      model: wireModel,
+      size,
+      seconds,
+      response_format: 'b64_json',
+    }),
+  });
+  const data = await parseOpenAICompatibleJson(resp, 'custom media router video');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'custom media router video');
+  return {
+    bytes,
+    providerNote: `custom-media-router/${wireModel} · ${size} · ${seconds === 'auto' ? 'auto' : `${seconds}s`} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
   };
 }
 

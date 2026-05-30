@@ -15,6 +15,7 @@ describe('OpenAI-compatible media providers', () => {
   const realFetch = globalThis.fetch;
   const originalImageRouterKey = process.env.OD_IMAGEROUTER_API_KEY;
   const originalCustomImageKey = process.env.OD_CUSTOM_IMAGE_API_KEY;
+  const originalCustomMediaRouterKey = process.env.OD_CUSTOM_MEDIA_ROUTER_API_KEY;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
 
@@ -25,6 +26,7 @@ describe('OpenAI-compatible media providers', () => {
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.OD_IMAGEROUTER_API_KEY;
     delete process.env.OD_CUSTOM_IMAGE_API_KEY;
+    delete process.env.OD_CUSTOM_MEDIA_ROUTER_API_KEY;
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
   });
@@ -41,6 +43,11 @@ describe('OpenAI-compatible media providers', () => {
       delete process.env.OD_CUSTOM_IMAGE_API_KEY;
     } else {
       process.env.OD_CUSTOM_IMAGE_API_KEY = originalCustomImageKey;
+    }
+    if (originalCustomMediaRouterKey == null) {
+      delete process.env.OD_CUSTOM_MEDIA_ROUTER_API_KEY;
+    } else {
+      process.env.OD_CUSTOM_MEDIA_ROUTER_API_KEY = originalCustomMediaRouterKey;
     }
     if (originalMediaConfigDir == null) {
       delete process.env.OD_MEDIA_CONFIG_DIR;
@@ -60,6 +67,111 @@ describe('OpenAI-compatible media providers', () => {
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
+
+  it('renders custom media router images through /v1/images/generations', async () => {
+    await writeConfig({
+      providers: {
+        'custom-media-router': {
+          apiKey: 'router-test-key',
+          baseUrl: 'https://router.example.test/v1',
+          model: 'auto',
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://router.example.test/v1/images/generations');
+      expect(init?.method).toBe('POST');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer router-test-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        prompt: 'A dashboard hero illustration with glassy cards',
+        model: 'auto',
+        size: '1024x576',
+        response_format: 'b64_json',
+      });
+      return new Response(JSON.stringify({
+        data: [{ b64_json: PNG_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'custom-media-image',
+      prompt: 'A dashboard hero illustration with glassy cards',
+      aspect: '16:9',
+      output: 'router.png',
+    });
+
+    expect(result.providerId).toBe('custom-media-router');
+    expect(result.providerNote).toContain('custom-media-router/auto');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'router.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('renders custom media router videos through /v1/videos/generations', async () => {
+    await writeConfig({
+      providers: {
+        'custom-media-router': {
+          apiKey: 'router-test-key',
+          baseUrl: 'https://router.example.test/v1',
+          model: 'auto',
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://router.example.test/v1/videos/generations');
+      expect(init?.method).toBe('POST');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer router-test-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        prompt: 'A smooth app onboarding animation',
+        model: 'auto',
+        size: '1024x576',
+        seconds: 8,
+        response_format: 'b64_json',
+      });
+      return new Response(JSON.stringify({
+        data: [{ b64_json: VIDEO_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'video',
+      model: 'custom-media-video',
+      prompt: 'A smooth app onboarding animation',
+      aspect: '16:9',
+      length: 8,
+      output: 'router.mp4',
+    });
+
+    expect(result.providerId).toBe('custom-media-router');
+    expect(result.name).toBe('router.mp4');
+    expect(result.providerNote).toContain('custom-media-router/auto');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'router.mp4'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
 
   it('renders custom /v1/images/generations providers with configured base URL and model', async () => {
     await writeConfig({
