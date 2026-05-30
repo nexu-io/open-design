@@ -173,6 +173,46 @@ test('conversation summaries expose cumulative completed run duration', () => {
   assert.equal(fetched?.totalDurationMs, 105_000);
 });
 
+test('conversation summaries include usage-only terminal run durations', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-usage-duration',
+    name: 'project-usage-duration',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  insertConversation(db, {
+    id: 'project-usage-duration-conversation',
+    projectId: 'project-usage-duration',
+    title: 'Usage duration test',
+    createdAt: 1,
+    updatedAt: 4,
+  });
+  upsertMessage(db, 'project-usage-duration-conversation', {
+    id: 'project-usage-duration-imported',
+    role: 'assistant',
+    content: 'imported done',
+    runId: 'project-usage-duration-imported-run',
+    runStatus: 'succeeded',
+    events: [{ kind: 'usage', durationMs: 22_000 }],
+  });
+  upsertMessage(db, 'project-usage-duration-conversation', {
+    id: 'project-usage-duration-timestamped',
+    role: 'assistant',
+    content: 'timestamped done',
+    runId: 'project-usage-duration-timestamped-run',
+    runStatus: 'succeeded',
+    startedAt: 30_000,
+    endedAt: 60_000,
+  });
+
+  const listed = listConversations(db, 'project-usage-duration')[0] as { totalDurationMs?: number };
+  const fetched = getConversation(db, 'project-usage-duration-conversation') as { totalDurationMs?: number } | null;
+
+  assert.equal(listed.totalDurationMs, 52_000);
+  assert.equal(fetched?.totalDurationMs, 52_000);
+});
+
 test('conversation listing batches latest run summaries for large projects', () => {
   const db = createDb();
   insertProject(db, {
