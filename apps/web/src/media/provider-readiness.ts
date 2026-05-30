@@ -33,10 +33,11 @@ export function isMediaModelPickerReady(
   const customImageEntry = mediaProviders?.['custom-image'];
   if (customImageModelConfigured(modelId, customImageEntry)) {
     if (hasConfiguredCustomImageModelEntry(customImageEntry, modelId)) return true;
-    const fallbackModel = findMediaModel(modelId);
-    return fallbackModel
-      ? isMediaProviderPickerReady(fallbackModel.provider, mediaProviders)
-      : false;
+    // A custom profile declares this model but is incomplete (e.g. missing
+    // baseUrl). Return false rather than falling through to the built-in
+    // model check — the user explicitly chose a custom endpoint and we
+    // should not silently route them to the real provider instead.
+    return false;
   }
   const model = findMediaModel(modelId);
   if (!model) return true;

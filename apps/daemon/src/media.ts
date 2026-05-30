@@ -1977,19 +1977,25 @@ const GOOGLE_VERTEX_DEFAULT_CONFIG_FILE = 'google-vertex-config.json';
 async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   const config = await readGoogleVertexMediaConfig();
   if (!(await googleVertexConfigReady(config))) {
-    // Surface the specific reason the config is incomplete instead of a
-    // generic "not configured" message — helps users diagnose setup issues.
     if (!config.enabled) {
       throw new Error(
         'Google Vertex is not configured — set OD_GOOGLE_VERTEX_CONFIG or configure ~/.config/open-design/google-vertex-config.json with enabled=true',
       );
     }
-    if (!(await resolveGoogleVertexProjectId(config))) {
+    // Surface specific credential errors (missing key file, invalid JSON, etc.)
+    // instead of the generic "project id is missing" message.
+    try {
+      if (!(await resolveGoogleVertexProjectId(config))) {
+        throw new Error(
+          'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
+        );
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && /Vertex|ADC/.test(err.message)) throw err;
       throw new Error(
         'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
       );
     }
-    // auth_mode=service_account but no key provided
     throw new Error(
       'Google Vertex service account credentials are missing — set service_account_json or service_account_key_file in the config',
     );
@@ -2062,12 +2068,18 @@ function normalizeGoogleVertexConfig(value: JsonRecord): GoogleVertexConfig {
 }
 
 async function googleVertexConfigReady(config: GoogleVertexConfig): Promise<boolean> {
-  return config.enabled
-    && Boolean(await resolveGoogleVertexProjectId(config))
-    && (
-      config.auth_mode === 'adc'
-      || Boolean(config.service_account_json?.trim() || config.service_account_key_file?.trim())
-    );
+  try {
+    return config.enabled
+      && Boolean(await resolveGoogleVertexProjectId(config))
+      && (
+        config.auth_mode === 'adc'
+        || Boolean(config.service_account_json?.trim() || config.service_account_key_file?.trim())
+      );
+  } catch {
+    // Credential file read/parse errors mean the config is not ready — let
+    // renderGoogleVertexImage catch and surface them as specific errors.
+    return false;
+  }
 }
 
 async function callGoogleVertexImagen(
@@ -2414,22 +2426,14 @@ async function resolveGoogleVertexProjectId(config: GoogleVertexConfig): Promise
 
 async function googleVertexProjectIdFromConfiguredServiceAccount(config: GoogleVertexConfig): Promise<string> {
   if (!config.service_account_json?.trim() && !config.service_account_key_file?.trim()) return '';
-  try {
-    const key = await googleVertexServiceAccountKey(config);
-    return cleanString(key.project_id)
-      || googleVertexProjectIdFromServiceAccountRef(key.client_email);
-  } catch {
-    return '';
-  }
+  const key = await googleVertexServiceAccountKey(config);
+  return cleanString(key.project_id)
+    || googleVertexProjectIdFromServiceAccountRef(key.client_email);
 }
 
 function googleVertexProjectIdFromAdc(): string {
-  try {
-    const parsed = JSON.parse(readFileSync(googleVertexAdcPath(), 'utf8')) as unknown;
-    return isRecord(parsed) ? googleVertexProjectIdFromCredential(parsed) : '';
-  } catch {
-    return '';
-  }
+  const parsed = JSON.parse(readFileSync(googleVertexAdcPath(), 'utf8')) as unknown;
+  return isRecord(parsed) ? googleVertexProjectIdFromCredential(parsed) : '';
 }
 
 function googleVertexProjectIdFromCredential(value: JsonRecord): string {

@@ -903,7 +903,16 @@ export function mergeDaemonMediaProviders(
   for (const [providerId, daemonEntry] of Object.entries(daemonProviders ?? {})) {
     const localEntry = mediaProviders[providerId];
     if (!isStoredMediaProviderEntryPresent(daemonEntry)) {
-      if (isMarkerOnlyMediaProviderEntry(localEntry)) {
+      // Drop the whole local entry when the daemon row is empty — the daemon
+      // now serializes every provider row, so an empty row means the user
+      // explicitly cleared it. Keeping stale apiKey/baseUrl/model fields would
+      // make localStorage authoritative again and silently resurrect deleted
+      // credentials or model overrides on the next save.
+      const preserveLocalPendingEdit = Boolean(
+        options?.preserveLocalProviderIds?.has(providerId)
+        && hasRecoverableLocalMediaProviderFields(localEntry),
+      );
+      if (!preserveLocalPendingEdit) {
         delete mediaProviders[providerId];
       }
       continue;
