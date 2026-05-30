@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "code-scaffold",
-  "title": "Code scaffold",
-  "version": "0.1.0",
-  "description": "Multi-stage code generation and scaffolding workflow — accepts a natural-language brief, files, or URL references, plans file structure, generates code, and self-reviews before delivery.",
+  "title": "Code Scaffold (K-Universe)",
+  "version": "0.2.0",
+  "description": "K-Universe code scaffolding — multi-stage generation using --ku-* design tokens, Power Grotesk type system, and monochrome-first conventions.",
   "license": "MIT",
   "author": {
     "name": "K-Universe",
@@ -14,7 +14,10 @@
     "scenario",
     "code-generation",
     "scaffolding",
-    "multi-stage"
+    "multi-stage",
+    "k-universe",
+    "design-tokens",
+    "dark-mode"
   ],
   "compat": {
     "agentSkills": [
@@ -35,8 +38,8 @@
     ],
     "useCase": {
       "query": {
-        "en": "Scaffold code from a brief, reference files, or URL. Discovers requirements, plans the file tree, generates all code, and self-reviews before delivery.",
-        "zh-CN": "根据简要描述、参考文件或 URL 生成代码脚手架。发现需求、规划文件树、生成所有代码，并在交付前自审。"
+        "en": "Scaffold code from a brief using K-Universe design tokens. Zero hardcoded hex, Power Grotesk type stack, monochrome-first, no unearned border-radius.",
+        "zh-CN": "使用 K-Universe 设计令牌从简要描述生成代码脚手架。零硬编码颜色，Power Grotesk 字体，先黑白后彩色，不使用未获得授权的圆角。"
       }
     },
     "context": {
@@ -82,14 +85,14 @@
         "type": "string",
         "required": true,
         "label": "What to scaffold",
-        "placeholder": "A REST API with Express + TypeScript for a todo app with CRUD endpoints"
+        "placeholder": "A dashboard panel with agent status, system health, and activity feed using K-Universe tokens"
       },
       {
         "name": "language",
         "type": "string",
         "required": false,
         "label": "Language / framework",
-        "placeholder": "TypeScript, Python, Rust, Go..."
+        "placeholder": "TypeScript, React 19, Next.js, Rust..."
       },
       {
         "name": "referenceUrl",
@@ -104,7 +107,15 @@
         "required": false,
         "default": ".",
         "label": "Output directory",
-        "placeholder": "src/modules/new-feature"
+        "placeholder": "src/panels"
+      },
+      {
+        "name": "kuStyle",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "label": "K-Universe design tokens",
+        "description": "Apply --ku-* CSS custom properties, Power Grotesk font stack, and monochrome-first conventions."
       }
     ]
   },
