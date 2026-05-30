@@ -284,6 +284,58 @@ describe('project export manifest route', () => {
       });
   });
 
+  it('keeps artifact entry refs current when a referenced file moves out of the wrapper directory', async () => {
+    const projectId = await createProject({ kind: 'prototype' });
+    await writeFile(projectId, {
+      name: 'index.html',
+      content: '<!doctype html><main>fallback</main>',
+    });
+    await writeFile(projectId, {
+      name: 'preview/reviewed.html',
+      content: '<!doctype html><main>reviewed</main>',
+    });
+    await writeFile(projectId, {
+      name: 'preview/wrapper.html',
+      content: '<!doctype html><iframe src="reviewed.html"></iframe>',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Review wrapper',
+        entry: 'reviewed.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        primary: 'reviewed.html',
+        supportingFiles: ['reviewed.html'],
+      },
+    });
+
+    await renameFile(projectId, 'preview/reviewed.html', 'reviewed.html');
+
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/export/manifest`);
+    expect(response.ok).toBe(true);
+    const body = await response.json() as {
+      entryFile: string;
+      files: Array<{ name: string; role: string; reasons: string[] }>;
+      artifacts: Array<{ file: string; supportingFiles: string[] }>;
+    };
+
+    expect(body.entryFile).toBe('reviewed.html');
+    expect(body.files.find((file) => file.name === 'reviewed.html')).toMatchObject({
+      role: 'entry',
+      reasons: expect.arrayContaining([
+        'artifact-entry',
+        'artifact-primary',
+        'artifact-supporting-file',
+        'project-entry-file',
+      ]),
+    });
+    expect(body.artifacts.find((artifact) => artifact.file === 'preview/wrapper.html'))
+      .toMatchObject({
+        supportingFiles: ['reviewed.html'],
+      });
+  });
+
   it('rejects invalid project ids before listing files', async () => {
     const response = await fetch(`${baseUrl}/api/projects/bad:id/export/manifest`);
     expect(response.status).toBe(400);

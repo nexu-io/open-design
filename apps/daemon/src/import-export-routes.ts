@@ -716,14 +716,16 @@ function buildProjectExportManifestResponse({
     const addManifestRef = (
       ref: unknown,
       reason: string,
-      options: { preferProjectRoot?: boolean } = {},
+      options: { allowProjectRootFallback?: boolean; preferProjectRoot?: boolean } = {},
     ) => {
+      const ownerRelative = normalizeManifestProjectRef(ref, file.name);
+      const projectRoot = normalizeManifestProjectRootRef(ref);
       const candidates = options.preferProjectRoot
-        ? [
-            normalizeManifestProjectRootRef(ref),
-            normalizeManifestProjectRef(ref, file.name),
-          ]
-        : [normalizeManifestProjectRef(ref, file.name)];
+        ? [projectRoot, ownerRelative]
+        : [
+            ownerRelative,
+            ...(options.allowProjectRootFallback ? [projectRoot] : []),
+          ];
       const normalized = candidates.find((candidate) => candidate && filesByName.has(candidate));
       if (!normalized) return;
       if (normalized === file.name) return;
@@ -737,7 +739,7 @@ function buildProjectExportManifestResponse({
     }
     if (Array.isArray(manifest.supportingFiles)) {
       for (const ref of manifest.supportingFiles) {
-        addManifestRef(ref, 'artifact-supporting-file');
+        addManifestRef(ref, 'artifact-supporting-file', { allowProjectRootFallback: true });
       }
     }
 
