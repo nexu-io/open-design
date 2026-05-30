@@ -51,12 +51,11 @@ export function extractEffectivePeer(
 ): string {
   if (!isProxyTrusted()) return remoteAddress ?? '';
   if (!isLoopbackAddress(remoteAddress)) return remoteAddress ?? '';
-  // No XFF header — when proxy trust is enabled and the TCP peer is
-  // loopback, a missing XFF is ambiguous: it could be a direct localhost
-  // connection or a misconfigured proxy that didn't forward the client IP.
-  // Fail closed so a remote client through a same-host proxy cannot bypass
-  // management guards by omitting the header.
-  if (xForwardedFor === undefined) return '';
+  // No XFF header — direct loopback connection (no proxy in the path).
+  // Accepts the risk that a misconfigured same-host proxy may also omit
+  // the header; the alternative (fail-closed) breaks all direct localhost
+  // bootstrap/management access.
+  if (xForwardedFor === undefined) return remoteAddress ?? '';
   // XFF present but empty/garbage — proxy is there but didn't forward a
   // real client IP. Fail closed so untrusted origins cannot slip through.
   const first = xForwardedFor.split(',')[0]?.trim();
@@ -92,11 +91,8 @@ export function isLocalManagementRequest(req: {
   if (!isLoopbackAddress(tcpPeer)) return false;
   if (!isProxyTrusted()) return true;
   const xff = req.headers['x-forwarded-for'];
-  // No XFF header — when proxy trust is enabled and the TCP peer is
-  // loopback, a missing XFF is ambiguous. Fail closed to prevent a remote
-  // client reaching the daemon through a same-host proxy without XFF from
-  // bypassing management guards.
-  if (xff === undefined) return false;
+  // No XFF header — direct loopback connection, not proxied.
+  if (xff === undefined) return true;
   // XFF present — verify the real client behind the proxy is also loopback.
   const first = String(xff).split(',')[0]?.trim();
   if (!first) return false;
