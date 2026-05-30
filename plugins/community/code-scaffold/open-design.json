@@ -1,0 +1,115 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "code-scaffold",
+  "title": "Code scaffold",
+  "version": "0.1.0",
+  "description": "Multi-stage code generation and scaffolding workflow — accepts a natural-language brief, files, or URL references, plans file structure, generates code, and self-reviews before delivery.",
+  "license": "MIT",
+  "author": {
+    "name": "K-Universe",
+    "url": "https://github.com/k-universe-dev"
+  },
+  "tags": [
+    "scenario",
+    "code-generation",
+    "scaffolding",
+    "multi-stage"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "scenario",
+    "scenario": "code-scaffold",
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Scaffold code from a brief, reference files, or URL. Discovers requirements, plans the file tree, generates all code, and self-reviews before delivery.",
+        "zh-CN": "根据简要描述、参考文件或 URL 生成代码脚手架。发现需求、规划文件树、生成所有代码，并在交付前自审。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "build",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "review",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score >= 4 || iterations >= 3"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "brief",
+        "type": "string",
+        "required": true,
+        "label": "What to scaffold",
+        "placeholder": "A REST API with Express + TypeScript for a todo app with CRUD endpoints"
+      },
+      {
+        "name": "language",
+        "type": "string",
+        "required": false,
+        "label": "Language / framework",
+        "placeholder": "TypeScript, Python, Rust, Go..."
+      },
+      {
+        "name": "referenceUrl",
+        "type": "string",
+        "required": false,
+        "label": "Reference URL",
+        "placeholder": "https://docs.example.com/api or a GitHub repo URL"
+      },
+      {
+        "name": "outputDir",
+        "type": "string",
+        "required": false,
+        "default": ".",
+        "label": "Output directory",
+        "placeholder": "src/modules/new-feature"
+      }
+    ]
+  },
+  "plugin": {
+    "repo": "https://github.com/k-universe-dev/code-scaffold"
+  },
+  "homepage": "https://github.com/k-universe-dev/code-scaffold"
+}
