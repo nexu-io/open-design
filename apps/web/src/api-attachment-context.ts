@@ -8,6 +8,7 @@ import type {
   ProjectFile,
   ProjectFileKind,
 } from './types';
+import { isAnthropicSupportedImagePath } from './utils/apiProtocol';
 
 const API_ATTACHMENT_TEXT_KINDS = new Set<ProjectFileKind>(['html', 'text', 'code']);
 const API_ATTACHMENT_PREVIEW_KINDS = new Set<ProjectFileKind>([
@@ -19,17 +20,22 @@ const API_ATTACHMENT_PREVIEW_KINDS = new Set<ProjectFileKind>([
 const MAX_API_ATTACHMENT_CHARS = 24_000;
 const MAX_API_ATTACHMENT_TOTAL_CHARS = 64_000;
 
+export interface ApiAttachmentContextOptions {
+  omitNativeImageAttachments?: boolean;
+}
+
 export async function historyWithApiAttachmentContext(
   history: ChatMessage[],
   messageId: string,
   projectId: string,
   projectFiles: ProjectFile[],
+  options: ApiAttachmentContextOptions = {},
 ): Promise<ChatMessage[]> {
   const current = history.find((message) => message.id === messageId && message.role === 'user');
   const attachments = current?.attachments ?? [];
   if (!current || attachments.length === 0) return history;
 
-  const context = await buildApiAttachmentContext(projectId, attachments, projectFiles);
+  const context = await buildApiAttachmentContext(projectId, attachments, projectFiles, options);
   if (!context) return history;
 
   return history.map((message) =>
@@ -43,6 +49,7 @@ async function buildApiAttachmentContext(
   projectId: string,
   attachments: ChatAttachment[],
   projectFiles: ProjectFile[],
+  options: ApiAttachmentContextOptions,
 ): Promise<string> {
   const byPath = new Map<string, ProjectFile>();
   const byName = new Map<string, ProjectFile>();
@@ -54,6 +61,13 @@ async function buildApiAttachmentContext(
   let remaining = MAX_API_ATTACHMENT_TOTAL_CHARS;
   const blocks: string[] = [];
   for (const attachment of attachments) {
+    const file =
+      byPath.get(attachment.path) ??
+      byName.get(attachment.path) ??
+      byName.get(attachment.name);
+    if (options.omitNativeImageAttachments && canSendNativeAnthropicImage(attachment)) {
+      continue;
+    }
     if (remaining <= 0) {
       blocks.push(
         '[Open Design omitted remaining attached files because the attachment context budget was exhausted.]',
@@ -61,10 +75,6 @@ async function buildApiAttachmentContext(
       break;
     }
 
-    const file =
-      byPath.get(attachment.path) ??
-      byName.get(attachment.path) ??
-      byName.get(attachment.name);
     const block = await renderApiAttachmentBlock(projectId, attachment, file, remaining);
     if (!block) continue;
     blocks.push(block.text);
@@ -134,6 +144,12 @@ async function renderApiAttachmentBlock(
 
   const text = lines.join('\n');
   return { text, charsUsed: text.length };
+}
+
+function canSendNativeAnthropicImage(
+  attachment: ChatAttachment,
+): boolean {
+  return attachment.kind === 'image' && isAnthropicSupportedImagePath(attachment.path);
 }
 
 function canReadRawText(kind: ProjectFileKind, path: string): boolean {

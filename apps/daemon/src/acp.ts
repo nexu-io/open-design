@@ -457,6 +457,7 @@ export function attachAcpSession({
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let emittedTextChunk = false;
+  let emittedTextBuffer = '';
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -618,16 +619,22 @@ export function attachAcpSession({
       if (update.sessionUpdate === 'agent_message_chunk') {
         const text = asObject(update.content)?.text;
         if (typeof text === 'string' && text.length > 0) {
-          emittedTextChunk = true;
-          if (!emittedFirstTokenStatus) {
-            emittedFirstTokenStatus = true;
-            send('agent', {
-              type: 'status',
-              label: 'streaming',
-              ttftMs: Date.now() - runStartedAt,
-            });
+          const delta = text.startsWith(emittedTextBuffer)
+            ? text.slice(emittedTextBuffer.length)
+            : text;
+          if (delta.length > 0) {
+            emittedTextChunk = true;
+            emittedTextBuffer += delta;
+            if (!emittedFirstTokenStatus) {
+              emittedFirstTokenStatus = true;
+              send('agent', {
+                type: 'status',
+                label: 'streaming',
+                ttftMs: Date.now() - runStartedAt,
+              });
+            }
+            send('agent', { type: 'text_delta', delta });
           }
-          send('agent', { type: 'text_delta', delta: text });
         }
         return;
       }

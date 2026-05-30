@@ -286,54 +286,18 @@ async function readJsonIfPresent(file: string): Promise<JsonRecord | null> {
   }
 }
 
-function tokenFromHermesAuth(data: unknown): string {
-  const providerToken = readNestedString(data, [
-    'providers',
-    'openai-codex',
-    'tokens',
-    'access_token',
-  ]);
-  if (providerToken) return providerToken;
-
-  const pool =
-    isRecord(data) && isRecord(data.credential_pool)
-      ? data.credential_pool['openai-codex']
-      : null;
-  if (Array.isArray(pool)) {
-    for (const item of pool) {
-      const token = readNestedString(item, ['access_token']);
-      if (token) return token;
-    }
-  }
-  return '';
+function apiKeyFromCodexAuth(data: unknown): string {
+  return readNestedString(data, ['OPENAI_API_KEY']);
 }
 
-function tokenFromCodexAuth(data: unknown): { token: string; source: string } | null {
-  const oauthToken = readNestedString(data, ['tokens', 'access_token']);
-  if (oauthToken) return { token: oauthToken, source: 'oauth-codex' };
-
-  const apiKey = readNestedString(data, ['OPENAI_API_KEY']);
-  if (apiKey) return { token: apiKey, source: 'codex-auth' };
-
-  return null;
-}
-
-async function resolveOpenAIOAuthCredential(): Promise<OAuthCredential | null> {
+async function resolveOpenAIAuthFileCredential(): Promise<OAuthCredential | null> {
   const home = os.homedir();
-  const hermesAuth = await readJsonIfPresent(
-    path.join(home, '.hermes', 'auth.json'),
-  );
-  const hermesToken = tokenFromHermesAuth(hermesAuth);
-  if (hermesToken) {
-    return { apiKey: hermesToken, source: 'oauth-hermes' };
-  }
-
   const codexAuth = await readJsonIfPresent(
     path.join(home, '.codex', 'auth.json'),
   );
-  const codexToken = tokenFromCodexAuth(codexAuth);
-  if (codexToken) {
-    return { apiKey: codexToken.token, source: codexToken.source };
+  const apiKey = apiKeyFromCodexAuth(codexAuth);
+  if (apiKey) {
+    return { apiKey, source: 'codex-auth' };
   }
 
   return null;
@@ -355,9 +319,7 @@ async function resolveXAIOAuthCredential(
   }
 
   // 2. Borrow the xAI OAuth token Hermes wrote to ~/.hermes/auth.json
-  //    when the user ran `hermes auth add xai-oauth`. Mirrors how
-  //    resolveOpenAIOAuthCredential already borrows the openai-codex
-  //    token from the same file, so a user who has already authorized
+  //    when the user ran `hermes auth add xai-oauth`. A user who has already authorized
   //    Hermes doesn't have to run a second OAuth dance inside OD.
   //    (No proactive refresh here — Hermes itself maintains the token,
   //    and we only borrow what is currently fresh.)
@@ -380,23 +342,25 @@ async function resolveXAIOAuthCredential(
 
 /**
  * Resolve credentials for a provider. Env vars win, then stored config,
- * then OpenAI/Codex OAuth for the OpenAI media provider.
+ * then provider-specific external credential stores. OpenAI only trusts
+ * explicit API keys from Codex auth files; Codex/Hermes OAuth tokens are
+ * not valid proof that the Images API can be called.
  * Returns { apiKey, baseUrl } where either may be empty string.
  */
 export async function resolveProviderConfig(projectRoot: string, providerId: string): Promise<ProviderEntry> {
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
-  const needsOAuthFallback = !envKey && !entry.apiKey;
-  const oauth = needsOAuthFallback
+  const needsExternalCredential = !envKey && !entry.apiKey;
+  const externalCredential = needsExternalCredential
     ? providerId === 'openai'
-      ? await resolveOpenAIOAuthCredential()
+      ? await resolveOpenAIAuthFileCredential()
       : providerId === 'grok'
         ? await resolveXAIOAuthCredential(projectRoot)
         : null
     : null;
   return {
-    apiKey: envKey || entry.apiKey || oauth?.apiKey || '',
+    apiKey: envKey || entry.apiKey || externalCredential?.apiKey || '',
     baseUrl: entry.baseUrl || '',
     ...(typeof entry.model === 'string' && entry.model.trim()
       ? { model: entry.model.trim() }
@@ -427,20 +391,20 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
     const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
-    const needsOAuthFallback = !envKey && !hasStoredKey;
-    const oauth = needsOAuthFallback
+    const needsExternalCredential = !envKey && !hasStoredKey;
+    const externalCredential = needsExternalCredential
       ? id === 'openai'
-        ? await resolveOpenAIOAuthCredential()
+        ? await resolveOpenAIAuthFileCredential()
         : id === 'grok'
           ? await resolveXAIOAuthCredential(projectRoot)
           : null
       : null;
     providers[id] = {
-      configured: Boolean(envKey || hasStoredKey || oauth?.apiKey),
-      source: envKey ? 'env' : hasStoredKey ? 'stored' : oauth?.source || 'unset',
+      configured: Boolean(envKey || hasStoredKey || externalCredential?.apiKey),
+      source: envKey ? 'env' : hasStoredKey ? 'stored' : externalCredential?.source || 'unset',
       // Show last 4 chars only when stored locally; never echo env-var
-      // or OAuth secrets so power users don't accidentally see them in
-      // the DOM.
+      // or borrowed auth-file/OAuth secrets so power users don't
+      // accidentally see them in the DOM.
       apiKeyTail: hasStoredKey && entry.apiKey ? entry.apiKey.slice(-4) : '',
       baseUrl: entry.baseUrl || '',
       ...(typeof entry.model === 'string' && entry.model.trim()

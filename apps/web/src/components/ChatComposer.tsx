@@ -373,7 +373,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // Right-align by default (menu right edge ≈ button right edge).
       // Shift left when the menu would spill past the viewport left edge.
       const left = Math.max(8, Math.min(viewW - menuW - 8, rect.right - menuW));
-      setPetMenuStyle({ position: 'fixed', top, left });
+      setPetMenuStyle({
+        position: 'fixed',
+        top,
+        left,
+        bottom: 'auto',
+        right: 'auto',
+      });
     }, [petMenuOpen]);
 
     // Lazy-fetch the user's external MCP servers list once on mount so the
@@ -1228,6 +1234,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function removeStaged(p: string) {
       setStaged((s) => s.filter((a) => a.path !== p));
       setStagedVisualComments((current) => current.filter((attachment) => attachment.screenshotPath !== p));
+      setDraft((current) => stripInlineMentionToken(current, p));
     }
 
     function removeCommentAttachment(id: string) {
@@ -1711,7 +1718,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                         currentSkillId={currentSkillId}
                         onPick={async (skill) => {
                           const applied = await applyProjectSkill(skill);
-                          if (applied) setToolsOpen(false);
+                          if (!applied) return;
+                          const ta = textareaRef.current;
+                          const insert = `${inlineMentionToken(skill.name)} `;
+                          const currentDraft = ta?.value ?? draft;
+                          const cursor = ta?.selectionStart ?? currentDraft.length;
+                          const before = currentDraft.slice(0, cursor);
+                          const after = currentDraft.slice(cursor);
+                          const next = before + insert + after;
+                          setDraft(next);
+                          setToolsOpen(false);
+                          requestAnimationFrame(() => {
+                            const el = textareaRef.current;
+                            if (!el) return;
+                            el.focus();
+                            const pos = before.length + insert.length;
+                            el.setSelectionRange(pos, pos);
+                          });
                         }}
                       />
                     ) : null}
@@ -2869,6 +2892,14 @@ function MentionPopover({
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripInlineMentionToken(text: string, label: string): string {
+  const token = inlineMentionToken(label);
+  return text.replace(
+    new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+    '$1',
+  );
 }
 
 function loadComposerDraft(key?: string): string | null {

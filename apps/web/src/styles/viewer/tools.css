@@ -929,6 +929,109 @@
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+.image-export-modal.modal {
+  width: min(430px, calc(100vw - 32px));
+  gap: 0;
+  padding: 0;
+}
+.image-export-modal .modal-head {
+  padding: 22px 24px 12px;
+}
+.image-export-modal .modal-head .kicker {
+  display: none;
+}
+.image-export-modal .modal-head h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.image-export-modal .modal-head .subtitle {
+  max-width: none;
+  margin-top: 6px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.image-export-form {
+  padding: 0 24px 18px;
+}
+.image-export-format-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.image-export-format-field legend {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.image-export-format-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+.image-export-format-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.image-export-format-option:hover {
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+}
+.image-export-format-option.active {
+  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: var(--bg-panel);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 7%, transparent);
+}
+.image-export-format-option input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.image-export-format-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+.image-export-format-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+}
+.image-export-format-text strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.image-export-format-text span {
+  display: none;
+}
+.image-export-modal .modal-foot {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--border);
+}
 /* Add a few extra pixels above the deploy dialog's primary action so
    it does not crowd the divider. The shared .modal-foot uses 12px
    vertical padding which is fine for shorter dialogs but reads as

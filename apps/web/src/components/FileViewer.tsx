@@ -53,8 +53,8 @@ import {
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
+  downloadImageDataUrl,
   exportAsHtml,
-  exportAsImage,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
@@ -62,8 +62,11 @@ import {
   exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
+  imageDataUrlToBlob,
   openSandboxedPreviewInNewTab,
+  prepareImageExportTarget,
   requestPreviewSnapshot,
+  type ImageExportFormat,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -147,6 +150,15 @@ type PreviewViewportPreset = {
   labelKey: keyof Dict;
   titleKey: keyof Dict;
 };
+const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
+  value: ImageExportFormat;
+  label: string;
+  extension: string;
+}> = [
+  { value: 'png', label: 'PNG', extension: '.png' },
+  { value: 'jpeg', label: 'JPEG', extension: '.jpg' },
+  { value: 'webp', label: 'WebP', extension: '.webp' },
+];
 type DeployProviderOption = {
   id: WebDeployProviderId;
   labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
@@ -661,6 +673,21 @@ function setSlideStateCached(key: string, state: SlideState) {
     const oldest = htmlPreviewSlideState.keys().next().value;
     if (oldest != null) htmlPreviewSlideState.delete(oldest);
   }
+}
+
+function waitForIframeLoadOrTimeout(iframe: HTMLIFrameElement, timeout = 750): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      iframe.removeEventListener('load', finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, timeout);
+    iframe.addEventListener('load', finish, { once: true });
+  });
 }
 
 function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path'>): string {
@@ -4226,6 +4253,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
+  const imageExportTitleId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -4266,6 +4294,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
+  const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
+  const [imageExportBusy, setImageExportBusy] = useState(false);
+  const [imageExportPreparing, setImageExportPreparing] = useState(false);
+  const [imageExportError, setImageExportError] = useState<string | null>(null);
+  const [imageExportSavedToast, setImageExportSavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [imageExportPreparedBlob, setImageExportPreparedBlob] = useState<{ format: ImageExportFormat; blob: Blob } | null>(null);
+  const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
+  const imageExportPrepareIdRef = useRef(0);
   const [exportToast, setExportToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
@@ -4519,7 +4556,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -4655,6 +4692,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
   }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  const activateSrcDocSnapshotTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    if (!srcDoc) return false;
+    const win = target?.contentWindow;
+    if (!win) return false;
+    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    return true;
+  }, [srcDoc]);
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
@@ -4692,7 +4736,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   
   useEffect(() => {
     restorePreviewScrollPosition();
-  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+  }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -6016,6 +6060,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setAgentToolsOpen(false);
       return;
     }
+    capturePreviewScrollPosition();
     const activateDraw = () => {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
@@ -6216,6 +6261,110 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     markExportReadyNudgeSeen(projectId, file.name);
     setShareMenuOpen((v) => !v);
   };
+  const captureExportImageSnapshot = useCallback(async () => {
+    if (!useUrlLoadPreview) {
+      const activeIframe = iframeRef.current;
+      return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
+    }
+
+    const srcDocIframe = srcDocPreviewIframeRef.current;
+    if (!srcDocIframe) {
+      const activeIframe = iframeRef.current;
+      return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
+    }
+
+    if (!srcDocShellReady) {
+      await waitForIframeLoadOrTimeout(srcDocIframe, 500);
+    }
+    const activated = activateSrcDocSnapshotTransport(srcDocIframe);
+    if (activated) {
+      await waitForIframeLoadOrTimeout(srcDocIframe);
+    }
+    return requestPreviewSnapshot(srcDocIframe);
+  }, [
+    activateSrcDocSnapshotTransport,
+    srcDocShellReady,
+    useUrlLoadPreview,
+  ]);
+
+  const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
+    const prepareId = imageExportPrepareIdRef.current + 1;
+    imageExportPrepareIdRef.current = prepareId;
+    setImageExportPreparing(true);
+    setImageExportError(null);
+    setImageExportPreparedBlob(null);
+    try {
+      let dataUrl = imageExportSnapshotDataUrlRef.current;
+      if (!dataUrl) {
+        const snap = await captureExportImageSnapshot();
+        if (!snap) throw new Error('Snapshot capture returned null');
+        dataUrl = snap.dataUrl;
+        imageExportSnapshotDataUrlRef.current = dataUrl;
+      }
+      const blob = await imageDataUrlToBlob(dataUrl, format);
+      if (blob.size <= 0) throw new Error('Snapshot capture produced an empty image');
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportPreparedBlob({ format, blob });
+      }
+    } catch (err) {
+      console.warn('[exportAsImage] failed to prepare snapshot:', err);
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportError(t('fileViewer.exportImageFailed'));
+      }
+    } finally {
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportPreparing(false);
+      }
+    }
+  }, [captureExportImageSnapshot, t]);
+
+  const openImageExportModal = () => {
+    setShareMenuOpen(false);
+    setImageExportError(null);
+    setImageExportPreparedBlob(null);
+    imageExportSnapshotDataUrlRef.current = null;
+    setImageExportModalOpen(true);
+    void prepareImageExportBlob(imageExportFormat);
+  };
+
+  const changeImageExportFormat = (format: ImageExportFormat) => {
+    setImageExportFormat(format);
+    void prepareImageExportBlob(format);
+  };
+
+  async function handleImageExportSave() {
+    const prepared = imageExportPreparedBlob;
+    if (!prepared || prepared.format !== imageExportFormat) {
+      setImageExportError(t('fileViewer.exportImageFailed'));
+      return;
+    }
+    setImageExportBusy(true);
+    setImageExportError(null);
+    try {
+      const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
+      if (!target) return;
+      const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
+      if (target.method === 'download' && imageExportFormat === 'png' && preparedDataUrl) {
+        downloadImageDataUrl(preparedDataUrl, target.filename);
+      } else {
+        await target.save(prepared.blob);
+      }
+      setImageExportModalOpen(false);
+      setImageExportSavedToast({
+        message: target.method === 'picker'
+          ? t('fileViewer.exportImageSaved')
+          : t('fileViewer.exportImageDownloadStarted'),
+        details: target.method === 'picker'
+          ? target.filename
+          : t('fileViewer.exportImageDownloadDetails', { filename: target.filename }),
+      });
+    } catch (err) {
+      console.warn('[exportAsImage] failed to save snapshot:', err);
+      setImageExportError(t('fileViewer.exportImageFailed'));
+    } finally {
+      setImageExportBusy(false);
+    }
+  }
   const visibleSideComments = useMemo(
     () => previewComments
       .filter((comment) => comment.filePath === file.name && comment.status === 'open')
@@ -6860,33 +7009,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
                     <span>{t('fileViewer.exportPptx') + '…'}</span>
                   </button>
-                  {!useUrlLoadPreview ? (
-                    <button
-                      type="button"
-                      className="share-menu-item share-menu-subitem"
-                      role="menuitem"
-                      onClick={async () => {
-                        setShareMenuOpen(false);
-                        const iframe = iframeRef.current;
-                        if (!iframe) return;
-                        const snap = await requestPreviewSnapshot(iframe);
-                        try {
-                          if (snap) {
-                            exportAsImage(snap.dataUrl, exportTitle);
-                          } else {
-                            console.warn('[exportAsImage] snapshot capture returned null');
-                            alert(t('fileViewer.exportImageFailed'));
-                          }
-                        } catch (err) {
-                          console.warn('[exportAsImage] failed to convert snapshot:', err);
-                          alert(t('fileViewer.exportImageFailed'));
-                        }
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
-                      <span>{t('fileViewer.exportImage')}</span>
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="share-menu-item share-menu-subitem"
+                    role="menuitem"
+                    onClick={openImageExportModal}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
+                    <span>{t('fileViewer.exportImage')}</span>
+                  </button>
                   <div className="share-menu-subsection-label" role="presentation">
                     {t('fileViewer.shareMenuSourceFiles')}
                   </div>
@@ -7301,6 +7432,74 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           )}
         </div>
       ) : null}
+      {imageExportModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal deploy-modal image-export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={imageExportTitleId}
+          >
+            <div className="modal-head">
+              <div className="kicker">IMAGE</div>
+              <h2 id={imageExportTitleId}>{t('fileViewer.exportImage')}</h2>
+              <p className="subtitle">{t('fileViewer.exportImageModalSubtitle')}</p>
+            </div>
+            <div className="deploy-form image-export-form">
+              <fieldset className="image-export-format-field" disabled={imageExportBusy}>
+                <legend>{t('fileViewer.exportImageFormatLabel')}</legend>
+                <div className="image-export-format-options">
+                  {IMAGE_EXPORT_FORMAT_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`image-export-format-option${imageExportFormat === option.value ? ' active' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="image-export-format"
+                        value={option.value}
+                        aria-label={option.label}
+                        checked={imageExportFormat === option.value}
+                        onChange={() => changeImageExportFormat(option.value)}
+                      />
+                      <span className="image-export-format-text">
+                        <strong>{option.label}</strong>
+                        <span aria-hidden="true">{option.extension}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {imageExportError ? (
+                <p className="deploy-error" role="alert">{imageExportError}</p>
+              ) : null}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={imageExportBusy}
+                onClick={() => {
+                  setImageExportModalOpen(false);
+                  setImageExportError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={imageExportBusy || imageExportPreparing || !imageExportPreparedBlob}
+                onClick={() => {
+                  void handleImageExportSave();
+                }}
+              >
+                {imageExportBusy || imageExportPreparing ? t('fileViewer.exportImageSaving') : t('common.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {templateModalOpen ? (
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal" role="dialog" aria-modal="true">
@@ -7628,6 +7827,16 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           placement="top"
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
+        />
+      ) : null}
+      {imageExportSavedToast ? (
+        <Toast
+          message={imageExportSavedToast.message}
+          details={imageExportSavedToast.details}
+          tone="success"
+          placement="top"
+          ttlMs={3600}
+          onDismiss={() => setImageExportSavedToast(null)}
         />
       ) : null}
     </div>

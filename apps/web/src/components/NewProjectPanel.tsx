@@ -23,6 +23,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
+import { isMediaProviderPickerReady } from '../media/provider-readiness';
 import type {
   AudioKind,
   DesignSystemSummary,
@@ -2482,6 +2483,7 @@ function MediaModelCards({
     for (const model of models) {
       const provider = findProvider(model.provider);
       const providerId = provider?.id ?? model.provider;
+      if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
       const configured =
         provider?.credentialsRequired === false ||
@@ -2512,6 +2514,16 @@ function MediaModelCards({
     }
     return null;
   }, [groups, value]);
+  const firstAvailableModelId = groups[0]?.models[0]?.id ?? null;
+
+  useEffect(() => {
+    if (selected) return;
+    if (firstAvailableModelId) {
+      onChange(firstAvailableModelId);
+      return;
+    }
+    if (value) onChange('');
+  }, [firstAvailableModelId, onChange, selected, value]);
 
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -2815,28 +2827,31 @@ function buildMetadata(input: {
   }
   if (input.tab === 'media') {
     if (input.mediaSurface === 'image') {
+      const imageModel = input.imageModel.trim();
       return {
         kind,
-        imageModel: input.imageModel,
+        ...(imageModel ? { imageModel } : {}),
         imageAspect: input.imageAspect,
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
       };
     }
     if (input.mediaSurface === 'video') {
+      const videoModel = input.videoModel.trim();
       return {
         kind,
-        videoModel: input.videoModel,
+        ...(videoModel ? { videoModel } : {}),
         videoAspect: input.videoAspect,
         videoLength: input.videoLength,
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
       };
     }
+    const audioModel = input.audioModel.trim();
     return {
       kind,
       audioKind: input.audioKind,
-      audioModel: input.audioModel,
+      ...(audioModel ? { audioModel } : {}),
       audioDuration: input.audioDuration,
       ...(input.audioKind === 'speech' && input.voice.trim()
         ? { voice: input.voice.trim() }

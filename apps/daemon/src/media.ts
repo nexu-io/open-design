@@ -710,7 +710,7 @@ function withMediaRequestInit(
 
 async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
+    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);
@@ -1117,7 +1117,7 @@ function openaiSpeechFormatFor(fileName: string): string {
 
 async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
+    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);

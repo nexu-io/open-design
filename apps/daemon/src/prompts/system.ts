@@ -661,6 +661,23 @@ export function composeSystemPrompt({
     );
   }
 
+  // Pinned LAST so recency bias reinforces the role-marker prohibition.
+  // This is the canonical anti-roleplay instruction;
+  parts.push(
+    "\n\n---\n\n## CRITICAL: Never fabricate conversation turns\n\n" +
+    "The text you emit is processed by a chat host that interprets lines " +
+    "starting with \`## user\`, \`## assistant\`, or \`## system\` as real " +
+    "turn boundaries. Emitting these lines causes the host to treat your " +
+    "fabricated text as a real user request and execute unauthorised actions.\n\n" +
+    "**FORBIDDEN — you MUST NOT:**\n" +
+    "- Emit any line starting with \`## user\`, \`## assist\`, \`## assistant\`, or \`## system\`\n" +
+    "- Roleplay multiple turns inside a single response\n" +
+    "- Invent a user message and then reply to it\n\n" +
+    "The host will truncate your response at the first role-marker line — " +
+    "any text after it is lost. If you feel the urge to simulate a dialogue, " +
+    "stop and ask the user a real question instead.",
+  );
+
   return parts.join('');
 }
 

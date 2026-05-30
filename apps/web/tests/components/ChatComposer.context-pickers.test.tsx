@@ -328,6 +328,138 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByTestId('chat-composer-mention-overlay').textContent).toContain('@My Export');
   });
 
+  it('removes the inline design file token when its staged chip is removed', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: 'Use @landing', selectionStart: 12 },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    expect(input.value).toBe('Use @designs/landing.html ');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('Use ');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
+  it('preserves surrounding draft formatting when removing a design file token', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    const draft = 'Plan:\n\n@landing\n\nKeep spacing';
+
+    fireEvent.change(input, {
+      target: { value: draft, selectionStart: 'Plan:\n\n@landing'.length },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    expect(input.value).toBe('Plan:\n\n@designs/landing.html \n\nKeep spacing');
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('Plan:\n\n\n\nKeep spacing');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
+  it('removes a design file token when punctuation follows it', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: 'Use @landing', selectionStart: 12 },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    fireEvent.change(input, {
+      target: {
+        value: 'Use @designs/landing.html, please',
+        selectionStart: 'Use @designs/landing.html, please'.length,
+      },
+    });
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('Use , please');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
+  it('removes a quoted design file token when its chip is removed', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@landing', selectionStart: 8 },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    fireEvent.change(input, {
+      target: {
+        value: '"@designs/landing.html"',
+        selectionStart: '"@designs/landing.html"'.length,
+      },
+    });
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('""');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
   it('lets the tools panel switch between Official and My plugins', async () => {
     renderComposer();
     fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
@@ -343,5 +475,35 @@ describe('ChatComposer context pickers', () => {
       target: { value: 'private' },
     });
     expect(screen.getByText('Private export workflow')).toBeTruthy();
+  });
+
+  it('clears absolute anchors when the pet popover switches to fixed positioning', async () => {
+    renderComposer({
+      petConfig: {
+        adopted: false,
+        enabled: false,
+        petId: 'custom',
+        custom: {
+          name: 'Buddy',
+          glyph: '🐾',
+          accent: '#7c3aed',
+          greeting: 'hi',
+        },
+      },
+      onAdoptPet: vi.fn(),
+      onTogglePet: vi.fn(),
+      onOpenPetSettings: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pets — wake, tuck, or pick one' }));
+
+    const menu = screen.getByText('Show pet').closest('.composer-pet-menu') as HTMLElement | null;
+    expect(menu).not.toBeNull();
+
+    await waitFor(() => {
+      expect(menu?.style.position).toBe('fixed');
+      expect(menu?.style.bottom).toBe('auto');
+      expect(menu?.style.right).toBe('auto');
+    });
   });
 });
