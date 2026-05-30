@@ -41,6 +41,93 @@ test('spawnEnvForAgent applies configured Claude Code env before auth stripping'
   assert.equal(env.PATH, '/usr/bin');
 });
 
+fsTest('spawnEnvForAgent points Claude at the XDG config dir for GUI launches', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-claude-home-'));
+  try {
+    mkdirSync(join(home, '.config', 'claude'), { recursive: true });
+
+    const env = spawnEnvForAgent('claude', {
+      HOME: home,
+      PATH: '/usr/bin',
+    });
+
+    assert.equal(env.CLAUDE_CONFIG_DIR, join(home, '.config', 'claude'));
+    assert.equal(env.PATH, '/usr/bin');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent preserves explicit Claude config env even when defaults exist', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-claude-home-'));
+  try {
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    mkdirSync(join(home, '.config', 'claude'), { recursive: true });
+
+    const env = spawnEnvForAgent('claude', {
+      HOME: home,
+      PATH: '/usr/bin',
+      CLAUDE_CONFIG_DIR: join(home, 'custom-claude'),
+    });
+
+    assert.equal(env.CLAUDE_CONFIG_DIR, join(home, 'custom-claude'));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent does not point Claude at XDG config when legacy ~/.claude exists', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-claude-home-'));
+  try {
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    mkdirSync(join(home, '.config', 'claude'), { recursive: true });
+
+    const env = spawnEnvForAgent('claude', {
+      HOME: home,
+      PATH: '/usr/bin',
+    });
+
+    assert.equal('CLAUDE_CONFIG_DIR' in env, false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent ignores a non-directory legacy ~/.claude path', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-claude-home-'));
+  try {
+    writeFileSync(join(home, '.claude'), 'not a directory');
+    mkdirSync(join(home, '.config', 'claude'), { recursive: true });
+
+    const env = spawnEnvForAgent('claude', {
+      HOME: home,
+      PATH: '/usr/bin',
+    });
+
+    assert.equal(env.CLAUDE_CONFIG_DIR, join(home, '.config', 'claude'));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent leaves Claude config discovery alone when XDG_CONFIG_HOME is present', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-claude-home-'));
+  try {
+    mkdirSync(join(home, '.config', 'claude'), { recursive: true });
+
+    const env = spawnEnvForAgent('claude', {
+      HOME: home,
+      PATH: '/usr/bin',
+      XDG_CONFIG_HOME: join(home, '.config'),
+    });
+
+    assert.equal('CLAUDE_CONFIG_DIR' in env, false);
+    assert.equal(env.XDG_CONFIG_HOME, join(home, '.config'));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent applies configured Codex env without mutating the base env', () => {
   const base = { PATH: '/usr/bin' };
   const env = spawnEnvForAgent('codex', base, {

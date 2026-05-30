@@ -1,3 +1,4 @@
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
@@ -61,6 +62,7 @@ export function spawnEnvForAgent(
     return env;
   }
   if (agentId === 'claude') {
+    applyClaudeConfigDirFallback(env);
     stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
     return env;
   }
@@ -72,6 +74,33 @@ export function spawnEnvForAgent(
     return env;
   }
   return env;
+}
+
+function applyClaudeConfigDirFallback(env: NodeJS.ProcessEnv): void {
+  if (hasNonEmptyEnvKey(env, 'CLAUDE_CONFIG_DIR') || hasNonEmptyEnvKey(env, 'XDG_CONFIG_HOME')) {
+    return;
+  }
+  const home = env.HOME?.trim();
+  if (!home || process.platform === 'win32') return;
+  const legacyDir = path.join(home, '.claude');
+  if (isDirectory(legacyDir)) return;
+  const configDir = path.join(home, '.config', 'claude');
+  if (isDirectory(configDir)) env.CLAUDE_CONFIG_DIR = configDir;
+}
+
+function isDirectory(filePath: string): boolean {
+  try {
+    return statSync(filePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function hasNonEmptyEnvKey(env: NodeJS.ProcessEnv, key: string): boolean {
+  const upper = key.toUpperCase();
+  return Object.keys(env).some(
+    (k) => k.toUpperCase() === upper && typeof env[k] === 'string' && env[k]!.trim() !== '',
+  );
 }
 
 // Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty
