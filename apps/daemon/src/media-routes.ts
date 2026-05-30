@@ -300,7 +300,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   };
   app.get('/api/media/models', async (_req, res) => {
-    const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
+    const mediaConfig = await readMaskedConfigWithProviderReadiness();
     res.json(buildMediaModelsResponse({
       mediaConfig,
       providers: MEDIA_PROVIDERS,
