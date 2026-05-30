@@ -229,9 +229,11 @@ async function safeProbe(
   try {
     return await probe(def, configuredEnv);
   } catch (err) {
-    // Fault isolation: one adapter's probe blowing up must not collapse
-    // the whole agent picker.  Config/env errors get a distinct
-    // unavailableReason so the UI can offer a Configure action.
+    // Fault isolation (issue #2297): one adapter's probe blowing up must
+    // not collapse the whole agent picker.  Config/env validation errors
+    // get a distinct unavailableReason so the UI can offer a Configure
+    // action; all other unexpected errors degrade just that adapter to
+    // unavailable while the rest of the registry keeps its real result.
     if (err instanceof AgentEnvConfigError) {
       return {
         ...unavailableAgent(def),
@@ -239,11 +241,7 @@ async function safeProbe(
         authMessage: err.message,
       };
     }
-    // Other unexpected probe failures are not user-fixable config
-    // mistakes — they are broken invariants or subprocess/probe
-    // defects that should stay observable. Rethrow so detectAgents()
-    // callers notice and can diagnose the failure.
-    throw err;
+    return unavailableAgent(def);
   }
 }
 

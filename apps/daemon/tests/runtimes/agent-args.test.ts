@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codebuddy, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, agentCapabilities, aider, antigravity, assert, claude, codebuddy, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
