@@ -344,4 +344,34 @@ describe('ChatComposer context pickers', () => {
     });
     expect(screen.getByText('Private export workflow')).toBeTruthy();
   });
+
+  it('clears absolute anchors when the pet popover switches to fixed positioning', async () => {
+    renderComposer({
+      petConfig: {
+        adopted: false,
+        enabled: false,
+        petId: 'custom',
+        custom: {
+          name: 'Buddy',
+          glyph: '🐾',
+          accent: '#7c3aed',
+          greeting: 'hi',
+        },
+      },
+      onAdoptPet: vi.fn(),
+      onTogglePet: vi.fn(),
+      onOpenPetSettings: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pets — wake, tuck, or pick one' }));
+
+    const menu = screen.getByText('Show pet').closest('.composer-pet-menu') as HTMLElement | null;
+    expect(menu).not.toBeNull();
+
+    await waitFor(() => {
+      expect(menu?.style.position).toBe('fixed');
+      expect(menu?.style.bottom).toBe('auto');
+      expect(menu?.style.right).toBe('auto');
+    });
+  });
 });

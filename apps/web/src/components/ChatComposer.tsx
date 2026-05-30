@@ -373,7 +373,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // Right-align by default (menu right edge ≈ button right edge).
       // Shift left when the menu would spill past the viewport left edge.
       const left = Math.max(8, Math.min(viewW - menuW - 8, rect.right - menuW));
-      setPetMenuStyle({ position: 'fixed', top, left });
+      setPetMenuStyle({
+        position: 'fixed',
+        top,
+        left,
+        bottom: 'auto',
+        right: 'auto',
+      });
     }, [petMenuOpen]);
 
     // Lazy-fetch the user's external MCP servers list once on mount so the
