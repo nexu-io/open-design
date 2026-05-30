@@ -476,6 +476,8 @@ export interface MaskedConfigResponse {
     apiKeyTail: string;
     baseUrl: string;
     enabled?: boolean;
+    ready?: boolean;
+    error?: string;
     model?: string;
     profiles?: Array<{
       id: string;

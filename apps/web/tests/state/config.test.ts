@@ -387,6 +387,43 @@ describe('mergeDaemonMediaProviders', () => {
     });
   });
 
+  it('keeps daemon readiness metadata when preserving a local pending provider edit', () => {
+    const merged = mergeDaemonMediaProviders(
+      {
+        ...DEFAULT_CONFIG,
+        mediaProviders: {
+          google: {
+            apiKey: '',
+            baseUrl: '',
+            enabled: true,
+            ready: true,
+            error: 'stale local success',
+            model: 'imagen-3',
+          },
+        },
+      },
+      {
+        google: {
+          apiKey: '',
+          baseUrl: '',
+          enabled: true,
+          ready: false,
+          error: 'Google ADC file is invalid',
+        },
+      },
+      { preserveLocalProviderIds: new Set(['google']) },
+    );
+
+    expect(merged.mediaProviders?.google).toEqual({
+      apiKey: '',
+      baseUrl: '',
+      enabled: true,
+      ready: false,
+      error: 'Google ADC file is invalid',
+      model: 'imagen-3',
+    });
+  });
+
   it('refreshes ordinary saved-marker rows from daemon state when there is no unsaved local secret', () => {
     const merged = mergeDaemonMediaProviders(
       {
@@ -800,6 +837,40 @@ describe('fetchMediaProvidersFromDaemon', () => {
           apiKeyTail: '1234',
           baseUrl: 'https://daemon.example/v1',
           model: 'gpt-image-1',
+        },
+      },
+    });
+  });
+
+  it('maps daemon provider readiness metadata into local config state', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          providers: {
+            google: {
+              configured: true,
+              enabled: true,
+              ready: false,
+              error: 'Google ADC file is invalid',
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchMediaProvidersFromDaemon()).resolves.toEqual({
+      status: 'ok',
+      providers: {
+        google: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: '',
+          baseUrl: '',
+          enabled: true,
+          ready: false,
+          error: 'Google ADC file is invalid',
         },
       },
     });

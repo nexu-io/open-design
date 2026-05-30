@@ -482,6 +482,8 @@ interface PublicMediaProviderConfigEntry {
   apiKeyTail?: string;
   baseUrl?: string;
   enabled?: boolean;
+  ready?: boolean;
+  error?: string;
   model?: string;
   profiles?: PublicMediaProviderProfileConfigEntry[];
 }
@@ -701,6 +703,10 @@ export async function fetchMediaProvidersFromDaemon(): Promise<DaemonMediaProvid
           ? { source: entry.source.trim() }
           : {}),
         ...(entry?.enabled ? { enabled: true } : {}),
+        ...(typeof entry?.ready === 'boolean' ? { ready: entry.ready } : {}),
+        ...(typeof entry?.error === 'string' && entry.error.trim()
+          ? { error: entry.error.trim() }
+          : {}),
         ...(typeof entry?.model === 'string' && entry.model.trim()
           ? { model: entry.model.trim() }
           : {}),
@@ -915,7 +921,7 @@ export function mergeDaemonMediaProviders(
       && hasRecoverableLocalMediaProviderFields(localEntry),
     );
     mediaProviders[providerId] = preserveLocalPendingEdit
-      ? { ...daemonEntry, ...localEntry }
+      ? mergeDaemonProviderWithLocalPendingEdit(daemonEntry, localEntry)
       : { ...daemonEntry };
   }
 
@@ -923,6 +929,14 @@ export function mergeDaemonMediaProviders(
     ...localConfig,
     mediaProviders,
   };
+}
+
+function mergeDaemonProviderWithLocalPendingEdit(
+  daemonEntry: MediaProviderCredentials,
+  localEntry: MediaProviderCredentials | undefined,
+): MediaProviderCredentials {
+  const { ready: _localReady, error: _localError, ...localEditable } = localEntry ?? {};
+  return { ...daemonEntry, ...localEditable };
 }
 
 export function hasAnyConfiguredProvider(

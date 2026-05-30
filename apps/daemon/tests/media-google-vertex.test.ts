@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateMedia } from '../src/media.js';
+import { generateMedia, googleVertexProviderReadiness } from '../src/media.js';
 
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=';
 const PROJECT_ID = 'precise-dragon-496304-i5';
@@ -357,6 +357,15 @@ describe('Google Vertex media generation', () => {
     })).rejects.toThrow(/Google Vertex config file is invalid/);
   });
 
+  it('surfaces invalid Vertex config JSON through provider readiness', async () => {
+    await writeFile(vertexConfigPath, 'NOT VALID CONFIG JSON {{{', 'utf8');
+
+    await expect(googleVertexProviderReadiness()).resolves.toEqual({
+      ready: false,
+      error: expect.stringMatching(/Google Vertex config file is invalid/),
+    });
+  });
+
   it.each([
     'OD_GOOGLE_VERTEX_CONFIG',
     'AGENT_SOUL_GOOGLE_VERTEX_CONFIG',
@@ -505,6 +514,74 @@ describe('Google Vertex media generation', () => {
       prompt: 'Should fail with missing ADC file.',
       output: 'vertex-missing-adc.png',
     })).rejects.toThrow(/Google ADC file not found/);
+  });
+
+  it('surfaces invalid ADC credentials through provider readiness', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      project_id: PROJECT_ID,
+      image_location: 'us-central1',
+    });
+    await writeFile(adcPath, 'NOT VALID ADC JSON {{{', 'utf8');
+
+    await expect(googleVertexProviderReadiness()).resolves.toEqual({
+      ready: false,
+      error: expect.stringMatching(/Google ADC file is invalid/),
+    });
+  });
+
+  it('marks Vertex provider readiness true only after local ADC credentials validate', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      project_id: PROJECT_ID,
+      image_location: 'us-central1',
+    });
+    await writeAdc({
+      type: 'authorized_user',
+      client_id: 'client-id',
+      client_secret: 'client-secret',
+      refresh_token: 'refresh-token',
+    });
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://oauth2.googleapis.com/token');
+      expect(init?.method).toBe('POST');
+      return jsonResponse({ access_token: 'vertex-access-token', expires_in: 3600 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(googleVertexProviderReadiness()).resolves.toEqual({ ready: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces ADC token probe failures through provider readiness', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      project_id: PROJECT_ID,
+      image_location: 'us-central1',
+    });
+    await writeAdc({
+      type: 'authorized_user',
+      client_id: 'client-id',
+      client_secret: 'client-secret',
+      refresh_token: 'expired-refresh-token',
+    });
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'invalid_grant' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ));
+
+    await expect(googleVertexProviderReadiness()).resolves.toEqual({
+      ready: false,
+      error: expect.stringMatching(/google adc refresh 400/),
+    });
   });
 
   it('reports missing project_id when service_account is configured but project_id is absent', async () => {

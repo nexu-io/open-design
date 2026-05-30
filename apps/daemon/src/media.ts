@@ -1956,6 +1956,7 @@ type GoogleVertexConfig = {
   service_account_key_file?: string;
 };
 type GoogleVertexAuth = { projectId: string; accessToken: string };
+export type GoogleVertexProviderReadiness = { ready: boolean; error?: string };
 type GoogleServiceAccountKey = {
   client_email: string;
   private_key: string;
@@ -1973,6 +1974,15 @@ const GOOGLE_VERTEX_MODEL_MAP: Record<string, string> = {
   'imagen-3': 'imagen-3.0-generate-002',
 };
 const GOOGLE_VERTEX_DEFAULT_CONFIG_FILE = 'google-vertex-config.json';
+
+export async function googleVertexProviderReadiness(): Promise<GoogleVertexProviderReadiness> {
+  try {
+    const config = await readGoogleVertexMediaConfig();
+    return { ready: await googleVertexProviderRunnable(config) };
+  } catch (err: unknown) {
+    return { ready: false, error: errorMessage(err) };
+  }
+}
 
 async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   const config = await readGoogleVertexMediaConfig();
@@ -2077,7 +2087,29 @@ async function googleVertexConfigReady(config: GoogleVertexConfig): Promise<bool
   if (config.auth_mode === 'service_account' && !googleVertexHasServiceAccountCredentials(config)) {
     return false;
   }
-  return Boolean(await resolveGoogleVertexProjectId(config));
+  const projectId = await resolveGoogleVertexProjectId(config);
+  if (!projectId) return false;
+  if (config.auth_mode === 'adc') {
+    googleVertexAdcCredentialFromFile();
+  }
+  return true;
+}
+
+async function googleVertexProviderRunnable(config: GoogleVertexConfig): Promise<boolean> {
+  if (!config.enabled) return false;
+  if (config.auth_mode === 'service_account' && !googleVertexHasServiceAccountCredentials(config)) {
+    throw new Error(
+      'Google Vertex service account credentials are missing — set service_account_json or service_account_key_file in the config',
+    );
+  }
+  const projectId = await resolveGoogleVertexProjectId(config);
+  if (!projectId) {
+    throw new Error(
+      'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
+    );
+  }
+  await googleVertexAuth({ ...config, project_id: projectId });
+  return true;
 }
 
 function googleVertexHasServiceAccountCredentials(config: GoogleVertexConfig): boolean {
@@ -2436,6 +2468,11 @@ async function googleVertexProjectIdFromConfiguredServiceAccount(config: GoogleV
 }
 
 function googleVertexProjectIdFromAdc(): string {
+  const parsed = googleVertexAdcCredentialFromFile();
+  return googleVertexProjectIdFromCredential(parsed);
+}
+
+function googleVertexAdcCredentialFromFile(): JsonRecord {
   const filePath = googleVertexAdcPath();
   let raw: string;
   try {
@@ -2447,7 +2484,8 @@ function googleVertexProjectIdFromAdc(): string {
     throw new Error(`Google ADC file could not be read: ${errorMessage(err)}`);
   }
   const parsed = parseGoogleVertexAdcCredential(raw);
-  return googleVertexProjectIdFromCredential(parsed);
+  validateGoogleVertexAdcCredential(parsed);
+  return parsed;
 }
 
 function parseGoogleVertexAdcCredential(raw: string): JsonRecord {
@@ -2459,6 +2497,37 @@ function parseGoogleVertexAdcCredential(raw: string): JsonRecord {
   }
   if (!isRecord(parsed)) throw new Error('Google ADC file is invalid');
   return parsed;
+}
+
+function validateGoogleVertexAdcCredential(credential: JsonRecord): void {
+  const type = stringRecordField(credential, 'type');
+  if (type === 'authorized_user') {
+    const clientId = stringRecordField(credential, 'client_id');
+    const clientSecret = stringRecordField(credential, 'client_secret');
+    const refreshToken = stringRecordField(credential, 'refresh_token');
+    if (!clientId || !clientSecret || !refreshToken) {
+      throw new Error('Google ADC authorized_user credentials must include client_id, client_secret, and refresh_token');
+    }
+    return;
+  }
+  if (type === 'impersonated_service_account') {
+    const url = stringRecordField(credential, 'service_account_impersonation_url');
+    const source = isRecord(credential.source_credentials) ? credential.source_credentials : null;
+    if (!url || !source) {
+      throw new Error('Google ADC impersonated_service_account credentials must include source_credentials and service_account_impersonation_url');
+    }
+    validateGoogleVertexAdcCredential(source);
+    return;
+  }
+  if (type === 'service_account') {
+    const clientEmail = stringRecordField(credential, 'client_email');
+    const privateKey = stringRecordField(credential, 'private_key');
+    if (!clientEmail || !privateKey) {
+      throw new Error('Google ADC service account credentials must include client_email and private_key');
+    }
+    return;
+  }
+  throw new Error(`Google ADC credential type is not supported: ${type || 'unknown'}`);
 }
 
 function googleVertexProjectIdFromCredential(value: JsonRecord): string {

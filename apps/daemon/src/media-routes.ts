@@ -71,7 +71,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
-  const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, withConfiguredCustomImageModels, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
+  const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, withConfiguredCustomImageModels, readMaskedConfig, writeConfig, generateMedia, googleVertexProviderReadiness, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { orbitService } = ctx.orbit;
   const { openNativeFolderDialog } = ctx.nativeDialogs;
@@ -219,9 +219,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   };
   app.get('/api/media/models', async (_req, res) => {
-    let imageModels = IMAGE_MODELS;
     const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
-    imageModels = withConfiguredCustomImageModels(
+    const imageModels = withConfiguredCustomImageModels(
       IMAGE_MODELS,
       mediaConfig.providers['custom-image']?.model,
       mediaConfig.providers['custom-image']?.profiles,
@@ -300,7 +299,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
 
   app.get('/api/media/config', async (_req, res) => {
     try {
-      const cfg = await readMaskedConfig(PROJECT_ROOT);
+      const cfg = await readMaskedConfigWithProviderReadiness();
       res.json(cfg);
     } catch (err: any) {
       res
@@ -312,7 +311,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   app.put('/api/media/config', async (req, res) => {
     try {
       const cfg = await writeConfig(PROJECT_ROOT, req.body);
-      res.json(cfg);
+      res.json(await addProviderReadiness(cfg));
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 400;
       res
@@ -320,6 +319,22 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         .json({ error: String(err && err.message ? err.message : err) });
     }
   });
+
+  async function readMaskedConfigWithProviderReadiness() {
+    return addProviderReadiness(await readMaskedConfig(PROJECT_ROOT));
+  }
+
+  async function addProviderReadiness<T extends { providers: Record<string, any> }>(cfg: T): Promise<T> {
+    const google = cfg.providers.google;
+    if (google?.enabled === true) {
+      const readiness = await googleVertexProviderReadiness();
+      google.ready = readiness.ready;
+      if (!readiness.ready && readiness.error) {
+        google.error = readiness.error;
+      }
+    }
+    return cfg;
+  }
 
   app.get('/api/media/providers/elevenlabs/voices', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {

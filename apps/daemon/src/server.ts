@@ -311,7 +311,7 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
-import { generateMedia } from './media.js';
+import { generateMedia, googleVertexProviderReadiness } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
@@ -6174,6 +6174,7 @@ export async function startServer({
     readMaskedConfig,
     writeConfig,
     generateMedia,
+    googleVertexProviderReadiness,
     mediaTasks,
     createMediaTask: (taskId, projectId, info) => createMediaTask(db, taskId, projectId, info),
     persistMediaTask: (task) => persistMediaTask(db, task),
@@ -10636,17 +10637,12 @@ export async function startServer({
   });
 
   app.get('/api/media/models', async (_req, res) => {
-    let imageModels = IMAGE_MODELS;
-    try {
-      const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
-      imageModels = withConfiguredCustomImageModels(
-        IMAGE_MODELS,
-        mediaConfig.providers['custom-image']?.model,
-        mediaConfig.providers['custom-image']?.profiles,
-      );
-    } catch {
-      imageModels = IMAGE_MODELS;
-    }
+    const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
+    const imageModels = withConfiguredCustomImageModels(
+      IMAGE_MODELS,
+      mediaConfig.providers['custom-image']?.model,
+      mediaConfig.providers['custom-image']?.profiles,
+    );
     res.json({
       providers: MEDIA_PROVIDERS,
       image: imageModels,
@@ -10661,6 +10657,11 @@ export async function startServer({
   app.get('/api/media/config', async (_req, res) => {
     try {
       const cfg = await readMaskedConfig(PROJECT_ROOT);
+      if (cfg.providers.google?.enabled === true) {
+        const readiness = await googleVertexProviderReadiness();
+        cfg.providers.google.ready = readiness.ready;
+        if (!readiness.ready && readiness.error) cfg.providers.google.error = readiness.error;
+      }
       res.json(cfg);
     } catch (err) {
       res
@@ -10672,6 +10673,11 @@ export async function startServer({
   app.put('/api/media/config', async (req, res) => {
     try {
       const cfg = await writeConfig(PROJECT_ROOT, req.body);
+      if (cfg.providers.google?.enabled === true) {
+        const readiness = await googleVertexProviderReadiness();
+        cfg.providers.google.ready = readiness.ready;
+        if (!readiness.ready && readiness.error) cfg.providers.google.error = readiness.error;
+      }
       res.json(cfg);
     } catch (err) {
       const status = typeof err?.status === 'number' ? err.status : 400;

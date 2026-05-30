@@ -19,7 +19,7 @@ export function isMediaProviderPickerReady(
   if (!provider?.integrated) return false;
   if (mediaProviders === undefined) return true;
   const entry = mediaProviders?.[provider.id];
-  if (provider.configKind === 'external') return entry?.enabled === true;
+  if (provider.configKind === 'external') return entry?.enabled === true && entry.ready === true;
   if (provider.credentialsRequired === false) return true;
   if (provider.id === 'openai' && isOpenAIOAuthOnlyEntry(entry)) return false;
   if (provider.id === 'custom-image') return hasConfiguredCustomImageEntry(entry);

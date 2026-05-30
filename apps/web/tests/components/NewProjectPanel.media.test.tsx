@@ -190,7 +190,7 @@ describe('NewProjectPanel media provider badges', () => {
     expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
   });
 
-  it('shows Google Vertex models only after the external provider is enabled', () => {
+  it('shows Google Vertex models only after daemon readiness validates the external provider', () => {
     const { rerender } = render(
       <NewProjectPanel
         skills={[]}
@@ -219,7 +219,7 @@ describe('NewProjectPanel media provider badges', () => {
         onDeleteTemplate={vi.fn()}
         promptTemplates={[]}
         onCreate={vi.fn()}
-        mediaProviders={{ google: { apiKey: '', baseUrl: '', enabled: true } }}
+        mediaProviders={{ google: { apiKey: '', baseUrl: '', enabled: true, ready: true } }}
       />,
     );
     fireEvent.click(screen.getByRole('tab', { name: 'Media' }));

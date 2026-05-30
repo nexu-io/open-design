@@ -226,6 +226,8 @@ export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
   enabled?: boolean;
+  ready?: boolean;
+  error?: string;
   model?: string;
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
