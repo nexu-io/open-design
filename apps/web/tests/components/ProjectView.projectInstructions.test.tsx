@@ -184,6 +184,14 @@ function ProjectViewHarness({ initialProject }: { initialProject: Project }) {
 
 const SAVED = 'Always use tabs, never spaces.';
 
+function deferredProjectPatch() {
+  let resolve!: (value: Project | null) => void;
+  const promise = new Promise<Project | null>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 async function openProjectInstructions() {
   const trigger = await screen.findByTestId('project-settings-trigger');
   fireEvent.click(trigger);
@@ -266,11 +274,78 @@ describe('ProjectView – saved Project instructions surface (#1822)', () => {
     });
     fireEvent.click(trigger);
 
-    expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
     await waitFor(() => {
       expect(mockedPatchProject).toHaveBeenCalledWith('project-1', {
         customInstructions: nextInstructions,
       });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
+    });
+  });
+
+  it('keeps typed instructions recoverable when close-time autosave fails', async () => {
+    const nextInstructions = 'Keep this draft if saving fails.';
+    mockedPatchProject.mockResolvedValue(null);
+    render(<ProjectViewHarness initialProject={baseProject} />);
+
+    const trigger = await openProjectInstructions();
+    fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
+      target: { value: nextInstructions },
+    });
+    fireEvent.click(trigger);
+
+    await waitFor(() => {
+      expect(mockedPatchProject).toHaveBeenCalledWith('project-1', {
+        customInstructions: nextInstructions,
+      });
+    });
+    const textarea = screen.getByTestId('project-instructions-textarea') as HTMLTextAreaElement;
+    expect(textarea.value).toBe(nextInstructions);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('saves a queued final revert after an in-flight autosave succeeds', async () => {
+    const initialInstructions = 'A';
+    const intermediateInstructions = 'AB';
+    const firstSave = deferredProjectPatch();
+    const secondSave = deferredProjectPatch();
+    mockedPatchProject
+      .mockReturnValueOnce(firstSave.promise)
+      .mockReturnValueOnce(secondSave.promise);
+    render(<ProjectViewHarness initialProject={{ ...baseProject, customInstructions: initialInstructions }} />);
+
+    const trigger = await openProjectInstructions();
+    fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
+      target: { value: intermediateInstructions },
+    });
+
+    await waitFor(() => {
+      expect(mockedPatchProject).toHaveBeenCalledWith('project-1', {
+        customInstructions: intermediateInstructions,
+      });
+    });
+
+    fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
+      target: { value: initialInstructions },
+    });
+    fireEvent.click(trigger);
+
+    firstSave.resolve({ ...baseProject, customInstructions: intermediateInstructions });
+
+    await waitFor(() => {
+      expect(mockedPatchProject).toHaveBeenCalledWith('project-1', {
+        customInstructions: initialInstructions,
+      });
+    });
+
+    const bar = screen.getByTestId('project-instructions-textarea').parentElement;
+    expect(bar?.getAttribute('aria-busy')).toBe('true');
+
+    secondSave.resolve({ ...baseProject, customInstructions: initialInstructions });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
     });
   });
 });

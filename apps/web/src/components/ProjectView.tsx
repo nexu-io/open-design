@@ -606,8 +606,10 @@ export function ProjectView({
   const instructionsSaveInFlightRef = useRef(false);
   const instructionsSaveQueuedRef = useRef(false);
   const instructionsSaveQueuedValueRef = useRef<string | undefined>(undefined);
+  const instructionsSaveQueuedResolversRef = useRef<Array<(ok: boolean) => void>>([]);
   const instructionsSaveRequestRef = useRef(0);
   const instructionsDesiredValueRef = useRef(normalizeProjectInstructions(project.customInstructions ?? ''));
+  const instructionsPersistedValueRef = useRef(normalizeProjectInstructions(project.customInstructions ?? ''));
   // Keep the draft in sync with the server value while the editor is closed
   // or when switching projects. While open, local typing stays authoritative
   // so server echoes from debounced autosaves cannot make the textarea jump.
@@ -627,10 +629,15 @@ export function ProjectView({
     }
     instructionsSaveQueuedRef.current = false;
     instructionsSaveQueuedValueRef.current = undefined;
+    instructionsSaveQueuedResolversRef.current.splice(0).forEach((resolve) => resolve(false));
     instructionsDesiredValueRef.current = normalizeProjectInstructions(project.customInstructions ?? '');
+    instructionsPersistedValueRef.current = normalizeProjectInstructions(project.customInstructions ?? '');
     setInstructionsDraft(project.customInstructions ?? '');
     setInstructionsMode('closed');
   }, [project.id]);
+  useEffect(() => {
+    instructionsPersistedValueRef.current = normalizeProjectInstructions(project.customInstructions ?? '');
+  }, [project.customInstructions]);
   useEffect(() => {
     instructionsDraftRef.current = instructionsDraft;
   }, [instructionsDraft]);
@@ -3750,39 +3757,52 @@ export function ProjectView({
     [project, onProjectChange, designSystems, analytics.track],
   );
 
-  const flushInstructionsAutosave = useCallback((draft: string) => {
+  const flushInstructionsAutosave = useCallback((draft: string): Promise<boolean> => {
     const value = normalizeProjectInstructions(draft);
     instructionsDesiredValueRef.current = value;
     const currentProject = latestProjectRef.current;
-    if (!instructionsSaveInFlightRef.current && value === normalizeProjectInstructions(currentProject.customInstructions ?? '')) {
-      return;
+    if (!instructionsSaveInFlightRef.current && value === instructionsPersistedValueRef.current) {
+      return Promise.resolve(true);
     }
     if (instructionsSaveInFlightRef.current) {
       instructionsSaveQueuedRef.current = true;
       instructionsSaveQueuedValueRef.current = value;
-      return;
+      return new Promise((resolve) => {
+        instructionsSaveQueuedResolversRef.current.push(resolve);
+      });
     }
     instructionsSaveInFlightRef.current = true;
     setInstructionsSaving(true);
     const requestId = ++instructionsSaveRequestRef.current;
     const projectId = currentProject.id;
-    void patchProject(projectId, { customInstructions: value ?? null })
+    return patchProject(projectId, { customInstructions: value ?? null })
       .then((result) => {
         const stillCurrentProject = latestProjectRef.current.id === projectId;
-        if (result && stillCurrentProject && requestId === instructionsSaveRequestRef.current && instructionsDesiredValueRef.current === value) {
+        if (!result || !stillCurrentProject) return false;
+        instructionsPersistedValueRef.current = normalizeProjectInstructions(result.customInstructions ?? '');
+        if (requestId === instructionsSaveRequestRef.current && instructionsDesiredValueRef.current === value) {
           latestOnProjectChangeRef.current(result);
         }
+        return true;
       })
-      .finally(() => {
+      .catch(() => false)
+      .then((ok) => {
         instructionsSaveInFlightRef.current = false;
         if (instructionsSaveQueuedRef.current) {
           const nextValue = instructionsSaveQueuedValueRef.current;
+          const queuedResolvers = instructionsSaveQueuedResolversRef.current.splice(0);
           instructionsSaveQueuedRef.current = false;
           instructionsSaveQueuedValueRef.current = undefined;
-          flushInstructionsAutosave(nextValue ?? '');
-          return;
+          return flushInstructionsAutosave(nextValue ?? '').then((queuedOk) => {
+            queuedResolvers.forEach((resolve) => resolve(queuedOk));
+            if (!instructionsSaveInFlightRef.current && !instructionsSaveQueuedRef.current) {
+              setInstructionsSaving(false);
+            }
+            return queuedOk;
+          });
         }
         setInstructionsSaving(false);
+        return ok;
       });
   }, []);
 
@@ -4403,8 +4423,9 @@ export function ProjectView({
                       clearTimeout(instructionsSaveTimerRef.current);
                       instructionsSaveTimerRef.current = null;
                     }
-                    flushInstructionsAutosave(instructionsDraftRef.current);
-                    setInstructionsMode('closed');
+                    void flushInstructionsAutosave(instructionsDraftRef.current).then((ok) => {
+                      if (ok) setInstructionsMode('closed');
+                    });
                     return;
                   }
                   setInstructionsDraft(project.customInstructions ?? '');
