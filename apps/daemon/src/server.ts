@@ -10636,24 +10636,6 @@ export async function startServer({
     }
   });
 
-  app.get('/api/media/models', async (_req, res) => {
-    const mediaConfig = await readMaskedConfig(PROJECT_ROOT);
-    const imageModels = withConfiguredCustomImageModels(
-      IMAGE_MODELS,
-      mediaConfig.providers['custom-image']?.model,
-      mediaConfig.providers['custom-image']?.profiles,
-    );
-    res.json({
-      providers: MEDIA_PROVIDERS,
-      image: imageModels,
-      video: VIDEO_MODELS,
-      audio: AUDIO_MODELS_BY_KIND,
-      aspects: MEDIA_ASPECTS,
-      videoLengthsSec: VIDEO_LENGTHS_SEC,
-      audioDurationsSec: AUDIO_DURATIONS_SEC,
-    });
-  });
-
   app.get('/api/media/config', async (_req, res) => {
     try {
       const cfg = await readMaskedConfig(PROJECT_ROOT);
