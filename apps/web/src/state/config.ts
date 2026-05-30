@@ -533,13 +533,6 @@ interface MediaProviderDaemonWriteRequest {
 
 type MediaProviderProfileCredentials = NonNullable<MediaProviderCredentials['profiles']>[number];
 
-function hasAnyDaemonManagedMediaProvider(
-  providers: Record<string, MediaProviderCredentials> | null | undefined,
-): boolean {
-  if (!providers) return false;
-  return Object.values(providers).some((entry) => isStoredMediaProviderEntryPresent(entry));
-}
-
 function hasRecoverableLocalMediaProviderFields(
   entry: MediaProviderCredentials | null | undefined,
 ): boolean {
@@ -890,7 +883,7 @@ export function mergeDaemonMediaProviders(
     return { ...localConfig };
   }
 
-  if (!hasAnyDaemonManagedMediaProvider(daemonProviders)) {
+  if (Object.keys(daemonProviders).length === 0) {
     return {
       ...localConfig,
       mediaProviders: Object.fromEntries(
@@ -945,7 +938,7 @@ export function shouldSyncLocalMediaProvidersToDaemon(
 ): boolean {
   return daemonProviders != null
     && Object.values(localProviders ?? {}).some((entry) => hasRecoverableLocalMediaProviderFields(entry))
-    && !hasAnyDaemonManagedMediaProvider(daemonProviders);
+    && Object.keys(daemonProviders).length === 0;
 }
 
 export async function syncMediaProvidersToDaemon(

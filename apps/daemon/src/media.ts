@@ -1982,23 +1982,17 @@ async function renderGoogleVertexImage(ctx: MediaContext, credentials: ProviderC
         'Google Vertex is not configured — set OD_GOOGLE_VERTEX_CONFIG or configure ~/.config/open-design/google-vertex-config.json with enabled=true',
       );
     }
-    // Surface specific credential errors (missing key file, invalid JSON, etc.)
-    // instead of the generic "project id is missing" message.
-    try {
-      if (!(await resolveGoogleVertexProjectId(config))) {
-        throw new Error(
-          'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
-        );
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && /Vertex|ADC/.test(err.message)) throw err;
+    if (config.auth_mode === 'service_account' && !googleVertexHasServiceAccountCredentials(config)) {
+      throw new Error(
+        'Google Vertex service account credentials are missing — set service_account_json or service_account_key_file in the config',
+      );
+    }
+    if (!(await resolveGoogleVertexProjectId(config))) {
       throw new Error(
         'Google Vertex project id is missing — set project_id in the config, or set GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / GCP_PROJECT env var',
       );
     }
-    throw new Error(
-      'Google Vertex service account credentials are missing — set service_account_json or service_account_key_file in the config',
-    );
+    throw new Error('Google Vertex is not ready');
   }
   const auth = await googleVertexAuth(config);
   const configuredModel = credentials.model?.trim();
@@ -2029,8 +2023,15 @@ async function readGoogleVertexMediaConfig(): Promise<GoogleVertexConfig> {
   ];
   for (const file of paths) {
     try {
-      const parsed = JSON.parse(await readFile(file, 'utf8')) as unknown;
+      const raw = await readFile(file, 'utf8');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw) as unknown;
+      } catch {
+        throw new Error(`Google Vertex config file is invalid: ${file}`);
+      }
       if (isRecord(parsed)) return normalizeGoogleVertexConfig(parsed);
+      throw new Error(`Google Vertex config file is invalid: ${file}`);
     } catch (err) {
       if (errorStringProp(err, 'code') !== 'ENOENT') throw err;
     }
@@ -2068,18 +2069,15 @@ function normalizeGoogleVertexConfig(value: JsonRecord): GoogleVertexConfig {
 }
 
 async function googleVertexConfigReady(config: GoogleVertexConfig): Promise<boolean> {
-  try {
-    return config.enabled
-      && Boolean(await resolveGoogleVertexProjectId(config))
-      && (
-        config.auth_mode === 'adc'
-        || Boolean(config.service_account_json?.trim() || config.service_account_key_file?.trim())
-      );
-  } catch {
-    // Credential file read/parse errors mean the config is not ready — let
-    // renderGoogleVertexImage catch and surface them as specific errors.
+  if (!config.enabled) return false;
+  if (config.auth_mode === 'service_account' && !googleVertexHasServiceAccountCredentials(config)) {
     return false;
   }
+  return Boolean(await resolveGoogleVertexProjectId(config));
+}
+
+function googleVertexHasServiceAccountCredentials(config: GoogleVertexConfig): boolean {
+  return Boolean(config.service_account_json?.trim() || config.service_account_key_file?.trim());
 }
 
 async function callGoogleVertexImagen(
@@ -2217,16 +2215,16 @@ async function googleVertexAuth(config: GoogleVertexConfig): Promise<GoogleVerte
 
 async function googleVertexAdcAccessToken(): Promise<string> {
   const filePath = googleVertexAdcPath();
-  let parsed: unknown;
+  let raw: string;
   try {
-    parsed = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
-  } catch (err) {
+    raw = await readFile(filePath, 'utf8');
+  } catch (err: unknown) {
     if (errorStringProp(err, 'code') === 'ENOENT') {
       throw new Error(`Google ADC file not found at ${filePath}`);
     }
-    throw err;
+    throw new Error(`Google ADC file could not be read: ${errorMessage(err)}`);
   }
-  if (!isRecord(parsed)) throw new Error('Google ADC file is invalid');
+  const parsed = parseGoogleVertexAdcCredential(raw);
   return googleVertexAdcCredentialAccessToken(parsed, `adc:${filePath}`);
 }
 
@@ -2415,13 +2413,15 @@ function parseGoogleVertexTokenResponse(text: string, label: string): JsonRecord
 }
 
 async function resolveGoogleVertexProjectId(config: GoogleVertexConfig): Promise<string> {
-  return cleanString(config.project_id)
+  const configuredProjectId = cleanString(config.project_id)
     || cleanString(process.env.GOOGLE_CLOUD_PROJECT)
     || cleanString(process.env.GCLOUD_PROJECT)
-    || cleanString(process.env.GCP_PROJECT)
-    || (config.auth_mode === 'service_account' ? await googleVertexProjectIdFromConfiguredServiceAccount(config) : '')
-    || googleVertexProjectIdFromAdc()
-    || '';
+    || cleanString(process.env.GCP_PROJECT);
+  if (configuredProjectId) return configuredProjectId;
+  if (config.auth_mode === 'service_account') {
+    return googleVertexProjectIdFromConfiguredServiceAccount(config);
+  }
+  return googleVertexProjectIdFromAdc();
 }
 
 async function googleVertexProjectIdFromConfiguredServiceAccount(config: GoogleVertexConfig): Promise<string> {
@@ -2432,8 +2432,29 @@ async function googleVertexProjectIdFromConfiguredServiceAccount(config: GoogleV
 }
 
 function googleVertexProjectIdFromAdc(): string {
-  const parsed = JSON.parse(readFileSync(googleVertexAdcPath(), 'utf8')) as unknown;
-  return isRecord(parsed) ? googleVertexProjectIdFromCredential(parsed) : '';
+  const filePath = googleVertexAdcPath();
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf8');
+  } catch (err: unknown) {
+    if (errorStringProp(err, 'code') === 'ENOENT') {
+      throw new Error(`Google ADC file not found at ${filePath}`);
+    }
+    throw new Error(`Google ADC file could not be read: ${errorMessage(err)}`);
+  }
+  const parsed = parseGoogleVertexAdcCredential(raw);
+  return googleVertexProjectIdFromCredential(parsed);
+}
+
+function parseGoogleVertexAdcCredential(raw: string): JsonRecord {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error('Google ADC file is invalid');
+  }
+  if (!isRecord(parsed)) throw new Error('Google ADC file is invalid');
+  return parsed;
 }
 
 function googleVertexProjectIdFromCredential(value: JsonRecord): string {

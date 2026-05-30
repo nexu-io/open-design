@@ -342,6 +342,21 @@ describe('Google Vertex media generation', () => {
     })).rejects.toThrow(/Google Vertex is not configured/);
   });
 
+  it('reports invalid Vertex config JSON instead of treating Vertex as unconfigured', async () => {
+    await writeFile(vertexConfigPath, 'NOT VALID CONFIG JSON {{{', 'utf8');
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with config parse error.',
+      output: 'vertex-invalid-config.png',
+    })).rejects.toThrow(/Google Vertex config file is invalid/);
+  });
+
   it('reports a broken service_account_key_file instead of the generic not-configured message', async () => {
     const brokenKeyPath = path.join(root, 'broken-key.json');
     await writeFile(brokenKeyPath, 'NOT VALID JSON {{{', 'utf8');
@@ -384,6 +399,50 @@ describe('Google Vertex media generation', () => {
       prompt: 'Should fail with missing key.',
       output: 'vertex-missing-key.png',
     })).rejects.toThrow(/service account key file not found/);
+  });
+
+  it('reports broken service-account credentials while deriving the project id', async () => {
+    const brokenKeyPath = path.join(root, 'broken-key-no-project.json');
+    await writeFile(brokenKeyPath, '{not-json', 'utf8');
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'service_account',
+      // No project_id: readiness must inspect the key and surface parse errors.
+      service_account_key_file: brokenKeyPath,
+    });
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with service account parse error.',
+      output: 'vertex-broken-key-no-project.png',
+    })).rejects.toThrow(/service account JSON is invalid/);
+  });
+
+  it('reports invalid ADC credentials while deriving the project id', async () => {
+    await writeVertexConfig({
+      version: 1,
+      enabled: true,
+      auth_mode: 'adc',
+      image_location: 'us-central1',
+    });
+    await writeFile(adcPath, 'NOT VALID ADC JSON {{{', 'utf8');
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'imagen-4',
+      prompt: 'Should fail with ADC parse error.',
+      output: 'vertex-broken-adc.png',
+    })).rejects.toThrow(/Google ADC file is invalid/);
   });
 
   it('reports missing project_id when service_account is configured but project_id is absent', async () => {

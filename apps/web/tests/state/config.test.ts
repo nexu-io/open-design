@@ -337,7 +337,7 @@ describe('mergeDaemonMediaProviders', () => {
     });
   });
 
-  it('keeps local media providers when daemon has no stored state yet', () => {
+  it('keeps local media providers when daemon returns no provider rows yet', () => {
     const localConfig = {
       ...DEFAULT_CONFIG,
       mediaProviders: {
@@ -348,14 +348,7 @@ describe('mergeDaemonMediaProviders', () => {
       },
     };
 
-    const merged = mergeDaemonMediaProviders(localConfig, {
-      openai: {
-        apiKey: '',
-        apiKeyConfigured: false,
-        apiKeyTail: '',
-        baseUrl: '',
-      },
-    });
+    const merged = mergeDaemonMediaProviders(localConfig, {});
 
     expect(merged.mediaProviders).toEqual(localConfig.mediaProviders);
   });
@@ -584,6 +577,62 @@ describe('mergeDaemonMediaProviders', () => {
       },
     });
   });
+
+  it('drops recoverable stale local entries when daemon returns an explicit empty row', () => {
+    const localConfig = {
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        google: {
+          apiKey: 'stale-local-key',
+          apiKeyConfigured: true,
+          apiKeyTail: '1234',
+          baseUrl: 'https://stale-local.example/v1',
+          model: 'imagen-4.0-fast-generate-001',
+        },
+        'custom-image': {
+          apiKey: 'custom-local-key',
+          baseUrl: 'https://custom.example/v1',
+          model: 'custom-image-model',
+        },
+      },
+    };
+    const daemonProviders = {
+      google: {
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+        baseUrl: '',
+        model: '',
+      },
+    };
+
+    expect(mergeDaemonMediaProviders(localConfig, daemonProviders).mediaProviders).toEqual({
+      'custom-image': {
+        apiKey: 'custom-local-key',
+        baseUrl: 'https://custom.example/v1',
+        model: 'custom-image-model',
+      },
+    });
+
+    expect(
+      mergeDaemonMediaProviders(localConfig, daemonProviders, {
+        preserveLocalProviderIds: new Set(['google']),
+      }).mediaProviders,
+    ).toEqual({
+      google: {
+        apiKey: 'stale-local-key',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+        baseUrl: 'https://stale-local.example/v1',
+        model: 'imagen-4.0-fast-generate-001',
+      },
+      'custom-image': {
+        apiKey: 'custom-local-key',
+        baseUrl: 'https://custom.example/v1',
+        model: 'custom-image-model',
+      },
+    });
+  });
 });
 
 describe('media provider entry presence helpers', () => {
@@ -620,7 +669,21 @@ describe('media provider entry presence helpers', () => {
 });
 
 describe('shouldSyncLocalMediaProvidersToDaemon', () => {
-  it('returns true when local providers exist and daemon has none yet', () => {
+  it('returns true when local providers exist and daemon returns no provider rows yet', () => {
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        {},
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false when daemon returns an explicit empty provider row', () => {
     expect(
       shouldSyncLocalMediaProvidersToDaemon(
         {
@@ -638,7 +701,7 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
           },
         },
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('returns false when daemon already has persisted media provider state', () => {
