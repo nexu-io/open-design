@@ -3428,6 +3428,30 @@ export function SettingsDialog({
                 </label>
               ) : null}
               {renderByokBaseUrlField()}
+              <label className="field">
+                <span className="field-label">{t('settings.maxTokens')}</span>
+                <input
+                  type="number"
+                  min={MIN_MAX_TOKENS}
+                  max={MAX_MAX_TOKENS}
+                  step={MIN_MAX_TOKENS}
+                  placeholder={String(modelMaxTokensDefault(cfg.model))}
+                  value={cfg.maxTokens ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (raw === '') {
+                      setCfg((c) => ({ ...c, maxTokens: undefined }));
+                      return;
+                    }
+                    const val = parseInt(raw, 10);
+                    setCfg((c) => ({
+                      ...c,
+                      maxTokens: Number.isFinite(val) ? val : undefined,
+                    }));
+                  }}
+                />
+                <p className="hint">{t('settings.maxTokensHint')}</p>
+              </label>
               <details className="agent-cli-env settings-memory-advanced">
                 <summary className="agent-cli-env-summary">
                   <span className="agent-cli-env-summary-title">
