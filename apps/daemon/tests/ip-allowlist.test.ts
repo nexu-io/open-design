@@ -1,8 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { createIpAllowlistMiddleware } from '../src/ip-allowlist.js';
 
-function mockReq(remoteAddress: string) {
-  return { socket: { remoteAddress }, headers: {} } as any;
+const PREVIOUS = process.env.OD_TRUST_PROXY;
+
+afterEach(() => {
+  if (PREVIOUS === undefined) delete process.env.OD_TRUST_PROXY;
+  else process.env.OD_TRUST_PROXY = PREVIOUS;
+});
+
+function mockReq(remoteAddress: string, headers: Record<string, string> = {}) {
+  return { socket: { remoteAddress }, headers } as any;
 }
 
 function mockRes() {
@@ -105,5 +112,48 @@ describe('ip-allowlist', () => {
     let called = false;
     await middleware(req, res, () => { called = true; });
     expect(called).toBe(true);
+  });
+
+  describe('regression: proxy trust + no XFF + allowlist', () => {
+    it('allows direct localhost when OD_TRUST_PROXY=1 and no XFF', async () => {
+      process.env.OD_TRUST_PROXY = '1';
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      const req = mockReq('127.0.0.1');
+      const res = mockRes();
+      let called = false;
+      await middleware(req, res, () => { called = true; });
+      expect(called).toBe(true);
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('allows direct ::1 localhost when OD_TRUST_PROXY=1 and no XFF', async () => {
+      process.env.OD_TRUST_PROXY = '1';
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      const req = mockReq('::1');
+      const res = mockRes();
+      let called = false;
+      await middleware(req, res, () => { called = true; });
+      expect(called).toBe(true);
+    });
+
+    it('still blocks non-allowlisted remote when OD_TRUST_PROXY=1 and no XFF', async () => {
+      process.env.OD_TRUST_PROXY = '1';
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      const req = mockReq('10.0.0.99');
+      const res = mockRes();
+      await middleware(req, res, () => {});
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('still allows proxied loopback via XFF when OD_TRUST_PROXY=1', async () => {
+      process.env.OD_TRUST_PROXY = '1';
+      const middleware = createIpAllowlistMiddleware(['192.168.1.5']);
+      // TCP peer is loopback, XFF shows loopback — should be allowed
+      const req = mockReq('127.0.0.1', { 'x-forwarded-for': '127.0.0.1' });
+      const res = mockRes();
+      let called = false;
+      await middleware(req, res, () => { called = true; });
+      expect(called).toBe(true);
+    });
   });
 });

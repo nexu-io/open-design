@@ -24,6 +24,12 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
   const entries = allowedHosts.map(parseEntry);
 
   return (req: Request, res: Response, next: NextFunction) => {
+    // Direct-loopback bypass: when the TCP peer is loopback, always allow
+    // regardless of proxy-trust state. This preserves localhost bootstrap
+    // when OD_TRUST_PROXY=1 and no X-Forwarded-For is present (where
+    // effectivePeerFromReq would return '').
+    if (isLoopbackAddress(req.socket?.remoteAddress)) return next();
+
     const clientIp = effectivePeerFromReq(req);
 
     if (isLoopbackAddress(clientIp)) return next();
