@@ -4259,7 +4259,6 @@ export function ProjectView({
   const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
   const projectInstructions = (project.customInstructions ?? '').trim();
   const hasProjectInstructions = projectInstructions.length > 0;
-  const projectInstructionsPreview = compactInlinePreview(projectInstructions);
 
   return (
     <div className="app">
@@ -4291,7 +4290,7 @@ export function ProjectView({
                 setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
               }}
             >
-              <Icon name="sliders" size={16} />
+              <Icon name="file-text" size={16} />
             </button>
             <HandoffButton projectId={project.id} />
             <AvatarMenu
@@ -4336,20 +4335,6 @@ export function ProjectView({
               selectedId={project.designSystemId ?? null}
               onChange={handleChangeDesignSystemId}
             />
-            {hasProjectInstructions ? (
-              <button
-                type="button"
-                className={`project-instructions-chip${instructionsMode !== 'closed' ? ' is-open' : ''}`}
-                data-testid="project-instructions-chip"
-                title={projectInstructions}
-                aria-label={t('project.customInstructions')}
-                aria-expanded={instructionsMode !== 'closed'}
-                onClick={() => setInstructionsMode((m) => (m === 'closed' ? 'review' : 'closed'))}
-              >
-                <Icon name="sliders" size={11} />
-                <span>&quot;{projectInstructionsPreview}&quot;</span>
-              </button>
-            ) : null}
           </span>
         </div>
       </AppChromeHeader>
@@ -4721,10 +4706,6 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
-}
-
-function compactInlinePreview(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
 }
 
 export interface RetryTarget {

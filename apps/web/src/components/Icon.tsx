@@ -22,6 +22,7 @@ export type IconName =
   | 'eye-off'
   | 'file'
   | 'file-code'
+  | 'file-text'
   | 'folder'
   | 'folder-filled'
   | 'github'
@@ -252,6 +253,15 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M14 2v6h6" />
           <path d="m10 13-2 2 2 2" />
           <path d="m14 17 2-2-2-2" />
+        </svg>
+      );
+    case 'file-text':
+      return (
+        <svg {...common}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M8 13h8" />
+          <path d="M8 17h6" />
         </svg>
       );
     case 'folder':
