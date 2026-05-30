@@ -308,7 +308,7 @@ CLA는 요구하지 않습니다. Apache-2.0으로 충분하며, 당신의 기�
 
 ## 라이선스
 
-기여하면, 당신의 기여가 이 저장소의 [Apache-2.0 License](LICENSE)를 따른다는 데 동의하는 것입니다. 단 [`skills/guizang-ppt/`](skills/guizang-ppt/) 안의 파일은 예외로, 원래의 MIT 라이선스와 [op7418](https://github.com/op7418)에 대한 저작자 표기를 그대로 유지합니다.
+기여하면, 당신의 기여가 이 저장소의 [Apache-2.0 License](LICENSE)를 따른다는 데 동의하는 것입니다. 단 [`design-templates/guizang-ppt/`](design-templates/guizang-ppt/) 안의 파일은 예외로, 원래의 MIT 라이선스와 [op7418](https://github.com/op7418)에 대한 저작자 표기를 그대로 유지합니다.
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 [guizang]: https://github.com/op7418/guizang-ppt-skill
