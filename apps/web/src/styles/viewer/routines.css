@@ -748,8 +748,7 @@
 }
 .app .app-chrome-back,
 .app .settings-icon-btn,
-.app .avatar-btn,
-.app .project-instructions-toggle {
+.app .avatar-btn {
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -1669,6 +1668,96 @@
   padding: 4px 10px 6px;
 }
 
+/* -- Project-page context capsule (design system + instructions) -- */
+.project-context-capsule {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(100%, 430px);
+  height: 30px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+}
+.project-context-capsule .project-ds-picker {
+  flex: 1 1 auto;
+}
+.project-context-capsule .project-ds-picker-trigger,
+.project-context-instructions {
+  appearance: none;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-context-capsule .project-ds-picker-trigger {
+  width: 100%;
+  max-width: none;
+  padding: 0 10px 0 11px;
+  border-radius: 999px 0 0 999px;
+  color: var(--text-strong, var(--text));
+}
+.project-context-capsule .project-ds-picker-trigger:hover,
+.project-context-capsule .project-ds-picker-trigger:active,
+.project-context-capsule .project-ds-picker-trigger.picked,
+.project-context-capsule .project-context-instructions:hover,
+.project-context-capsule .project-context-instructions:hover:not(:disabled),
+.project-context-capsule .project-context-instructions:active,
+.project-context-capsule .project-context-instructions.is-open {
+  background: transparent;
+}
+.project-context-capsule .project-ds-picker-trigger:hover,
+.project-context-capsule .project-context-instructions:hover {
+  color: var(--text-strong, var(--text));
+}
+.project-context-capsule .project-ds-picker-trigger.picked,
+.project-context-instructions.is-open {
+  color: var(--text-strong, var(--text));
+}
+.project-ds-picker-chevron,
+.project-context-instructions-chevron {
+  flex: 0 0 auto;
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-ds-picker.open .project-ds-picker-chevron,
+.project-context-instructions.is-open .project-context-instructions-chevron {
+  transform: rotate(180deg);
+}
+.project-context-capsule .project-ds-picker-trigger:focus-visible,
+.project-context-instructions:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong, var(--border)),
+    0 0 0 2px color-mix(in srgb, var(--text) 10%, transparent);
+}
+.project-context-instructions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 174px;
+  padding: 0 11px 0 10px;
+  border-left: 1px solid var(--border);
+  border-radius: 0 999px 999px 0;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1;
+  cursor: pointer;
+}
+.project-context-instructions-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* -- Project-page design-system picker (project chrome header) -- */
 .project-ds-picker {
   position: relative;
@@ -1739,18 +1828,22 @@
 .project-ds-picker-search {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  color: var(--text-muted);
 }
 .project-ds-picker-search input {
   flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   border: 0;
   outline: none;
   background: transparent;
   font: inherit;
   color: var(--text);
+}
+.project-ds-picker-search input:focus {
+  border-color: transparent;
+  box-shadow: none;
 }
 .project-ds-picker-body {
   display: grid;

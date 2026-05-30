@@ -167,6 +167,8 @@ export function ProjectDesignSystemPicker({
         onClick={() => setOpen((v) => !v)}
         disabled={loading}
         title={selected?.title ?? t('designSystemPicker.select')}
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
         {selected && selected.swatches && selected.swatches.length > 0 ? (
           <span className="project-ds-picker-swatches" aria-hidden>
@@ -184,9 +186,9 @@ export function ProjectDesignSystemPicker({
         <span className="project-ds-picker-label">
           {loading
             ? t('designSystemPicker.loading')
-            : selected?.title ?? t('designSystemPicker.select')}
+            : selected?.title ?? t('misc.designSystem')}
         </span>
-        <Icon name="chevron-down" size={11} />
+        <Icon name="chevron-down" size={11} className="project-ds-picker-chevron" />
       </button>
       {open && anchor && typeof document !== 'undefined'
         ? createPortal(
@@ -197,7 +199,6 @@ export function ProjectDesignSystemPicker({
               style={{ top: anchor.top, left: anchor.left, width: anchor.width }}
             >
               <div className="project-ds-picker-search">
-                <Icon name="search" size={12} />
                 <input
                   ref={inputRef}
                   type="text"

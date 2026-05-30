@@ -184,8 +184,10 @@ function ProjectViewHarness({ initialProject }: { initialProject: Project }) {
 
 const SAVED = 'Always use tabs, never spaces.';
 
-async function openProjectInstructionsFromSettings() {
-  fireEvent.click(await screen.findByTestId('project-settings-trigger'));
+async function openProjectInstructions() {
+  const trigger = await screen.findByTestId('project-settings-trigger');
+  fireEvent.click(trigger);
+  return trigger;
 }
 
 describe('ProjectView – saved Project instructions surface (#1822)', () => {
@@ -202,68 +204,73 @@ describe('ProjectView – saved Project instructions surface (#1822)', () => {
     vi.clearAllMocks();
   });
 
-  it('shows a persistent saved-state chip (not just a bare pencil) when instructions exist', async () => {
+  it('shows a persistent project-instructions capsule when instructions exist', async () => {
     render(<ProjectViewHarness initialProject={{ ...baseProject, customInstructions: SAVED }} />);
 
-    const chip = await screen.findByTestId('project-instructions-chip');
-    expect(chip).toBeTruthy();
-    // The empty-state add affordance must not be the surface once a value exists.
-    expect(screen.queryByTestId('project-instructions-add')).toBeNull();
+    const trigger = await screen.findByTestId('project-settings-trigger');
+    expect(trigger.textContent).toContain('project.customInstructions');
+    expect(trigger.className).toContain('has-instructions');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
     // Nothing is expanded until the user opts in.
     expect(screen.queryByTestId('project-instructions-preview')).toBeNull();
     expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
   });
 
-  it('opens a read-only review panel that previews the saved instructions', async () => {
+  it('opens the live editor with the saved instructions prefilled', async () => {
     render(<ProjectViewHarness initialProject={{ ...baseProject, customInstructions: SAVED }} />);
 
-    fireEvent.click(await screen.findByTestId('project-instructions-chip'));
-
-    const preview = screen.getByTestId('project-instructions-preview');
-    expect(preview.textContent).toBe(SAVED);
-    // The panel makes the active/injected state explicit.
-    expect(screen.getByText('project.instructionsActive')).toBeTruthy();
-    // Review is read-only — no editor until the user asks to edit.
-    expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
-  });
-
-  it('reopens the editor from the review panel with the saved value prefilled', async () => {
-    render(<ProjectViewHarness initialProject={{ ...baseProject, customInstructions: SAVED }} />);
-
-    fireEvent.click(await screen.findByTestId('project-instructions-chip'));
-    fireEvent.click(screen.getByTestId('project-instructions-edit'));
+    const trigger = await openProjectInstructions();
 
     const textarea = screen.getByTestId('project-instructions-textarea') as HTMLTextAreaElement;
     expect(textarea.value).toBe(SAVED);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByTestId('project-instructions-preview')).toBeNull();
+    expect(screen.queryByTestId('project-instructions-edit')).toBeNull();
+    expect(screen.queryByTestId('project-instructions-save')).toBeNull();
   });
 
-  it('offers an add affordance and opens an empty editor when no instructions are saved', async () => {
+  it('opens an empty live editor when no instructions are saved', async () => {
     render(<ProjectViewHarness initialProject={baseProject} />);
 
     expect(await screen.findByTestId('project-settings-trigger')).toBeTruthy();
-    expect(screen.queryByTestId('project-instructions-chip')).toBeNull();
 
-    await openProjectInstructionsFromSettings();
+    await openProjectInstructions();
 
     const textarea = screen.getByTestId('project-instructions-textarea') as HTMLTextAreaElement;
     expect(textarea.value).toBe('');
   });
 
-  it('reads the saved value back in the review panel right after a save', async () => {
+  it('autosaves changed instructions through the project patch endpoint', async () => {
     mockedPatchProject.mockResolvedValue({ ...baseProject, customInstructions: SAVED });
     render(<ProjectViewHarness initialProject={baseProject} />);
 
-    await openProjectInstructionsFromSettings();
+    await openProjectInstructions();
     fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
       target: { value: SAVED },
     });
-    fireEvent.click(screen.getByTestId('project-instructions-save'));
 
-    expect(mockedPatchProject).toHaveBeenCalledWith('project-1', { customInstructions: SAVED });
-    // Save lands on the review panel so the stored value is confirmed back.
     await waitFor(() => {
-      expect(screen.getByTestId('project-instructions-preview').textContent).toBe(SAVED);
+      expect(mockedPatchProject).toHaveBeenCalledWith('project-1', { customInstructions: SAVED });
     });
-    expect(screen.getByTestId('project-instructions-chip')).toBeTruthy();
+    expect(screen.getByTestId('project-instructions-textarea')).toBeTruthy();
+  });
+
+  it('flushes pending instruction edits when the capsule closes', async () => {
+    const nextInstructions = 'Use compact terminal spacing.';
+    mockedPatchProject.mockResolvedValue({ ...baseProject, customInstructions: nextInstructions });
+    render(<ProjectViewHarness initialProject={baseProject} />);
+
+    const trigger = await openProjectInstructions();
+    fireEvent.change(screen.getByTestId('project-instructions-textarea'), {
+      target: { value: nextInstructions },
+    });
+    fireEvent.click(trigger);
+
+    expect(screen.queryByTestId('project-instructions-textarea')).toBeNull();
+    await waitFor(() => {
+      expect(mockedPatchProject).toHaveBeenCalledWith('project-1', {
+        customInstructions: nextInstructions,
+      });
+    });
   });
 });

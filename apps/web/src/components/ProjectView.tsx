@@ -594,22 +594,52 @@ export function ProjectView({
   const [byokImageModelOverride, setByokImageModelOverride] = useState<string>(
     config.byokImageModel ?? '',
   );
-  // `closed` → no surface; `review` → read-only saved-state panel with a
-  // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
-  const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
+  // `open` renders the live autosaving editor; the capsule is the only
+  // open/close affordance so the panel chrome does not duplicate it.
+  const [instructionsMode, setInstructionsMode] = useState<'closed' | 'open'>('closed');
   const [instructionsDraft, setInstructionsDraft] = useState(project.customInstructions ?? '');
   const [instructionsSaving, setInstructionsSaving] = useState(false);
-  // Keep the draft in sync with the server value while the editor is not
-  // open (e.g. after an external update or project switch). If the saved
-  // value disappears while the review panel is showing, collapse the
-  // surface so it never renders a stale or empty read-back.
+  const instructionsDraftRef = useRef(instructionsDraft);
+  const latestProjectRef = useRef(project);
+  const latestOnProjectChangeRef = useRef(onProjectChange);
+  const instructionsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const instructionsSaveInFlightRef = useRef(false);
+  const instructionsSaveQueuedRef = useRef(false);
+  const instructionsSaveQueuedValueRef = useRef<string | undefined>(undefined);
+  const instructionsSaveRequestRef = useRef(0);
+  const instructionsDesiredValueRef = useRef(normalizeProjectInstructions(project.customInstructions ?? ''));
+  // Keep the draft in sync with the server value while the editor is closed
+  // or when switching projects. While open, local typing stays authoritative
+  // so server echoes from debounced autosaves cannot make the textarea jump.
   useEffect(() => {
-    if (instructionsMode === 'edit') return;
+    if (instructionsMode === 'open') return;
     setInstructionsDraft(project.customInstructions ?? '');
-    if (instructionsMode === 'review' && !(project.customInstructions ?? '').trim()) {
-      setInstructionsMode('closed');
-    }
+    instructionsDesiredValueRef.current = normalizeProjectInstructions(project.customInstructions ?? '');
   }, [project.customInstructions, instructionsMode]);
+  useEffect(() => {
+    if (instructionsMode !== 'open') return;
+    instructionsDesiredValueRef.current = normalizeProjectInstructions(instructionsDraft);
+  }, [instructionsDraft, instructionsMode]);
+  useEffect(() => {
+    if (instructionsSaveTimerRef.current) {
+      clearTimeout(instructionsSaveTimerRef.current);
+      instructionsSaveTimerRef.current = null;
+    }
+    instructionsSaveQueuedRef.current = false;
+    instructionsSaveQueuedValueRef.current = undefined;
+    instructionsDesiredValueRef.current = normalizeProjectInstructions(project.customInstructions ?? '');
+    setInstructionsDraft(project.customInstructions ?? '');
+    setInstructionsMode('closed');
+  }, [project.id]);
+  useEffect(() => {
+    instructionsDraftRef.current = instructionsDraft;
+  }, [instructionsDraft]);
+  useEffect(() => {
+    latestProjectRef.current = project;
+  }, [project]);
+  useEffect(() => {
+    latestOnProjectChangeRef.current = onProjectChange;
+  }, [onProjectChange]);
 
   // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
   // bumps on file-changed SSE events, live_artifact* events, and the
@@ -3720,22 +3750,60 @@ export function ProjectView({
     [project, onProjectChange, designSystems, analytics.track],
   );
 
-  const handleSaveInstructions = useCallback(async () => {
-    const value = instructionsDraft.trim() || undefined;
-    // After a save, land on the review panel so the saved value is read
-    // back immediately (#1822); collapse only when it was cleared.
-    const settle = () => setInstructionsMode(value ? 'review' : 'closed');
-    if (value === (project.customInstructions ?? undefined)) {
-      settle();
+  const flushInstructionsAutosave = useCallback((draft: string) => {
+    const value = normalizeProjectInstructions(draft);
+    instructionsDesiredValueRef.current = value;
+    const currentProject = latestProjectRef.current;
+    if (!instructionsSaveInFlightRef.current && value === normalizeProjectInstructions(currentProject.customInstructions ?? '')) {
       return;
     }
+    if (instructionsSaveInFlightRef.current) {
+      instructionsSaveQueuedRef.current = true;
+      instructionsSaveQueuedValueRef.current = value;
+      return;
+    }
+    instructionsSaveInFlightRef.current = true;
     setInstructionsSaving(true);
-    const result = await patchProject(project.id, { customInstructions: value ?? null });
-    setInstructionsSaving(false);
-    if (!result) return;
-    onProjectChange(result);
-    settle();
-  }, [project, onProjectChange, instructionsDraft]);
+    const requestId = ++instructionsSaveRequestRef.current;
+    const projectId = currentProject.id;
+    void patchProject(projectId, { customInstructions: value ?? null })
+      .then((result) => {
+        const stillCurrentProject = latestProjectRef.current.id === projectId;
+        if (result && stillCurrentProject && requestId === instructionsSaveRequestRef.current && instructionsDesiredValueRef.current === value) {
+          latestOnProjectChangeRef.current(result);
+        }
+      })
+      .finally(() => {
+        instructionsSaveInFlightRef.current = false;
+        if (instructionsSaveQueuedRef.current) {
+          const nextValue = instructionsSaveQueuedValueRef.current;
+          instructionsSaveQueuedRef.current = false;
+          instructionsSaveQueuedValueRef.current = undefined;
+          flushInstructionsAutosave(nextValue ?? '');
+          return;
+        }
+        setInstructionsSaving(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (instructionsMode !== 'open') return undefined;
+    const value = normalizeProjectInstructions(instructionsDraft);
+    if (value === normalizeProjectInstructions(project.customInstructions ?? '')) return undefined;
+    if (instructionsSaveTimerRef.current) {
+      clearTimeout(instructionsSaveTimerRef.current);
+    }
+    instructionsSaveTimerRef.current = setTimeout(() => {
+      instructionsSaveTimerRef.current = null;
+      flushInstructionsAutosave(instructionsDraft);
+    }, 500);
+    return () => {
+      if (instructionsSaveTimerRef.current) {
+        clearTimeout(instructionsSaveTimerRef.current);
+        instructionsSaveTimerRef.current = null;
+      }
+    };
+  }, [flushInstructionsAutosave, instructionsDraft, instructionsMode, project.customInstructions]);
 
   const projectMeta = useMemo(() => {
     // Design system is rendered by the adjacent picker chip — keep the
@@ -4278,20 +4346,6 @@ export function ProjectView({
         )}
         actions={(
           <>
-            <button
-              type="button"
-              className="settings-icon-btn"
-              data-testid="project-settings-trigger"
-              title={t('project.customInstructions')}
-              aria-label={t('project.customInstructions')}
-              aria-expanded={instructionsMode !== 'closed'}
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
-              }}
-            >
-              <Icon name="file-text" size={16} />
-            </button>
             <HandoffButton projectId={project.id} />
             <AvatarMenu
               config={config}
@@ -4330,51 +4384,43 @@ export function ProjectView({
             {projectMeta !== t('project.metaFreeform') ? (
               <span className="meta" data-testid="project-meta">{projectMeta}</span>
             ) : null}
-            <ProjectDesignSystemPicker
-              designSystems={designSystems}
-              selectedId={project.designSystemId ?? null}
-              onChange={handleChangeDesignSystemId}
-            />
+            <div className="project-context-capsule" role="group" aria-label="Project context">
+              <ProjectDesignSystemPicker
+                designSystems={designSystems}
+                selectedId={project.designSystemId ?? null}
+                onChange={handleChangeDesignSystemId}
+              />
+              <button
+                type="button"
+                className={`project-context-instructions${instructionsMode !== 'closed' ? ' is-open' : ''}${hasProjectInstructions ? ' has-instructions' : ''}`}
+                data-testid="project-settings-trigger"
+                title={t('project.customInstructions')}
+                aria-label={t('project.customInstructions')}
+                aria-expanded={instructionsMode !== 'closed'}
+                onClick={() => {
+                  if (instructionsMode !== 'closed') {
+                    if (instructionsSaveTimerRef.current) {
+                      clearTimeout(instructionsSaveTimerRef.current);
+                      instructionsSaveTimerRef.current = null;
+                    }
+                    flushInstructionsAutosave(instructionsDraftRef.current);
+                    setInstructionsMode('closed');
+                    return;
+                  }
+                  setInstructionsDraft(project.customInstructions ?? '');
+                  setInstructionsMode('open');
+                }}
+              >
+                <Icon name="file-text" size={14} />
+                <span className="project-context-instructions-label">{t('project.customInstructions')}</span>
+                <Icon name="chevron-down" size={11} className="project-context-instructions-chevron" />
+              </button>
+            </div>
           </span>
         </div>
       </AppChromeHeader>
-      {instructionsMode === 'review' && (
-        <div className="project-instructions-bar project-instructions-review">
-          <div className="project-instructions-bar-head">
-            <label className="project-instructions-label">{t('project.customInstructions')}</label>
-            <span className="project-instructions-status">
-              <Icon name="check" size={11} />
-              {t('project.instructionsActive')}
-            </span>
-          </div>
-          <div className="project-instructions-preview" data-testid="project-instructions-preview">
-            {project.customInstructions}
-          </div>
-          <div className="project-instructions-actions">
-            <button
-              type="button"
-              className="btn-sm"
-              onClick={() => setInstructionsMode('closed')}
-            >
-              {t('common.close')}
-            </button>
-            <button
-              type="button"
-              className="btn-sm btn-primary"
-              data-testid="project-instructions-edit"
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode('edit');
-              }}
-            >
-              {t('common.edit')}
-            </button>
-          </div>
-        </div>
-      )}
-      {instructionsMode === 'edit' && (
-        <div className="project-instructions-bar">
-          <label className="project-instructions-label">{t('project.customInstructions')}</label>
+      {instructionsMode === 'open' && (
+        <div className="project-instructions-bar" aria-busy={instructionsSaving}>
           <textarea
             className="project-instructions-input"
             data-testid="project-instructions-textarea"
@@ -4383,20 +4429,9 @@ export function ProjectView({
             placeholder={t('project.customInstructionsPlaceholder')}
             value={instructionsDraft}
             onChange={(e) => setInstructionsDraft(e.target.value)}
-            disabled={instructionsSaving}
+            aria-label={t('project.customInstructions')}
             autoFocus
           />
-          <div className="project-instructions-actions">
-            <button type="button" className="btn-sm" disabled={instructionsSaving} onClick={() => {
-              setInstructionsDraft(project.customInstructions ?? '');
-              setInstructionsMode((project.customInstructions ?? '').trim() ? 'review' : 'closed');
-            }}>
-              {t('common.cancel')}
-            </button>
-            <button type="button" className="btn-sm btn-primary" data-testid="project-instructions-save" disabled={instructionsSaving} onClick={handleSaveInstructions}>
-              {t('common.save')}
-            </button>
-          </div>
         </div>
       )}
       {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
@@ -4712,6 +4747,11 @@ export interface RetryTarget {
   failedAssistant: ChatMessage;
   userMsg: ChatMessage;
   priorMessages: ChatMessage[];
+}
+
+function normalizeProjectInstructions(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export function resolveRetryTarget(
