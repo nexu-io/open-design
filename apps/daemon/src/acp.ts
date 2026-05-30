@@ -288,30 +288,62 @@ function currentModelFromSessionResult(result: JsonObject): string | null {
 
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
+  let pendingJson = '';
+
+  const emit = (candidate: string): boolean => {
+    try {
+      onMessage(JSON.parse(candidate), candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const startPendingJson = (line: string) => {
+    pendingJson = line;
+  };
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (pendingJson) {
+      const nextCandidate = `${pendingJson}\n${trimmed}`;
+      if (emit(nextCandidate)) {
+        pendingJson = '';
+        return;
+      }
+      pendingJson = nextCandidate.length <= 128_000 ? nextCandidate : '';
+      return;
+    }
+    if (emit(trimmed)) return;
+    // ACP is line-delimited JSON-RPC, but a few bridges have emitted
+    // pretty-printed JSON during startup. Keep a bounded aggregate so an
+    // otherwise valid multiline initialize response does not get discarded
+    // line-by-line and leave the session stuck in spawn pending.
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      startPendingJson(trimmed);
+    }
+  };
+
   return {
     feed(chunk: string) {
       buffer += chunk;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          onMessage(JSON.parse(trimmed), trimmed);
-        } catch {
-          // Ignore non-JSON log lines on stdout.
-        }
+        handleLine(line);
       }
     },
     flush() {
       const trimmed = buffer.trim();
       buffer = '';
-      if (!trimmed) return;
-      try {
-        onMessage(JSON.parse(trimmed), trimmed);
-      } catch {
-        // Ignore trailing non-JSON log lines on stdout.
+      if (trimmed) {
+        handleLine(trimmed);
       }
+      if (pendingJson && emit(pendingJson)) {
+        pendingJson = '';
+      }
+      // Ignore trailing non-JSON log lines on stdout.
     },
   };
 }
