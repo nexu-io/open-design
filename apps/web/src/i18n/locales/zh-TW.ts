@@ -338,7 +338,7 @@ export const zhTW: Dict = {
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy API key',
   'settings.cliEnvCodebuddyInternetEnvironment': 'CodeBuddy 網路環境',
-  'settings.cliEnvCodebuddyInternetEnvDefault': '繼承 / 未設置',
+  'settings.cliEnvCodebuddyInternetEnvDefault': '國際版（預設）',
   'settings.cliEnvCodebuddyInternetEnvInternal': 'internal（中國版）',
   'settings.cliEnvCodebuddyInternetEnvIoa': 'ioa（iOA 企業版）',
   'settings.cliEnvCodexHome': 'Codex home',

@@ -703,8 +703,16 @@ export function updateAgentCliEnvValue(
   const value = rawValue.trim();
   const agentCliEnv = { ...(config.agentCliEnv ?? {}) };
   const nextAgentEnv = { ...(agentCliEnv[agentId] ?? {}) };
-  if (value) {
-    nextAgentEnv[envKey] = value;
+  // For closed-enum fields (those with options), an empty string is an
+  // explicit "unset" marker that must be persisted so the daemon knows
+  // the user chose "International (default)" rather than never configuring
+  // the field. For free-text fields, empty just means "clear the value".
+  const field = AGENT_CLI_ENV_FIELDS.find(
+    (f) => f.agentId === agentId && f.envKey === envKey,
+  );
+  const isClosedEnum = field && 'options' in field && field.options;
+  if (value || (isClosedEnum && rawValue === '')) {
+    nextAgentEnv[envKey] = isClosedEnum ? rawValue : value;
   } else {
     delete nextAgentEnv[envKey];
   }

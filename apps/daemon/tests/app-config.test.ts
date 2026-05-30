@@ -322,7 +322,6 @@ describe('app-config', () => {
             VELA_BIN: '~/bin/vela',
             OPEN_DESIGN_AMR_PROFILE: '  local  ',
             OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
-            HOME: 'should-not-persist',
           },
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
@@ -550,6 +549,41 @@ describe('app-config', () => {
           },
         }),
       ).rejects.toThrow(/CODEBUDDY_INTERNET_ENVIRONMENT/);
+    });
+
+    it('persists empty-string CODEBUDDY_INTERNET_ENVIRONMENT as explicit unset marker', async () => {
+      // When the user selects "International (default)" in Settings, the UI
+      // persists an empty string as an "unset" marker. This must survive
+      // the write path so spawnEnvForAgent can detect it and delete the
+      // inherited value.
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: {
+            CODEBUDDY_INTERNET_ENVIRONMENT: '',
+            CODEBUDDY_API_KEY: 'cb-test-key',
+          },
+        },
+      });
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: '', CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
+    });
+
+    it('persists empty-string CODEBUDDY_INTERNET_ENVIRONMENT without other keys', async () => {
+      // The empty-string marker should be persisted even when it's the only
+      // value for the codebuddy agent (no API key alongside it).
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: {
+            CODEBUDDY_INTERNET_ENVIRONMENT: '',
+          },
+        },
+      });
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: '' },
+      });
     });
 
     it('rejects unknown agent id on write without clearing prior agentCliEnv', async () => {

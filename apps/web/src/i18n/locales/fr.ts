@@ -328,7 +328,7 @@ export const fr: Dict = {
   'settings.cliEnvCodebuddyBaseUrl': 'URL de base du proxy CodeBuddy',
   'settings.cliEnvCodebuddyApiKey': 'Clé API CodeBuddy',
   'settings.cliEnvCodebuddyInternetEnvironment': 'Environnement internet CodeBuddy',
-  'settings.cliEnvCodebuddyInternetEnvDefault': 'Inherit / unset',
+  'settings.cliEnvCodebuddyInternetEnvDefault': 'International (par défaut)',
   'settings.cliEnvCodebuddyInternetEnvInternal': 'internal (China)',
   'settings.cliEnvCodebuddyInternetEnvIoa': 'ioa (iOA enterprise)',
   'settings.cliEnvCodexHome': 'Dossier d’accueil Codex',

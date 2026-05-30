@@ -274,7 +274,18 @@ export function validateAgentCliEnv(
         continue;
       }
       const trimmed = envValue.trim();
-      if (!trimmed) continue;
+      if (!trimmed) {
+        // For closed-enum keys, empty string is an explicit "unset" marker
+        // that tells spawnEnvForAgent() to delete the inherited value.
+        // Without this, a user whose parent process sets
+        // CODEBUDDY_INTERNET_ENVIRONMENT=internal cannot switch back to
+        // the international/default path through Settings.
+        const allowedValues = enums?.get(envKey);
+        if (allowedValues) {
+          env[envKey] = '';
+        }
+        continue;
+      }
       const allowedValues = enums?.get(envKey);
       if (allowedValues && !allowedValues.has(trimmed)) {
         if (throwOnInvalid) {

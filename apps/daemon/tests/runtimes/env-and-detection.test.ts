@@ -1133,33 +1133,44 @@ test('spawnEnvForAgent keeps CODEBUDDY_INTERNET_ENVIRONMENT when configured over
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
 });
 
-test('spawnEnvForAgent overrides inherited internal with configured public', () => {
-  // When the parent process has CODEBUDDY_INTERNET_ENVIRONMENT=internal but
-  // the user explicitly selects "public (International)" in Settings, the
-  // configured value should override the inherited one.
+test('spawnEnvForAgent rejects configured CODEBUDDY_INTERNET_ENVIRONMENT=public', () => {
+  // "public" is not a documented CLI value — the international/default
+  // path is represented by leaving the variable unset or selecting
+  // "International (default)" in Settings (which persists an empty string).
+  expect(() =>
+    spawnEnvForAgent(
+      'codebuddy',
+      { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
+      { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
+    ),
+  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
+});
+
+test('spawnEnvForAgent clears inherited CODEBUDDY_INTERNET_ENVIRONMENT when empty-string marker is configured', () => {
+  // When the user selects "International (default)" in Settings, the UI
+  // persists an empty string as an "unset" marker. This must override
+  // the inherited value so the child process runs without the env var.
   const env = spawnEnvForAgent(
     'codebuddy',
     { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
-    { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
-  );
-
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
-});
-
-test('spawnEnvForAgent drops invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT with warning', () => {
-  // A typo like "internel" should be dropped so the child falls back to
-  // the international default instead of failing with a confusing error.
-  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
-    {},
+    { CODEBUDDY_INTERNET_ENVIRONMENT: '' },
   );
 
   assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
   assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
-  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('internel'));
-  warnSpy.mockRestore();
+});
+
+test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT', () => {
+  // A typo like "internel" should cause a hard error (AgentEnvConfigError)
+  // so the bad configuration is surfaced immediately instead of silently
+  // sending traffic to the wrong network region.
+  expect(() =>
+    spawnEnvForAgent(
+      'codebuddy',
+      { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
+      {},
+    ),
+  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });
 
 test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_INTERNET_ENVIRONMENT aliases on Windows', () => {

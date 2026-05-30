@@ -136,14 +136,23 @@ export function spawnEnvForAgent(
   // empty or unset = international/default). Per the CLI docs, only
   // `internal` and `ioa` are documented values; the international/default
   // path is represented by leaving the variable unset, not by setting it
-  // to "public". When the user selects "Inherit / unset" in Settings, no configured value is persisted. In that
-  // case we preserve any inherited value from the parent process (e.g.
+  // to "public".
+  //
+  // When the user has not configured a value in Settings (fresh install,
+  // no codebuddy section in agentCliEnv), we preserve any inherited value
+  // from the parent process (e.g.
   //   CODEBUDDY_INTERNET_ENVIRONMENT=internal pnpm tools-dev
   // ) so that China/iOA installs launched with the env var on the command
-  // line continue to work. When the user explicitly selects a value in
-  // Settings, expandConfiguredEnv will override the inherited value.
+  // line continue to work without requiring Settings configuration.
   //
-  // However, inherited values outside the closed enum (e.g. a typo like
+  // When the user explicitly selects "International (default)" in Settings,
+  // validateAgentCliEnv persists an empty string as an "unset" marker.
+  // That marker reaches the merged env here and overrides any inherited
+  // value; we delete the key so the child process uses the international
+  // default (variable unset). This ensures users CAN switch away from an
+  // inherited non-default value through the Settings UI.
+  //
+  // Inherited values outside the closed enum (e.g. a typo like
   // "internel") are treated as a hard error so the bad configuration is
   // surfaced immediately instead of silently sending traffic to the wrong
   // network region.
@@ -181,6 +190,10 @@ export function spawnEnvForAgent(
         }
         env[CANONICAL] = trimmed;
       } else {
+        // Empty string = "International (default)" explicitly selected in
+        // Settings. Delete the key so the child process uses the
+        // international default (variable unset). This overrides any
+        // inherited non-default value from the parent process.
         delete env[CANONICAL];
       }
     }
