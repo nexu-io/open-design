@@ -135,4 +135,33 @@ describe('runnable model filtering', () => {
     expect(ids(response.image)).not.toContain('imagen-4');
     expect(ids(response.image)).not.toContain('gemini-3-pro-image-preview');
   });
+
+  it('excludes generic custom-image placeholder when no baseUrl or runnable profiles exist', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        'custom-image': {},
+      },
+    });
+    expect(ids(response.image)).not.toContain('custom-image');
+  });
+
+  it('promotes custom-image models when top-level baseUrl is configured', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        'custom-image': { baseUrl: 'https://custom.example/v1', model: 'flux-custom' },
+      },
+    });
+    expect(ids(response.image)).toContain('flux-custom');
+  });
+
+  it('promotes custom-image profile models when runnable profiles exist', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        'custom-image': {
+          profiles: [{ model: 'flux-custom', baseUrl: 'https://custom.example/v1' }],
+        },
+      },
+    });
+    expect(ids(response.image)).toContain('flux-custom');
+  });
 });

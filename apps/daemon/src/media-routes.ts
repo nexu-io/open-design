@@ -119,8 +119,10 @@ export function buildMediaModelsResponse({
       })
       .map(([id]) => id),
   );
+  const hasRunnableCustomImage = Boolean(customImageModelList || runnableProfiles.length > 0);
   const isRunnableCatalogModel = (model: MediaModelsResponseModel) =>
-    model.provider === 'custom-image' || configuredProviderIds.has(model.provider);
+    (model.provider === 'custom-image' && hasRunnableCustomImage)
+    || configuredProviderIds.has(model.provider);
   const isRunnableNonGoogleModel = (model: MediaModelsResponseModel) =>
     model.provider !== 'google' && isRunnableCatalogModel(model);
 

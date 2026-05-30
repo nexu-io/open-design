@@ -572,7 +572,6 @@ export function isStoredMediaProviderEntryPresent(
     || entry?.baseUrl?.trim()
     || entry?.model?.trim()
     || entry?.enabled === true
-    || entry?.apiKeyConfigured
     || entry?.apiKeyTail?.trim()
     || entry?.profiles?.some(isStoredMediaProviderProfilePresent),
   );

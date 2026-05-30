@@ -698,10 +698,54 @@ describe('mergeDaemonMediaProviders', () => {
       localConfig.mediaProviders,
     );
   });
+
+  it('keeps local state when daemon only has codex-auth marker rows (first-boot migration)', () => {
+    // Daemon returns { apiKeyConfigured: true } for codex-auth OAuth markers
+    // with no actual secret material.  These must NOT block first-boot migration.
+    const localConfig = {
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        openai: {
+          apiKey: 'sk-local',
+          baseUrl: 'https://local.example/v1',
+        },
+      },
+    };
+    const daemonProviders = {
+      openai: { apiKeyConfigured: true } as unknown as MediaProviderCredentials,
+      google: { apiKey: '', apiKeyConfigured: false, apiKeyTail: '', baseUrl: '' },
+    };
+
+    expect(mergeDaemonMediaProviders(localConfig, daemonProviders).mediaProviders).toEqual(
+      localConfig.mediaProviders,
+    );
+  });
 });
 
 describe('media provider entry presence helpers', () => {
-  it('treat saved-marker entries as present even when visible fields are empty', () => {
+  it('treat auth-file-only marker rows as empty (apiKeyConfigured alone is not real state)', () => {
+    // Daemon returns { apiKeyConfigured: true } for codex-auth / OAuth markers
+    // with no actual secret material.  isStoredMediaProviderEntryPresent must
+    // NOT treat those as persisted state so first-boot migration can proceed.
+    expect(
+      isStoredMediaProviderEntryPresent({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '',
+        baseUrl: '',
+      }),
+    ).toBe(false);
+    expect(
+      isStoredMediaProviderEntryEmpty({
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '',
+        baseUrl: '',
+      }),
+    ).toBe(true);
+  });
+
+  it('treat saved-marker entries with apiKeyTail as present', () => {
     expect(
       isStoredMediaProviderEntryPresent({
         apiKey: '',
@@ -782,6 +826,25 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
             apiKeyTail: '',
             baseUrl: '',
           },
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('returns true when daemon only has auth-file marker rows (codex-auth first boot)', () => {
+    // Daemon returns { apiKeyConfigured: true } for codex-auth OAuth markers
+    // without real secret material.  shouldSync must still allow first-boot migration.
+    expect(
+      shouldSyncLocalMediaProvidersToDaemon(
+        {
+          openai: {
+            apiKey: 'sk-local',
+            baseUrl: 'https://local.example/v1',
+          },
+        },
+        {
+          openai: { apiKeyConfigured: true } as unknown as MediaProviderCredentials,
+          google: { apiKey: '', apiKeyConfigured: false, apiKeyTail: '', baseUrl: '' },
         },
       ),
     ).toBe(true);
