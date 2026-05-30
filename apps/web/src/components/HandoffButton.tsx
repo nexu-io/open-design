@@ -126,12 +126,13 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
     }
   }
 
-  if (!loaded || (available.length === 0 && unavailable.length === 0)) {
+  if (!loaded) {
     return null;
   }
 
-  // No detected editors at all — render a Finder/Explorer/File-Manager
-  // single-button fallback so the surface is never blank.
+  // No available editors — render a Finder/Explorer/File-Manager single-button
+  // fallback so the surface is never blank, including the true zero-editor
+  // response where the daemon reports `editors: []`.
   if (available.length === 0) {
     const fallbackLabel = platform === 'win32' ? 'Explorer' : platform === 'linux' ? 'File Manager' : 'Finder';
     const fallbackId: HostEditorId =

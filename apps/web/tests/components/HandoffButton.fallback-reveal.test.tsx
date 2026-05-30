@@ -28,11 +28,9 @@ afterEach(() => {
 
 describe('HandoffButton zero-editors fallback', () => {
   it('opens the project folder in the OS file manager via the daemon', async () => {
-    // No *available* editor (one detected-but-unavailable entry keeps us past
-    // the loading short-circuit and into the fallback branch).
     fetchHostEditors.mockResolvedValue({
       platform: 'darwin',
-      editors: [{ id: 'vscode', label: 'VS Code', available: false }],
+      editors: [],
     });
     openProjectInEditor.mockResolvedValue(undefined);
 
@@ -55,7 +53,7 @@ describe('HandoffButton zero-editors fallback', () => {
     // advertises Finder/Explorer/File Manager but does nothing visible.
     fetchHostEditors.mockResolvedValue({
       platform: 'darwin',
-      editors: [{ id: 'vscode', label: 'VS Code', available: false }],
+      editors: [],
     });
     openProjectInEditor.mockRejectedValue(new Error('daemon refused: ENOENT'));
 
