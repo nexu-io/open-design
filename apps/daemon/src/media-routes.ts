@@ -12,6 +12,7 @@ import {
 } from './aihubmix.js';
 import { isSandboxModeEnabled } from './sandbox-mode.js';
 import type { ToolTokenGrant } from './tool-tokens.js';
+import type { MediaModel } from './media-models.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -65,12 +66,13 @@ export function resolveLegacyMediaRouteGrant(input: {
   return { ok: true, grant: input.grant };
 }
 
-type MediaModelsResponseModel = { provider: string; [key: string]: unknown };
+type MediaModelsResponseModel = MediaModel;
 type MediaModelsResponseConfig = {
   providers?: Record<string, {
     model?: string;
     baseUrl?: string;
     profiles?: Array<{ model?: string; baseUrl?: string }>;
+    [key: string]: unknown;
   }>;
 };
 

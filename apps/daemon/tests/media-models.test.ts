@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
-import { IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, withConfiguredCustomImageModels } from '../src/media-models.js';
+import {
+  AUDIO_DURATIONS_SEC,
+  AUDIO_MODELS_BY_KIND,
+  IMAGE_MODELS,
+  MEDIA_ASPECTS,
+  MEDIA_PROVIDERS,
+  VIDEO_LENGTHS_SEC,
+  VIDEO_MODELS,
+  withConfiguredCustomImageModels,
+} from '../src/media-models.js';
+import { buildMediaModelsResponse } from '../src/media-routes.js';
+
+function buildDaemonModelsRegistry(mediaConfig: Parameters<typeof buildMediaModelsResponse>[0]['mediaConfig']) {
+  return buildMediaModelsResponse({
+    mediaConfig,
+    providers: MEDIA_PROVIDERS,
+    imageModels: IMAGE_MODELS,
+    videoModels: VIDEO_MODELS,
+    audioModelsByKind: AUDIO_MODELS_BY_KIND,
+    aspects: MEDIA_ASPECTS,
+    videoLengthsSec: VIDEO_LENGTHS_SEC,
+    audioDurationsSec: AUDIO_DURATIONS_SEC,
+    withConfiguredCustomImageModels,
+  });
+}
+
+function ids(models: Array<{ id?: unknown }>) {
+  return models.map((model) => model.id);
+}
 
 describe('media model registry', () => {
   it('advertises Gemini Vertex image as image-conditioned once i2i is wired', () => {
@@ -29,5 +57,56 @@ describe('runnable model filtering', () => {
 
     const withoutBaseUrl = withConfiguredCustomImageModels(IMAGE_MODELS, undefined, undefined);
     expect(withoutBaseUrl.find((m) => m.id === 'flux-custom')).toBeUndefined();
+  });
+
+  it('keeps /api/media/models Google entries to implemented image surfaces', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        google: { enabled: true },
+      },
+    });
+
+    expect(response.image.filter((model) => model.provider === 'google').map((model) => model.id))
+      .toEqual(['imagen-4', 'imagen-3', 'gemini-3-pro-image-preview']);
+    expect(response.video.filter((model) => model.provider === 'google')).toEqual([]);
+    expect(Object.values(response.audio).flat().filter((model) => model.provider === 'google'))
+      .toEqual([]);
+    expect(ids(response.video)).toContain('google/veo-3.1-lite');
+  });
+
+  it('keeps /api/media/models from publishing incomplete custom-image dynamic ids', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        'custom-image': {
+          model: 'root-without-base-url',
+          profiles: [
+            { model: 'profile-without-base-url' },
+            { model: 'profile-with-empty-base-url', baseUrl: '   ' },
+            { model: 'profile-with-base-url', baseUrl: 'https://custom.example/v1' },
+          ],
+        },
+      },
+    });
+
+    expect(ids(response.image)).not.toContain('root-without-base-url');
+    expect(ids(response.image)).not.toContain('profile-without-base-url');
+    expect(ids(response.image)).not.toContain('profile-with-empty-base-url');
+    expect(ids(response.image)).toContain('profile-with-base-url');
+  });
+
+  it('lets runnable custom-image profiles shadow built-in ids in /api/media/models', () => {
+    const response = buildDaemonModelsRegistry({
+      providers: {
+        'custom-image': {
+          profiles: [
+            { model: 'gpt-image-2', baseUrl: 'https://custom.example/v1' },
+          ],
+        },
+      },
+    });
+    const matches = response.image.filter((model) => model.id === 'gpt-image-2');
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.provider).toBe('custom-image');
   });
 });
