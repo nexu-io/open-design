@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
+import {
+  exportAsHtml,
+  exportAsImage,
+  exportAsPdf,
+  exportAsZip,
+  openSandboxedPreviewInNewTab,
+  requestPreviewSnapshot,
+} from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
 
@@ -18,15 +25,19 @@ export interface PreviewView {
   // button that re-fires onView for this view id, instead of sitting
   // at the loading state forever. Issue #860.
   error?: string | null;
-  // Set when the underlying skill ships no HTML preview at all (its
+  // Set when the underlying surface ships no HTML preview at all (its
   // `od.preview.type` is `image`, `markdown`, etc.). The modal renders
   // a calm "no shipped preview" placeholder instead of the loading or
-  // error states — fetching `/api/skills/:id/example` for those skills
-  // returns 404 today and the resulting "Couldn't load this example."
-  // copy is misleading. `kind` carries the raw preview-type token so
-  // copy can be shaped per kind ("markdown document", "image asset",
-  // …). Mutually exclusive with `html` and `error`. Issue #897.
-  unavailable?: { kind: string } | null;
+  // error states — fetching `/api/skills/:id/example` (or the symmetric
+  // plugin route) returns 404 today and the resulting "Couldn't load
+  // this example." copy is misleading. `kind` carries the raw
+  // preview-type token so copy can be shaped per kind ("markdown
+  // document", "image asset", …). `noun` carries the surface kind so
+  // the placeholder reads with the right word — "skill" on the Skills
+  // tab, "plugin" on Community/Plugins cards, "template" on
+  // design-template (deck) cards. Mutually exclusive with `html` and
+  // `error`. Issues #897, #2840, #3216.
+  unavailable?: { kind: string; noun?: 'skill' | 'plugin' | 'template' } | null;
   // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
   // print-all-slides behavior survive the sandboxed export path.
   deck?: boolean;
@@ -193,10 +204,10 @@ interface Props {
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
   // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
-  // / "open_in_new_tab"). Used by callers that want to track popover-
+  // / "image" / "open_in_new_tab"). Used by callers that want to track popover-
   // level clicks separately from the share trigger.
   onSharePopoverItemClick?: (
-    item: 'pdf' | 'zip' | 'html' | 'open_in_new_tab',
+    item: 'pdf' | 'zip' | 'html' | 'image' | 'open_in_new_tab',
   ) => void;
 }
 
@@ -239,6 +250,7 @@ export function PreviewModal({
   const templateShareRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageFrameRef = useRef<HTMLDivElement | null>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [stageSize, setStageSize] = useState<{ w: number; h: number }>({
     w: 0,
     h: 0,
@@ -736,6 +748,34 @@ export function PreviewModal({
                             type="button"
                             className="share-menu-item"
                             role="menuitem"
+                            onClick={async () => {
+                              onSharePopoverItemClick?.('image');
+                              setTemplateShareOpen(false);
+                              const iframe = previewIframeRef.current;
+                              if (!iframe) return;
+                              const snap = await requestPreviewSnapshot(iframe);
+                              try {
+                                if (snap) {
+                                  exportAsImage(snap.dataUrl, exportTitle);
+                                } else {
+                                  console.warn('[PreviewModal] snapshot capture returned null');
+                                  alert(t('common.exportImageFailed'));
+                                }
+                              } catch (err) {
+                                console.warn('[PreviewModal] failed to convert snapshot:', err);
+                                alert(t('common.exportImageFailed'));
+                              }
+                            }}
+                          >
+                            <span className="share-menu-icon">
+                              <Icon name="image" size={14} />
+                            </span>
+                            <span>{t('common.exportImage')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
                             onClick={() => {
                               onSharePopoverItemClick?.('open_in_new_tab');
                               setTemplateShareOpen(false);
@@ -774,20 +814,42 @@ export function PreviewModal({
               // 404 into the generic "Couldn't load this example." copy
               // — misleading, since nothing failed: there's just no
               // preview to render. Show a calm placeholder pointing the
-              // user at "Use this prompt" instead. Issue #897.
-              <div
-                className="ds-modal-empty ds-modal-unavailable"
-                data-testid="preview-unavailable"
-              >
-                <div className="ds-modal-unavailable-title">
-                  {t('preview.unavailableTitle')}
-                </div>
-                <div className="ds-modal-unavailable-body">
-                  {t('preview.unavailableBody', {
-                    kind: activeUnavailable.kind || 'preview',
-                  })}
-                </div>
-              </div>
+              // user at "Use this prompt" instead. Issues #897, #2840.
+              //
+              // `noun` lets the same placeholder read with the right
+              // word per surface — Skills tab, Community/Plugins,
+              // design-template (deck) cards. Defaults to 'skill' so
+              // pre-noun callers keep their existing copy. Issue #3216.
+              (() => {
+                const nounKey = ((): 'preview.nounSkill' | 'preview.nounPlugin' | 'preview.nounTemplate' => {
+                  switch (activeUnavailable.noun) {
+                    case 'plugin':
+                      return 'preview.nounPlugin';
+                    case 'template':
+                      return 'preview.nounTemplate';
+                    case 'skill':
+                    default:
+                      return 'preview.nounSkill';
+                  }
+                })();
+                const noun = t(nounKey);
+                return (
+                  <div
+                    className="ds-modal-empty ds-modal-unavailable"
+                    data-testid="preview-unavailable"
+                  >
+                    <div className="ds-modal-unavailable-title">
+                      {t('preview.unavailableTitle', { noun })}
+                    </div>
+                    <div className="ds-modal-unavailable-body">
+                      {t('preview.unavailableBody', {
+                        kind: activeUnavailable.kind || 'preview',
+                        noun,
+                      })}
+                    </div>
+                  </div>
+                );
+              })()
             ) : activeError ? (
               // Distinct error state so a fetch failure stops looking
               // like an indefinite "Loading…". The Retry button re-fires
@@ -822,6 +884,7 @@ export function PreviewModal({
               <div className="ds-modal-stage-iframe-scaler" style={scalerStyle}>
                 <iframe
                   key={activeView?.id ?? 'view'}
+                  ref={previewIframeRef}
                   title={`${title} ${activeView?.label ?? ''}`}
                   sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                   srcDoc={srcDoc}

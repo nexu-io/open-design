@@ -21,7 +21,9 @@ import {
 } from "../analytics/events";
 import {
   feedbackAgentProviderIdToTracking,
+  modelIdForTracking,
   normalizeCustomReason,
+  type TrackingFeedbackProviderId,
   type TrackingFeedbackReasonCode,
   type TrackingFeedbackRatingWithNone,
   type TrackingProjectKind,
@@ -645,7 +647,7 @@ export function AssistantMessage({
                 conversationId={conversationId}
                 runId={message.runId ?? null}
                 assistantMessageId={message.id}
-                modelId={assistantFeedbackModelId(message)}
+                modelId={modelIdForTracking(assistantFeedbackModelId(message))}
                 agentProviderId={feedbackAgentProviderIdToTracking(message.agentId)}
                 producedFileCount={displayedProduced.length}
                 hasDesignSystemContext={hasDesignSystemContext}
@@ -869,8 +871,8 @@ function AssistantFeedback({
   conversationId: string | null;
   runId: string | null;
   assistantMessageId: string;
-  modelId: string | null;
-  agentProviderId: ReturnType<typeof feedbackAgentProviderIdToTracking>;
+  modelId: string;
+  agentProviderId: TrackingFeedbackProviderId;
   producedFileCount: number;
 }) {
   const t = useT();
@@ -925,6 +927,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
       });
     }
@@ -936,6 +940,8 @@ function AssistantFeedback({
     conversationId,
     assistantMessageId,
     runId,
+    agentProviderId,
+    modelId,
   ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
@@ -959,6 +965,8 @@ function AssistantFeedback({
       conversation_id: conversationId,
       assistant_message_id: assistantMessageId,
       run_id: runId ?? "",
+      agent_provider_id: agentProviderId,
+      model_id: modelId,
       rating,
       rating_before: ratingBefore,
       has_produced_files: producedFileCount > 0,
@@ -978,6 +986,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: ratingAfter,
         rating_before: ratingBefore,
         has_produced_files: producedFileCount > 0,
@@ -1017,6 +1027,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -1041,8 +1053,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? "",
-        model_id: modelId,
         agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         ...(reasonJoined ? { reason: reasonJoined } : {}),
         reason_count: reasonCodes.length,
@@ -1066,6 +1078,8 @@ function AssistantFeedback({
         conversation_id: conversationId,
         assistant_message_id: assistantMessageId,
         run_id: runId ?? null,
+        agent_provider_id: agentProviderId,
+        model_id: modelId,
         rating: reasonRating,
         reason: reasons,
         reason_count: reasons.length,
@@ -1851,8 +1865,13 @@ function StatusPill({
   label: string;
   detail?: string | undefined;
 }) {
+  const variant =
+    label === "error" ? "error" : label === "warning" ? "warning" : undefined;
   return (
-    <div className="status-pill">
+    <div
+      className={`status-pill${variant ? ` is-${variant}` : ""}`}
+      data-status={label}
+    >
       <span className="status-label">{label}</span>
       {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
     </div>
@@ -1861,7 +1880,7 @@ function StatusPill({
 
 function renderStatusDetail(detail: string): ReactNode {
   const segments: ReactNode[] = [];
-  const urlRe = /(https?:\/\/[^\s)<>]+)/g;
+  const urlRe = /(https?:\/\/[^\s)<>"}\]]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -1894,7 +1913,7 @@ function renderStatusDetail(detail: string): ReactNode {
 }
 
 function splitStatusDetailUrlPunctuation(url: string): [string, string] {
-  const match = /([.,!?;:，。！？；：、'"」』】》〉）]+)$/.exec(url);
+  const match = /([.,!?;:，。！？；：、'"」』】》〉）}\]]+)$/.exec(url);
   if (!match?.[1]) return [url, ''];
   const trimmed = url.slice(0, -match[1].length);
   return trimmed ? [trimmed, match[1]] : [url, ''];

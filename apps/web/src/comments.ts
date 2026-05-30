@@ -101,12 +101,13 @@ export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCom
 export function overlayBoundsFromSnapshot(
   snapshot: PreviewCommentSnapshot,
   scale: number,
+  offset: { x: number; y: number } = { x: 0, y: 0 },
 ): CommentOverlayBounds {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const position = normalizePosition(snapshot.position);
   return {
-    left: position.x * safeScale,
-    top: position.y * safeScale,
+    left: offset.x + position.x * safeScale,
+    top: offset.y + position.y * safeScale,
     width: Math.max(1, position.width * safeScale),
     height: Math.max(1, position.height * safeScale),
   };

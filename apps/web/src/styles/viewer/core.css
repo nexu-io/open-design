@@ -124,6 +124,10 @@
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
+.viewer-action.active:hover:not(:disabled) {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
 .viewer-action.primary {
   background: var(--accent);
   border: 1px solid var(--accent);
@@ -164,7 +168,8 @@
   line-height: 1;
   text-align: left;
 }
-.viewer-action-icon[data-tooltip]::after {
+.viewer-action-icon[data-tooltip]::after,
+.viewer-comment-count-trigger[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   z-index: 80;
@@ -183,23 +188,11 @@
   transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .viewer-action-icon[data-tooltip]:hover::after,
-.viewer-action-icon[data-tooltip]:focus-visible::after {
+.viewer-action-icon[data-tooltip]:focus-visible::after,
+.viewer-comment-count-trigger[data-tooltip]:hover::after,
+.viewer-comment-count-trigger[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
-}
-.viewer-comment-toggle.active {
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
-}
-.viewer-action-active-dot {
-  position: absolute;
-  right: 5px;
-  top: 5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 2px var(--bg-panel);
 }
 .artifact-tool-menu-anchor {
   position: relative;
@@ -1130,14 +1123,60 @@
   top: 14px;
   z-index: 40;
   width: min(320px, calc(100% - 28px));
+  max-height: calc(100% - 28px);
+  overflow: auto;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
 }
-.annotation-hover-popover {
-  pointer-events: none;
+.comment-popover-section {
+  min-width: 0;
+}
+.comment-popover-section + .comment-popover-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+.comment-popover-section-params {
+  display: grid;
+  gap: 8px;
+}
+.annotation-style-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+.annotation-style-row {
+  display: grid;
+  grid-template-columns: minmax(52px, max-content) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.annotation-style-row span {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.annotation-style-row strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.annotation-style-row strong i {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 .comment-popover-head {
   display: flex;
@@ -1250,9 +1289,10 @@
   overflow-wrap: anywhere;
 }
 .comment-popover textarea {
-  min-height: 78px;
-  max-height: 120px;
-  resize: vertical;
+  height: 112px;
+  max-height: 112px;
+  overflow-y: auto;
+  resize: none;
 }
 .comment-popover-actions {
   display: flex;
@@ -1278,10 +1318,20 @@
   gap: 10px;
   min-width: 0;
 }
+.comment-popover-delete:hover {
+  background: var(--red-bg);
+  border-color: var(--red-border);
+  color: var(--red);
+}
 /* Right-side comment thread panel. Shown while board (comment) mode
    is on; takes the place of the chat sidebar's removed Comments tab.
    Floats over the artifact preview at the right edge. */
 .comment-side-panel {
+  --comment-accent: #ff5a3c;
+  --comment-accent-strong: color-mix(in srgb, var(--comment-accent) 78%, var(--text));
+  --comment-accent-surface: color-mix(in srgb, var(--comment-accent) 10%, var(--bg-panel));
+  --comment-accent-surface-strong: color-mix(in srgb, var(--comment-accent) 18%, var(--bg-panel));
+  --comment-accent-border: color-mix(in srgb, var(--comment-accent) 64%, var(--border));
   position: absolute;
   top: 8px;
   right: 8px;
@@ -1319,6 +1369,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.comment-side-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.comment-side-select-all {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.comment-side-select-all:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.comment-side-select-all:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 .comment-side-close {
   width: 26px;
@@ -1403,18 +1477,19 @@
   border-radius: 8px;
   padding: 10px 12px;
   background: transparent;
+  color: var(--text);
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 .comment-side-item.selected {
-  background: #fff1ec;
-  border-color: #ff8c75;
+  background: var(--comment-accent-surface);
+  border-color: var(--comment-accent-border);
 }
 .comment-side-item.active {
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--comment-accent-surface-strong);
+  border-color: var(--comment-accent-border);
+  box-shadow: inset 3px 0 0 var(--comment-accent);
 }
 .comment-side-item-head {
   display: flex;
@@ -1458,7 +1533,7 @@
   height: 16px;
   border-radius: 4px;
   border: 1.5px solid var(--border);
-  background: #fff;
+  background: var(--bg-panel);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1468,8 +1543,8 @@
   flex-shrink: 0;
 }
 .comment-side-check.checked {
-  background: #ff5a3c;
-  border-color: #ff5a3c;
+  background: var(--comment-accent);
+  border-color: var(--comment-accent);
 }
 .comment-side-body {
   font-size: 13px;
@@ -1478,31 +1553,18 @@
   word-break: break-word;
   white-space: pre-wrap;
 }
-.comment-side-reply {
-  align-self: flex-start;
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.comment-side-reply:hover {
-  color: var(--text);
-  text-decoration: underline;
-}
 .comment-side-selectbar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
-  background: #fff1ec;
+  background: var(--comment-accent-surface);
 }
 .comment-side-selectcount {
   flex: 1;
   font-size: 12px;
-  color: #cc3a20;
+  color: var(--comment-accent-strong);
 }
 .comment-side-selectbar .ghost {
   background: transparent;
@@ -1520,22 +1582,23 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #ff5a3c;
+  background: var(--comment-accent);
   color: #fff;
-  border: 1px solid #ff5a3c;
+  border: 1px solid var(--comment-accent);
   border-radius: 6px;
   padding: 5px 10px;
   font-size: 12px;
   cursor: pointer;
 }
 .comment-side-selectbar .primary:disabled {
-  background: #ffb9aa;
-  border-color: #ffb9aa;
+  background: color-mix(in srgb, var(--comment-accent) 45%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--comment-accent) 45%, var(--border));
+  color: color-mix(in srgb, #fff 68%, var(--text-muted));
   cursor: not-allowed;
 }
 .comment-side-selectbar .primary:hover:not(:disabled) {
-  background: #e94a2d;
-  border-color: #e94a2d;
+  background: color-mix(in srgb, var(--comment-accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--comment-accent) 88%, #000);
 }
 .comment-side-new-comment {
   flex: 0 0 auto;
@@ -1967,6 +2030,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 }
 .comment-history-attachments {
   gap: 6px;
+}
+.comment-history-attachments .user-attachment.staged-comment {
+  max-height: none;
+  overflow: visible;
+  align-items: flex-start;
 }
 .viewer-source {
   margin: 0;

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Page, Response } from '@playwright/test';
+import type { Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
@@ -245,6 +245,61 @@ test('real daemon run previews an artifact from a fake OpenCode runtime', async 
 
   const { projectId } = currentProject(page);
   await expectProjectFileToContain(page, projectId, fileName, heading);
+});
+
+test('plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
+  await configureFakeAgent(page, 'codex');
+  await installBrowserAgentConfig(page, 'codex');
+  await gotoEntryHome(page);
+  await setBrowserAgentConfig(page, 'codex');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserAgentConfig(page, 'codex');
+  await configureFakeAgent(page, 'codex');
+  await expectBrowserAgentConfig(page, 'codex');
+  await dismissPrivacyDialog(page);
+
+  await page.getByTestId('home-hero-shortcuts-trigger').click();
+  await page.getByTestId('home-hero-rail-create-plugin').click();
+  await expect(page.getByTestId('home-hero-input')).toHaveValue(/Create an Open Design plugin for:/);
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await page.getByTestId('home-hero-submit').click();
+
+  const projectRequest = await projectRequestPromise;
+  const projectBody = projectRequest.postDataJSON() as {
+    pluginId?: string;
+    pendingPrompt?: string;
+  };
+  expect(projectBody.pluginId).toBe('od-plugin-authoring');
+  expect(projectBody.pendingPrompt).toContain('produce a folder named generated-plugin');
+
+  const runRequest = await runRequestPromise;
+  const runBody = runRequest.postDataJSON() as { message?: string; agentId?: string };
+  expect(runBody.agentId).toBe('codex');
+  expect(runBody.message).toContain('produce a folder named generated-plugin');
+
+  await expectWorkspaceReady(page);
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [
+    'generated-plugin/open-design.json',
+    'generated-plugin/SKILL.md',
+    'generated-plugin/examples/demo.md',
+  ]);
+  await expectProjectFileToContain(page, projectId, 'generated-plugin/open-design.json', '"name": "generated-plugin"');
+  await expectProjectFileToContain(page, projectId, 'generated-plugin/SKILL.md', '# Generated Plugin');
+
+  await expect(page.getByText('Files from this turn')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-actions-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-install-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-publish-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeVisible();
+
+  await expect(page.getByTestId('design-plugin-folder-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('design-plugin-folder-install-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('design-plugin-folder-publish-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('design-plugin-folder-contribute-generated-plugin')).toBeVisible();
 });
 
 test('real daemon run supports fake non-Codex runtime protocols', async ({ page }) => {
@@ -637,6 +692,16 @@ async function listConversationMessages(
 function isCreateRunResponse(response: Response): boolean {
   const url = new URL(response.url());
   return url.pathname === '/api/runs' && response.request().method() === 'POST';
+}
+
+function isCreateRunRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/runs' && request.method() === 'POST';
+}
+
+function isCreateProjectRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
 function expectCreateRunAgentId(response: Response, agentId: FakeAgentId) {

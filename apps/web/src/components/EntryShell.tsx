@@ -13,8 +13,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type SetStateAction,
 } from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
@@ -109,11 +111,11 @@ import {
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import { AmrAccountControl } from './AmrLoginPill';
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   amrLoginPollOutcome,
 } from './amrLoginPolling';
+import { renderModelOptions } from './modelOptions';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -127,6 +129,13 @@ import {
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
+const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
+  { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+  { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { id: 'glm-5.1', label: 'GLM 5.1' },
+];
+
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
@@ -227,6 +236,8 @@ interface Props {
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
   config: AppConfig;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -353,6 +364,8 @@ export function EntryShell({
   designSystemsLoading = false,
   projectsLoading = false,
   config,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   agents,
   daemonLive,
   onModeChange,
@@ -579,6 +592,7 @@ export function EntryShell({
                 <span className="entry-discord-badge__label">Join Discord</span>
               </a>
               <InlineModelSwitcher
+                providerModelsCache={sharedProviderModelsCache}
                 config={config}
                 agents={agents}
                 daemonLive={daemonLive}
@@ -748,6 +762,8 @@ export function EntryShell({
 
 function OnboardingView({
   config,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   agents,
   daemonLive,
   onModeChange,
@@ -761,6 +777,8 @@ function OnboardingView({
   onFinish,
 }: {
   config: AppConfig;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -808,9 +826,11 @@ function OnboardingView({
     | { status: 'running'; inputKey: string }
     | { status: 'done'; inputKey: string; result: ProviderModelsResponse }
   >({ status: 'idle' });
-  const [providerModelsCache, setProviderModelsCache] = useState<
+  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
   >({});
+  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
+  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
   const [profile, setProfile] = useState({
     role: '',
     orgSize: '',
@@ -879,6 +899,24 @@ function OnboardingView({
   const showAmrCloudOption = amrAgent !== null || agents.length === 0;
   const amrSignedIn = amrStatus?.loggedIn === true;
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
+  const amrAgentChoice = config.agentModels?.amr ?? {};
+  const amrModels =
+    amrAgent?.models && amrAgent.models.length > 0
+      ? amrAgent.models
+      : ONBOARDING_AMR_MODEL_OPTIONS;
+  const amrModelsSource =
+    amrAgent?.models && amrAgent.models.length > 0
+      ? amrAgent.modelsSource ?? 'fallback'
+      : 'fallback';
+  const amrKnownModelIds = amrModels.map((model) => model.id);
+  const amrConfiguredModel =
+    typeof amrAgentChoice.model === 'string' && amrAgentChoice.model
+      ? amrAgentChoice.model
+      : null;
+  const amrSelectedModel =
+    amrConfiguredModel && amrKnownModelIds.includes(amrConfiguredModel)
+      ? amrConfiguredModel
+      : amrModels[0]?.id ?? '';
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
 
@@ -1551,8 +1589,10 @@ function OnboardingView({
     }
   }
 
-  const primaryActionLabel = step === 0 && amrSelectedAndSignedOut
-    ? t('settings.amrSignInToContinue')
+  const primaryActionLabel = step === 0 && amrLoginPending
+    ? t('settings.amrSigningIn')
+    : step === 0 && amrSelectedAndSignedOut
+      ? t('settings.amrSignInToContinue')
     : step === 1
       ? t('settings.onboardingContinue')
     : isLastStep
@@ -1600,31 +1640,25 @@ function OnboardingView({
                         t('settings.onboardingAmrCloudBenefitModels'),
                         t('settings.onboardingAmrCloudBenefitPricing'),
                       ]}
-                      badge={t('settings.onboardingRecommended')}
-                      officialLabel={t('settings.onboardingAmrCloudOfficialBadge')}
-                      statusSlot={
-                        runtime === 'amr' ? (
-                          <AmrAccountControl
-                            status={
-                              amrLoginError
-                                ? 'error'
-                                : amrSignedIn
-                                  ? 'signed-in'
-                                  : amrLoginPending
-                                    ? 'signing-in'
-                                    : 'signed-out'
-                            }
-                            compact
-                            email={
-                              amrSignedIn
-                                ? amrStatus?.user?.email || t('settings.amrSignedIn')
-                                : ''
-                            }
-                            showSignInAction={false}
-                            signInDisabled={amrLoginPending}
+                      upcomingLabel={t('settings.onboardingAmrCloudUpcomingLabel')}
+                      upcomingBenefits={[
+                        t('settings.onboardingAmrCloudUpcomingImageVideo'),
+                        t('settings.onboardingAmrCloudUpcomingSkills'),
+                        t('settings.onboardingAmrCloudUpcomingRouting'),
+                      ]}
+                      benefitPlacement="aside"
+                      metaLabel="AMR v0.1.0"
+                      modelSlot={
+                        amrModels.length > 0 ? (
+                          <OnboardingAmrModelSelect
+                            models={amrModels}
+                            modelsSource={amrModelsSource}
+                            selectedModel={amrSelectedModel}
+                            onSelectModel={(model) => onAgentModelChange('amr', { model })}
                           />
                         ) : null
                       }
+                      variant="amr"
                       featured
                       selected={runtime === 'amr'}
                       onClick={() => {
@@ -1892,6 +1926,11 @@ function OnboardingView({
 
           {step === 2 && renderDesignSystemCreation ? null : (
             <div className="onboarding-view__actions">
+              {step === 0 && amrLoginError ? (
+                <span className="onboarding-view__action-status is-error" role="alert">
+                  {t('settings.amrLoginErrorCompact')}
+                </span>
+              ) : null}
               <button
                 type="button"
                 className="onboarding-view__secondary"
@@ -2006,6 +2045,91 @@ function OnboardingCliSetupPanel({
       ) : null}
     </div>
   );
+}
+
+function OnboardingAmrModelSelect({
+  models,
+  modelsSource,
+  selectedModel,
+  onSelectModel,
+}: {
+  models: NonNullable<AgentInfo['models']>;
+  modelsSource: AgentInfo['modelsSource'];
+  selectedModel: string;
+  onSelectModel: (model: string) => void;
+}) {
+  const t = useT();
+  const modelSource = modelsSource ?? 'fallback';
+  const displayModels = models.map((model) => ({
+    ...model,
+    label: formatOnboardingAmrModelLabel(model),
+  }));
+  const modelSourceLabel = t('settings.onboardingAmrModelSourceLabel');
+  return (
+    <label
+      className="onboarding-view__model-picker"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="onboarding-view__model-label">
+        {t('settings.modelPicker')}
+        <span className={`onboarding-view__model-source ${modelSource}`}>
+          {modelSourceLabel}
+        </span>
+      </span>
+      <span className="onboarding-view__model-select-wrap">
+        <select
+          value={selectedModel}
+          onChange={(event) => onSelectModel(event.target.value)}
+        >
+          {renderModelOptions(displayModels)}
+        </select>
+        <Icon
+          name="chevron-down"
+          size={12}
+          className="onboarding-view__model-select-chevron"
+        />
+      </span>
+    </label>
+  );
+}
+
+function formatOnboardingAmrModelLabel(
+  model: NonNullable<AgentInfo['models']>[number],
+): string {
+  const label = model.label?.trim();
+  if (label && label !== model.id && !/^[a-z0-9._-]+$/.test(label)) {
+    return label;
+  }
+  return model.id
+    .split('-')
+    .filter(Boolean)
+    .map(formatModelToken)
+    .join(' ');
+}
+
+function formatModelToken(token: string): string {
+  const lower = token.toLowerCase();
+  const known: Record<string, string> = {
+    claude: 'Claude',
+    opus: 'Opus',
+    sonnet: 'Sonnet',
+    haiku: 'Haiku',
+    deepseek: 'DeepSeek',
+    gemini: 'Gemini',
+    glm: 'GLM',
+    gpt: 'GPT',
+    oss: 'OSS',
+    kimi: 'Kimi',
+    minimax: 'MiniMax',
+    mimo: 'MiMo',
+    qwen3: 'Qwen3',
+    seed: 'Seed',
+  };
+  if (known[lower]) return known[lower];
+  if (/^v\d/i.test(token)) return token.toUpperCase();
+  if (/^\d+b$/i.test(token) || /^a\d+b$/i.test(token)) return token.toUpperCase();
+  if (/^\d+(\.\d+)*$/.test(token)) return token;
+  return token.charAt(0).toUpperCase() + token.slice(1);
 }
 
 function OnboardingByokSetupPanel({
@@ -2439,12 +2563,17 @@ function OnboardingChoiceCard({
   title,
   body,
   benefits,
+  upcomingLabel,
+  upcomingBenefits,
+  benefitPlacement = 'copy',
+  metaLabel,
+  modelSlot,
   actionLabel,
   selected,
   badge,
-  officialLabel,
   statusSlot,
   featured,
+  variant,
   onClick,
 }: {
   icon: 'orbit' | 'hammer' | 'sliders' | 'github' | 'upload' | 'sparkles';
@@ -2452,12 +2581,17 @@ function OnboardingChoiceCard({
   title: string;
   body: string;
   benefits?: string[];
+  upcomingLabel?: string;
+  upcomingBenefits?: string[];
+  benefitPlacement?: 'copy' | 'aside';
+  metaLabel?: string;
+  modelSlot?: ReactNode;
   actionLabel?: string;
   selected: boolean;
   badge?: string;
-  officialLabel?: string;
   statusSlot?: ReactNode;
   featured?: boolean;
+  variant?: 'amr';
   onClick: () => void;
 }) {
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
@@ -2467,55 +2601,106 @@ function OnboardingChoiceCard({
     onClick();
   }
 
+  const hasBenefits =
+    (benefits && benefits.length > 0) ||
+    (upcomingBenefits && upcomingBenefits.length > 0);
+  const benefitStack = hasBenefits ? (
+    <span className="onboarding-view__benefit-stack">
+      {benefits && benefits.length > 0 ? (
+        <span className="onboarding-view__benefits">
+          {benefits.map((item, index) => (
+            <span
+              key={item}
+              className={`onboarding-view__benefit${
+                index >= 2 ? ' onboarding-view__benefit--hero' : ''
+              }`}
+            >
+              {item}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {upcomingBenefits && upcomingBenefits.length > 0 ? (
+        <span className="onboarding-view__upcoming-benefits">
+          {upcomingLabel ? (
+            <span className="onboarding-view__upcoming-label">{upcomingLabel}</span>
+          ) : null}
+          {upcomingBenefits.map((item) => (
+            <span key={item} className="onboarding-view__benefit onboarding-view__benefit--upcoming">
+              {item}
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </span>
+  ) : null;
+  const modelUnderLogo = variant === 'amr' && modelSlot;
+  const iconNode = (
+    <span
+      className={
+        'onboarding-view__icon' +
+        (agentIconId ? ' onboarding-view__icon--asset' : '')
+      }
+    >
+      {agentIconId ? (
+        <AgentIcon
+          id={agentIconId}
+          size={featured ? 52 : 40}
+          className="onboarding-view__agent-logo"
+        />
+      ) : (
+        <Icon name={icon} size={18} />
+      )}
+    </span>
+  );
+  const copyNode = (
+    <span className="onboarding-view__card-copy">
+      <span className="onboarding-view__card-top">
+        <strong>{title}</strong>
+        {badge ? <span className="onboarding-view__badge">{badge}</span> : null}
+      </span>
+      {metaLabel ? <span className="onboarding-view__card-meta">{metaLabel}</span> : null}
+      {modelUnderLogo ? null : modelSlot}
+      {benefitPlacement === 'copy' && benefitStack ? (
+        benefitStack
+      ) : !modelSlot ? (
+        <small>{body}</small>
+      ) : null}
+    </span>
+  );
+
   return (
     <div
       role="button"
       tabIndex={0}
       className={`onboarding-view__card${selected ? ' is-selected' : ''}${
         featured ? ' onboarding-view__card--featured' : ''
-      }${officialLabel ? ' onboarding-view__card--official' : ''}`}
+      }${variant ? ` onboarding-view__card--${variant}` : ''}${
+        benefitPlacement === 'aside' ? ' onboarding-view__card--benefit-aside' : ''
+      }`}
       onClick={onClick}
       onKeyDown={handleKeyDown}
       aria-pressed={selected}
     >
-      {officialLabel ? (
-        <span className="onboarding-view__official-tag">
-          <img src="/official_badge.svg" alt={officialLabel} draggable={false} />
+      {variant === 'amr' ? (
+        <span className="onboarding-view__identity">
+          {iconNode}
+          {copyNode}
+        </span>
+      ) : (
+        <>
+          {iconNode}
+          {copyNode}
+        </>
+      )}
+      {modelUnderLogo ? (
+        <span className="onboarding-view__card-model">
+          {modelSlot}
         </span>
       ) : null}
-      <span
-        className={
-          'onboarding-view__icon' +
-          (agentIconId ? ' onboarding-view__icon--asset' : '')
-        }
-      >
-        {agentIconId ? (
-          <AgentIcon
-            id={agentIconId}
-            size={featured ? 52 : 40}
-            className="onboarding-view__agent-logo"
-          />
-        ) : (
-          <Icon name={icon} size={18} />
-        )}
-      </span>
-      <span className="onboarding-view__card-copy">
-        <span className="onboarding-view__card-top">
-          <strong>{title}</strong>
-          {badge ? <span className="onboarding-view__badge">{badge}</span> : null}
-        </span>
-        {benefits && benefits.length > 0 ? (
-          <span className="onboarding-view__benefits">
-            {benefits.map((item) => (
-              <span key={item} className="onboarding-view__benefit">
-                {item}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <small>{body}</small>
-        )}
-      </span>
+      {benefitPlacement === 'aside' && benefitStack ? (
+        <span className="onboarding-view__benefit-aside">{benefitStack}</span>
+      ) : null}
       {statusSlot ? (
         <span className="onboarding-view__card-status">
           {statusSlot}

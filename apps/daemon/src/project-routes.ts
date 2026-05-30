@@ -21,6 +21,106 @@ import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
 
+const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
+(function(){
+  if (window.__odUrlScrollBridge) return;
+  window.__odUrlScrollBridge = true;
+  var pending = false;
+  function scrollElement(){
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function num(value){
+    var next = Number(value || 0);
+    return Number.isFinite(next) ? next : 0;
+  }
+  function post(){
+    var el = scrollElement();
+    if (!el) return;
+    var frame = document.scrollingElement || document.documentElement;
+    window.parent.postMessage({
+      type: 'od:preview-scroll',
+      canvasLeft: Math.round(el.scrollLeft || 0),
+      canvasTop: Math.round(el.scrollTop || 0),
+      frameLeft: Math.round(frame.scrollLeft || 0),
+      frameTop: Math.round(frame.scrollTop || 0)
+    }, '*');
+  }
+  function schedule(){
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(function(){
+      pending = false;
+      post();
+    });
+  }
+  function scrollTo(el, left, top){
+    if (!el) return;
+    if (typeof el.scrollTo === 'function') el.scrollTo(num(left), num(top));
+    else {
+      el.scrollLeft = num(left);
+      el.scrollTop = num(top);
+    }
+  }
+  function scrollBy(el, left, top){
+    if (!el) return;
+    var dx = num(left);
+    var dy = num(top);
+    if (!dx && !dy) return;
+    if (typeof el.scrollBy === 'function') el.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+    else {
+      el.scrollLeft = (el.scrollLeft || 0) + dx;
+      el.scrollTop = (el.scrollTop || 0) + dy;
+    }
+  }
+  function requestRestore(){
+    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || !data.type) return;
+    if (data.type === 'od:preview-scroll-restore') {
+      scrollTo(document.scrollingElement || document.documentElement, data.frameLeft, data.frameTop);
+      scrollTo(scrollElement(), data.canvasLeft, data.canvasTop);
+      setTimeout(post, 0);
+      return;
+    }
+    if (data.type === 'od:preview-scroll-by') {
+      scrollBy(scrollElement(), data.left, data.top);
+      schedule();
+    }
+  });
+  window.addEventListener('scroll', schedule, true);
+  document.addEventListener('scroll', schedule, true);
+  window.addEventListener('resize', schedule);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      requestRestore();
+      schedule();
+    });
+  } else {
+    setTimeout(function(){
+      requestRestore();
+      schedule();
+    }, 0);
+  }
+})();
+</script>`;
+
+function wantsUrlPreviewScrollBridge(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(wantsUrlPreviewScrollBridge);
+  if (typeof value !== 'string') return false;
+  return value === 'scroll' || value === '1' || value === 'true';
+}
+
+function injectUrlPreviewScrollBridge(html: string): string {
+  if (html.includes('data-od-url-scroll-bridge')) return html;
+  const bodyCloseIndex = html.search(/<\/body\s*>/i);
+  if (bodyCloseIndex >= 0) {
+    return `${html.slice(0, bodyCloseIndex)}${URL_PREVIEW_SCROLL_BRIDGE}${html.slice(bodyCloseIndex)}`;
+  }
+  return `${html}${URL_PREVIEW_SCROLL_BRIDGE}`;
+}
+
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
@@ -32,7 +132,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
-  const { validateProjectDesignSystemId } = ctx.validation;
+  const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -181,6 +281,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
+      const skillValidation = await validateProjectSkillId(skillId);
+      if (!skillValidation.ok) {
+        return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+      }
+      const normalizedSkillId = skillValidation.id;
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -200,7 +305,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const project = insertProject(db, {
         id,
         name: name.trim(),
-        skillId: skillId ?? null,
+        skillId: normalizedSkillId,
         designSystemId: normalizedDesignSystemId,
         pendingPrompt: pendingPrompt || null,
         metadata: projectMetadata,
@@ -402,6 +507,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
         patch.designSystemId = designSystemValidation.id;
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
+        const skillValidation = await validateProjectSkillId(patch.skillId);
+        if (!skillValidation.ok) {
+          return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+        }
+        patch.skillId = skillValidation.id;
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
@@ -947,6 +1059,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
+      if (
+        wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) &&
+        /^text\/html(?:;|$)/i.test(file.mime)
+      ) {
+        res.type(file.mime).send(injectUrlPreviewScrollBridge(file.buffer.toString('utf8')));
+        return;
+      }
       res.type(file.mime).send(file.buffer);
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

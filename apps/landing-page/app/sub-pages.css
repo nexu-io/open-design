@@ -1035,9 +1035,17 @@ body.sub-page {
 }
 .sub-footer-grid {
   display: grid;
-  grid-template-columns: 1.6fr 1fr 1fr 1fr;
-  gap: 48px;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+  gap: 40px;
   margin-bottom: 36px;
+}
+@media (max-width: 1080px) {
+  /* At medium widths, drop to a 3-column grid (brand + two columns
+     per row, since `.sub-footer-brand` carries no `grid-column` span)
+     so no column collapses to a single line of unrecognizable text.
+     With 5 children that flows as: row 1 = brand · Products · Plugins,
+     row 2 = Resources · Connect · empty cell. */
+  .sub-footer-grid { grid-template-columns: 1.6fr repeat(2, 1fr); }
 }
 .sub-footer-brand .brand {
   text-decoration: none;

@@ -74,6 +74,7 @@ import {
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
+  usesAnthropicProxy,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
@@ -147,6 +148,7 @@ import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
 } from './Theater';
+import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
@@ -167,6 +169,7 @@ import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
+import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import {
   buildFinalizeCredentialsMissingToast,
   buildFinalizeRequest,
@@ -513,6 +516,7 @@ export function ProjectView({
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
+  const iframeKeepAlivePool = useIframeKeepAlivePool();
   // P0 page_view page_name=chat_panel — fire once per project mount.
   // ProjectView outlives conversation switches (ChatPane is keyed by
   // activeConversationId so it remounts when the user switches chats,
@@ -1279,6 +1283,7 @@ export function ProjectView({
   );
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
+      iframeKeepAlivePool.evictProject(project.id);
       coalescedFileChangedRefresh();
       return;
     }
@@ -1327,8 +1332,45 @@ export function ProjectView({
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
-  }, [onProjectsRefresh, refreshLiveArtifacts, project.id, coalescedFileChangedRefresh]);
+  }, [coalescedFileChangedRefresh, iframeKeepAlivePool, onProjectsRefresh, refreshLiveArtifacts, project.id]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
+
+  const activePromptContextSignature = useMemo(() => {
+    const skill = project.skillId
+      ? (skills.find((s) => s.id === project.skillId) ??
+        designTemplates.find((s) => s.id === project.skillId))
+      : null;
+    const designSystem = project.designSystemId
+      ? designSystems.find((d) => d.id === project.designSystemId)
+      : null;
+    return JSON.stringify({
+      designSystem: designSystem
+        ? {
+            id: designSystem.id,
+            title: designSystem.title,
+            category: designSystem.category,
+            summary: designSystem.summary,
+            source: designSystem.source ?? null,
+          }
+        : null,
+      skill: skill
+        ? {
+            id: skill.id,
+            name: skill.name,
+            description: skill.description,
+            mode: skill.mode,
+            source: skill.source ?? null,
+            upstream: skill.upstream,
+          }
+        : null,
+    });
+  }, [designSystems, designTemplates, project.designSystemId, project.skillId, skills]);
+  const previousPromptContextSignatureRef = useRef(activePromptContextSignature);
+  useEffect(() => {
+    if (previousPromptContextSignatureRef.current === activePromptContextSignature) return;
+    previousPromptContextSignatureRef.current = activePromptContextSignature;
+    iframeKeepAlivePool.evictProject(project.id, { includeActive: true });
+  }, [activePromptContextSignature, iframeKeepAlivePool, project.id]);
 
   // When the URL points at a specific file, fire an open request so the
   // FileWorkspace promotes it to an active tab. We watch routeFileName
@@ -2722,6 +2764,7 @@ export function ProjectView({
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           research: meta?.research,
+          mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           locale,
@@ -2819,6 +2862,7 @@ export function ProjectView({
           userMsg.id,
           project.id,
           projectFiles,
+          { omitNativeImageAttachments: usesAnthropicProxy(config) },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         let accumulatedAssistantText = '';
@@ -2949,6 +2993,29 @@ export function ProjectView({
     },
     [currentConversationActionDisabled, onModeChange, onAgentChange, onOpenAmrSettings],
   );
+  // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
+  // so the auth banner offers a one-click "Sign in via terminal"
+  // button that POSTs to the daemon. The daemon opens a system
+  // Terminal running `agy` (osascript / x-terminal-emulator /
+  // `cmd /c start`); the user finishes Google sign-in there and then
+  // clicks Retry to redo the chat run. We don't auto-retry because
+  // the OAuth completion happens externally with no reliable signal
+  // back to the chat — the secondary Retry button on the same banner
+  // covers the manual case.
+  const handleLaunchAntigravityOauth = useCallback(async () => {
+    try {
+      const { launchAntigravityOauth } = await import('../providers/daemon');
+      const result = await launchAntigravityOauth();
+      if (!result.ok) {
+        // Surface the daemon-side reason so the user knows whether
+        // the spawn failed because of missing osascript / unsupported
+        // platform / etc. instead of silently swallowing it.
+        console.warn('[antigravity] oauth-launch failed:', result.error);
+      }
+    } catch (err) {
+      console.warn('[antigravity] oauth-launch threw:', err);
+    }
+  }, []);
   // Poll the AMR login status while a retry is armed, rather than only reacting
   // to the AmrLoginPill's status event — the user may close Settings (which
   // unmounts the pill and stops its polling) before finishing sign-in in the
@@ -4209,6 +4276,12 @@ export function ProjectView({
         onBack={onBack}
         backLabel={t('project.backToProjects')}
         fileActionsBefore={(
+          <div
+            className="app-chrome-file-actions-before workspace-tabs-file-actions"
+            data-app-chrome-file-actions="true"
+          />
+        )}
+        actions={(
           <>
             <button
               type="button"
@@ -4236,14 +4309,7 @@ export function ProjectView({
               onRefreshAgents={onRefreshAgents}
               onBack={onBack}
             />
-            <div
-              className="app-chrome-file-actions-before workspace-tabs-file-actions"
-              data-app-chrome-file-actions="true"
-            />
           </>
-        )}
-        actions={(
-          null
         )}
       >
         <div className="app-project-title">
@@ -4427,6 +4493,7 @@ export function ProjectView({
               onOpenSettings={onOpenSettings}
               onOpenAmrSettings={onOpenAmrSettings}
               onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
+              onLaunchAntigravityOauth={handleLaunchAntigravityOauth}
               onOpenMcpSettings={onOpenMcpSettings}
               connectRepoNeeded={connectRepoNeeded}
               githubConnected={githubConnected}

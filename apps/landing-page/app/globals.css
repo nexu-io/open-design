@@ -606,6 +606,34 @@ body::before {
   align-items: center;
   gap: 18px;
 }
+/*
+ * Compact icon-only chrome buttons for community-channel links
+ * (Discord, X) sitting beside the Download / Star CTAs. They share
+ * the ghost-button outline language but stay square so they read as
+ * social affordances and don't compete with the text CTAs.
+ */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(21, 20, 15, 0.18);
+  color: var(--ink);
+  background: transparent;
+  text-decoration: none;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  flex-shrink: 0;
+}
+.nav-icon:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.nav-icon svg {
+  display: block;
+}
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -2470,8 +2498,9 @@ footer {
 @media (max-width: 1080px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
-  /* Hide Download from the bar (Star stays). */
+  /* Hide Download + Discord/X icon buttons from the bar (Star stays). */
   .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-icon { display: none; }
   /* Collapse the nav <ul> into a panel that drops below the header bar.
    * The header is `position: sticky`, so absolute-positioning the panel
    * relative to the header element keeps it pinned correctly. */
@@ -2620,11 +2649,13 @@ footer {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta and Download
-   * stay hidden; Star CTA still pings in the bar. */
+   * the hamburger panel introduced at ≤1080px. Brand meta, Download,
+   * and the Discord/X icon buttons stay hidden; Star CTA still pings
+   * in the bar. */
   .nav { padding: 16px 0; }
   .brand-meta { display: none; }
   .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-icon { display: none; }
 }
 @media (max-width: 640px) {
   .topbar-inner { gap: 14px; }

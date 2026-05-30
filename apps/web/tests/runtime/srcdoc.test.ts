@@ -88,7 +88,8 @@ describe('buildSrcdoc', () => {
 
     const canSetActive = srcdoc.match(/function canSetActive\(list\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
 
-    expect(canSetActive).toContain('findActiveByClass(list) >= 0');
+    expect(canSetActive).toContain('var active = findActiveByClass(list);');
+    expect(canSetActive).toContain('hasComputedHiddenSibling(list, active)');
     expect(canSetActive).toContain("list[i].style.display === 'none'");
     expect(canSetActive).toContain("list[i].style.visibility === 'hidden'");
     expect(canSetActive).toContain("list[i].hasAttribute('hidden')");

@@ -40,6 +40,14 @@
   min-height: 0;
 }
 
+.iframe-keep-alive-pool {
+  display: none;
+}
+
+.pooled-iframe-host {
+  display: contents;
+}
+
 .workspace-tabs-chrome.app-chrome-header {
   min-width: 0;
   max-width: 100%;

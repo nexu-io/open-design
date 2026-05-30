@@ -94,14 +94,9 @@ describe('dialog artifact consistency', () => {
 
       const page = await context.newPage();
       await page.goto('/', { waitUntil: 'domcontentloaded' });
-      await playwrightExpect(
-        page.getByRole('heading', { name: 'What do you want to design?' }),
-      ).toBeVisible();
-      await page.evaluate(({ projectId, conversationId }) => {
-        const target = `/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`;
-        window.history.pushState(null, '', target);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }, { projectId: project.project.id, conversationId: project.conversationId });
+      await waitForLoadingToClear(page);
+      const target = `/projects/${encodeURIComponent(project.project.id)}/conversations/${encodeURIComponent(project.conversationId)}`;
+      await page.goto(target, { waitUntil: 'domcontentloaded' });
       await expectWorkspaceReady(page);
 
       const createRunResponse = await sendPrompt(page, PROMPT);

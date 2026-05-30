@@ -1488,12 +1488,101 @@
 }
 .agent-card-config .hint,
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
+
+.model-select-searchable {
+  position: relative;
+}
+.model-select-searchable.is-open {
+  z-index: 1400;
+}
+.model-select-searchable__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 1401;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.model-select-searchable__search-row {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.model-select-searchable__input {
+  width: 100%;
+}
+.model-select-searchable__list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+.model-select-searchable__option {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 30px 8px 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text);
+  cursor: pointer;
+  position: relative;
+}
+.model-select-searchable__option:hover {
+  background: var(--bg-subtle);
+}
+.model-select-searchable__option.is-active {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+}
+.model-select-searchable__option[data-selected='true']::after {
+  content: '✓';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: currentColor;
+}
+.model-select-searchable__option-label {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.model-select-searchable__option-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.model-select-searchable__empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .agent-card-config .hint {
   color: var(--text-muted);
   line-height: 1.35;
 }
 .agent-model-select-wrap {
   position: relative;
+  overflow: visible;
+}
+
+.settings-model-select {
+  width: 100%;
+  min-height: 36px;
+  text-align: left;
+  line-height: 1.35;
+}
+.settings-model-select--byok {
+  min-width: min(420px, 100%);
 }
 .agent-model-select-wrap select {
   appearance: none;
@@ -1501,6 +1590,12 @@
   background-image: none;
   padding-right: 28px;
   width: 100%;
+}
+.agent-model-select-wrap .model-select-searchable select {
+  background:
+    color-mix(in srgb, var(--bg-subtle) 82%, var(--bg-panel))
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")
+    no-repeat right 10px center;
 }
 .agent-card-config .agent-model-select-wrap select {
   min-height: 36px;

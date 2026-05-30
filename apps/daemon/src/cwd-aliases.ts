@@ -28,9 +28,11 @@
 // source root so an environment that puts `skills/` itself behind a
 // symlink (e.g. a content-addressable mount) is followed correctly.
 
+import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { cp, lstat, rm, stat } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
 export const SKILLS_CWD_ALIAS = '.od-skills';
 
@@ -52,6 +54,46 @@ export function skillCwdAliasSegment(dir: string): string {
   return `${folder}-${digest}`;
 }
 
+// copy_file_range(2) — used by fs.cp under the hood — is rejected with
+// these errno codes when source and destination live on different
+// filesystems (commonly EXDEV; a container image layer copied onto a
+// ZFS/overlay bind mount surfaces EPERM). Node doesn't fall back to a
+// userspace copy on any of them, so we do.
+const RECOVERABLE_COPY_CODES = new Set(['EPERM', 'EXDEV', 'ENOTSUP', 'EOPNOTSUPP']);
+
+type SkillCopyFn = (
+  source: string,
+  destination: string,
+  options: { recursive: boolean; dereference: boolean; preserveTimestamps: boolean },
+) => Promise<void>;
+
+// Recursive copy that mirrors `cp({ dereference: true })` without going
+// through copy_file_range. `stat()` (not `lstat`) follows symlinks, so
+// every staged entry lands as a real directory or regular file — keeping
+// `.od-skills/` a self-contained write barrier even on the fallback path.
+async function copyTreeDereferenced(srcDir: string, destDir: string): Promise<void> {
+  await mkdir(destDir, { recursive: true });
+  for (const entry of await readdir(srcDir, { withFileTypes: true })) {
+    const from = path.join(srcDir, entry.name);
+    const to = path.join(destDir, entry.name);
+    const entryStat = await stat(from);
+    if (entryStat.isDirectory()) {
+      await copyTreeDereferenced(from, to);
+    } else if (entryStat.isFile()) {
+      await pipeline(createReadStream(from), createWriteStream(to));
+      // createWriteStream opens the destination with the default 0644, so
+      // restore the source's permission bits (notably the exec bit on
+      // skill helper scripts) and mtime — `fs.cp` preserves these, and
+      // skills shell out to staged scripts. Mask to 0o777 so the
+      // agent-writable staging copy never inherits setuid/setgid/sticky.
+      await chmod(to, entryStat.mode & 0o777);
+      await utimes(to, entryStat.atime, entryStat.mtime);
+    }
+    // Sockets, FIFOs, and devices can't appear in a sane skill folder and
+    // copying them would hang or fail — skip them.
+  }
+}
+
 /**
  * Copy `<sourceDir>` to `<cwd>/.od-skills/<folderName>/` so an agent can
  * reach skill side files via a cwd-relative path. Idempotent and
@@ -68,6 +110,11 @@ export async function stageActiveSkill(
   folderName: string,
   sourceDir: string,
   log: SkillStagingLogger = () => {},
+  // Seam for tests: the real copy_file_range EPERM only reproduces on
+  // specific cross-filesystem mounts (ZFS/overlay), so tests inject a
+  // copy that rejects with a synthetic code to drive the fallback path.
+  nativeCopy: SkillCopyFn = (source, destination, options) =>
+    cp(source, destination, options),
 ): Promise<SkillStagingResult> {
   if (!cwd) {
     return { staged: false, reason: 'no project cwd' };
@@ -123,16 +170,26 @@ export async function stageActiveSkill(
     // reflected and a partially-failed previous run cannot leave junk
     // behind.
     await rm(stagedPath, { recursive: true, force: true });
-    await cp(sourceDir, stagedPath, {
-      recursive: true,
-      // Resolve every symlink we find inside the skill so the staged
-      // copy is a fully self-contained set of regular files. This is
-      // what makes the copy a true write barrier — no entry under
-      // `.od-skills/...` can resolve back to a real file outside the
-      // project cwd.
-      dereference: true,
-      preserveTimestamps: true,
-    });
+    try {
+      await nativeCopy(sourceDir, stagedPath, {
+        recursive: true,
+        // Resolve every symlink we find inside the skill so the staged
+        // copy is a fully self-contained set of regular files. This is
+        // what makes the copy a true write barrier — no entry under
+        // `.od-skills/...` can resolve back to a real file outside the
+        // project cwd.
+        dereference: true,
+        preserveTimestamps: true,
+      });
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? '';
+      if (!RECOVERABLE_COPY_CODES.has(code)) throw err;
+      log(
+        `[od] skill-stage: native copy failed (${code}); retrying with stream copy`,
+      );
+      await rm(stagedPath, { recursive: true, force: true });
+      await copyTreeDereferenced(sourceDir, stagedPath);
+    }
     return { staged: true, stagedPath };
   } catch (err) {
     log(`[od] skill-stage failed: ${(err as Error).message}`);

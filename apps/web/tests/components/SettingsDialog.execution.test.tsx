@@ -114,6 +114,7 @@ const amrAgent: AgentInfo = {
   available: true,
   version: '1.0.0',
   models: [{ id: 'default', label: 'Default' }],
+  supportsCustomModel: false,
 };
 
 type OnRefreshAgents = (
@@ -449,7 +450,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       target: { value: '1' },
     });
 
-    expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
   });
 
@@ -468,7 +469,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     fireEvent.change(providerSelect, { target: { value: '1' } });
 
-    expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
       'https://api.deepseek.com/anthropic',
     );
@@ -770,10 +771,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       }),
       expect.any(AbortSignal),
     );
-    const select = screen.getByLabelText('Model') as HTMLSelectElement;
-    expect(Array.from(select.options).map((option) => option.value)).toEqual(
-      expect.arrayContaining(['gpt-account', 'gpt-4o', '__custom__']),
-    );
+    const modelPicker = screen.getByRole('combobox', { name: 'Model' });
+    fireEvent.click(modelPicker);
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    expect(
+      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
+    ).toEqual(expect.arrayContaining(['Account Model (gpt-account)', 'gpt-4o', 'Custom (type below)…']));
 
     fireEvent.click(screen.getByRole('tab', { name: 'Azure OpenAI' }));
     expect(screen.queryByRole('button', { name: 'Fetch models' })).toBeNull();
@@ -797,6 +800,45 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.blur(screen.getByLabelText('API key'));
 
     expect(screen.queryByText('Fill API key to test the connection.')).toBeNull();
+  });
+
+  it('filters long BYOK model lists in Settings after provider discovery succeeds', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
+        { id: 'gpt-4.1', label: 'gpt-4.1' },
+        { id: 'gpt-5.5', label: 'gpt-5.5' },
+        { id: 'o4-mini', label: 'o4-mini' },
+        { id: 'o3', label: 'o3' },
+        { id: 'o1', label: 'o1' },
+        { id: 'gpt-4o', label: 'gpt-4o' },
+        { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+      ],
+    });
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4.1-mini',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    expect(await screen.findByText('✓ Loaded 8 models from your account.')).toBeTruthy();
+
+    const modelPicker = screen.getByRole('combobox', { name: 'Model' });
+    fireEvent.click(modelPicker);
+
+    const searchInput = screen.getByTestId('settings-byok-model-search') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: '5.5' } });
+
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    expect(
+      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
+    ).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
   });
 
   it('fetches provider models, merges them into the picker, and preserves a custom current model', async () => {
@@ -829,13 +871,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       }),
       expect.any(AbortSignal),
     );
-    const select = screen.getByLabelText('Model') as HTMLSelectElement;
-    expect(Array.from(select.options).map((option) => option.value)).toEqual(
-      expect.arrayContaining(['remote-alpha', 'gpt-4o', '__custom__']),
-    );
+    const modelPicker = screen.getByRole('combobox', { name: 'Model' });
+    fireEvent.click(modelPicker);
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
     expect(
-      Array.from(select.options).some((option) => option.textContent === 'Remote Alpha (remote-alpha)'),
-    ).toBe(true);
+      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
+    ).toEqual(expect.arrayContaining(['Remote Alpha (remote-alpha)', 'gpt-4o', 'Custom (type below)…']));
     expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe('custom-still-here');
   });
 
@@ -915,9 +956,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'sk-openai' },
     });
-    fireEvent.change(screen.getByLabelText('Model'), {
-      target: { value: '__custom__' },
-    });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    fireEvent.click(within(modelPopover).getByRole('option', { name: 'Custom (type below)…' }));
 
     const customModelInput = screen.getByLabelText('Custom model id') as HTMLInputElement;
     expect(customModelInput).toBeTruthy();
@@ -1104,6 +1145,48 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
   });
 
+  it('filters long Local CLI model lists in Settings without hiding the current selection', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex', agentModels: { codex: { model: 'gpt-4.1-mini' } } },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelsSource: 'live',
+            models: [
+              { id: 'default', label: 'Default' },
+              { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
+              { id: 'gpt-4.1', label: 'gpt-4.1' },
+              { id: 'gpt-5.5', label: 'gpt-5.5' },
+              { id: 'o4-mini', label: 'o4-mini' },
+              { id: 'o3', label: 'o3' },
+              { id: 'o1', label: 'o1' },
+              { id: 'gpt-4o', label: 'gpt-4o' },
+              { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const codexCard = screen.getByRole('button', { name: /Codex CLI/i });
+    fireEvent.click(codexCard);
+
+    const modelPicker = screen.getByRole('combobox', {
+      name: en['settings.modelPicker'],
+    });
+    fireEvent.click(modelPicker);
+
+    const searchInput = screen.getByTestId('settings-agent-model-search-codex') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: '5.5' } });
+
+    const modelPopover = screen.getByTestId('settings-agent-model-popover-codex');
+    expect(
+      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
+    ).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
+  });
+
   it('labels live CLI model metadata in the model picker', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
@@ -1174,12 +1257,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     const modelPickers = screen.getAllByRole('combobox', {
       name: en['settings.modelPicker'],
-    }) as HTMLSelectElement[];
+    });
     expect(modelPickers).toHaveLength(1);
-    expect(modelPickers[0]?.value).toBe('glm-5');
+    expect(modelPickers[0]?.textContent).toContain('GLM 5');
+    fireEvent.click(modelPickers[0]!);
+    const modelPopover = screen.getByTestId('settings-agent-model-popover-amr');
     expect(
-      Array.from(modelPickers[0]?.options ?? []).map((option) => option.value),
-    ).toEqual(['glm-5', 'glm-5.1']);
+      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
+    ).toEqual(['GLM 5', 'GLM 5.1']);
     expect(screen.queryByLabelText(en['settings.modelCustomLabel'])).toBeNull();
   });
 

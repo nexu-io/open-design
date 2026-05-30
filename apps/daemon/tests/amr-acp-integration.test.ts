@@ -106,6 +106,8 @@ describe('AMR runtime def', () => {
     expect(normalizeVelaModelId('public_model_qwen3_235b_a22b')).toBe('qwen3-235b-a22b');
     expect(normalizeVelaModelId('deepseek-v3.2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('vela/deepseek-v3.2')).toBe('deepseek-v3.2');
+    expect(normalizeVelaModelId('deepseek-v3-2')).toBe('deepseek-v3.2');
+    expect(normalizeVelaModelId('vela/deepseek-v3-2')).toBe('deepseek-v3.2');
   });
 
   it('parses `vela models` output with fast chat defaults and plain canonical labels', () => {
