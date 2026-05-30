@@ -951,9 +951,15 @@ export function shouldSyncLocalMediaProvidersToDaemon(
   localProviders: Record<string, MediaProviderCredentials> | undefined,
   daemonProviders: Record<string, MediaProviderCredentials> | null | undefined,
 ): boolean {
-  return daemonProviders != null
-    && Object.values(localProviders ?? {}).some((entry) => hasRecoverableLocalMediaProviderFields(entry))
-    && Object.keys(daemonProviders).length === 0;
+  if (daemonProviders == null) return false;
+  // readMaskedConfig now returns a row for every provider id even when each
+  // row is empty (e.g. `{ openai: { apiKey: "" }, google: {} }`).  Check
+  // semantic emptiness — at least one daemon entry with real configured
+  // state — rather than key count.
+  const daemonHasConfiguredEntry = Object.values(daemonProviders)
+    .some((entry) => isStoredMediaProviderEntryPresent(entry));
+  return !daemonHasConfiguredEntry
+    && Object.values(localProviders ?? {}).some((entry) => hasRecoverableLocalMediaProviderFields(entry));
 }
 
 export async function syncMediaProvidersToDaemon(

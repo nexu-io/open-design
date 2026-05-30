@@ -766,7 +766,10 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
     ).toBe(true);
   });
 
-  it('returns false when daemon returns an explicit empty provider row', () => {
+  it('returns true when daemon returns only empty provider rows (first boot migration)', () => {
+    // readMaskedConfig now emits a row for every provider id even when each
+    // row is empty.  On first boot, local settings should be synced to the
+    // daemon even though the object has keys.
     expect(
       shouldSyncLocalMediaProvidersToDaemon(
         {
@@ -784,7 +787,7 @@ describe('shouldSyncLocalMediaProvidersToDaemon', () => {
           },
         },
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('returns false when daemon already has persisted media provider state', () => {
