@@ -62,9 +62,9 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
       reasoning: 'high',
     },
   );
-  assert.deepEqual(withReasoning, withModel);
   assert.equal(withReasoning.some((arg) => arg.includes('reason')), false);
   assert.equal(withReasoning.includes('--thinking'), false);
+  assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
 });
