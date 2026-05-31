@@ -904,7 +904,7 @@ export function getAgentSession(
       `SELECT session_id FROM agent_sessions
         WHERE conversation_id = ? AND agent_id = ?`,
     )
-    .get(conversationId, agentId) as { session_id?: string } | undefined;
+    .get(conversationId, agentId) as DbRow | undefined;
   return row && typeof row.session_id === 'string' ? row.session_id : null;
 }
 
