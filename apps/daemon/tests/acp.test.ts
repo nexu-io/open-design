@@ -398,7 +398,7 @@ test('attachAcpSession accepts pretty-printed ACP startup responses', () => {
     send: (event, payload) => events.push({ event, payload }),
   });
 
-  child.stdout.write('{\n  "id": 1,\n  "result": {}\n}\n');
+  child.stdout.write('{\n  "id": 1,\n  "result":\n  {}\n}\n');
   child.stdout.write('{\n  "id": 2,\n  "result":\n  {\n    "sessionId": "session-1"\n  }\n}\n');
 
   const methods = parseRpcWrites(writes)

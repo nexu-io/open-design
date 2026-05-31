@@ -305,28 +305,40 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
     pendingJsonLineCount = 1;
   };
 
+  const resetPendingJson = () => {
+    pendingJson = '';
+    pendingJsonLineCount = 0;
+  };
+
   const handleLine = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) return;
     if (pendingJson) {
-      if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && emit(trimmed)) {
-        pendingJson = '';
-        pendingJsonLineCount = 0;
-        return;
-      }
       const nextCandidate = `${pendingJson}\n${trimmed}`;
       if (emit(nextCandidate)) {
-        pendingJson = '';
-        pendingJsonLineCount = 0;
+        resetPendingJson();
         return;
       }
       pendingJsonLineCount += 1;
-      if (nextCandidate.length <= 128_000 && pendingJsonLineCount <= 256) {
+      if (
+        pendingJsonLineCount === 2 &&
+        pendingJson !== '{' &&
+        pendingJson !== '[' &&
+        emit(trimmed)
+      ) {
+        resetPendingJson();
+        return;
+      }
+      const state = classifyJsonCandidate(nextCandidate);
+      if (
+        state === 'incomplete' &&
+        nextCandidate.length <= 128_000 &&
+        pendingJsonLineCount <= 256
+      ) {
         pendingJson = nextCandidate;
         return;
       }
-      pendingJson = '';
-      pendingJsonLineCount = 0;
+      resetPendingJson();
       handleLine(trimmed);
       return;
     }
@@ -361,6 +373,68 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
       // Ignore trailing non-JSON log lines on stdout.
     },
   };
+}
+
+function classifyJsonCandidate(value: string): 'complete' | 'incomplete' | 'invalid' {
+  const stack: string[] = [];
+  let started = false;
+  let complete = false;
+  let inString = false;
+  let escaping = false;
+
+  for (const char of value) {
+    if (!started) {
+      if (/\s/.test(char)) continue;
+      if (char === '{') {
+        started = true;
+        stack.push('}');
+        continue;
+      }
+      if (char === '[') {
+        started = true;
+        stack.push(']');
+        continue;
+      }
+      return 'invalid';
+    }
+
+    if (complete) {
+      if (/\s/.test(char)) continue;
+      return 'invalid';
+    }
+
+    if (inString) {
+      if (escaping) {
+        escaping = false;
+      } else if (char === '\\') {
+        escaping = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (char === '[') {
+      stack.push(']');
+      continue;
+    }
+    if (char === '}' || char === ']') {
+      if (stack.pop() !== char) return 'invalid';
+      if (stack.length === 0) complete = true;
+    }
+  }
+
+  if (!started) return 'invalid';
+  if (inString || escaping || stack.length > 0) return 'incomplete';
+  return complete ? 'complete' : 'invalid';
 }
 
 export async function detectAcpModels({
