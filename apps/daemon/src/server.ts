@@ -204,6 +204,7 @@ import {
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
+import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
@@ -12187,6 +12188,68 @@ export async function startServer({
       scheduleForcedChildShutdown();
     }
 
+    // Per-run tool-loop guard. Agents sometimes fixate on a failing tool call
+    // and grind through dozens of identical attempts (e.g. re-running an Edit
+    // whose `old_string` never matches, or a shell assertion against an element
+    // that does not exist). Unlike the BYOK proxy path — bounded by
+    // MAX_BYOK_TOOL_LOOPS — the autonomous chat agents had no such bound. This
+    // guard observes the normalized tool_use/tool_result events EVERY agent
+    // path emits, so one instance covers Claude, Codex/OpenCode, Copilot, ACP,
+    // … It emits a one-shot `tool_loop` warning, then (in halt mode) terminates
+    // the run at a hard ceiling. Mode via OD_TOOL_LOOP_GUARD (halt|warn|off).
+    const toolLoopGuard = createToolLoopGuard({ mode: resolveToolLoopMode() });
+    let toolLoopAbortFired = false;
+
+    // Idempotent — both agent-event paths (sendAgentEvent, the Claude
+    // stream-json callback) can route a halt verdict here.
+    function abortForToolLoop(verdict: ToolLoopVerdict) {
+      if (toolLoopAbortFired) return;
+      toolLoopAbortFired = true;
+      send(
+        'error',
+        createSseErrorPayload(
+          'TOOL_LOOP_DETECTED',
+          `Run terminated: the agent repeated a failing ${verdict.toolName} call ` +
+            `${verdict.count}× without progress (\`${verdict.signature}\`). Re-check the ` +
+            'actual target — the file, the element, the command — before retrying ' +
+            'instead of resubmitting the same turn.',
+          { retryable: true },
+        ),
+      );
+      if (acpSession?.abort) {
+        try {
+          acpSession.abort();
+        } catch {
+          // ignore — best-effort
+        }
+      }
+      if (child && !child.killed) child.kill('SIGTERM');
+      scheduleForcedChildShutdown();
+    }
+
+    // Feed a normalized agent event into the loop guard and act on a verdict.
+    // Safe to call for every event; non-tool events are ignored. Emit the
+    // `tool_loop` warning to the UI/CLI, and on a halt verdict tear the run
+    // down so it cannot keep grinding.
+    function observeToolEventForLoop(ev: any) {
+      if (!ev || typeof ev !== 'object') return;
+      if (ev.type === 'tool_use' && typeof ev.id === 'string') {
+        toolLoopGuard.observeToolUse(ev.id, typeof ev.name === 'string' ? ev.name : 'tool', ev.input);
+        return;
+      }
+      if (ev.type === 'tool_result' && typeof ev.toolUseId === 'string') {
+        const verdict = toolLoopGuard.observeToolResult(
+          ev.toolUseId,
+          Boolean(ev.isError),
+          typeof ev.content === 'string' ? ev.content : '',
+        );
+        if (verdict) {
+          send('agent', verdict);
+          if (verdict.action === 'halt') abortForToolLoop(verdict);
+        }
+      }
+    }
+
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
@@ -12239,6 +12302,7 @@ export async function startServer({
         emitGuardedTextDelta(ev.delta);
         return;
       }
+      observeToolEventForLoop(ev);
       send('agent', ev);
     };
 
@@ -12247,6 +12311,7 @@ export async function startServer({
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
         send('agent', ev);
+        observeToolEventForLoop(ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
         // run-scoped guard above, so its `fabricated_role_marker` events
         // surface here directly from the stream handler, not via
