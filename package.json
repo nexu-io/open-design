@@ -47,6 +47,7 @@
       "postcss": "8.5.15",
       "protobufjs": "8.4.0",
       "qs": "6.15.2",
+      "tmp": "0.2.7",
       "yaml": "2.9.0"
     },
     "onlyBuiltDependencies": [
