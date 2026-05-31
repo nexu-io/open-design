@@ -1,0 +1,137 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "aws-pptx",
+  "title": "AWS PPTX Generator",
+  "version": "0.1.0",
+  "description": "AWS-compliant 16:9 deck generator. Applies the official AWS Architecture Icons brand system — Squid Ink dark + pure-white light themes, Smile Orange accent, eight service-category colors, Amazon Ember + Arial typography — to the Open Design fixed deck framework. Produces twelve canonical AWS slide types (Cover, Agenda, Section Divider, Content, Architecture, Two-Column, Demo/Code, Customer Story, Comparison, Summary, Resources/CTA, Q&A). Architecture diagrams are generated through the drawio skill (preferred) or the architecture-diagram skill.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://aws.amazon.com/architecture/icons/"
+  },
+  "homepage": "https://aws.amazon.com/architecture/icons/",
+  "tags": [
+    "deck",
+    "pptx",
+    "aws",
+    "architecture",
+    "presentation",
+    "enterprise",
+    "16x9",
+    "first-party"
+  ],
+  "compat": {
+    "agentSkills": [
+      { "path": "./skills/aws-pptx-deck/SKILL.md" }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "enterprise",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build an AWS-styled 12-slide HTML deck following the official AWS Architecture Icons brand system. Confirm: (1) theme — light or dark Squid Ink, (2) deck subject — proposal / migration / well-architected / genai / custom, (3) session code + speaker. Render every system / architecture page through the drawio skill (preferred) or the architecture-diagram skill, and use a two-column image+text layout on every technical or business content page.",
+        "zh-CN": "使用此插件生成 AWS 风格的 12 页 HTML deck，遵循官方 AWS Architecture Icons 品牌规范。先确认：(1) 主题：light 或 dark Squid Ink，(2) deck 题材：proposal / migration / well-architected / genai / custom，(3) session code 与演讲者。所有架构图通过 drawio skill（优先）或 architecture-diagram skill 生成，每一页技术/业务内容默认采用 image+text 双栏布局。"
+      },
+      "exampleOutputs": [
+        { "path": "./examples/migration-strategy/index.html", "title": "Migration Strategy — 12 slides (dark · ARC301)" },
+        { "path": "./index.html", "title": "Plugin preview — palette · typography · 12 slide types" }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "theme",
+        "label": "Theme mode (Dark = Squid Ink + white text, AWS standard for in-person; Light = white + black text, for web/PDF)",
+        "type": "select",
+        "required": true,
+        "default": "dark",
+        "options": ["dark", "light"]
+      },
+      {
+        "name": "deckSubject",
+        "label": "Deck subject (proposal | migration | war = Well-Architected Review | genai | custom)",
+        "type": "select",
+        "required": true,
+        "default": "migration",
+        "options": ["proposal", "migration", "war", "genai", "custom"]
+      },
+      {
+        "name": "audience",
+        "label": "Primary audience (e.g. AWS Solutions Architects, customer technical evaluators, internal architecture review)",
+        "type": "text",
+        "default": "AWS Solutions Architects"
+      },
+      {
+        "name": "sessionCode",
+        "label": "Session code — AWS track + 3-digit level, e.g. ARC301, BOA208",
+        "type": "text"
+      },
+      {
+        "name": "speakerName",
+        "label": "Speaker / presenter name + title, e.g. Jane Doe, Principal Solutions Architect, AWS",
+        "type": "text"
+      },
+      {
+        "name": "slideCount",
+        "label": "Slide count",
+        "type": "select",
+        "default": "12",
+        "options": ["8", "10", "12", "16", "20"]
+      },
+      {
+        "name": "diagramApproach",
+        "label": "How to handle architecture diagrams (drawio = preferred | architecture-diagram | slot = labelled placeholder)",
+        "type": "select",
+        "required": true,
+        "default": "drawio",
+        "options": ["drawio", "architecture-diagram", "slot"]
+      },
+      {
+        "name": "techVsBusiness",
+        "label": "Tech-heavy or business-heavy deck — drives every content page to image+text two-column when 'tech' or 'business'",
+        "type": "select",
+        "default": "tech",
+        "options": ["tech", "business", "mixed"]
+      }
+    ],
+    "context": {
+      "skills": [
+        { "path": "./skills/aws-pptx-deck/SKILL.md" }
+      ],
+      "assets": [
+        "./skills/aws-pptx-deck/assets/template.html",
+        "./skills/aws-pptx-deck/references/aws-theme.md",
+        "./skills/aws-pptx-deck/references/layouts.md",
+        "./skills/aws-pptx-deck/references/diagrams.md",
+        "./skills/aws-pptx-deck/references/checklist.md",
+        "./examples/migration-strategy/index.html",
+        "./index.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write", "live-artifact"] },
+        { "id": "critique", "atoms": ["critique-theater"], "repeat": true, "until": "critique.score >= 4 || iterations >= 2" }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "homeChip": {
+      "label": "AWS PPTX",
+      "icon": "aws",
+      "tagline": "AWS-compliant 16:9 deck — Squid Ink + Smile Orange, Amazon Ember, twelve slide types, drawio diagrams"
+    }
+  }
+}

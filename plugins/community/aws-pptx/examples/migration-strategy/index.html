@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Migrate to AWS without freezing the business · ARC301</title>
+  <style>
+    /* =========================================================
+       Open Design deck framework — DO NOT EDIT.
+       1920x1080 stage, scale-to-fit, prev/next, counter, keyboard,
+       click-anywhere focus, localStorage position, print-to-PDF.
+       ========================================================= */
+    :root {
+      --squid-ink:       #232F3E;
+      --smile-orange:    #ED7100;
+      --galaxy-purple:   #8C4FFF;
+      --nebula:          #C925D1;
+      --mars-red:        #DD344C;
+      --cosmos-pink:     #E7157B;
+      --endor-green:     #7AA116;
+      --orbit-turquoise: #01A88D;
+      --light-gray:      #7D8998;
+      --white:           #FFFFFF;
+      --black:           #000000;
+      --arrow-on-dark:   #9BA7B6;
+
+      --font-display: 'Amazon Ember Display', 'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+      --font-body:    'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+      --font-mono:    Consolas, Monaco, Menlo, 'Courier Prime', ui-monospace, monospace;
+      --font-diagram: Arial, 'Helvetica Neue', sans-serif;
+    }
+    html[data-theme="dark"] {
+      --bg:        #232F3E;
+      --surface:   #2A3A4E;
+      --surface-2: #1E2C3E;
+      --fg:        #FFFFFF;
+      --muted:     #C5CCD6;
+      --border:    #3D4E63;
+      --arrow:     #9BA7B6;
+      --shell:     #0E1620;
+      --accent:    #ED7100;
+      --table-head-fg: #FFFFFF;
+    }
+    html[data-theme="light"] {
+      --bg:        #FFFFFF;
+      --surface:   #FFFFFF;
+      --surface-2: #F3F4F6;
+      --fg:        #000000;
+      --muted:     #4A5568;
+      --border:    #D1D5DB;
+      --arrow:     #7D8998;
+      --shell:     #E5E7EB;
+      --accent:    #ED7100;
+      --table-head-fg: #FFFFFF;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--shell); color: var(--fg);
+      font: 18px/1.5 var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .deck-shell { position: fixed; inset: 0; overflow: hidden; }
+    .deck-stage {
+      width: 1920px; height: 1080px;
+      background: var(--bg); position: relative;
+      transform-origin: top left;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    }
+    .slide { position: absolute; inset: 0; overflow: hidden; }
+    .slide:not(.active) { display: none !important; }
+    :where(.slide.active) { display: flex; flex-direction: column; }
+
+    .deck-counter {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(10,14,26,0.92); backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 6px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08); color: #fff;
+      font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.18em; z-index: 1000;
+    }
+    .deck-counter button {
+      width: 36px; height: 36px; background: transparent; color: #fff;
+      border: 0; border-radius: 50%; font-size: 18px; line-height: 1;
+      cursor: pointer; display: grid; place-items: center; transition: background 0.15s;
+    }
+    .deck-counter button:hover { background: rgba(255,255,255,0.12); }
+    .deck-counter button[disabled] { opacity: 0.3; cursor: default; }
+    .deck-counter .deck-count { padding: 0 14px; letter-spacing: 0.22em; }
+    .deck-counter .deck-count .total { color: rgba(255,255,255,0.5); }
+    .deck-hint {
+      position: fixed; bottom: 26px; right: 28px;
+      color: rgba(255,255,255,0.4);
+      font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      z-index: 999; pointer-events: none;
+    }
+
+    @media print {
+      @page { size: 1920px 1080px; margin: 0; }
+      html, body { width: 1920px !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+      .deck-shell { position: static !important; display: block !important; inset: auto !important; }
+      .deck-stage { width: 1920px !important; height: auto !important; transform: none !important; box-shadow: none !important; position: static !important; }
+      .slide { display: flex !important; position: relative !important; inset: auto !important; width: 1920px !important; height: 1080px !important; page-break-after: always; break-after: page; }
+      .slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-counter, .deck-hint { display: none !important; }
+    }
+  </style>
+
+  <style>
+    /* =========================================================
+       AWS slide variants
+       ========================================================= */
+    .slide-pad {
+      padding: 96px 108px 86px;
+      display: flex; flex-direction: column; gap: 28px;
+      width: 100%; height: 100%;
+    }
+    .kicker {
+      font: 700 14px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .headline {
+      font: 700 clamp(36px, 3.2vw, 52px)/1.1 var(--font-display);
+      letter-spacing: -0.01em; color: var(--fg);
+      max-width: 28ch;
+    }
+    .body {
+      font: 300 18px/1.55 var(--font-body); color: var(--muted);
+      max-width: 64ch;
+    }
+    .footer {
+      position: absolute; bottom: 36px; left: 108px; right: 108px;
+      display: flex; justify-content: space-between; align-items: center;
+      font: 400 12px/1 var(--font-body); letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .footer .session { color: var(--accent); font-weight: 700; }
+
+    /* COVER */
+    .s-cover { display: grid !important; grid-template-rows: 1fr auto; padding: 0; }
+    .s-cover .cover-body {
+      padding: 140px 108px 0; display: flex; flex-direction: column; gap: 32px;
+      align-self: end;
+    }
+    .s-cover .display {
+      font: 700 clamp(56px, 6vw, 88px)/1.05 var(--font-display);
+      letter-spacing: -0.015em; max-width: 22ch;
+    }
+    .s-cover .meta {
+      display: flex; gap: 48px; align-items: baseline;
+      font: 400 16px/1 var(--font-body); color: var(--muted);
+      padding-bottom: 60px;
+    }
+    .s-cover .meta .session-code {
+      font: 700 14px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .s-cover .accent-bar { height: 8px; background: var(--smile-orange); }
+
+    /* AGENDA */
+    .s-agenda ol {
+      list-style: none; counter-reset: a;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px 64px;
+      margin-top: 12px;
+    }
+    .s-agenda ol li {
+      counter-increment: a;
+      padding: 18px 0 18px 64px; position: relative;
+      border-top: 1px solid var(--border);
+      font: 400 22px/1.3 var(--font-body); color: var(--fg);
+    }
+    .s-agenda ol li::before {
+      content: counter(a, decimal-leading-zero);
+      position: absolute; left: 0; top: 18px;
+      font: 700 14px/1 var(--font-body); letter-spacing: 0.22em;
+      color: var(--accent);
+    }
+
+    /* SECTION DIVIDER */
+    .s-section { display: grid !important; place-items: center; padding: 0; }
+    .s-section .section-num {
+      font: 700 14px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 24px;
+      text-align: center;
+    }
+    .s-section .section-title {
+      font: 700 clamp(72px, 7vw, 120px)/1.05 var(--font-display);
+      letter-spacing: -0.02em; text-align: center; max-width: 18ch;
+    }
+    .s-section .section-rule {
+      width: 120px; height: 4px; background: var(--smile-orange);
+      margin: 40px auto 0;
+    }
+
+    /* CONTENT (bullets only) */
+    .s-content ul { list-style: none; display: flex; flex-direction: column; gap: 18px; margin-top: 8px; }
+    .s-content ul li {
+      position: relative; padding-left: 28px;
+      font: 300 22px/1.45 var(--font-body); color: var(--fg);
+      max-width: 52ch;
+    }
+    .s-content ul li::before {
+      content: ""; position: absolute; left: 0; top: 13px;
+      width: 12px; height: 2px; background: var(--accent);
+    }
+    .s-content ul li b { font-weight: 700; color: var(--fg); }
+
+    /* TWO-COLUMN */
+    .s-two { display: grid !important; grid-template-columns: 1fr 1fr; gap: 64px; padding: 96px 108px 86px; }
+    .s-two.split-7-5 { grid-template-columns: 7fr 5fr; }
+    .s-two .left {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 8px; display: grid; place-items: center;
+      min-height: 600px; overflow: hidden; padding: 24px;
+    }
+    .s-two .left img, .s-two .left svg { max-width: 100%; max-height: 100%; display: block; }
+    .s-two .left .placeholder {
+      font: 400 14px/1.4 var(--font-mono); color: var(--muted);
+      letter-spacing: 0.1em; text-transform: uppercase; padding: 24px; text-align: center;
+    }
+    .s-two .right { display: flex; flex-direction: column; gap: 24px; padding-top: 12px; }
+    .s-two .right .kicker { margin-bottom: -8px; }
+    .s-two .right .headline { font-size: clamp(32px, 2.5vw, 44px); }
+    .s-two .right ul { list-style: none; display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+    .s-two .right ul li {
+      position: relative; padding-left: 24px;
+      font: 300 18px/1.5 var(--font-body); color: var(--fg);
+      max-width: 38ch;
+    }
+    .s-two .right ul li::before {
+      content: ""; position: absolute; left: 0; top: 11px;
+      width: 10px; height: 2px; background: var(--accent);
+    }
+    .s-two .right ul li b { font-weight: 700; color: var(--fg); }
+
+    /* ARCHITECTURE */
+    .s-arch { display: grid !important; grid-template-rows: auto 1fr; gap: 24px; padding: 64px 108px 86px; }
+    .s-arch .arch-head { display: flex; align-items: end; justify-content: space-between; gap: 32px; }
+    .s-arch .arch-head .headline { font-size: clamp(32px, 2.4vw, 44px); }
+    .s-arch .arch-stage {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 32px; overflow: hidden;
+      display: grid; place-items: center;
+    }
+    .s-arch .arch-placeholder {
+      width: 100%; height: 100%;
+      font: 400 14px/1.5 var(--font-mono); color: var(--muted);
+      letter-spacing: 0.12em; text-transform: uppercase;
+      border: 2px dashed var(--border); border-radius: 8px;
+      display: grid; place-items: center;
+    }
+
+    /* TABLE */
+    .s-table table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      margin-top: 8px; font: 400 16px/1.4 var(--font-body);
+    }
+    .s-table th {
+      background: var(--smile-orange); color: var(--table-head-fg);
+      text-align: left; padding: 14px 20px;
+      font: 700 14px/1.2 var(--font-body); letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .s-table td {
+      padding: 14px 20px; color: var(--fg);
+      border-bottom: 1px solid var(--border);
+    }
+    .s-table tr:nth-child(odd) td { background: var(--surface-2); }
+    .s-table tr:nth-child(even) td { background: var(--surface); }
+    .s-table .pill {
+      display: inline-block; padding: 4px 12px; border-radius: 14px;
+      font: 700 12px/1.2 var(--font-body); letter-spacing: 0.06em;
+      text-transform: uppercase; color: #fff;
+    }
+    .s-table .pill.ok    { background: var(--endor-green); }
+    .s-table .pill.warn  { background: var(--smile-orange); }
+    .s-table .pill.risk  { background: var(--mars-red); }
+    .s-table .pill.info  { background: var(--orbit-turquoise); }
+
+    /* SUMMARY */
+    .s-summary ol { counter-reset: s; list-style: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; margin-top: 8px; }
+    .s-summary ol li {
+      counter-increment: s; padding: 24px;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .s-summary ol li::before {
+      content: counter(s, decimal-leading-zero);
+      font: 700 14px/1 var(--font-body); letter-spacing: 0.22em;
+      color: var(--accent);
+    }
+    .s-summary ol li .h {
+      font: 700 22px/1.25 var(--font-body); color: var(--fg);
+    }
+    .s-summary ol li .b {
+      font: 300 16px/1.45 var(--font-body); color: var(--muted);
+    }
+
+    /* Q&A */
+    .s-qa { display: grid !important; place-items: center; padding: 0; }
+    .s-qa .qa-headline {
+      font: 700 clamp(120px, 14vw, 220px)/1 var(--font-display);
+      letter-spacing: -0.04em; text-align: center;
+    }
+    .s-qa .qa-headline span { color: var(--accent); }
+    .s-qa .qa-sub {
+      font: 400 22px/1.4 var(--font-body); color: var(--muted);
+      margin-top: 32px; text-align: center; max-width: 60ch;
+    }
+
+    /* Inline architecture diagram (SVG-based, mimics drawio export) */
+    .arch-svg { width: 100%; height: 100%; }
+    .arch-svg text { font: 700 14px/1 var(--font-diagram); }
+    .arch-svg text.lbl { font-weight: 400; font-size: 12px; }
+    .arch-svg .container {
+      fill: none; stroke-width: 1.5;
+      stroke-dasharray: 4 4;
+    }
+    .arch-svg .service {
+      stroke-width: 1.5;
+    }
+    .arch-svg .arrow {
+      stroke: #9BA7B6; stroke-width: 2; fill: none;
+    }
+    html[data-theme="light"] .arch-svg .arrow { stroke: #7D8998; }
+    .arch-svg text { fill: #FFFFFF; }
+    html[data-theme="light"] .arch-svg text { fill: #000000; }
+  </style>
+</head>
+<body>
+  <div class="deck-shell">
+    <div class="deck-stage" id="deck-stage">
+
+      <!-- 01 COVER -->
+      <section class="slide active s-cover" data-screen-label="01 Cover">
+        <div class="cover-body">
+          <div class="kicker">ARC301 · Migration</div>
+          <h1 class="display">Migrate to AWS without freezing the business</h1>
+          <div class="meta">
+            <span>Jane Doe, Principal Solutions Architect, AWS</span>
+            <span>Customer Architecture Review · 2026</span>
+            <span class="session-code">ARC301</span>
+          </div>
+        </div>
+        <div class="accent-bar"></div>
+      </section>
+
+      <!-- 02 AGENDA -->
+      <section class="slide s-agenda" data-screen-label="02 Agenda">
+        <div class="slide-pad">
+          <div class="kicker">Agenda</div>
+          <h2 class="headline">What we'll cover in 45 minutes</h2>
+          <ol>
+            <li>Why migrate now — three forcing functions</li>
+            <li>The 6 R's — choosing a strategy per workload</li>
+            <li>Landing Zone — the foundation before any wave</li>
+            <li>Wave plan — sequencing 47 workloads in four quarters</li>
+            <li>Governance — guardrails, not gates</li>
+            <li>FinOps — cost control from day one</li>
+          </ol>
+          <div class="footer">
+            <span class="session">ARC301</span>
+            <span>aws.amazon.com</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 03 CONTENT — Why migrate -->
+      <section class="slide s-content" data-screen-label="03 Why migrate">
+        <div class="slide-pad">
+          <div class="kicker">Why migrate now</div>
+          <h2 class="headline">Three forcing functions, one window</h2>
+          <ul>
+            <li><b>Lease cliff</b> — primary data center contract expires in 14 months, no renewal option below current SKU</li>
+            <li><b>Capacity ceiling</b> — monolithic Oracle estate at 92% utilization, no path to scale without sharding</li>
+            <li><b>Compliance commitments</b> — SOC 2 Type II and ISO 27001 certifications due Q4, current controls insufficient</li>
+            <li><b>Talent reality</b> — last on-prem hire was 2022; 70% of net-new engineering wants cloud-native by default</li>
+          </ul>
+          <div class="footer">
+            <span class="session">ARC301</span>
+            <span>aws.amazon.com</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 04 SECTION DIVIDER — Strategy -->
+      <section class="slide s-section" data-screen-label="04 Section · Strategy">
+        <div>
+          <div class="section-num">Section 01</div>
+          <h2 class="section-title">Strategy</h2>
+          <div class="section-rule"></div>
+        </div>
+      </section>
+
+      <!-- 05 TWO-COLUMN — The 6 R's -->
+      <section class="slide s-two" data-screen-label="05 The 6 R's">
+        <div class="left">
+          <svg class="arch-svg" viewBox="0 0 600 540" xmlns="http://www.w3.org/2000/svg" aria-label="6 R's strategy quadrant">
+            <!-- Axes -->
+            <line x1="60" y1="270" x2="540" y2="270" stroke="#9BA7B6" stroke-width="1.5" />
+            <line x1="300" y1="40" x2="300" y2="500" stroke="#9BA7B6" stroke-width="1.5" />
+            <text x="540" y="288" text-anchor="end" class="lbl" style="font-size: 11px;">Effort →</text>
+            <text x="300" y="34" text-anchor="middle" class="lbl" style="font-size: 11px;">Business value ↑</text>
+
+            <!-- Quadrant tiles -->
+            <rect class="service" x="80" y="60" width="200" height="190" rx="8" fill="#ED7100" fill-opacity="0.15" stroke="#ED7100" />
+            <text x="180" y="100" text-anchor="middle" style="font-size: 22px;">Rehost</text>
+            <text x="180" y="130" text-anchor="middle" class="lbl">"Lift &amp; shift"</text>
+            <text x="180" y="160" text-anchor="middle" class="lbl">EC2 + storage</text>
+            <text x="180" y="220" text-anchor="middle" class="lbl" style="font-size: 11px; font-style: italic;">Lowest risk</text>
+
+            <rect class="service" x="320" y="60" width="200" height="190" rx="8" fill="#01A88D" fill-opacity="0.15" stroke="#01A88D" />
+            <text x="420" y="100" text-anchor="middle" style="font-size: 22px;">Refactor</text>
+            <text x="420" y="130" text-anchor="middle" class="lbl">Re-architect</text>
+            <text x="420" y="160" text-anchor="middle" class="lbl">Microservices</text>
+            <text x="420" y="220" text-anchor="middle" class="lbl" style="font-size: 11px; font-style: italic;">Highest payoff</text>
+
+            <rect class="service" x="80" y="290" width="200" height="190" rx="8" fill="#7D8998" fill-opacity="0.18" stroke="#7D8998" />
+            <text x="180" y="330" text-anchor="middle" style="font-size: 22px;">Retire</text>
+            <text x="180" y="360" text-anchor="middle" class="lbl">Decommission</text>
+            <text x="180" y="390" text-anchor="middle" class="lbl">No replacement</text>
+
+            <rect class="service" x="320" y="290" width="200" height="190" rx="8" fill="#8C4FFF" fill-opacity="0.15" stroke="#8C4FFF" />
+            <text x="420" y="320" text-anchor="middle" style="font-size: 22px;">Replatform</text>
+            <text x="420" y="345" text-anchor="middle" class="lbl">Lift &amp; reshape</text>
+            <text x="420" y="365" text-anchor="middle" class="lbl">DB → RDS</text>
+            <text x="420" y="385" text-anchor="middle" style="font-size: 22px;">Repurchase</text>
+            <text x="420" y="410" text-anchor="middle" class="lbl">SaaS swap</text>
+            <text x="420" y="445" text-anchor="middle" style="font-size: 16px;">Retain</text>
+            <text x="420" y="465" text-anchor="middle" class="lbl">Keep on-prem</text>
+          </svg>
+        </div>
+        <div class="right">
+          <div class="kicker">The 6 R's</div>
+          <h2 class="headline">One strategy per workload, not one strategy for everything</h2>
+          <ul>
+            <li><b>Rehost</b> — fastest, lowest risk; 80% of estate goes here first</li>
+            <li><b>Replatform</b> — small surgery for big upside (Oracle → Aurora)</li>
+            <li><b>Refactor</b> — only when the runway and value justify it</li>
+            <li><b>Repurchase</b> — replace with SaaS where commodity (CRM, email)</li>
+            <li><b>Retire</b> — kill the unloved; surveys reveal ~15% has no users</li>
+            <li><b>Retain</b> — leave on-prem when latency or compliance demands it</li>
+          </ul>
+        </div>
+        <div class="footer">
+          <span class="session">ARC301</span>
+          <span>aws.amazon.com</span>
+        </div>
+      </section>
+
+      <!-- 06 ARCHITECTURE — Landing Zone -->
+      <section class="slide s-arch" data-screen-label="06 Landing Zone">
+        <div class="arch-head">
+          <div>
+            <div class="kicker">Architecture · Landing Zone</div>
+            <h2 class="headline">Multi-account foundation, deployed once, governed forever</h2>
+          </div>
+          <p class="body" style="max-width:36ch;">AWS Control Tower provisions the OU structure; AFT (Account Factory for Terraform) keeps it reproducible.</p>
+        </div>
+        <div class="arch-stage">
+          <svg class="arch-svg" viewBox="0 0 1700 760" xmlns="http://www.w3.org/2000/svg" aria-label="Landing Zone architecture">
+            <!-- Org root -->
+            <rect class="container" x="40" y="40" width="1620" height="100" rx="8" stroke="#7D8998" />
+            <text x="60" y="70" style="font-size: 13px; letter-spacing: 0.12em;">AWS ORGANIZATIONS · ROOT</text>
+            <rect class="service" x="80" y="84" width="180" height="40" rx="6" fill="#E7157B" fill-opacity="0.18" stroke="#E7157B" />
+            <text x="170" y="109" text-anchor="middle" class="lbl">Control Tower</text>
+            <rect class="service" x="280" y="84" width="180" height="40" rx="6" fill="#E7157B" fill-opacity="0.18" stroke="#E7157B" />
+            <text x="370" y="109" text-anchor="middle" class="lbl">AFT</text>
+            <rect class="service" x="480" y="84" width="180" height="40" rx="6" fill="#DD344C" fill-opacity="0.18" stroke="#DD344C" />
+            <text x="570" y="109" text-anchor="middle" class="lbl">SCPs · Guardrails</text>
+
+            <!-- Foundation OU -->
+            <rect class="container" x="40" y="170" width="520" height="540" rx="8" stroke="#01A88D" />
+            <text x="60" y="200" style="font-size: 13px; letter-spacing: 0.12em;">FOUNDATION OU</text>
+
+            <rect class="service" x="60" y="220" width="220" height="80" rx="6" fill="#01A88D" fill-opacity="0.15" stroke="#01A88D" />
+            <text x="170" y="250" text-anchor="middle" style="font-size: 14px;">Log Archive</text>
+            <text x="170" y="275" text-anchor="middle" class="lbl">CloudTrail · Config</text>
+
+            <rect class="service" x="300" y="220" width="220" height="80" rx="6" fill="#DD344C" fill-opacity="0.15" stroke="#DD344C" />
+            <text x="410" y="250" text-anchor="middle" style="font-size: 14px;">Audit</text>
+            <text x="410" y="275" text-anchor="middle" class="lbl">GuardDuty · Security Hub</text>
+
+            <rect class="service" x="60" y="320" width="460" height="80" rx="6" fill="#7AA116" fill-opacity="0.15" stroke="#7AA116" />
+            <text x="290" y="350" text-anchor="middle" style="font-size: 14px;">Shared Services</text>
+            <text x="290" y="375" text-anchor="middle" class="lbl">DNS · AD · Patch · KMS</text>
+
+            <rect class="service" x="60" y="420" width="460" height="80" rx="6" fill="#8C4FFF" fill-opacity="0.15" stroke="#8C4FFF" />
+            <text x="290" y="450" text-anchor="middle" style="font-size: 14px;">Network Hub</text>
+            <text x="290" y="475" text-anchor="middle" class="lbl">Transit Gateway · Network Firewall</text>
+
+            <rect class="service" x="60" y="520" width="460" height="80" rx="6" fill="#ED7100" fill-opacity="0.15" stroke="#ED7100" />
+            <text x="290" y="550" text-anchor="middle" style="font-size: 14px;">CI/CD</text>
+            <text x="290" y="575" text-anchor="middle" class="lbl">CodePipeline · ECR · Artifacts</text>
+
+            <!-- Workloads OU -->
+            <rect class="container" x="600" y="170" width="1060" height="540" rx="8" stroke="#ED7100" />
+            <text x="620" y="200" style="font-size: 13px; letter-spacing: 0.12em;">WORKLOADS OU</text>
+
+            <rect class="container" x="620" y="220" width="500" height="220" rx="6" stroke="#7D8998" />
+            <text x="640" y="244" class="lbl" style="letter-spacing: 0.12em;">PROD · WAVE 01</text>
+            <rect class="service" x="640" y="260" width="220" height="60" rx="6" fill="#ED7100" fill-opacity="0.15" stroke="#ED7100" />
+            <text x="750" y="285" text-anchor="middle" style="font-size: 13px;">Billing</text>
+            <text x="750" y="305" text-anchor="middle" class="lbl">EC2 · RDS Aurora</text>
+            <rect class="service" x="880" y="260" width="220" height="60" rx="6" fill="#ED7100" fill-opacity="0.15" stroke="#ED7100" />
+            <text x="990" y="285" text-anchor="middle" style="font-size: 13px;">Identity</text>
+            <text x="990" y="305" text-anchor="middle" class="lbl">EKS · DynamoDB</text>
+            <rect class="service" x="640" y="340" width="460" height="60" rx="6" fill="#C925D1" fill-opacity="0.15" stroke="#C925D1" />
+            <text x="870" y="365" text-anchor="middle" style="font-size: 13px;">Data lake — S3 + Glue + Athena</text>
+
+            <rect class="container" x="1140" y="220" width="500" height="220" rx="6" stroke="#7D8998" />
+            <text x="1160" y="244" class="lbl" style="letter-spacing: 0.12em;">PROD · WAVE 02–03</text>
+            <rect class="service" x="1160" y="260" width="220" height="60" rx="6" fill="#7D8998" fill-opacity="0.18" stroke="#7D8998" />
+            <text x="1270" y="285" text-anchor="middle" style="font-size: 13px;">CRM · Q3</text>
+            <rect class="service" x="1400" y="260" width="220" height="60" rx="6" fill="#7D8998" fill-opacity="0.18" stroke="#7D8998" />
+            <text x="1510" y="285" text-anchor="middle" style="font-size: 13px;">Reporting · Q4</text>
+            <rect class="service" x="1160" y="340" width="460" height="60" rx="6" fill="#7D8998" fill-opacity="0.18" stroke="#7D8998" />
+            <text x="1390" y="365" text-anchor="middle" style="font-size: 13px;">Mainframe — Refactor · 2027</text>
+
+            <rect class="container" x="620" y="460" width="1020" height="220" rx="6" stroke="#7D8998" />
+            <text x="640" y="484" class="lbl" style="letter-spacing: 0.12em;">NON-PROD</text>
+            <rect class="service" x="640" y="500" width="300" height="60" rx="6" fill="#01A88D" fill-opacity="0.15" stroke="#01A88D" />
+            <text x="790" y="525" text-anchor="middle" style="font-size: 13px;">Sandbox / Dev</text>
+            <rect class="service" x="960" y="500" width="300" height="60" rx="6" fill="#01A88D" fill-opacity="0.15" stroke="#01A88D" />
+            <text x="1110" y="525" text-anchor="middle" style="font-size: 13px;">Staging</text>
+            <rect class="service" x="1280" y="500" width="340" height="60" rx="6" fill="#01A88D" fill-opacity="0.15" stroke="#01A88D" />
+            <text x="1450" y="525" text-anchor="middle" style="font-size: 13px;">Pre-prod / Perf</text>
+            <rect class="service" x="640" y="580" width="980" height="60" rx="6" fill="#7D8998" fill-opacity="0.10" stroke="#7D8998" />
+            <text x="1130" y="615" text-anchor="middle" class="lbl">All accounts inherit Foundation OU services via Transit Gateway</text>
+
+            <!-- Connectors -->
+            <path class="arrow" d="M 290 300 L 600 300" marker-end="url(#a)" />
+            <path class="arrow" d="M 290 460 L 600 460" marker-end="url(#a)" />
+            <path class="arrow" d="M 660 124 L 660 220" marker-end="url(#a)" />
+
+            <defs>
+              <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#9BA7B6" />
+              </marker>
+            </defs>
+          </svg>
+        </div>
+        <div class="footer">
+          <span class="session">ARC301</span>
+          <span>Generated by drawio skill · arrows #9BA7B6 · Arial 12pt</span>
+        </div>
+      </section>
+
+      <!-- 07 TABLE — Wave plan -->
+      <section class="slide s-table" data-screen-label="07 Wave plan">
+        <div class="slide-pad">
+          <div class="kicker">Comparison · Wave plan</div>
+          <h2 class="headline">47 workloads sequenced over four quarters</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 22%;">Workload</th>
+                <th style="width: 16%;">Strategy</th>
+                <th style="width: 12%;">Effort</th>
+                <th style="width: 16%;">Risk</th>
+                <th style="width: 12%;">Wave</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Billing service</td><td>Replatform</td><td>Medium</td><td><span class="pill warn">Medium</span></td><td>1 · Q1</td><td>Oracle → Aurora PostgreSQL</td></tr>
+              <tr><td>Identity / SSO</td><td>Rehost</td><td>Low</td><td><span class="pill ok">Low</span></td><td>1 · Q1</td><td>EC2 → EKS in wave 3</td></tr>
+              <tr><td>Customer data lake</td><td>Refactor</td><td>High</td><td><span class="pill warn">Medium</span></td><td>1 · Q1</td><td>S3 + Glue + Athena, kill HDFS</td></tr>
+              <tr><td>CRM</td><td>Repurchase</td><td>Low</td><td><span class="pill info">N/A</span></td><td>2 · Q2</td><td>SaaS swap; 8-week parallel run</td></tr>
+              <tr><td>Reporting platform</td><td>Replatform</td><td>Medium</td><td><span class="pill warn">Medium</span></td><td>2 · Q2</td><td>Tableau → QuickSight</td></tr>
+              <tr><td>Mainframe (4 modules)</td><td>Refactor</td><td>High</td><td><span class="pill risk">High</span></td><td>3–4</td><td>Carved out; vendor partner engaged</td></tr>
+              <tr><td>Legacy intranet sites (12)</td><td>Retire</td><td>—</td><td><span class="pill ok">Low</span></td><td>1 · Q1</td><td>Surveys: zero active users in 90 days</td></tr>
+              <tr><td>HR system</td><td>Retain</td><td>—</td><td><span class="pill info">N/A</span></td><td>—</td><td>On-prem; data residency review pending</td></tr>
+            </tbody>
+          </table>
+          <div class="footer">
+            <span class="session">ARC301</span>
+            <span>Header #ED7100 · alt rows · 0.5pt borders · status pills</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 08 TWO-COLUMN — Governance -->
+      <section class="slide s-two split-7-5" data-screen-label="08 Governance">
+        <div class="left">
+          <svg class="arch-svg" viewBox="0 0 700 540" xmlns="http://www.w3.org/2000/svg" aria-label="Governance layers">
+            <!-- Pyramid layers -->
+            <rect class="service" x="60" y="60" width="580" height="80" rx="8" fill="#DD344C" fill-opacity="0.18" stroke="#DD344C" />
+            <text x="350" y="92" text-anchor="middle" style="font-size: 18px;">Preventive</text>
+            <text x="350" y="118" text-anchor="middle" class="lbl">SCPs · IAM · KMS · Network Firewall</text>
+
+            <rect class="service" x="60" y="160" width="580" height="80" rx="8" fill="#ED7100" fill-opacity="0.18" stroke="#ED7100" />
+            <text x="350" y="192" text-anchor="middle" style="font-size: 18px;">Detective</text>
+            <text x="350" y="218" text-anchor="middle" class="lbl">GuardDuty · Security Hub · Config Rules</text>
+
+            <rect class="service" x="60" y="260" width="580" height="80" rx="8" fill="#7AA116" fill-opacity="0.18" stroke="#7AA116" />
+            <text x="350" y="292" text-anchor="middle" style="font-size: 18px;">Responsive</text>
+            <text x="350" y="318" text-anchor="middle" class="lbl">EventBridge · Lambda remediation · SOAR</text>
+
+            <rect class="service" x="60" y="360" width="580" height="80" rx="8" fill="#8C4FFF" fill-opacity="0.18" stroke="#8C4FFF" />
+            <text x="350" y="392" text-anchor="middle" style="font-size: 18px;">Audit</text>
+            <text x="350" y="418" text-anchor="middle" class="lbl">CloudTrail · Audit Manager · Access Analyzer</text>
+
+            <text x="350" y="490" text-anchor="middle" class="lbl" style="font-size: 11px; font-style: italic;">Layered controls — defense in depth, not a checklist</text>
+          </svg>
+        </div>
+        <div class="right">
+          <div class="kicker">Governance</div>
+          <h2 class="headline">Guardrails, not gates</h2>
+          <ul>
+            <li><b>Preventive</b> — SCPs deny region pinning, root user keys, public S3 from creation</li>
+            <li><b>Detective</b> — Config rules score every account against CIS + custom benchmarks daily</li>
+            <li><b>Responsive</b> — EventBridge auto-remediates 14 of the top 20 misconfig patterns</li>
+            <li><b>Audit</b> — CloudTrail Lake is the source of truth for SOC 2 evidence collection</li>
+            <li><b>Tagging</b> — mandatory <code style="font: 700 14px/1 var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 3px;">cost-center</code>, <code style="font: 700 14px/1 var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 3px;">env</code>, <code style="font: 700 14px/1 var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 3px;">owner</code> via SCP</li>
+          </ul>
+        </div>
+        <div class="footer">
+          <span class="session">ARC301</span>
+          <span>aws.amazon.com</span>
+        </div>
+      </section>
+
+      <!-- 09 SECTION DIVIDER — Run -->
+      <section class="slide s-section" data-screen-label="09 Section · Run">
+        <div>
+          <div class="section-num">Section 02</div>
+          <h2 class="section-title">Run</h2>
+          <div class="section-rule"></div>
+        </div>
+      </section>
+
+      <!-- 10 TWO-COLUMN — FinOps -->
+      <section class="slide s-two" data-screen-label="10 FinOps">
+        <div class="left">
+          <svg class="arch-svg" viewBox="0 0 600 540" xmlns="http://www.w3.org/2000/svg" aria-label="FinOps loop">
+            <!-- Three phase circles -->
+            <circle class="service" cx="180" cy="180" r="100" fill="#01A88D" fill-opacity="0.18" stroke="#01A88D" />
+            <text x="180" y="170" text-anchor="middle" style="font-size: 20px;">Inform</text>
+            <text x="180" y="195" text-anchor="middle" class="lbl">Visibility · Allocation</text>
+            <text x="180" y="215" text-anchor="middle" class="lbl">CUR · QuickSight</text>
+
+            <circle class="service" cx="420" cy="180" r="100" fill="#ED7100" fill-opacity="0.18" stroke="#ED7100" />
+            <text x="420" y="170" text-anchor="middle" style="font-size: 20px;">Optimize</text>
+            <text x="420" y="195" text-anchor="middle" class="lbl">Right-size · RIs</text>
+            <text x="420" y="215" text-anchor="middle" class="lbl">Compute Optimizer</text>
+
+            <circle class="service" cx="300" cy="380" r="100" fill="#8C4FFF" fill-opacity="0.18" stroke="#8C4FFF" />
+            <text x="300" y="370" text-anchor="middle" style="font-size: 20px;">Operate</text>
+            <text x="300" y="395" text-anchor="middle" class="lbl">Budgets · Anomaly</text>
+            <text x="300" y="415" text-anchor="middle" class="lbl">Detection · KPIs</text>
+
+            <!-- Arrows -->
+            <path class="arrow" d="M 280 180 L 320 180" marker-end="url(#fa)" />
+            <path class="arrow" d="M 380 280 L 340 340" marker-end="url(#fa)" />
+            <path class="arrow" d="M 240 340 L 220 280" marker-end="url(#fa)" />
+
+            <defs>
+              <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#9BA7B6" />
+              </marker>
+            </defs>
+          </svg>
+        </div>
+        <div class="right">
+          <div class="kicker">FinOps</div>
+          <h2 class="headline">Cost as a first-class concern from day one</h2>
+          <ul>
+            <li><b>Tag everything</b> — SCP rejects untagged resource creation in prod</li>
+            <li><b>Show, don't scold</b> — every team gets a QuickSight cost dashboard scoped to their tag</li>
+            <li><b>Buy savings, not surprises</b> — Compute Savings Plans cover the steady-state 70%</li>
+            <li><b>Anomaly Detection</b> — pages on-call when daily spend deviates &gt; 25% from baseline</li>
+            <li><b>Quarterly forecast</b> — finance + engineering review forecast vs actual together</li>
+          </ul>
+        </div>
+        <div class="footer">
+          <span class="session">ARC301</span>
+          <span>aws.amazon.com</span>
+        </div>
+      </section>
+
+      <!-- 11 SUMMARY -->
+      <section class="slide s-summary" data-screen-label="11 Summary">
+        <div class="slide-pad">
+          <div class="kicker">Summary</div>
+          <h2 class="headline">Three things to take back to the team</h2>
+          <ol>
+            <li>
+              <span class="h">Lift the 80% first</span>
+              <span class="b">Rehost the workloads that won't change in twelve months — keep the muscle for the parts that will.</span>
+            </li>
+            <li>
+              <span class="h">Land before any wave</span>
+              <span class="b">Multi-account Landing Zone, Transit Gateway, and SCPs in place before workload one moves.</span>
+            </li>
+            <li>
+              <span class="h">Cost from day one</span>
+              <span class="b">Tag everything, set per-team budgets, and review forecast vs actual every quarter.</span>
+            </li>
+          </ol>
+          <div class="footer">
+            <span class="session">ARC301</span>
+            <span>aws.amazon.com</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12 Q&A -->
+      <section class="slide s-qa" data-screen-label="12 Q&A">
+        <div>
+          <div class="qa-headline">Q<span>&amp;</span>A</div>
+          <p class="qa-sub">Jane Doe · jane@example.aws · ARC301</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <nav class="deck-counter" role="navigation" aria-label="Deck navigation">
+    <button type="button" id="deck-prev" aria-label="Previous slide">‹</button>
+    <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
+    <button type="button" id="deck-next" aria-label="Next slide">›</button>
+  </nav>
+  <div class="deck-hint">← / → · space</div>
+
+  <script>
+    (function () {
+      var stage = document.getElementById('deck-stage');
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var prev = document.getElementById('deck-prev');
+      var next = document.getElementById('deck-next');
+      var cur = document.getElementById('deck-cur');
+      var total = document.getElementById('deck-total');
+      var STORE = 'deck:idx:' + (location.pathname || '/');
+      var idx = 0;
+
+      function fit() {
+        var sw = window.innerWidth, sh = window.innerHeight, pad = 32;
+        var s = Math.min((sw - pad) / 1920, (sh - pad) / 1080);
+        if (!isFinite(s) || s <= 0) s = 1;
+        var tx = (sw - 1920 * s) / 2, ty = (sh - 1080 * s) / 2;
+        stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+      }
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+      function paint() {
+        slides.forEach(function (el, i) { el.classList.toggle('active', i === idx); });
+        if (cur) cur.textContent = pad2(idx + 1);
+        if (total) total.textContent = pad2(slides.length);
+        if (prev) prev.toggleAttribute('disabled', idx <= 0);
+        if (next) next.toggleAttribute('disabled', idx >= slides.length - 1);
+      }
+      function go(i) {
+        idx = Math.max(0, Math.min(slides.length - 1, i));
+        paint();
+        try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
+      }
+      function onKey(e) {
+        if (e._deckHandled) return; e._deckHandled = true;
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(idx + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(idx - 1); }
+        else if (e.key === 'Home') { e.preventDefault(); go(0); }
+        else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+      }
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      if (prev) prev.addEventListener('click', function () { go(idx - 1); });
+      if (next) next.addEventListener('click', function () { go(idx + 1); });
+
+      document.body.setAttribute('tabindex', '-1');
+      document.body.style.outline = 'none';
+      function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+      document.addEventListener('mousedown', focusDeck);
+      window.addEventListener('load', focusDeck);
+
+      try {
+        var saved = parseInt(localStorage.getItem(STORE) || '0', 10);
+        if (!isNaN(saved) && saved >= 0 && saved < slides.length) idx = saved;
+      } catch (_) {}
+
+      window.addEventListener('resize', fit);
+      fit(); paint(); focusDeck();
+    })();
+  </script>
+</body>
+</html>

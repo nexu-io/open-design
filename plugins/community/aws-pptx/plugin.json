@@ -1,0 +1,106 @@
+{
+  "$schema": "https://opendesign.dev/schemas/plugin.json",
+  "id": "aws-pptx",
+  "name": "AWS PPTX Generator",
+  "version": "0.1.0",
+  "kind": "plugin",
+  "description": "AWS-compliant PPTX deck generator. Produces 16:9 widescreen presentations following the official AWS brand system: Squid Ink dark / pure-white light themes, Smile Orange accent, eight service category colors, Amazon Ember + Arial typography, twelve canonical slide types (Cover, Agenda, Section Divider, Content, Architecture, Two-Column, Demo/Code, Customer Story, Comparison, Summary, Resources/CTA, Q&A).",
+  "author": "Open Design",
+  "homepage": "https://aws.amazon.com/architecture/icons/",
+  "tags": ["pptx", "aws", "deck", "architecture", "presentation", "enterprise"],
+  "od": {
+    "kind": "deck",
+    "taskKind": "Slide deck",
+    "homeChip": {
+      "label": "AWS PPTX",
+      "icon": "aws",
+      "tagline": "AWS-compliant 16:9 deck — Squid Ink + Smile Orange, Amazon Ember, twelve slide types"
+    },
+    "exampleBrief": "Generate an AWS-styled deck following the official Architecture Icons brand system. Pick a theme (Light or Dark), pick a deck subject, the plugin produces a 12-page widescreen PPTX-equivalent HTML deck with cover, agenda, content, architecture, table, and Q&A slides.",
+    "skills": [
+      {
+        "id": "aws-pptx-deck",
+        "path": "skills/aws-pptx-deck/SKILL.md",
+        "description": "AWS PPTX deck builder — applies AWS brand system to deck framework"
+      }
+    ]
+  },
+  "inputs": {
+    "theme": {
+      "label": "Theme mode",
+      "type": "radio",
+      "required": true,
+      "default": "dark",
+      "options": [
+        { "label": "Dark — Squid Ink background, white text (recommended for in-person, AWS standard)", "value": "dark" },
+        { "label": "Light — White background, black text (recommended for web/PDF distribution)", "value": "light" }
+      ]
+    },
+    "deckSubject": {
+      "label": "Deck subject",
+      "type": "radio",
+      "required": true,
+      "default": "migration",
+      "options": [
+        { "label": "Customer Solution Proposal (proposal/situation/architecture/services/timeline/cost)", "value": "proposal" },
+        { "label": "Migration Strategy (assessment / 6Rs / Landing Zone / waves / governance / FinOps)", "value": "migration" },
+        { "label": "Well-Architected Review (six pillars review)", "value": "war" },
+        { "label": "GenAI Reference Architecture (Bedrock / SageMaker / KB / Agents)", "value": "genai" },
+        { "label": "Custom — I'll describe the agenda in 'audience' or 'constraints'", "value": "custom" }
+      ]
+    },
+    "audience": {
+      "label": "Primary audience",
+      "type": "text",
+      "default": "AWS Solutions Architects",
+      "placeholder": "e.g. AWS Solutions Architects, customer technical evaluators, internal architecture review"
+    },
+    "sessionCode": {
+      "label": "Session code (AWS track prefix + 3-digit level, e.g. ARC301, BOA208)",
+      "type": "text",
+      "placeholder": "ARC301"
+    },
+    "speakerName": {
+      "label": "Speaker / presenter name + title",
+      "type": "text",
+      "placeholder": "Jane Doe, Principal Solutions Architect, AWS"
+    },
+    "slideCount": {
+      "label": "Slide count",
+      "type": "select",
+      "default": "12",
+      "options": ["8", "10", "12", "16", "20"]
+    },
+    "diagramApproach": {
+      "label": "How to handle architecture diagrams",
+      "type": "radio",
+      "default": "drawio",
+      "options": [
+        { "label": "draw.io — invoke the drawio skill (already installed)", "value": "drawio" },
+        { "label": "architecture-diagram skill — invoke the architecture-diagram skill", "value": "architecture-diagram" },
+        { "label": "Slot only — leave a labelled placeholder, user supplies diagram", "value": "slot" }
+      ]
+    },
+    "techVsBusiness": {
+      "label": "Tech-heavy or business-heavy deck (drives every content page to image+text two-column when 'tech' or 'business')",
+      "type": "radio",
+      "default": "tech",
+      "options": [
+        { "label": "Technical (every content slide = image/diagram + text columns)", "value": "tech" },
+        { "label": "Business (every content slide = chart/visual + text columns)", "value": "business" },
+        { "label": "Mixed (let the plugin pick per slide)", "value": "mixed" }
+      ]
+    }
+  },
+  "outputs": {
+    "primary": "examples/{deckSubject}/index.html",
+    "preview": "index.html"
+  },
+  "files": {
+    "manifest": "plugin.json",
+    "readme": "README.md",
+    "preview": "index.html",
+    "skills": ["skills/aws-pptx-deck/"],
+    "examples": ["examples/migration-strategy/"]
+  }
+}

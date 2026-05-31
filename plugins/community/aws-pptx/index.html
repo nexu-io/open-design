@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AWS PPTX Generator — Open Design plugin</title>
+  <style>
+    :root {
+      --squid-ink:       #232F3E;
+      --smile-orange:    #ED7100;
+      --galaxy-purple:   #8C4FFF;
+      --nebula:          #C925D1;
+      --mars-red:        #DD344C;
+      --cosmos-pink:     #E7157B;
+      --endor-green:     #7AA116;
+      --orbit-turquoise: #01A88D;
+      --light-gray:      #7D8998;
+      --white:           #FFFFFF;
+      --black:           #000000;
+      --arrow-on-dark:   #9BA7B6;
+
+      --font-display: 'Amazon Ember Display', 'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+      --font-body:    'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+      --font-mono:    Consolas, Monaco, Menlo, 'Courier Prime', ui-monospace, monospace;
+    }
+    html[data-theme="dark"] {
+      --bg:        #232F3E;
+      --surface:   #2A3A4E;
+      --surface-2: #1E2C3E;
+      --fg:        #FFFFFF;
+      --muted:     #C5CCD6;
+      --border:    #3D4E63;
+      --accent:    #ED7100;
+    }
+    html[data-theme="light"] {
+      --bg:        #FFFFFF;
+      --surface:   #FFFFFF;
+      --surface-2: #F3F4F6;
+      --fg:        #000000;
+      --muted:     #4A5568;
+      --border:    #D1D5DB;
+      --accent:    #ED7100;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg); color: var(--fg);
+      font: 16px/1.55 var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      min-height: 100%;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font: 400 14px/1.4 var(--font-mono); background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
+
+    /* Top bar */
+    .topbar {
+      position: sticky; top: 0; z-index: 50;
+      background: color-mix(in oklab, var(--bg) 86%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: 1280px; margin: 0 auto;
+      padding: 16px 32px;
+      display: flex; align-items: center; gap: 24px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 12px;
+      font: 700 18px/1 var(--font-display); letter-spacing: -0.01em;
+    }
+    .brand .mark {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: var(--smile-orange);
+      display: grid; place-items: center;
+      color: var(--squid-ink); font-weight: 800; font-size: 14px;
+      letter-spacing: -0.04em;
+    }
+    .brand .label { color: var(--fg); }
+    .brand .ver {
+      font: 400 12px/1 var(--font-mono);
+      color: var(--muted); letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px;
+    }
+    .nav-spacer { flex: 1; }
+    .theme-switch {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      padding: 4px; border-radius: 999px;
+    }
+    .theme-switch button {
+      background: transparent; color: var(--muted);
+      border: 0; border-radius: 999px;
+      padding: 6px 14px;
+      font: 700 12px/1 var(--font-body); letter-spacing: 0.12em;
+      text-transform: uppercase; cursor: pointer;
+    }
+    .theme-switch button[aria-pressed="true"] {
+      background: var(--accent); color: var(--squid-ink);
+    }
+
+    /* Hero */
+    .hero {
+      max-width: 1280px; margin: 0 auto;
+      padding: 72px 32px 56px;
+      display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 56px;
+    }
+    @media (max-width: 960px) { .hero { grid-template-columns: 1fr; } }
+    .hero .kicker {
+      font: 700 13px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 18px;
+    }
+    .hero h1 {
+      font: 700 clamp(40px, 5vw, 64px)/1.05 var(--font-display);
+      letter-spacing: -0.02em; max-width: 18ch;
+      text-wrap: balance;
+    }
+    .hero .lede {
+      margin-top: 20px;
+      font: 300 19px/1.55 var(--font-body); color: var(--muted);
+      max-width: 56ch;
+    }
+    .hero .cta {
+      margin-top: 32px;
+      display: flex; flex-wrap: wrap; gap: 12px;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 6px;
+      font: 700 14px/1 var(--font-body); letter-spacing: 0.04em;
+      text-decoration: none; cursor: pointer;
+      border: 1px solid transparent; transition: transform .12s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--accent); color: var(--squid-ink); }
+    .btn-primary:hover { text-decoration: none; }
+    .btn-ghost {
+      background: transparent; color: var(--fg);
+      border-color: var(--border);
+    }
+    .hero-card {
+      align-self: start;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px; display: flex; flex-direction: column; gap: 18px;
+      position: relative; overflow: hidden;
+    }
+    .hero-card::before {
+      content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+      height: 6px; background: var(--smile-orange);
+    }
+    .hero-card .session {
+      font: 700 13px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .hero-card h3 {
+      font: 700 28px/1.15 var(--font-display); letter-spacing: -0.01em;
+    }
+    .hero-card .meta {
+      display: flex; flex-wrap: wrap; gap: 6px 18px;
+      font: 400 13px/1.4 var(--font-body); color: var(--muted);
+    }
+    .hero-card .meta b { color: var(--fg); font-weight: 700; }
+    .hero-card ul {
+      list-style: none; display: flex; flex-direction: column; gap: 8px;
+      font: 300 14px/1.45 var(--font-body); color: var(--fg);
+    }
+    .hero-card ul li {
+      padding-left: 18px; position: relative;
+    }
+    .hero-card ul li::before {
+      content: ""; position: absolute; left: 0; top: 9px;
+      width: 8px; height: 2px; background: var(--accent);
+    }
+
+    /* Section pattern */
+    section.block {
+      max-width: 1280px; margin: 0 auto;
+      padding: 56px 32px;
+    }
+    .section-head {
+      display: flex; align-items: end; justify-content: space-between;
+      gap: 24px; margin-bottom: 32px;
+      border-bottom: 1px solid var(--border); padding-bottom: 16px;
+    }
+    .section-head h2 {
+      font: 700 clamp(28px, 2.6vw, 36px)/1.15 var(--font-display);
+      letter-spacing: -0.01em;
+    }
+    .section-head .lead {
+      font: 300 16px/1.5 var(--font-body); color: var(--muted);
+      max-width: 48ch;
+    }
+    .section-head .kicker {
+      font: 700 12px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 8px;
+    }
+
+    /* Color tokens grid */
+    .palette {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .swatch {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+    }
+    .swatch .chip { height: 86px; display: block; }
+    .swatch .meta {
+      padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .swatch .name { font: 700 13px/1.2 var(--font-body); }
+    .swatch .hex {
+      font: 400 12px/1 var(--font-mono); color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+    .swatch .role {
+      font: 300 12px/1.35 var(--font-body); color: var(--muted);
+    }
+
+    /* Slide-type cards */
+    .slide-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 18px;
+    }
+    .slide-card {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .slide-card .preview {
+      aspect-ratio: 16 / 9;
+      position: relative; overflow: hidden;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .slide-card .preview .pad { position: absolute; inset: 14px 18px 22px; display: flex; flex-direction: column; gap: 6px; }
+    .slide-card .preview .k {
+      font: 700 7px/1 var(--font-body); letter-spacing: 0.22em;
+      color: var(--accent); text-transform: uppercase;
+    }
+    .slide-card .preview .h {
+      font: 700 16px/1.1 var(--font-display); letter-spacing: -0.01em;
+      color: var(--fg); max-width: 22ch;
+    }
+    .slide-card .preview .b {
+      font: 300 9px/1.3 var(--font-body); color: var(--muted);
+      max-width: 36ch;
+    }
+    .slide-card .preview .ft {
+      position: absolute; left: 18px; right: 18px; bottom: 8px;
+      display: flex; justify-content: space-between;
+      font: 700 6px/1 var(--font-body); letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .slide-card .preview .ft .s { color: var(--accent); }
+    /* preview variants */
+    .pv-cover .accent { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--smile-orange); }
+    .pv-cover .pad { justify-content: end; padding-bottom: 18px; }
+    .pv-section { display: grid; place-items: center; }
+    .pv-section .pad {
+      position: static; align-items: center; justify-content: center; text-align: center; gap: 4px;
+    }
+    .pv-section .h { font-size: 22px; }
+    .pv-section .rule { width: 30px; height: 2px; background: var(--smile-orange); margin-top: 6px; }
+    .pv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 18px 22px; }
+    .pv-two .left {
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
+      display: grid; place-items: center;
+      font: 400 7px/1 var(--font-mono); color: var(--muted);
+      letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .pv-two .right { display: flex; flex-direction: column; gap: 4px; }
+    .pv-two .right .k { font: 700 6px/1 var(--font-body); letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; }
+    .pv-two .right .h { font: 700 12px/1.1 var(--font-display); }
+    .pv-two .right ul { list-style: none; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+    .pv-two .right li {
+      font: 300 7px/1.3 var(--font-body); color: var(--fg);
+      padding-left: 8px; position: relative;
+    }
+    .pv-two .right li::before { content: ""; position: absolute; left: 0; top: 4px; width: 5px; height: 1px; background: var(--accent); }
+    .pv-arch .pad { padding-bottom: 22px; }
+    .pv-arch .stage {
+      flex: 1; margin-top: 6px;
+      border: 1px dashed var(--border); border-radius: 4px;
+      display: grid; place-items: center;
+      font: 400 8px/1 var(--font-mono); color: var(--muted);
+      letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .pv-table .row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 0; }
+    .pv-table .pad { gap: 4px; padding: 14px 14px 22px; }
+    .pv-table .row .c {
+      padding: 4px 6px; font: 400 7px/1.1 var(--font-body); color: var(--fg);
+      border-bottom: 1px solid var(--border);
+    }
+    .pv-table .head .c {
+      background: var(--smile-orange); color: var(--squid-ink); font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .pv-table .row.odd .c { background: var(--surface-2); }
+    .pv-customer .pad { justify-content: space-between; }
+    .pv-customer .logo {
+      width: 60px; height: 22px; border: 1px solid var(--border); border-radius: 3px;
+      display: grid; place-items: center;
+      font: 700 7px/1 var(--font-body); color: var(--muted); letter-spacing: 0.12em;
+    }
+    .pv-customer .quote { font: 700 12px/1.2 var(--font-display); }
+    .pv-customer .quote::before { content: "“"; color: var(--accent); margin-right: 2px; }
+    .pv-customer .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); }
+    .pv-customer .metrics .m { display: flex; flex-direction: column; gap: 1px; }
+    .pv-customer .metrics .num { font: 700 14px/1 var(--font-display); color: var(--accent); }
+    .pv-customer .metrics .label { font: 400 6px/1.2 var(--font-body); color: var(--muted); }
+    .pv-demo .code {
+      flex: 1; margin-top: 4px;
+      background: #0E1620; border: 1px solid var(--border); border-radius: 3px;
+      padding: 8px 10px;
+      font: 400 7px/1.4 var(--font-mono); color: #E5E7EB;
+    }
+    .pv-demo .code .kw { color: #E7157B; }
+    .pv-demo .code .st { color: #7AA116; }
+    .pv-demo .code .cm { color: #7D8998; }
+    .pv-summary .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 4px; }
+    .pv-summary .cards .c {
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 3px;
+      padding: 6px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .pv-summary .cards .c .n { font: 700 6px/1 var(--font-body); letter-spacing: 0.2em; color: var(--accent); }
+    .pv-summary .cards .c .t { font: 700 8px/1.1 var(--font-body); }
+    .pv-summary .cards .c .b { font: 300 6px/1.3 var(--font-body); color: var(--muted); }
+    .pv-resources { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px 18px 22px; }
+    .pv-resources .pane h3 {
+      font: 700 6px/1 var(--font-body); letter-spacing: 0.2em; color: var(--accent);
+      text-transform: uppercase; margin-bottom: 4px;
+    }
+    .pv-resources .pane li {
+      list-style: none; padding-left: 8px; position: relative;
+      font: 400 7px/1.3 var(--font-body); margin-bottom: 3px;
+    }
+    .pv-resources .pane li::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
+    .pv-qa { display: grid; place-items: center; }
+    .pv-qa .pad {
+      position: static; align-items: center; justify-content: center;
+    }
+    .pv-qa .h {
+      font: 700 36px/1 var(--font-display); letter-spacing: -0.04em;
+    }
+    .pv-qa .h span { color: var(--accent); }
+    .pv-qa .b { font: 400 8px/1.3 var(--font-body); color: var(--muted); margin-top: 4px; }
+    .pv-agenda ol { list-style: none; counter-reset: a; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; margin-top: 4px; }
+    .pv-agenda ol li { counter-increment: a; position: relative; padding: 3px 0 3px 14px; border-top: 1px solid var(--border); font: 400 7px/1.2 var(--font-body); }
+    .pv-agenda ol li::before { content: counter(a, decimal-leading-zero); position: absolute; left: 0; top: 4px; font: 700 5px/1 var(--font-body); letter-spacing: 0.2em; color: var(--accent); }
+    .pv-content ul { list-style: none; display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+    .pv-content ul li {
+      position: relative; padding-left: 8px;
+      font: 300 7px/1.3 var(--font-body); color: var(--fg);
+    }
+    .pv-content ul li::before { content: ""; position: absolute; left: 0; top: 4px; width: 5px; height: 1px; background: var(--accent); }
+
+    .slide-card .meta {
+      padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .slide-card .meta .num {
+      font: 700 11px/1 var(--font-body); letter-spacing: 0.2em;
+      color: var(--accent); text-transform: uppercase;
+    }
+    .slide-card .meta .name {
+      font: 700 16px/1.2 var(--font-body);
+    }
+    .slide-card .meta .role {
+      font: 300 13px/1.45 var(--font-body); color: var(--muted);
+    }
+
+    /* Inputs / how-it-works */
+    .twocol {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+    }
+    @media (max-width: 900px) { .twocol { grid-template-columns: 1fr; } }
+    .pane {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 24px 28px;
+    }
+    .pane h3 {
+      font: 700 13px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .pane h4 {
+      font: 700 18px/1.2 var(--font-display); margin-bottom: 4px;
+    }
+    .input-row {
+      display: grid; grid-template-columns: 180px 1fr;
+      gap: 16px; padding: 12px 0;
+      border-top: 1px solid var(--border);
+      font: 300 14px/1.45 var(--font-body);
+    }
+    .input-row:first-of-type { border-top: 0; }
+    .input-row .k { color: var(--accent); font-weight: 700; letter-spacing: 0.04em; }
+    .input-row .v { color: var(--fg); }
+    .input-row .v code { font-size: 12px; }
+
+    .steps { counter-reset: step; list-style: none; display: flex; flex-direction: column; gap: 14px; }
+    .steps li {
+      counter-increment: step; padding-left: 48px; position: relative;
+      font: 400 14px/1.5 var(--font-body); color: var(--fg);
+    }
+    .steps li::before {
+      content: counter(step, decimal-leading-zero);
+      position: absolute; left: 0; top: 0;
+      width: 32px; height: 32px;
+      background: var(--accent); color: var(--squid-ink);
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font: 700 13px/1 var(--font-body); letter-spacing: 0.04em;
+    }
+    .steps li b { display: block; font-weight: 700; margin-bottom: 2px; }
+    .steps li small { color: var(--muted); }
+
+    pre.brief {
+      background: #0E1620; color: #E5E7EB;
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px 24px; overflow-x: auto;
+      font: 400 13px/1.55 var(--font-mono);
+    }
+    pre.brief .kw { color: #ED7100; }
+    pre.brief .st { color: #7AA116; }
+    pre.brief .cm { color: #7D8998; font-style: italic; }
+
+    /* Type sample */
+    .type-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .type-card {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 22px 24px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .type-card .role {
+      font: 700 11px/1 var(--font-body); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--accent);
+    }
+    .type-card .sample { color: var(--fg); }
+    .type-card .meta {
+      font: 400 12px/1.3 var(--font-mono); color: var(--muted);
+      letter-spacing: 0.04em; padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Footer */
+    footer.foot {
+      max-width: 1280px; margin: 0 auto;
+      padding: 48px 32px 64px;
+      border-top: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; gap: 16px;
+      justify-content: space-between;
+      font: 400 13px/1.4 var(--font-body); color: var(--muted);
+    }
+    footer.foot .left b { color: var(--fg); font-weight: 700; }
+    footer.foot .right { display: flex; gap: 24px; }
+
+    /* Accent bar */
+    .bottom-bar { height: 8px; background: var(--smile-orange); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="mark">aws</span>
+        <span class="label">AWS PPTX Generator</span>
+        <span class="ver">v0.1.0 · Open Design plugin</span>
+      </div>
+      <span class="nav-spacer"></span>
+      <div class="theme-switch" role="tablist" aria-label="Preview theme">
+        <button type="button" data-theme-set="dark" aria-pressed="true">Dark</button>
+        <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <div class="kicker">Open Design plugin · deck</div>
+      <h1>AWS-compliant 16:9 decks, generated to spec.</h1>
+      <p class="lede">A plugin that turns a brief into a 1920×1080 deck following the official AWS Architecture Icons brand system — Squid Ink + Smile Orange, Amazon Ember typography, eight service category colors, twelve canonical slide types, and architecture diagrams routed through the <code>drawio</code> or <code>architecture-diagram</code> skills.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="examples/migration-strategy/index.html">Open example deck →</a>
+        <a class="btn btn-ghost" href="skills/aws-pptx-deck/SKILL.md">Read the skill</a>
+        <a class="btn btn-ghost" href="plugin.json">plugin.json</a>
+      </div>
+    </div>
+    <aside class="hero-card">
+      <div class="session">ARC301 · Migration</div>
+      <h3>Migrate to AWS without freezing the business</h3>
+      <p style="font: 300 14px/1.5 var(--font-body); color: var(--muted); max-width: 38ch;">A 12-page Migration Strategy deck — assessment, the 6 R's, Landing Zone, wave plan, governance, FinOps.</p>
+      <ul>
+        <li>1920 × 1080, scale-to-fit any viewport</li>
+        <li>Save → PDF emits a multi-page 16:9 PDF</li>
+        <li>Architecture pages call <code>drawio</code> · arrows <code>#9BA7B6</code></li>
+      </ul>
+      <div class="meta">
+        <span><b>Theme</b> Dark (Squid Ink)</span>
+        <span><b>Audience</b> AWS SAs</span>
+        <span><b>Slides</b> 12</span>
+      </div>
+    </aside>
+  </section>
+
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">Slide types · 12</div>
+        <h2>Every layout the spec calls out, ready to fill.</h2>
+      </div>
+      <p class="lead">The skill ships <code>references/layouts.md</code> with paste-ready skeletons for each. The agent picks one per slide and fills <code>[REPLACE]</code> with real copy from your brief — never lorem ipsum, never invented metrics.</p>
+    </div>
+    <div class="slide-grid">
+
+      <article class="slide-card">
+        <div class="preview pv-cover">
+          <div class="pad">
+            <span class="k">ARC301 · Migration</span>
+            <span class="h">Migrate to AWS without freezing the business</span>
+            <span class="b" style="margin-top: 6px;">Jane Doe, Principal SA · re:Invent · ARC301</span>
+          </div>
+          <div class="accent"></div>
+        </div>
+        <div class="meta">
+          <span class="num">01 · Cover</span>
+          <span class="name">Title slide</span>
+          <span class="role">Display headline ≤ 8 words. Orange accent bar at bottom.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-agenda">
+          <div class="pad">
+            <span class="k">Agenda</span>
+            <span class="h" style="font-size: 14px;">What we'll cover</span>
+            <ol>
+              <li>Why migrate</li>
+              <li>The 6 R's</li>
+              <li>Landing Zone</li>
+              <li>Wave plan</li>
+              <li>Governance</li>
+              <li>FinOps</li>
+            </ol>
+            <div class="ft"><span class="s">ARC301</span><span>aws.amazon.com</span></div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">02 · Agenda</span>
+          <span class="name">Two-column outline</span>
+          <span class="role">Numbered list, kicker · headline, footer with session code.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-section">
+          <div class="pad">
+            <span class="k" style="font-size: 6px;">Section 02</span>
+            <span class="h">The 6 R's strategy</span>
+            <span class="rule"></span>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">03 · Section</span>
+          <span class="name">Section divider</span>
+          <span class="role">Centered display headline + 120px orange rule.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-content">
+          <div class="pad">
+            <span class="k">Why migrate</span>
+            <span class="h">Three forcing functions</span>
+            <ul>
+              <li>End of data center lease in 14 months</li>
+              <li>Capacity ceiling on monolithic Oracle</li>
+              <li>Compliance: SOC 2, ISO 27001 by Q4</li>
+            </ul>
+            <div class="ft"><span class="s">ARC301</span><span>aws.amazon.com</span></div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">04 · Content</span>
+          <span class="name">Bullets only</span>
+          <span class="role">Reserved for narrative / explainer slides.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-two">
+          <div class="left">drawio · 1700×900</div>
+          <div class="right">
+            <span class="k">6 R's</span>
+            <span class="h">Strategy per workload</span>
+            <ul>
+              <li>Rehost — fastest, lowest risk</li>
+              <li>Replatform — DB to RDS</li>
+              <li>Refactor — when the runway exists</li>
+              <li>Retire — kill the unloved</li>
+            </ul>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">05 · Two-Column</span>
+          <span class="name">Image + bullets</span>
+          <span class="role">Default for technical / business slides. 6/6 or 7/5 split.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-arch">
+          <div class="pad">
+            <span class="k">Architecture</span>
+            <span class="h">Landing Zone reference</span>
+            <div class="stage">drawio · 1700 × 900 · landing-zone.svg</div>
+            <div class="ft"><span class="s">ARC301</span><span>arrows #9BA7B6 · Arial 12pt</span></div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">06 · Architecture</span>
+          <span class="name">Full-bleed diagram</span>
+          <span class="role">Diagram from the <code>drawio</code> skill, embedded as SVG.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-demo">
+          <div class="pad">
+            <span class="k">Demo</span>
+            <span class="h">Bucket policy</span>
+            <div class="code">
+              <div><span class="kw">resource</span> <span class="st">"aws_s3_bucket"</span> <span class="st">"data"</span> {</div>
+              <div>&nbsp;&nbsp;bucket = <span class="st">"acme-prod-data"</span></div>
+              <div>&nbsp;&nbsp;acl    = <span class="st">"private"</span></div>
+              <div>}</div>
+              <div><span class="cm"># Encrypted, versioned, replicated.</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">07 · Demo / Code</span>
+          <span class="name">Code on dark surface</span>
+          <span class="role">Mono font, line-numbered, syntax-highlighted.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-customer">
+          <div class="pad">
+            <div class="logo">ACME</div>
+            <span class="quote">From 14-month migration plan to 4 months in production.</span>
+            <div class="metrics">
+              <div class="m"><span class="num">42%</span><span class="label">Infra cost cut</span></div>
+              <div class="m"><span class="num">10×</span><span class="label">Faster deploy</span></div>
+              <div class="m"><span class="num">4</span><span class="label">Months end-to-end</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">08 · Customer Story</span>
+          <span class="name">Logo + quote + 3 metrics</span>
+          <span class="role">One pull quote. Three accent-orange numbers.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-table">
+          <div class="pad">
+            <span class="k">Comparison</span>
+            <span class="h" style="font-size: 13px;">Workload disposition</span>
+            <div class="row head">
+              <div class="c">App</div><div class="c">Strategy</div><div class="c">Effort</div><div class="c">Risk</div><div class="c">Wave</div>
+            </div>
+            <div class="row odd"><div class="c">Billing</div><div class="c">Rehost</div><div class="c">Low</div><div class="c">Low</div><div class="c">1</div></div>
+            <div class="row"><div class="c">CRM</div><div class="c">Replatform</div><div class="c">Med</div><div class="c">Med</div><div class="c">2</div></div>
+            <div class="row odd"><div class="c">Data lake</div><div class="c">Refactor</div><div class="c">High</div><div class="c">High</div><div class="c">3</div></div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">09 · Comparison</span>
+          <span class="name">Table</span>
+          <span class="role">Header <code>#ED7100</code>, alt rows, status pills.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-summary">
+          <div class="pad">
+            <span class="k">Summary</span>
+            <span class="h" style="font-size: 13px;">Three takeaways</span>
+            <div class="cards">
+              <div class="c"><span class="n">01</span><span class="t">Lift first</span><span class="b">Rehost the 80% that won't change</span></div>
+              <div class="c"><span class="n">02</span><span class="t">Land safely</span><span class="b">LZ + guardrails before any wave</span></div>
+              <div class="c"><span class="n">03</span><span class="t">Cost from day one</span><span class="b">Tag everything, set budgets early</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">10 · Summary</span>
+          <span class="name">Three takeaways</span>
+          <span class="role">3-card grid. Numeric eyebrow + headline + supporting line.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-resources">
+          <div class="pane">
+            <h3>Get started</h3>
+            <ul>
+              <li>Migration Hub quickstart</li>
+              <li>Landing Zone Accelerator</li>
+              <li>Solutions Library</li>
+            </ul>
+          </div>
+          <div class="pane">
+            <h3>Go deeper</h3>
+            <ul>
+              <li>Migration whitepaper</li>
+              <li>re:Invent ARC301 talk</li>
+              <li>Reference architecture</li>
+            </ul>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">11 · Resources</span>
+          <span class="name">Two-column CTAs</span>
+          <span class="role">Get-started + go-deeper panes with arrow bullets.</span>
+        </div>
+      </article>
+
+      <article class="slide-card">
+        <div class="preview pv-qa">
+          <div class="pad">
+            <span class="h">Q<span>&amp;</span>A</span>
+            <span class="b">Jane Doe · @jane · ARC301</span>
+          </div>
+        </div>
+        <div class="meta">
+          <span class="num">12 · Q&amp;A</span>
+          <span class="name">Closing slide</span>
+          <span class="role">Display Q&amp;A with orange ampersand. Speaker · contact · session.</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">Brand tokens</div>
+        <h2>The only colors allowed.</h2>
+      </div>
+      <p class="lead">Squid Ink + Smile Orange anchor every slide. Eight service category colors are reserved for color-coding services on architecture diagrams and tables — never for arbitrary decoration.</p>
+    </div>
+    <div class="palette">
+      <div class="swatch"><span class="chip" style="background:#232F3E"></span><div class="meta"><span class="name">Squid Ink</span><span class="hex">#232F3E</span><span class="role">Dark brand background</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#ED7100"></span><div class="meta"><span class="name">Smile Orange</span><span class="hex">#ED7100</span><span class="role">Primary accent · Compute</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#8C4FFF"></span><div class="meta"><span class="name">Galaxy Purple</span><span class="hex">#8C4FFF</span><span class="role">Analytics · Networking</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#C925D1"></span><div class="meta"><span class="name">Nebula</span><span class="hex">#C925D1</span><span class="role">Database · Dev tools</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#DD344C"></span><div class="meta"><span class="name">Mars Red</span><span class="hex">#DD344C</span><span class="role">Security · Front-end</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#E7157B"></span><div class="meta"><span class="name">Cosmos Pink</span><span class="hex">#E7157B</span><span class="role">App Integration · Mgmt</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#7AA116"></span><div class="meta"><span class="name">Endor Green</span><span class="hex">#7AA116</span><span class="role">Storage · IoT</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#01A88D"></span><div class="meta"><span class="name">Orbit Turquoise</span><span class="hex">#01A88D</span><span class="role">AI/ML · Migration</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#7D8998"></span><div class="meta"><span class="name">Light Gray</span><span class="hex">#7D8998</span><span class="role">Borders · dividers</span></div></div>
+      <div class="swatch"><span class="chip" style="background:#9BA7B6"></span><div class="meta"><span class="name">Arrow on Dark</span><span class="hex">#9BA7B6</span><span class="role">Connectors on dark</span></div></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">Typography</div>
+        <h2>Amazon Ember — system fallback shipped.</h2>
+      </div>
+      <p class="lead">Amazon Ember is not freely web-licensed; the framework's font stack reproduces its geometric humanist proportions through Helvetica Neue + Arial + system-ui. Diagram labels are Arial 12pt, period.</p>
+    </div>
+    <div class="type-grid">
+      <div class="type-card">
+        <span class="role">Display · Cover headline</span>
+        <span class="sample" style="font: 700 40px/1.05 var(--font-display); letter-spacing: -0.015em;">Migrate to AWS</span>
+        <span class="meta">Amazon Ember Display · 700 · clamp(56–88px)</span>
+      </div>
+      <div class="type-card">
+        <span class="role">Headline · Slide title</span>
+        <span class="sample" style="font: 700 26px/1.1 var(--font-display); letter-spacing: -0.01em;">Three forcing functions</span>
+        <span class="meta">Amazon Ember Display · 700 · 36–44px</span>
+      </div>
+      <div class="type-card">
+        <span class="role">Subhead</span>
+        <span class="sample" style="font: 700 18px/1.3 var(--font-body);">Wave 01 · Production billing</span>
+        <span class="meta">Amazon Ember Bold · ≤ ½ headline · ≥ 22px</span>
+      </div>
+      <div class="type-card">
+        <span class="role">Body</span>
+        <span class="sample" style="font: 300 16px/1.5 var(--font-body);">Rehost the 80% that won't change in the next twelve months — keep the muscle for the parts that need rewiring.</span>
+        <span class="meta">Amazon Ember Light · 300 · 16–22px</span>
+      </div>
+      <div class="type-card">
+        <span class="role">Diagram label</span>
+        <span class="sample" style="font: 400 14px/1.2 var(--font-mono); letter-spacing: 0.04em;">Amazon EC2 · m6i.2xlarge</span>
+        <span class="meta">Arial · 12pt · 400 / 700</span>
+      </div>
+      <div class="type-card">
+        <span class="role">Code</span>
+        <span class="sample" style="font: 400 15px/1.5 var(--font-mono);">resource "aws_s3_bucket" "data" { … }</span>
+        <span class="meta">Consolas / Monaco / Menlo · 16–18px</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">How the plugin runs</div>
+        <h2>Brief in, AWS-spec deck out.</h2>
+      </div>
+    </div>
+    <div class="twocol">
+      <div class="pane">
+        <h3>Inputs</h3>
+        <div class="input-row"><span class="k">theme</span><span class="v"><b>dark</b> (Squid Ink, in-person standard) / <b>light</b> (white, web/PDF distribution)</span></div>
+        <div class="input-row"><span class="k">deckSubject</span><span class="v"><code>proposal</code> · <code>migration</code> · <code>war</code> · <code>genai</code> · <code>custom</code></span></div>
+        <div class="input-row"><span class="k">audience</span><span class="v">Defaults to "AWS Solutions Architects"</span></div>
+        <div class="input-row"><span class="k">sessionCode</span><span class="v">AWS track prefix + level — e.g. <code>ARC301</code>, <code>BOA208</code></span></div>
+        <div class="input-row"><span class="k">slideCount</span><span class="v"><code>8</code> · <code>10</code> · <code>12</code> · <code>16</code> · <code>20</code></span></div>
+        <div class="input-row"><span class="k">diagramApproach</span><span class="v"><code>drawio</code> (default) · <code>architecture-diagram</code> · <code>slot</code></span></div>
+        <div class="input-row"><span class="k">techVsBusiness</span><span class="v"><code>tech</code> · <code>business</code> · <code>mixed</code> — drives image+text discipline</span></div>
+      </div>
+      <div class="pane">
+        <h3>Workflow</h3>
+        <ol class="steps">
+          <li><b>Lay the agenda</b><small>Skill states the 12 slide types in order, in plain prose, before writing any slide content.</small></li>
+          <li><b>Drop the framework</b><small><code>assets/template.html</code> copied verbatim — never re-author the scale-to-fit / keyboard / print logic.</small></li>
+          <li><b>Plan the diagram budget</b><small>For every architecture page, queue a <code>drawio</code> call (or <code>architecture-diagram</code>); save SVG to <code>assets/diagrams/</code>.</small></li>
+          <li><b>Fill slides</b><small>Paste the matching skeleton from <code>references/layouts.md</code>; replace every <code>[REPLACE]</code> with real copy.</small></li>
+          <li><b>P0 checklist + 5-dim critique</b><small>Run <code>references/checklist.md</code>; score philosophy / hierarchy / execution / specificity / restraint.</small></li>
+          <li><b>Emit</b><small>Single <code>&lt;artifact&gt;</code> wrapping the canonical deck HTML. Save → PDF emits a 16:9 multi-page PDF.</small></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="section-head">
+      <div>
+        <div class="kicker">Sample brief</div>
+        <h2>Drop this in chat to invoke the plugin.</h2>
+      </div>
+    </div>
+    <pre class="brief"><span class="cm"># Open Design — invoke AWS PPTX plugin</span>
+<span class="kw">Generate</span> an AWS-styled deck for an in-person SA-led session.
+
+  <span class="kw">theme</span>:           <span class="st">dark</span>           <span class="cm"># Squid Ink + Smile Orange + white text</span>
+  <span class="kw">deckSubject</span>:     <span class="st">migration</span>      <span class="cm"># 6 R's / Landing Zone / Wave plan / FinOps</span>
+  <span class="kw">slideCount</span>:      <span class="st">12</span>
+  <span class="kw">sessionCode</span>:     <span class="st">ARC301</span>
+  <span class="kw">audience</span>:        <span class="st">"enterprise customer architecture review"</span>
+  <span class="kw">speakerName</span>:     <span class="st">"Jane Doe, Principal SA, AWS"</span>
+  <span class="kw">diagramApproach</span>: <span class="st">drawio</span>         <span class="cm"># architecture pages call the drawio skill</span>
+  <span class="kw">techVsBusiness</span>:  <span class="st">tech</span>           <span class="cm"># every content slide → image + text two-column</span>
+</pre>
+  </section>
+
+  <footer class="foot">
+    <div class="left">
+      <b>AWS PPTX Generator</b> · v0.1.0 · Open Design plugin · Brand tokens extracted from AWS Architecture Icons Deck (Release 22, 2025-07-31).
+    </div>
+    <div class="right">
+      <a href="plugin.json">plugin.json</a>
+      <a href="skills/aws-pptx-deck/SKILL.md">SKILL.md</a>
+      <a href="examples/migration-strategy/index.html">Example deck</a>
+    </div>
+  </footer>
+  <div class="bottom-bar"></div>
+
+  <script>
+    (function () {
+      var html = document.documentElement;
+      var btns = document.querySelectorAll('[data-theme-set]');
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () {
+          var t = b.getAttribute('data-theme-set');
+          html.setAttribute('data-theme', t);
+          btns.forEach(function (x) {
+            x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+          });
+          try { localStorage.setItem('aws-pptx-preview-theme', t); } catch (_) {}
+        });
+      });
+      try {
+        var saved = localStorage.getItem('aws-pptx-preview-theme');
+        if (saved === 'light' || saved === 'dark') {
+          html.setAttribute('data-theme', saved);
+          btns.forEach(function (x) {
+            x.setAttribute('aria-pressed', x.getAttribute('data-theme-set') === saved ? 'true' : 'false');
+          });
+        }
+      } catch (_) {}
+    })();
+  </script>
+</body>
+</html>

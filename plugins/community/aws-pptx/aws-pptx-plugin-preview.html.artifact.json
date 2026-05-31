@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "AWS PPTX Generator — plugin preview",
+  "entry": "aws-pptx-plugin-preview.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-05-26T11:20:49.220Z",
+  "updatedAt": "2026-05-26T11:20:49.226Z",
+  "metadata": {
+    "identifier": "aws-pptx-plugin-preview",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}
