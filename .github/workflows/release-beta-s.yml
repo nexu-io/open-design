@@ -1,0 +1,64 @@
+# Self-hosted release-beta lane. Hosted baseline remains release-beta.yml.
+name: release-beta-s
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_win:
+        description: "Run the Windows self-hosted beta lane."
+        required: true
+        type: boolean
+        default: true
+      publish:
+        description: "Publish release assets and metadata. Keep disabled while validating the runner lane."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-beta-s-win
+  cancel-in-progress: false
+
+jobs:
+  windows_probe:
+    name: Probe Windows self-hosted runner
+    if: ${{ inputs.enable_win }}
+    runs-on: [self-hosted, Windows, X64, nexu-win, release-beta]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          lfs: true
+
+      - name: Verify preinstalled toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          where.exe git
+          where.exe git-lfs
+          where.exe node
+          where.exe pnpm
+          where.exe cargo
+          where.exe makensis
+          git --version
+          git lfs version
+          node --version
+          pnpm --version
+          cargo --version
+          makensis /VERSION
+
+      - name: Confirm workflow boundary
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          "workspace=$env:GITHUB_WORKSPACE"
+          "runner_temp=$env:RUNNER_TEMP"
+          "runner_tool_cache=$env:RUNNER_TOOL_CACHE"
+          if ($env:GITHUB_WORKSPACE -like "C:\Users\runner\Projects\*") {
+            throw "GITHUB_WORKSPACE must not point at the operator Projects directory"
+          }

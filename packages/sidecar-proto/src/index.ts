@@ -72,6 +72,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   CONSOLE: "console",
   EVAL: "eval",
   EXPORT_PDF: "export-pdf",
+  MINT_IMPORT_TOKEN: "mint-import-token",
   REGISTER_DESKTOP_AUTH: "register-desktop-auth",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
@@ -97,6 +98,8 @@ export type DesktopUpdateMode = (typeof DESKTOP_UPDATE_MODES)[keyof typeof DESKT
 
 export const DESKTOP_UPDATE_CHANNELS = Object.freeze({
   BETA: "beta",
+  NIGHTLY: "nightly",
+  PREVIEW: "preview",
   STABLE: "stable",
 } as const);
 
@@ -138,6 +141,7 @@ export type ServiceRuntimeState = "idle" | "running" | "starting" | "stopped" | 
 export type DaemonStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  trustedWebOriginPort?: number | null;
   updatedAt?: string;
   url: string | null;
   /**
@@ -354,10 +358,25 @@ export type RegisterDesktopAuthResult = {
   accepted: true;
 };
 
+export type MintImportTokenInput = {
+  baseDir: string;
+};
+
+export type MintImportTokenMessage = {
+  input: MintImportTokenInput;
+  type: typeof SIDECAR_MESSAGES.MINT_IMPORT_TOKEN;
+};
+
+export type MintImportTokenResult =
+  | { ok: true; expiresAt: string; token: string }
+  | { ok: false; code: "DESKTOP_AUTH_INACTIVE"; message: string; retryable: false }
+  | { ok: false; code: "DESKTOP_AUTH_PENDING"; message: string; retryable: true };
+
 export type DaemonSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
-  | RegisterDesktopAuthMessage;
+  | RegisterDesktopAuthMessage
+  | MintImportTokenMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -549,6 +568,12 @@ function normalizeRegisterDesktopAuthInput(input: unknown): RegisterDesktopAuthI
   return { secret };
 }
 
+function normalizeMintImportTokenInput(input: unknown): MintImportTokenInput {
+  const value = assertObject(input, "mint-import-token input");
+  assertKnownKeys(value, ["baseDir"], "mint-import-token input");
+  return { baseDir: normalizeNonEmptyString(value.baseDir, "mint-import-token baseDir") };
+}
+
 function normalizeBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
   return value;
@@ -596,6 +621,10 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
   if (type === SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH) {
     assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
     return { input: normalizeRegisterDesktopAuthInput(value.input), type };
+  }
+  if (type === SIDECAR_MESSAGES.MINT_IMPORT_TOKEN) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    return { input: normalizeMintImportTokenInput(value.input), type };
   }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }

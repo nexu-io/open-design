@@ -36,6 +36,10 @@ import {
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
 import { useI18n } from '../i18n';
+import {
+  localizeSkillName,
+  localizeSkillPrompt,
+} from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
 import type {
@@ -224,6 +228,8 @@ export function HomeView({
   const [pendingPluginUseHandoff, setPendingPluginUseHandoff] =
     useState<PendingPluginUseHandoff | null>(null);
   const [fallbackProjectKind, setFallbackProjectKind] = useState<ProjectKind | null>(null);
+  const [fallbackProjectMetadata, setFallbackProjectMetadata] =
+    useState<ProjectMetadata | null>(null);
   const [active, setActive] = useState<ActivePlugin | null>(null);
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
@@ -409,6 +415,7 @@ export function HomeView({
     setSelectedMcpContexts([]);
     setSelectedConnectorContexts([]);
     setFallbackProjectKind('other');
+    setFallbackProjectMetadata(null);
     if (promptHandoff.focus) {
       pendingPromptFocusEndRef.current = true;
     }
@@ -417,6 +424,7 @@ export function HomeView({
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
     setPendingAuthoringChipId('create-plugin');
+    setPendingChipId('create-plugin');
   }, [promptHandoff]);
 
   const activeContextItemCount = useMemo(
@@ -571,6 +579,7 @@ export function HomeView({
   ) {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
+    setActiveSkill(null);
     const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(
@@ -625,6 +634,7 @@ export function HomeView({
       suppressPromptSync: suppressPromptUpdate,
     });
     setFallbackProjectKind(null);
+    setFallbackProjectMetadata(null);
     setDetailsRecord(null);
     if (!suppressPromptUpdate && optimisticPrompt !== null) {
       setPrompt(optimisticPrompt);
@@ -858,16 +868,11 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
-  function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
-    const projectKind = projectKindForExamplePlugin(record, chipId);
-    requestActivePlugin(record, promptText, {
-      projectKind,
-      chipId,
-      inputs: {},
-      inputFields: [],
-      queryTemplate: null,
-      replaceWithoutConfirmation: true,
-    });
+  function useExamplePlugin(_record: InstalledPluginRecord, _chipId: string, promptText: string) {
+    setError(null);
+    setPrompt(promptText);
+    setPromptEditedByUser(false);
+    focusPromptAtEnd();
   }
 
   function removePluginContext(pluginId: string) {
@@ -968,6 +973,7 @@ export function HomeView({
     activePluginApplyRequestRef.current += 1;
     setActive(null);
     setFallbackProjectKind(null);
+    setFallbackProjectMetadata(null);
     setPendingApplyId(null);
     setPendingChipId(null);
     setPrompt('');
@@ -978,6 +984,7 @@ export function HomeView({
     activePluginApplyRequestRef.current += 1;
     setActive(null);
     setFallbackProjectKind(null);
+    setFallbackProjectMetadata(null);
     setPendingApplyId(null);
     setPendingChipId(null);
     setError(null);
@@ -986,9 +993,15 @@ export function HomeView({
   }
 
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
+    activePluginApplyRequestRef.current += 1;
+    setActive(null);
+    setPendingChipId(null);
+    setPendingApplyId(null);
+    setFallbackProjectKind(null);
+    setFallbackProjectMetadata(null);
     setActiveSkill(skill);
     setError(null);
-    const replacement = nextPrompt ?? skill.examplePrompt ?? '';
+    const replacement = nextPrompt ?? localizeSkillPrompt(locale, skill) ?? '';
     if (replacement.trim().length > 0) {
       setPrompt(replacement);
       setPromptEditedByUser(false);
@@ -1026,12 +1039,14 @@ export function HomeView({
       setActive(null);
       setActiveSkill(null);
       setFallbackProjectKind('other');
+      setFallbackProjectMetadata(null);
       setError(null);
       setPrompt(nextPrompt);
       setPromptEditedByUser(false);
       setPendingAuthoringPrompt(nextPrompt);
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
+      setPendingChipId(chipId ?? 'create-plugin');
       focusPromptAtEnd();
     }, {
       before: active?.record.id ?? null,
@@ -1045,6 +1060,7 @@ export function HomeView({
     const record = authoringRecord ?? plugins.find((plugin) => plugin.id === 'od-new-generation');
     setPendingAuthoringChipId(null);
     if (!record) {
+      setPendingChipId(null);
       // The authoring scenario can be absent in a long-running dev
       // daemon that started before the bundled plugin was added. If
       // even the default scenario is missing, do not block the user:
@@ -1235,12 +1251,15 @@ export function HomeView({
       : homeCreateProjectMetadata(
           submittedProjectKind,
           submittedActive?.inputs ?? null,
-          submittedActive?.projectMetadata ?? null,
+          submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
         );
+    // Scenario plugins (chips / preset cards) and explicit skill picks are
+    // mutually exclusive routing sources — never send both (#2972).
+    const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
     onSubmit({
       prompt: trimmed,
       pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
-      skillId: activeSkill?.id ?? null,
+      skillId: resolvedSkillId,
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
       taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
@@ -1265,7 +1284,7 @@ export function HomeView({
         activePluginTitle={activeBadgeTitle}
         activePluginRecord={active?.record ?? null}
         activeSkillId={activeSkill?.id ?? null}
-        activeSkillTitle={activeSkill?.name ?? null}
+        activeSkillTitle={activeSkill ? localizeSkillName(locale, activeSkill) : null}
         activeChipId={active?.chipId ?? null}
         showActivePluginChip={showActivePluginChip}
         onClearActivePlugin={clearActivePlugin}
@@ -1315,6 +1334,7 @@ export function HomeView({
 
       <RecentProjectsStrip
         projects={projects}
+        designSystems={designSystems}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
         onOpen={(id) => {
           // P0 ui_click area=recent_projects element=project_card — emit
@@ -1453,35 +1473,6 @@ function projectKindForSkill(skill: SkillSummary | null): ProjectKind | null {
   return 'other';
 }
 
-function projectKindForExamplePlugin(
-  record: InstalledPluginRecord,
-  chipId: string,
-): ProjectKind {
-  const mode = homePluginManifestField(record, 'mode');
-  const surface = homePluginManifestField(record, 'surface');
-  if (mode === 'deck') return 'deck';
-  if (mode === 'prototype') return 'prototype';
-  if (mode === 'image' || surface === 'image') return 'image';
-  if (mode === 'video' || surface === 'video') return 'video';
-  if (mode === 'audio' || surface === 'audio') return 'audio';
-  const chip = findChip(chipId);
-  if (
-    chip?.action.kind === 'apply-scenario' ||
-    chip?.action.kind === 'apply-figma-migration'
-  ) {
-    return chip.action.projectKind;
-  }
-  return 'other';
-}
-
-function homePluginManifestField(
-  record: InstalledPluginRecord,
-  key: string,
-): string | null {
-  const value = (record.manifest?.od ?? {})[key];
-  return typeof value === 'string' ? value.toLowerCase() : null;
-}
-
 function defaultPluginIdForChip(chipId: string | null): string | null {
   if (!chipId) return null;
   const chip = findChip(chipId);
@@ -1511,7 +1502,7 @@ function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
 function facetSelectionForChip(chipId: string): FacetSelection | null {
   switch (chipId) {
     case 'prototype': return { category: 'prototype', subcategory: null };
-    case 'live-artifact': return { category: 'prototype', subcategory: 'business-dashboards' };
+    case 'live-artifact': return { category: 'live-artifact', subcategory: null };
     case 'deck': return { category: 'deck', subcategory: null };
     case 'image': return { category: 'image', subcategory: null };
     case 'video': return { category: 'video', subcategory: null };
@@ -1539,7 +1530,7 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
 
 function footerInputNamesForChip(chipId: string | null): string[] {
   if (chipId === 'prototype') return ['designSystem', 'fidelity'];
-  if (chipId === 'deck') return ['designSystem', 'speakerNotes'];
+  if (chipId === 'deck') return ['designSystem', 'slideCount', 'speakerNotes'];
   if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
   if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
   if (chipId === 'audio') return ['audioType', 'model', 'duration'];
@@ -1563,6 +1554,8 @@ function homeCreateProjectMetadata(
   if (fidelity) next.fidelity = fidelity;
   const speakerNotes = normalizeHomeSpeakerNotes(inputs?.speakerNotes);
   if (speakerNotes !== null) next.speakerNotes = speakerNotes;
+  const slideCount = normalizeHomeSlideCount(inputs?.slideCount);
+  if (slideCount) next.slideCount = slideCount;
   return next;
 }
 
@@ -1595,6 +1588,12 @@ function normalizeHomeSpeakerNotes(value: unknown): boolean | null {
   return null;
 }
 
+function normalizeHomeSlideCount(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const normalized = String(value).trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function designSystemOptionsForHome(
   systems: DesignSystemSummary[],
   defaultDesignSystemId: string | null,
@@ -1603,7 +1602,7 @@ function designSystemOptionsForHome(
 ): HomeDesignSystemOption[] {
   const selectable = systems.filter((system) => {
     if (!system.title) return false;
-    if (system.source === 'user') return (system.status ?? 'draft') === 'published';
+    if (system.source === 'user' || system.isEditable === true) return (system.status ?? 'draft') === 'published';
     return true;
   });
   const systemOptions = selectable
@@ -1623,15 +1622,19 @@ function designSystemOptionsForHome(
       if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
       return a.title.localeCompare(b.title);
     });
+  const autoOption: HomeDesignSystemOption = {
+    id: AUTO_DESIGN_SYSTEM_OPTION_ID,
+    title: t('homeHero.footer.autoDesignSystem'),
+    isDefault: false,
+    auto: true,
+    summary: t('homeHero.footer.autoDesignSystemSummary'),
+  };
+  const defaultOption = systemOptions.find((option) => option.isDefault);
+  if (!defaultOption) return [autoOption, ...systemOptions];
   return [
-    {
-      id: AUTO_DESIGN_SYSTEM_OPTION_ID,
-      title: t('homeHero.footer.autoDesignSystem'),
-      isDefault: false,
-      auto: true,
-      summary: t('homeHero.footer.autoDesignSystemSummary'),
-    },
-    ...systemOptions,
+    defaultOption,
+    autoOption,
+    ...systemOptions.filter((option) => option.id !== defaultOption.id),
   ];
 }
 

@@ -14,17 +14,21 @@
 // override live in `./plugins-home/usePluginFacets.ts`. This file
 // owns layout only.
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
 import { PluginCard } from './plugins-home/PluginCard';
 import { isFeaturedPlugin, type FacetOption, type FacetSelection } from './plugins-home/facets';
+import { localizePluginTitle } from './plugins-home/localization';
 import { usePluginFacets } from './plugins-home/usePluginFacets';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
+
+const INITIAL_PLUGIN_RENDER_LIMIT = 60;
+const PLUGIN_RENDER_BATCH_SIZE = 60;
 
 interface Props {
   plugins: InstalledPluginRecord[];
@@ -67,9 +71,11 @@ export function PluginsHomeSection({
   subtitle,
   emptyMessage,
 }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [renderLimit, setRenderLimit] = useState(INITIAL_PLUGIN_RENDER_LIMIT);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
     visiblePlugins,
     savedList,
@@ -89,14 +95,46 @@ export function PluginsHomeSection({
     savedPluginIds,
     preferDefaultFacet,
     presetSelection,
+    locale,
   });
+  const renderedPlugins = useMemo(
+    () => filtered.slice(0, renderLimit),
+    [filtered, renderLimit],
+  );
+  const hasMorePlugins = renderLimit < filtered.length;
+
+  useEffect(() => {
+    setRenderLimit(INITIAL_PLUGIN_RENDER_LIMIT);
+  }, [filtered]);
+
+  useEffect(() => {
+    if (!hasMorePlugins) return;
+    const node = loadMoreRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setRenderLimit(filtered.length);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setRenderLimit((limit) =>
+          Math.min(filtered.length, limit + PLUGIN_RENDER_BATCH_SIZE),
+        );
+      },
+      { rootMargin: '640px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filtered.length, hasMorePlugins]);
 
   function handleSavePlugin(record: InstalledPluginRecord): void {
     const result = savePluginId(record.id);
+    const title = localizePluginTitle(locale, record);
     if (result === 'saved') {
-      setSaveToast(`Saved ${record.title}.`);
+      setSaveToast(`Saved ${title}.`);
     } else if (result === 'already-saved') {
-      setSaveToast(`${record.title} is already saved.`);
+      setSaveToast(`${title} is already saved.`);
     } else {
       setSaveToast('Could not save this plugin in this browser.');
     }
@@ -174,7 +212,7 @@ export function PluginsHomeSection({
             </div>
           ) : (
             <div className="plugins-home__grid" role="list">
-              {filtered.map((p) => (
+              {renderedPlugins.map((p) => (
                 <PluginCard
                   key={p.id}
                   record={p}
@@ -190,6 +228,13 @@ export function PluginsHomeSection({
                   onShareAction={onPluginShareAction}
                 />
               ))}
+              {hasMorePlugins ? (
+                <div
+                  ref={loadMoreRef}
+                  className="plugins-home__load-more-sentinel"
+                  aria-hidden
+                />
+              ) : null}
             </div>
           )}
         </>

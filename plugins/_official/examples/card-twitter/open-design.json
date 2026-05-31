@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-card-twitter",
-  "title": "Twitter 分享卡",
+  "title": "Twitter Share Card",
+  "title_i18n": {
+    "en": "Twitter Share Card",
+    "zh-CN": "Twitter 分享卡",
+    "zh-TW": "Twitter 分享卡片",
+    "ja": "Twitter シェアカード",
+    "ko": "Twitter 공유 카드",
+    "de": "Twitter-Teilen-Karte",
+    "fr": "Carte de partage Twitter",
+    "ru": "Карточка для Twitter",
+    "es": "Tarjeta para compartir en Twitter",
+    "pt-BR": "Card de compartilhamento do Twitter",
+    "it": "Card di condivisione Twitter",
+    "vi": "Thẻ chia sẻ Twitter",
+    "pl": "Karta udostępniania Twitter",
+    "id": "Kartu Berbagi Twitter",
+    "nl": "Twitter-deelkaart",
+    "ar": "بطاقة مشاركة Twitter",
+    "tr": "Twitter Paylaşım Kartı",
+    "uk": "Картка для Twitter"
+  },
   "version": "0.1.0",
-  "description": "推特金句 / 数据卡, 适合配推文",
+  "description": "Twitter quote or data card designed to pair with a post.",
+  "description_i18n": {
+    "en": "Twitter quote or data card designed to pair with a post.",
+    "zh-CN": "推特金句 / 数据卡, 适合配推文",
+    "zh-TW": "用於搭配貼文的 Twitter 引用或資料卡片。",
+    "ja": "投稿と組み合わせて使用するTwitterの引用またはデータカード。",
+    "ko": "게시물과 함께 사용하도록 디자인된 Twitter 인용 또는 데이터 카드입니다.",
+    "de": "Twitter-Zitat- oder Datenkarte, die für die Kombination mit einem Beitrag entwickelt wurde.",
+    "fr": "Carte de citation ou de données Twitter conçue pour accompagner une publication.",
+    "ru": "Карточка с цитатой или данными для Twitter, предназначенная для публикации.",
+    "es": "Tarjeta de cita o datos de Twitter diseñada para acompañar una publicación.",
+    "pt-BR": "Card de citação ou dados do Twitter projetado para acompanhar uma postagem.",
+    "it": "Card con citazione o dati di Twitter progettata per accompagnare un post.",
+    "vi": "Thẻ trích dẫn hoặc dữ liệu Twitter được thiết kế để đi kèm với bài đăng.",
+    "pl": "Karta z cytatem lub danymi Twitter zaprojektowana do pary z postem.",
+    "id": "Kartu kutipan atau data Twitter yang dirancang untuk dipasangkan dengan postingan.",
+    "nl": "Twitter-citaat- of datakaart ontworpen om te combineren met een bericht.",
+    "ar": "بطاقة اقتباس أو بيانات Twitter مصممة لمرافقة المنشور.",
+    "tr": "Bir gönderiyle eşleştirilmek üzere tasarlanmış Twitter alıntı veya veri kartı.",
+    "uk": "Картка з цитатою або даними Twitter, призначена для публікації."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -42,11 +82,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Twitter 分享卡」模板把我的内容做成一份「推特金句 / 数据卡, 适合配推文」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Twitter Share Card template to turn my content into a Twitter quote or data card designed to pair with a post. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Twitter 分享卡」模板把我的内容做成一份「推特金句 / 数据卡, 适合配推文」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Twitter 分享卡"
+          "title": "Twitter Share Card",
+          "title_i18n": {
+            "en": "Twitter Share Card",
+            "zh-CN": "Twitter 分享卡"
+          }
         }
       ]
     },

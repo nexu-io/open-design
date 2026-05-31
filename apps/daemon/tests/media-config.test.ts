@@ -21,7 +21,7 @@ const OPENAI_ENV_KEYS = [
   'AZURE_OPENAI_API_KEY',
 ];
 
-describe('media-config OpenAI OAuth fallback', () => {
+describe('media-config OpenAI auth-file fallback', () => {
   let homeDir: string;
   let projectRoot: string;
   const originalHome = process.env.HOME;
@@ -30,6 +30,7 @@ describe('media-config OpenAI OAuth fallback', () => {
   );
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  const originalSandboxMode = process.env.OD_SANDBOX_MODE;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
@@ -42,6 +43,7 @@ describe('media-config OpenAI OAuth fallback', () => {
     }
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
+    delete process.env.OD_SANDBOX_MODE;
   });
 
   afterEach(async () => {
@@ -67,6 +69,11 @@ describe('media-config OpenAI OAuth fallback', () => {
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
     }
+    if (originalSandboxMode == null) {
+      delete process.env.OD_SANDBOX_MODE;
+    } else {
+      process.env.OD_SANDBOX_MODE = originalSandboxMode;
+    }
     homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
@@ -88,7 +95,7 @@ describe('media-config OpenAI OAuth fallback', () => {
     return (masked.providers as Record<string, unknown>).openai;
   }
 
-  it('uses Hermes openai-codex OAuth when no API key is configured', async () => {
+  it('ignores Hermes openai-codex OAuth for media generation', async () => {
     await writeHomeJson('.hermes/auth.json', {
       providers: {
         'openai-codex': {
@@ -100,15 +107,15 @@ describe('media-config OpenAI OAuth fallback', () => {
     const resolved = await resolveProviderConfig(projectRoot, 'openai');
     const masked = await readMaskedConfig(projectRoot);
 
-    expect(resolved.apiKey).toBe('hermes-oauth-token');
+    expect(resolved.apiKey).toBe('');
     expect(openaiProvider(masked)).toMatchObject({
-      configured: true,
-      source: 'oauth-hermes',
+      configured: false,
+      source: 'unset',
       apiKeyTail: '',
     });
   });
 
-  it('uses Codex OAuth when Hermes has no OpenAI Codex credential', async () => {
+  it('ignores Codex OAuth tokens for media generation', async () => {
     await writeHomeJson('.codex/auth.json', {
       tokens: { access_token: 'codex-oauth-token' },
     });
@@ -116,15 +123,56 @@ describe('media-config OpenAI OAuth fallback', () => {
     const resolved = await resolveProviderConfig(projectRoot, 'openai');
     const masked = await readMaskedConfig(projectRoot);
 
-    expect(resolved.apiKey).toBe('codex-oauth-token');
+    expect(resolved.apiKey).toBe('');
     expect(openaiProvider(masked)).toMatchObject({
-      configured: true,
-      source: 'oauth-codex',
+      configured: false,
+      source: 'unset',
       apiKeyTail: '',
     });
   });
 
-  it('keeps stored provider config ahead of OAuth fallbacks', async () => {
+  it('does not read host OpenAI auth files in sandbox mode', async () => {
+    process.env.OD_SANDBOX_MODE = '1';
+    await writeHomeJson('.hermes/auth.json', {
+      providers: {
+        'openai-codex': {
+          tokens: { access_token: 'hermes-oauth-token' },
+        },
+      },
+    });
+    await writeHomeJson('.codex/auth.json', {
+      tokens: { access_token: 'codex-oauth-token' },
+      OPENAI_API_KEY: 'host-codex-api-key',
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'openai');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('');
+    expect(openaiProvider(masked)).toMatchObject({
+      configured: false,
+      source: 'unset',
+    });
+  });
+
+  it('uses explicit OPENAI_API_KEY from Codex auth files', async () => {
+    await writeHomeJson('.codex/auth.json', {
+      tokens: { access_token: 'codex-oauth-token' },
+      OPENAI_API_KEY: 'codex-api-key',
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'openai');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('codex-api-key');
+    expect(openaiProvider(masked)).toMatchObject({
+      configured: true,
+      source: 'codex-auth',
+      apiKeyTail: '',
+    });
+  });
+
+  it('keeps stored provider config ahead of auth-file fallbacks', async () => {
     await writeHomeJson('.hermes/auth.json', {
       providers: {
         'openai-codex': {

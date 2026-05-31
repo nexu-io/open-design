@@ -1,15 +1,6 @@
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none' role='img' aria-label='Open Design'>
-  <title>Open Design</title>
-  <g stroke='#1F1B16' stroke-width='3.4' stroke-linecap='square' fill='none'>
-    <path d='M10 24 L10 10 L24 10' />
-    <path d='M40 10 L54 10 L54 24' />
-    <path d='M54 40 L54 54 L40 54' />
-    <path d='M24 54 L10 54 L10 40' />
-  </g>
-  <g stroke='#C2532D' stroke-width='3' stroke-linecap='round'>
-    <line x1='32' y1='20' x2='32' y2='44' />
-    <line x1='20' y1='32' x2='44' y2='32' />
-    <line x1='23.51' y1='23.51' x2='40.49' y2='40.49' />
-    <line x1='40.49' y1='23.51' x2='23.51' y2='40.49' />
-  </g>
+<svg width="444" height="444" viewBox="0 0 444 444" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="444" height="444" fill="#202020"/>
+<path d="M212.059 291.897L166.327 171.549C164.847 167.654 168.651 163.836 172.52 165.333L292.925 211.915C297.88 213.832 296.514 221.229 291.205 221.229H221.322V290.177C221.322 295.523 213.957 296.891 212.059 291.897Z" fill="#FFFFFF"/>
+<path d="M72 222C72 304.843 139.157 372 222 372H82C76.4772 372 72 367.523 72 362V222Z" fill="#FFFFFF"/>
+<path d="M222 87C296.558 87 357 147.442 357 222C357 296.558 296.558 357 222 357C147.442 357 87 296.558 87 222C87 147.442 147.442 87 222 87Z" stroke="#FFFFFF" stroke-width="30"/>
 </svg>

@@ -830,12 +830,12 @@ const CATALOGUE: CuratedSkill[] = [
   {
     id: 'd3-visualization',
     description:
-      'Teaches the agent to produce D3 charts and interactive data visualizations. Useful for editorial dashboards, reports, and explanatory graphics.',
-    triggers: ['d3', 'd3.js', 'interactive chart', 'data visualization', 'editorial chart'],
+      'Teaches the agent to produce D3 charts and interactive data visualizations. A comprehensive D3.js skill with examples across chart types and techniques giving the agent expert-level knowledge to generate complex, interactive visualizations. Useful for editorial dashboards, reports, data-rich prototypes, and explanatory graphics.',
+    triggers: ['d3', 'd3.js', 'interactive chart', 'data visualization', 'editorial chart', 'd3 bar chart', 'd3 line chart', 'd3 map', 'd3 force graph', 'd3 sankey', 'd3 treemap', 'd3 sunburst', 'd3 choropleth', 'd3 animation', 'd3 scroll', 'snow-d3'],
     mode: 'prototype',
     category: 'diagrams',
-    upstream: 'https://github.com/chrisvoncsefalvay/d3-claude-skill',
-    attribution: 'Curated from @chrisvoncsefalvay.',
+    upstream: 'https://github.com/jiannanya/snow-d3/',
+    attribution: 'Curated from @jiannanya.',
   },
   {
     id: 'hand-drawn-diagrams',

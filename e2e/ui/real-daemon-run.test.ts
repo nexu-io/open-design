@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { Page, Response } from '@playwright/test';
+import type { Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
 import type { FakeAgentId } from '@/playwright/fake-agents';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const GENERATED_FILE = 'real-daemon-smoke.html';
@@ -65,6 +66,14 @@ test('real daemon run streams, persists, and previews an artifact', async ({ pag
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+
+  const rawResponse = await page.request.get(`/api/projects/${projectId}/raw/${GENERATED_FILE}`, {
+    headers: { Origin: 'null' },
+  });
+  expect(rawResponse.ok(), await rawResponse.text()).toBeTruthy();
+  expect(rawResponse.headers()['access-control-allow-origin']).toBe('*');
+  expect(rawResponse.headers()['content-type']).toContain('text/html');
+  expect(await rawResponse.text()).toContain(GENERATED_HEADING);
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
@@ -238,6 +247,61 @@ test('real daemon run previews an artifact from a fake OpenCode runtime', async 
   await expectProjectFileToContain(page, projectId, fileName, heading);
 });
 
+test('plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
+  await configureFakeAgent(page, 'codex');
+  await installBrowserAgentConfig(page, 'codex');
+  await gotoEntryHome(page);
+  await setBrowserAgentConfig(page, 'codex');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserAgentConfig(page, 'codex');
+  await configureFakeAgent(page, 'codex');
+  await expectBrowserAgentConfig(page, 'codex');
+  await dismissPrivacyDialog(page);
+
+  await page.getByTestId('home-hero-shortcuts-trigger').click();
+  await page.getByTestId('home-hero-rail-create-plugin').click();
+  await expect(page.getByTestId('home-hero-input')).toHaveValue(/Create an Open Design plugin for:/);
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await page.getByTestId('home-hero-submit').click();
+
+  const projectRequest = await projectRequestPromise;
+  const projectBody = projectRequest.postDataJSON() as {
+    pluginId?: string;
+    pendingPrompt?: string;
+  };
+  expect(projectBody.pluginId).toBe('od-plugin-authoring');
+  expect(projectBody.pendingPrompt).toContain('produce a folder named generated-plugin');
+
+  const runRequest = await runRequestPromise;
+  const runBody = runRequest.postDataJSON() as { message?: string; agentId?: string };
+  expect(runBody.agentId).toBe('codex');
+  expect(runBody.message).toContain('produce a folder named generated-plugin');
+
+  await expectWorkspaceReady(page);
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [
+    'generated-plugin/open-design.json',
+    'generated-plugin/SKILL.md',
+    'generated-plugin/examples/demo.md',
+  ]);
+  await expectProjectFileToContain(page, projectId, 'generated-plugin/open-design.json', '"name": "generated-plugin"');
+  await expectProjectFileToContain(page, projectId, 'generated-plugin/SKILL.md', '# Generated Plugin');
+
+  await expect(page.getByText('Files from this turn')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-actions-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-install-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-publish-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeVisible();
+
+  await expect(page.getByTestId('design-plugin-folder-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('design-plugin-folder-install-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('design-plugin-folder-publish-generated-plugin')).toBeVisible();
+  await expect(page.getByTestId('design-plugin-folder-contribute-generated-plugin')).toBeVisible();
+});
+
 test('real daemon run supports fake non-Codex runtime protocols', async ({ page }) => {
   test.setTimeout(180_000);
 
@@ -298,7 +362,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -378,15 +442,14 @@ async function openNewProjectModal(page: Page) {
 
 async function dismissPrivacyDialog(page: Page) {
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
@@ -629,6 +692,16 @@ async function listConversationMessages(
 function isCreateRunResponse(response: Response): boolean {
   const url = new URL(response.url());
   return url.pathname === '/api/runs' && response.request().method() === 'POST';
+}
+
+function isCreateRunRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/runs' && request.method() === 'POST';
+}
+
+function isCreateProjectRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
 function expectCreateRunAgentId(response: Response, agentId: FakeAgentId) {

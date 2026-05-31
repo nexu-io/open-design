@@ -89,6 +89,11 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
+  /* Container for the HTML preview iframe's responsive scale (below): the
+   * iframe renders at a fixed desktop design width and is scaled by the
+   * card's own width so the page reads as a faithful thumbnail instead of
+   * collapsing at the narrow card width. */
+  container-type: inline-size;
 }
 .recent-projects__card-thumb-html,
 .recent-projects__card-thumb-image,
@@ -116,6 +121,43 @@
 .recent-projects__thumb-iframe {
   pointer-events: none;
   background: #fff;
+  /* Render the page at a desktop design width, then scale it down to the
+   * card width via a container query so non-responsive galleries don't
+   * collapse at the narrow card size. 1280x720 keeps the 16/9 thumb ratio,
+   * so the scaled iframe fills the thumb exactly. */
+  inset: auto;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform-origin: 0 0;
+  transform: scale(calc(100cqw / 1280px));
+}
+.recent-projects__deck-frame,
+.recent-projects__deck-iframe,
+.recent-projects__deck-cover-loading {
+  position: absolute;
+  inset: 0;
+}
+.recent-projects__deck-frame {
+  overflow: hidden;
+  background: #fff;
+}
+.recent-projects__deck-iframe {
+  width: 1280px;
+  height: 720px;
+  border: 0;
+  pointer-events: none;
+  transform: scale(var(--recent-deck-scale, 1));
+  transform-origin: 0 0;
+}
+.recent-projects__deck-cover-loading {
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.52) 50%, transparent 70%) 0 0 / 200% 100%,
+    var(--bg-subtle);
+  animation: recent-projects-shimmer 1.4s ease-in-out infinite;
 }
 .recent-projects__card-glyph {
   font-family: var(--serif);
@@ -173,6 +215,9 @@
 .recent-projects__card-status-failed {
   color: var(--red);
 }
+.recent-projects__card-status-published {
+  color: var(--green);
+}
 .recent-projects__card-status-dot {
   width: 6px;
   height: 6px;
@@ -186,4 +231,9 @@
 @keyframes recent-projects-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+@keyframes recent-projects-shimmer {
+  to {
+    background-position: -200% 0, 0 0;
+  }
 }

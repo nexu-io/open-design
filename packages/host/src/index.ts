@@ -9,6 +9,11 @@ export type OpenDesignHostClientType =
   (typeof OPEN_DESIGN_HOST_CLIENT_TYPES)[keyof typeof OPEN_DESIGN_HOST_CLIENT_TYPES];
 
 export type OpenDesignHostClient = {
+  // BCP-47 locale string (e.g. "zh-CN", "pt-BR") the host process read from
+  // the OS at startup. The renderer uses this so the packaged desktop app
+  // can follow the OS language even when Chromium's built-in
+  // `navigator.language` would have defaulted to en-US.
+  osLocale?: string;
   platform?: string;
   type: OpenDesignHostClientType;
 };
@@ -31,7 +36,7 @@ export type OpenDesignHostProjectImportInit = {
 
 export type OpenDesignHostProjectImportSuccess = {
   conversationId: string;
-  entryFile: string;
+  entryFile: string | null;
   ok: true;
   projectId: string;
 };
@@ -93,7 +98,7 @@ export type OpenDesignHostUpdaterState =
   (typeof OPEN_DESIGN_HOST_UPDATER_STATES)[keyof typeof OPEN_DESIGN_HOST_UPDATER_STATES];
 
 export type OpenDesignHostUpdaterMode = "js-incremental" | "package-launcher";
-export type OpenDesignHostUpdaterChannel = "beta" | "stable";
+export type OpenDesignHostUpdaterChannel = "beta" | "nightly" | "preview" | "stable";
 
 export type OpenDesignHostUpdaterActionOptions = {
   payload?: Record<string, unknown>;
@@ -250,6 +255,7 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
   const client = value.client;
   if (!isRecord(client) || client.type !== OPEN_DESIGN_HOST_CLIENT_TYPES.DESKTOP) return false;
   if (client.platform != null && typeof client.platform !== "string") return false;
+  if (client.osLocale != null && typeof client.osLocale !== "string") return false;
 
   const shell = value.shell;
   if (!isRecord(shell) || !hasFunction(shell, "openExternal") || !hasFunction(shell, "openPath")) return false;
@@ -310,8 +316,11 @@ export function normalizeOpenDesignHostProjectImportResult(input: unknown): Open
   const rawProjectId = isRecord(project) ? project.id : null;
   const projectId = typeof rawProjectId === "string" ? rawProjectId : null;
   const conversationId = typeof response.conversationId === "string" ? response.conversationId : null;
-  const entryFile = typeof response.entryFile === "string" ? response.entryFile : null;
-  if (projectId == null || conversationId == null || entryFile == null) {
+  const entryFile =
+    typeof response.entryFile === "string" || response.entryFile === null
+      ? response.entryFile
+      : undefined;
+  if (projectId == null || conversationId == null || entryFile === undefined) {
     return failure("daemon import response did not include host project identifiers", response);
   }
 

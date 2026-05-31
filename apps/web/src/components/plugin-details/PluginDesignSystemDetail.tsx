@@ -23,7 +23,7 @@ import {
 } from '../../providers/registry';
 import { DesignSpecView } from '../DesignSpecView';
 import { PreviewModal, type PreviewView } from '../PreviewModal';
-import { PluginShareMenu } from './PluginShareMenu';
+import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
 
 interface Props {
@@ -131,6 +131,11 @@ export function PluginDesignSystemDetail({
       initialViewId={dsRef ? 'showcase' : 'spec'}
       onView={handleView}
       exportTitleFor={(viewId) => `${record.title} — ${viewId}`}
+      shareTarget={{
+        title: record.title,
+        description: record.manifest?.description || dsRef || undefined,
+        url: buildPluginShareUrl(record),
+      }}
       onClose={onClose}
       sidebar={{
         label: 'Plugin info',

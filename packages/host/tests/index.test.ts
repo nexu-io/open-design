@@ -129,6 +129,29 @@ describe("open-design host contract", () => {
     expect(JSON.stringify(result)).not.toContain("resolvedDir");
   });
 
+  it("accepts imported folders with no detected entry file", () => {
+    const result = normalizeOpenDesignHostProjectImportResult({
+      ok: true,
+      response: {
+        project: {
+          id: "project-1",
+          name: "Imported source repo",
+          resolvedDir: "/private/path/that-must-not-cross",
+        },
+        conversationId: "conversation-1",
+        entryFile: null,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      entryFile: null,
+    });
+    expect(JSON.stringify(result)).not.toContain("resolvedDir");
+  });
+
   it("preserves canceled and structured failure project-import results", () => {
     expect(normalizeOpenDesignHostProjectImportResult({ canceled: true, ok: false })).toEqual({
       canceled: true,

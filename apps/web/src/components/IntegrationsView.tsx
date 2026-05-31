@@ -194,9 +194,9 @@ function SkillsComingSoonPanel() {
 
 function integrationTabLabel(id: IntegrationTab, t: ReturnType<typeof useT>): string {
   switch (id) {
-    case 'mcp': return 'MCP';
+    case 'mcp': return t('integrations.tabLabel.mcp');
     case 'connectors': return t('entry.tabConnectors');
-    case 'skills': return t('homeHero.skills');
+    case 'skills': return t('integrations.tabLabel.skills');
     case 'use-everywhere': return t('entry.useEverywhereTitle');
   }
 }
@@ -206,6 +206,6 @@ function integrationTabHint(id: IntegrationTab, t: ReturnType<typeof useT>): str
     case 'mcp': return t('integrations.tabHint.mcp');
     case 'connectors': return t('integrations.tabHint.connectors');
     case 'skills': return t('tasks.comingSoon');
-    case 'use-everywhere': return 'CLI, HTTP, MCP';
+    case 'use-everywhere': return t('integrations.tabHint.useEverywhere');
   }
 }

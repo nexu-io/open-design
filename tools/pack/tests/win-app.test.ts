@@ -13,6 +13,8 @@ const PACKAGE_DIRS = [
   "packages/sidecar-proto",
   "packages/sidecar",
   "packages/platform",
+  "packages/download",
+  "packages/host",
   "packages/agui-adapter",
   "packages/plugin-runtime",
   "packages/diagnostics",
@@ -46,6 +48,7 @@ function createConfig(root: string, webOutputMode: ToolPackConfig["webOutputMode
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
+    requireVelaCli: false,
     roots: {
       cacheRoot: join(root, ".cache"),
       output: {

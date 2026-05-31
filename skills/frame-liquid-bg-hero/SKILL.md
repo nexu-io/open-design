@@ -3,7 +3,9 @@ name: frame-liquid-bg-hero
 zh_name: "流体背景 Hero 帧"
 en_name: "Liquid Background Hero"
 emoji: "🌊"
-description: "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报"
+description: "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters."
+zh_description: "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报"
+en_description: "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters."
 category: poster
 scenario: video
 aspect_hint: "1920×1080 (16:9) 或 1080×1920 (9:16)"
@@ -27,7 +29,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Liquid Background Hero template to turn my content into a WebGL-style fluid displacement background with a quote overlay for a video intro, landing hero, or poster. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 流体背景 Hero】

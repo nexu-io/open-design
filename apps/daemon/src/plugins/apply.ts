@@ -146,8 +146,12 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
     autoAtom,
   );
 
+  const pluginTitle = resolveLocalizedText(manifest.title_i18n, input.locale) || (manifest.title ?? manifest.name);
+  const pluginDescription =
+    resolveLocalizedText(manifest.description_i18n, input.locale) || manifest.description;
+
   const projectMetadata: PluginProjectMetadataPatch = {
-    name: manifest.title ?? manifest.name,
+    name: pluginTitle,
     taskKind,
   };
   const skillRef = pickFirstSkillId(manifest);
@@ -187,8 +191,8 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
     mcpServers,
     pipeline:             appliedPipeline,
     genuiSurfaces,
-    pluginTitle:          manifest.title ?? manifest.name,
-    pluginDescription:    manifest.description,
+    pluginTitle,
+    pluginDescription,
     query:                queryText || undefined,
     status:               'fresh',
   };

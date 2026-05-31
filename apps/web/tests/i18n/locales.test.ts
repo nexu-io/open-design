@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { resolveSystemLocale } from '../../src/i18n';
 import { en } from '../../src/i18n/locales/en';
 import { id } from '../../src/i18n/locales/id';
+import { zhCN } from '../../src/i18n/locales/zh-CN';
+import { zhTW } from '../../src/i18n/locales/zh-TW';
 import { LOCALES, LOCALE_LABEL, type Dict, type Locale } from '../../src/i18n/types';
 
 const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
@@ -124,6 +126,62 @@ describe('i18n locales', () => {
     }
   });
 
+  it('keeps Chinese integrations copy translated instead of falling back to English', () => {
+    const translatedKeys: Array<keyof Dict> = [
+      'entry.navIntegrations',
+      'integrations.kicker',
+      'integrations.lede',
+      'integrations.agentReady',
+      'integrations.tabLabel.mcp',
+      'integrations.tabLabel.skills',
+      'integrations.tabHint.mcp',
+      'integrations.tabHint.connectors',
+      'integrations.tabHint.useEverywhere',
+      'integrations.skillsTitle',
+      'integrations.skillsBody',
+      'mcpClient.title',
+      'mcpClient.subtitle',
+      'mcpClient.addServer',
+      'mcpClient.emptyTitle',
+      'mcpClient.emptyBody',
+      'mcpClient.saveChanges',
+      'mcpClient.storedAt',
+      'mcpClient.daemonError',
+      'mcpClient.saveFailed',
+      'tasks.comingSoon',
+    ];
+
+    for (const key of translatedKeys) {
+      expect(zhCN[key], `zh-CN.${key}`).not.toBe(en[key]);
+      expect(zhTW[key], `zh-TW.${key}`).not.toBe(en[key]);
+    }
+  });
+
+  it('keeps Routines settings page copy translated in Chinese (issue #1372)', () => {
+    const translatedKeys: Array<keyof Dict> = [
+      'routines.title',
+      'routines.subtitle',
+      'routines.newAutomation',
+      'routines.runNow',
+      'routines.pause',
+      'routines.resume',
+      'routines.history',
+      'routines.delete',
+      'routines.describe.daily',
+      'routines.describe.weekly',
+      'routines.status.succeeded',
+      'routines.status.failed',
+      'routines.modeCreate',
+      'routines.confirmDelete',
+      'routines.errorPickProject',
+    ];
+
+    for (const key of translatedKeys) {
+      expect(zhCN[key], `zh-CN.${key}`).not.toBe(en[key]);
+      expect(zhTW[key], `zh-TW.${key}`).not.toBe(en[key]);
+    }
+  });
+
   it('declares CI-sensitive Indonesian fallback keys explicitly', () => {
     const explicitKeys = new Set(explicitLocaleKeys('id'));
     const requiredExplicitKeys = Object.keys(en).filter((key) => {
@@ -137,5 +195,40 @@ describe('i18n locales', () => {
     const source = readFileSync(new URL('../../src/i18n/locales/id.ts', import.meta.url), 'utf8');
 
     expect(source).not.toMatch(/en\['(?:connectors\.category\.|liveArtifact\.viewer\.)/);
+  });
+
+  // Tier-1 locale parity lock (issue #1894):
+  //
+  // Most locale modules use `...en` spread so missing translations silently
+  // fall back to English at runtime — that satisfies the dictionary-shape
+  // test above (`Object.keys(dict)` is complete) but hides drift between
+  // English and the rendered locale. `zh-CN` is the one locale today that
+  // declares every key explicitly with no `...en` spread, so a new English
+  // key without a matching `zh-CN` entry is a *real* hole, not a benign
+  // fallback. The two cases below lock that property in place: any future
+  // PR that lets `zh-CN` drift, or reintroduces an implicit spread, fails
+  // CI loudly instead of regressing translation coverage in silence.
+  it('keeps zh-CN explicitly translated for every English key (tier-1 parity lock)', () => {
+    const englishKeys = Object.keys(en).sort();
+    const explicit = explicitLocaleKeys('zh-CN').sort();
+
+    expect(
+      explicit,
+      'zh-CN must explicitly declare every English key (no implicit `...en` spread fallback). ' +
+        'Add the missing translations to `apps/web/src/i18n/locales/zh-CN.ts` rather than re-introducing the spread.',
+    ).toEqual(englishKeys);
+  });
+
+  it('keeps the zh-CN locale source free of the `...en` spread fallback', () => {
+    const source = readFileSync(
+      new URL('../../src/i18n/locales/zh-CN.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(
+      source,
+      'zh-CN.ts must not use `...en` spread — every key must be explicitly translated. ' +
+        'If you need to add new keys, declare them with their Chinese values directly.',
+    ).not.toMatch(/\.\.\.en\b/);
   });
 });

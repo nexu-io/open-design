@@ -1,0 +1,13 @@
+# Codex CLI sidecar (optional). Adds a friendlier picker entry when this skill
+# is loaded by Codex from ~/.agents/skills/od-contribute/ or .agents/skills/.
+# Not required — Codex loads SKILL.md regardless.
+
+interface:
+  display_name: "Open Design — Contribute"
+  short_description: "Ship a Skill / Design System / translation / typo fix to nexu-io/open-design without writing code."
+  default_prompt: "I want to contribute to Open Design."
+
+policy:
+  # Allow Codex to surface this skill when the user mentions OD contribution
+  # without an explicit `$od-contribute` invocation. Keep on — it's the whole point.
+  allow_implicit_invocation: true

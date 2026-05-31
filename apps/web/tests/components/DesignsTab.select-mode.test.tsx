@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignsTab } from '../../src/components/DesignsTab';
@@ -90,6 +90,114 @@ describe('DesignsTab select mode', () => {
 
     expect(screen.queryByText('0 selected')).toBeNull();
     expect(screen.getByRole('button', { name: 'Select' })).toBeTruthy();
+  });
+
+  it('confirms bulk project deletion and shows success feedback', async () => {
+    const onDelete = vi.fn().mockResolvedValue(true);
+    render(
+      <DesignsTab
+        projects={[
+          project,
+          {
+            ...project,
+            id: 'project-2',
+            name: 'Brand system',
+            createdAt: 3,
+            updatedAt: 4,
+          },
+        ]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={onDelete}
+        onRename={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+    fireEvent.click(screen.getByText('Landing refresh').closest('.design-card') as HTMLElement);
+    fireEvent.click(screen.getByText('Brand system').closest('.design-card') as HTMLElement);
+
+    expect(screen.getByText('2 selected')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Delete selected',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledTimes(2);
+    });
+    expect(onDelete).toHaveBeenNthCalledWith(1, 'project-1');
+    expect(onDelete).toHaveBeenNthCalledWith(2, 'project-2');
+    expect(screen.getByRole('status').textContent).toContain(
+      '2 project(s) deleted successfully.',
+    );
+    expect(screen.queryByText('2 selected')).toBeNull();
+  });
+
+  it('restarts the bulk delete toast timer for repeated matching results', async () => {
+    vi.useFakeTimers();
+    const onDelete = vi.fn().mockResolvedValue(true);
+
+    const flushDelete = async () => {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+    const deleteSelectedProject = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+      fireEvent.click(screen.getByText('Landing refresh').closest('.design-card') as HTMLElement);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+      fireEvent.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: 'Delete selected',
+        }),
+      );
+      await flushDelete();
+    };
+
+    try {
+      render(
+        <DesignsTab
+          projects={[project]}
+          skills={[]}
+          designSystems={[]}
+          onOpen={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onDelete={onDelete}
+          onRename={vi.fn()}
+        />,
+      );
+
+      await deleteSelectedProject();
+      expect(screen.getByRole('status').textContent).toContain(
+        '1 project(s) deleted successfully.',
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      await deleteSelectedProject();
+
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole('status').textContent).toContain(
+        '1 project(s) deleted successfully.',
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(screen.queryByRole('status')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks design-system projects with a dedicated tag', () => {

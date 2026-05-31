@@ -36,7 +36,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # 需要时构建 web package
 ```
 
-要求 Node `~24` 和 pnpm `10.33.x`。`nvm` / `fnm` 是可选路径；如果你习惯用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`。macOS、Linux、WSL2 是主要路径。Windows 原生应该能跑但不是主要目标 —— 跑不起来请开 issue。
+要求 Node `~24` 和 pnpm `10.33.x`。`nvm` / `fnm` 是可选路径；如果你习惯用它们，先执行 `nvm install 24 && nvm use 24` 或 `fnm install 24 && fnm use 24`。macOS、Linux、WSL2 是主要路径。Windows 原生已支持；常见的安装与配置坑请参见 [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md)。
 
 **开发 OD 本身不需要在 `PATH` 上装任何 agent CLI** —— daemon 会告诉你「找不到 agent」并落到 **Anthropic API · BYOK** 路径，反而是最快的开发循环。
 
@@ -234,6 +234,7 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 
 - **一个 PR 只做一件事。** 加 skill + 重构 parser + 升依赖，是三个 PR。
 - **标题用动词起头 + 范围。** `add dating-web skill`、`fix daemon SSE backpressure when CLI hangs`、`docs: clarify .od layout`。
+- **使用 PR 模板。** 把 [`.github/pull_request_template.md`](.github/pull_request_template.md) 的每一节都填上 —— Why、What users will see、Surface area、Screenshots（如果有 UI 改动）、Bug fix verification（如果是修 bug）、Validation。留空的节会被 reviewer 回 "please fill in"。
 - **正文解释 why。** 「这个 PR 改了什么」从 diff 一般能看出来；「为什么要改」很少能。
 - **如果有 issue，引用它。** 没有、且改动非平凡，请先开 issue 让我们先就「值不值得做」达成一致，再投入时间。
 - **Review 期间不要 squash。** 推 fixup commit；merge 时我们会 squash。

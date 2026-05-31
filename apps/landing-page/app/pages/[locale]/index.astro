@@ -1,80 +1,12 @@
 ---
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import FontStylesheet from '../../_components/font-stylesheet.astro';
-import HomeEnhancer from '../../_components/home-enhancer.astro';
-import LocaleSwitcherEnhancer from '../../_components/locale-switcher-enhancer.astro';
-import PreciseLazyload from '../../_components/precise-lazyload.astro';
-import Page from '../../page';
-import { getCatalogCounts } from '../../_lib/catalog';
-import { getGithubRepoMeta } from '../../_lib/github';
-import {
-  LOCALE_OG,
-  PREFIXED_LOCALES,
-  alternateLinks,
-  isLocale,
-  localeDir,
-  localePath,
-  type Locale,
-} from '../../_lib/i18n';
-import { heroImage, heroImageSrcset } from '../../image-assets';
-import '../../globals.css';
+import HomePage from '../index.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../i18n';
 
 export function getStaticPaths() {
-  return PREFIXED_LOCALES.map((locale) => ({
-    params: { locale },
-  }));
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
 }
-
-const localeParam = Astro.params.locale;
-const locale: Locale = isLocale(localeParam) ? localeParam : 'en';
-const counts = await getCatalogCounts();
-const github = await getGithubRepoMeta();
-const pathname = localePath('/', locale, { prefixDefault: true });
-const title = 'Open Design — Design with the agent already on your laptop.';
-const description = `The open-source alternative to Claude Design. Your existing coding agent becomes the design engine, driven by ${counts.skills} composable skills and ${counts.systems} brand-grade design systems.`;
-const canonical = new URL(pathname, Astro.site).toString();
-const pageHtml = renderToStaticMarkup(
-  Page({ counts, github, locale, pathname, prefixDefaultLocale: true }) as ReturnType<typeof createElement>,
-);
 ---
 
-<!doctype html>
-<html lang={locale} dir={localeDir(locale)}>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#efe7d2" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
-    {alternateLinks(pathname).map((item) => (
-      <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
-    ))}
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <FontStylesheet />
-    <link
-      rel="preload"
-      as="image"
-      href={heroImage}
-      imagesrcset={heroImageSrcset}
-      imagesizes="(max-width: 768px) 100vw, 60vw"
-      fetchpriority="high"
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Open Design" />
-    <meta property="og:locale" content={LOCALE_OG[locale]} />
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={heroImage} />
-    <meta name="twitter:card" content="summary_large_image" />
-  </head>
-  <body>
-    <Fragment set:html={pageHtml} />
-    <LocaleSwitcherEnhancer />
-    <PreciseLazyload />
-    <HomeEnhancer />
-  </body>
-</html>
+<HomePage />

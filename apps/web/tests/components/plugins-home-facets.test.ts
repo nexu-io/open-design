@@ -49,6 +49,36 @@ describe('extractCategories', () => {
     expect(extractCategories(fixture({ id: 'audio', od: { mode: 'audio' } }))).toEqual(['audio']);
   });
 
+  it('groups live artifacts ahead of their underlying rendering mode', () => {
+    expect(
+      extractCategories(
+        fixture({
+          id: 'example-live-dashboard',
+          tags: ['live-dashboard'],
+          od: { mode: 'prototype' },
+        }),
+      ),
+    ).toEqual(['live-artifact']);
+    expect(
+      extractCategories(
+        fixture({
+          id: 'image-template-notion-team-dashboard-live-artifact',
+          tags: ['live-artifact'],
+          od: { mode: 'image' },
+        }),
+      ),
+    ).toEqual(['live-artifact']);
+    expect(
+      extractCategories(
+        fixture({
+          id: 'example-social-media-matrix-tracker-template',
+          tags: ['live-artifacts'],
+          od: { mode: 'template' },
+        }),
+      ),
+    ).toEqual(['live-artifact']);
+  });
+
   it('splits HyperFrames from the broader video mode', () => {
     expect(
       extractCategories(fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } })),
@@ -108,7 +138,16 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'cinema', tags: ['cinematic'], od: { mode: 'video' } }))).toEqual(['cinematic-story']);
   });
 
-  it('keeps HyperFrames and Audio flat with no second-level buckets', () => {
+  it('keeps Live Artifact, HyperFrames, and Audio flat with no second-level buckets', () => {
+    expect(
+      extractSubcategories(
+        fixture({
+          id: 'example-live-artifact',
+          tags: ['live-artifact'],
+          od: { mode: 'prototype' },
+        }),
+      ),
+    ).toEqual([]);
     expect(extractSubcategories(fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } }))).toEqual([]);
     expect(extractSubcategories(fixture({ id: 'audio', od: { mode: 'audio' } }))).toEqual([]);
   });
@@ -118,6 +157,7 @@ describe('buildFacetCatalog', () => {
   it('produces artifact-kind primary tabs in product order', () => {
     const catalog = buildFacetCatalog([
       fixture({ id: 'prototype', tags: ['dashboard'], od: { mode: 'prototype' } }),
+      fixture({ id: 'example-live-artifact', tags: ['live-artifact'], od: { mode: 'prototype' } }),
       fixture({ id: 'deck', tags: ['pitch-deck'], od: { mode: 'deck' } }),
       fixture({ id: 'image', tags: ['profile-avatar'], od: { mode: 'image' } }),
       fixture({ id: 'video', tags: ['cinematic'], od: { mode: 'video' } }),
@@ -128,6 +168,7 @@ describe('buildFacetCatalog', () => {
 
     expect(catalog.category.map((o) => [o.slug, o.count])).toEqual([
       ['prototype', 1],
+      ['live-artifact', 1],
       ['deck', 1],
       ['image', 1],
       ['video', 1],
@@ -165,6 +206,7 @@ describe('buildFacetCatalog', () => {
       'data-explainers',
       'cinematic-story',
     ]);
+    expect(catalog.subcategory['live-artifact']).toBeUndefined();
     expect(catalog.subcategory.hyperframes).toBeUndefined();
     expect(catalog.subcategory.audio).toBeUndefined();
   });
@@ -174,6 +216,7 @@ describe('applyFacetSelection', () => {
   const plugins = [
     fixture({ id: 'prototype-dashboard', tags: ['dashboard'], od: { mode: 'prototype' } }),
     fixture({ id: 'prototype-app', tags: ['mobile-app'], od: { mode: 'prototype' } }),
+    fixture({ id: 'example-live-artifact', tags: ['live-artifact'], od: { mode: 'prototype' } }),
     fixture({ id: 'deck', tags: ['pitch-deck'], od: { mode: 'deck' } }),
     fixture({ id: 'image', tags: ['profile-avatar'], od: { mode: 'image' } }),
     fixture({ id: 'video', tags: ['cinematic'], od: { mode: 'video' } }),
@@ -184,13 +227,25 @@ describe('applyFacetSelection', () => {
   it('returns everything when no category is selected', () => {
     expect(
       applyFacetSelection(plugins, { category: null, subcategory: null }).map((p) => p.id),
-    ).toEqual(['prototype-dashboard', 'prototype-app', 'deck', 'image', 'video', 'hf', 'audio']);
+    ).toEqual([
+      'prototype-dashboard',
+      'prototype-app',
+      'example-live-artifact',
+      'deck',
+      'image',
+      'video',
+      'hf',
+      'audio',
+    ]);
   });
 
   it('filters by the selected artifact-kind category slug', () => {
     expect(
       applyFacetSelection(plugins, { category: 'prototype', subcategory: null }).map((p) => p.id),
     ).toEqual(['prototype-dashboard', 'prototype-app']);
+    expect(
+      applyFacetSelection(plugins, { category: 'live-artifact', subcategory: null }).map((p) => p.id),
+    ).toEqual(['example-live-artifact']);
     expect(
       applyFacetSelection(plugins, { category: 'hyperframes', subcategory: null }).map((p) => p.id),
     ).toEqual(['hf']);

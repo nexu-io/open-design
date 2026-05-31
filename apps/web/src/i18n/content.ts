@@ -1012,15 +1012,44 @@ function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function localizedRecordValue(
+  locale: Locale,
+  values: Record<string, string> | undefined,
+  options: { includeEnglishFallback?: boolean } = {},
+): string | undefined {
+  if (!values) return undefined;
+  if (values[locale]) return values[locale];
+  if (locale === 'zh-TW' && values['zh-CN']) return values['zh-CN'];
+  if (locale.startsWith('zh') && values['zh-CN']) return values['zh-CN'];
+  if (options.includeEnglishFallback !== false && values.en) return values.en;
+  return undefined;
+}
+
+export function localizeSkillName(locale: Locale, skill: SkillSummary): string {
+  return localizedRecordValue(locale, skill.displayName) ?? skill.name;
+}
+
 export function localizeSkillPrompt(locale: Locale, skill: SkillSummary): string | undefined {
+  const inline = localizedRecordValue(locale, skill.examplePromptI18n, {
+    includeEnglishFallback: false,
+  });
+  if (inline) return inline;
   const translated = getLocalizedContent(locale)?.skillCopy[skill.id]?.examplePrompt;
   if (translated) return translated;
+  const fallback = localizedRecordValue(locale, skill.examplePromptI18n);
+  if (fallback) return fallback;
   return skill.examplePrompt ? normalizeText(skill.examplePrompt) : undefined;
 }
 
 export function localizeSkillDescription(locale: Locale, skill: SkillSummary): string {
+  const inline = localizedRecordValue(locale, skill.descriptionI18n, {
+    includeEnglishFallback: false,
+  });
+  if (inline) return inline;
   const translated = getLocalizedContent(locale)?.skillCopy[skill.id]?.description;
   if (translated) return translated;
+  const fallback = localizedRecordValue(locale, skill.descriptionI18n);
+  if (fallback) return fallback;
   return normalizeText(skill.description);
 }
 

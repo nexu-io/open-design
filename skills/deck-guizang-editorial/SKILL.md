@@ -3,7 +3,9 @@ name: deck-guizang-editorial
 zh_name: "归藏编辑墨水 Deck"
 en_name: "Guizang Editorial E-Ink Deck"
 emoji: "🖋️"
-description: "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)"
+description: "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune)."
+zh_description: "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)"
+en_description: "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune)."
 category: slides
 scenario: marketing
 aspect_hint: "16:9 横向翻页"
@@ -29,7 +31,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Guizang Editorial E-Ink Deck template to turn my content into an editorial magazine x e-ink horizontal deck with 10 layouts and 5 palettes. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 归藏编辑墨水 Deck (Editorial × E-Ink)】

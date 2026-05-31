@@ -14,10 +14,12 @@
 
 import { useMemo, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { useI18n } from '../../i18n';
 import type { PluginShareAction } from '../../state/projects';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import { PreviewSurface } from './cards/PreviewSurface';
+import { localizePluginDescription, localizePluginTitle } from './localization';
 import { inferPluginPreview } from './preview';
 import type { PluginUseAction } from './useActions';
 
@@ -53,9 +55,11 @@ export function PluginCard({
   onSave,
   onShareAction,
 }: Props) {
+  const { locale } = useI18n();
   const [useMenuOpen, setUseMenuOpen] = useState(false);
   const preview = useMemo(() => inferPluginPreview(record), [record]);
-  const description = record.manifest?.description ?? '';
+  const title = localizePluginTitle(locale, record);
+  const description = localizePluginDescription(locale, record);
   const tags = useMemo(
     () =>
       (record.manifest?.tags ?? [])
@@ -92,7 +96,7 @@ export function PluginCard({
     >
       <PreviewSurface
         pluginId={record.id}
-        pluginTitle={record.title}
+        pluginTitle={title}
         preview={preview}
       />
 
@@ -106,8 +110,8 @@ export function PluginCard({
           ) : null}
         </div>
         <div className="plugins-home__card-overlay-body">
-          <span className="plugins-home__overlay-title" title={record.title}>
-            {record.title}
+          <span className="plugins-home__overlay-title" title={title}>
+            {title}
           </span>
           {description ? (
             <p className="plugins-home__overlay-desc">{description}</p>
@@ -128,7 +132,7 @@ export function PluginCard({
               type="button"
               className="plugins-home__action plugins-home__action--secondary"
               onClick={() => onOpenDetails(record)}
-              aria-label={`View details for ${record.title}`}
+              aria-label={`View details for ${title}`}
               data-testid={`plugins-home-details-${record.id}`}
             >
               <Icon name="eye" size={12} />
@@ -162,7 +166,7 @@ export function PluginCard({
                     disabled={useDisabled}
                     aria-haspopup="menu"
                     aria-expanded={useMenuOpen}
-                    aria-label={`Choose how to use ${record.title}`}
+                    aria-label={`Choose how to use ${title}`}
                     data-testid={`plugins-home-use-menu-${record.id}`}
                   >
                     <Icon name="chevron-down" size={13} />
@@ -171,7 +175,7 @@ export function PluginCard({
                     <div
                       className="plugins-home__use-menu-list"
                       role="menu"
-                      aria-label={`Use options for ${record.title}`}
+                      aria-label={`Use options for ${title}`}
                     >
                       <button
                         type="button"
@@ -202,7 +206,7 @@ export function PluginCard({
           {onShareAction ? (
             <div
               className="plugins-home__share-actions"
-              aria-label={`Share ${record.title}`}
+              aria-label={`Share ${title}`}
             >
               <button
                 type="button"
@@ -210,7 +214,7 @@ export function PluginCard({
                 onClick={() => onShareAction(record, 'publish-github')}
                 disabled={pendingAny || shareBusy}
                 aria-busy={sharePendingAction === 'publish-github' ? 'true' : undefined}
-                aria-label={`Publish ${record.title} as a GitHub repository`}
+                aria-label={`Publish ${title} as a GitHub repository`}
                 title="Publish plugin as a GitHub repository"
                 data-testid={`plugins-home-publish-github-${record.id}`}
               >
@@ -226,7 +230,7 @@ export function PluginCard({
                 onClick={() => onShareAction(record, 'contribute-open-design')}
                 disabled={pendingAny || shareBusy}
                 aria-busy={sharePendingAction === 'contribute-open-design' ? 'true' : undefined}
-                aria-label={`Contribute ${record.title} to Open Design`}
+                aria-label={`Contribute ${title} to Open Design`}
                 title="Contribute plugin to Open Design with a pull request"
                 data-testid={`plugins-home-contribute-open-design-${record.id}`}
               >
@@ -252,15 +256,15 @@ export function PluginCard({
             .join(' ')}
           onClick={() => onSave(record)}
           aria-pressed={isSaved}
-          aria-label={`${isSaved ? 'Saved' : 'Save'} ${record.title}`}
+          aria-label={`${isSaved ? 'Saved' : 'Save'} ${title}`}
           title={isSaved ? 'Saved' : 'Save'}
           data-testid={`plugins-home-save-${record.id}`}
         >
           <Icon name={isSaved ? 'check' : 'star'} size={12} />
           <span className="sr-only">{isSaved ? 'Saved' : 'Save'}</span>
         </button>
-        <span className="plugins-home__card-title" title={record.title}>
-          <span className="plugins-home__card-title-text">{record.title}</span>
+        <span className="plugins-home__card-title" title={title}>
+          <span className="plugins-home__card-title-text">{title}</span>
         </span>
         <TrustBadge trust={record.trust} />
       </div>

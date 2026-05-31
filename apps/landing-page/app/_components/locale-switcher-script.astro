@@ -1,0 +1,126 @@
+---
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../i18n';
+
+const localeRoutes = LANDING_LOCALES.map((locale) => ({
+  code: locale.code,
+  htmlLang: locale.htmlLang,
+}));
+
+const script = `
+(() => {
+  const STORAGE_KEY = 'od.preferredLocale';
+  const DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};
+  const LOCALES = ${JSON.stringify(localeRoutes)};
+  const codes = new Set(LOCALES.map((locale) => locale.code));
+
+  const normalizeLocale = (value) => {
+    if (typeof value !== 'string' || value.trim() === '') return null;
+    const raw = value.toLowerCase().replace(/_/g, '-');
+    if (raw === 'zh-cn' || raw === 'zh-hans' || raw.startsWith('zh-hans-')) return 'zh';
+    if (
+      raw === 'zh-hk' ||
+      raw === 'zh-mo' ||
+      raw === 'zh-tw' ||
+      raw === 'zh-hant' ||
+      raw.startsWith('zh-hant-')
+    ) {
+      return 'zh-tw';
+    }
+    if (raw === 'pt' || raw.startsWith('pt-br')) return 'pt-br';
+    if (codes.has(raw)) return raw;
+    const base = raw.split('-')[0];
+    return codes.has(base) ? base : null;
+  };
+
+  const currentFromPath = () => {
+    const first = window.location.pathname.split('/').filter(Boolean)[0]?.toLowerCase();
+    return first && codes.has(first) ? first : DEFAULT_LOCALE;
+  };
+
+  const basePathFromCurrent = () => {
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    if (parts[0] && codes.has(parts[0].toLowerCase())) parts.shift();
+    return parts.length > 0 ? \`/\${parts.join('/')}/\` : '/';
+  };
+
+  const targetFor = (locale) => {
+    const basePath = basePathFromCurrent();
+    const nextPath = locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
+    return \`\${nextPath}\${window.location.search}\${window.location.hash}\`;
+  };
+
+  const persistLocale = (locale) => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, locale);
+    } catch {}
+  };
+
+  const selectLocale = (locale, persist) => {
+    const next = normalizeLocale(locale) ?? DEFAULT_LOCALE;
+    if (persist) persistLocale(next);
+    const target = targetFor(next);
+    const current = \`\${window.location.pathname}\${window.location.search}\${window.location.hash}\`;
+    if (current !== target) window.location.assign(target);
+  };
+
+  const bindSwitchers = () => {
+    // Each locale entry is a real <a> link with a server-computed href, so
+    // navigation happens for free (and survives right-click → "open in new
+    // tab"). The click handler's only job is to persist the user's choice
+    // so future visits to '/' auto-route to it.
+    for (const link of document.querySelectorAll('[data-locale-link]')) {
+      if (link.dataset.localeBound === 'true') continue;
+      link.dataset.localeBound = 'true';
+      link.addEventListener('click', (event) => {
+        if (event.defaultPrevented) return;
+        if (event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const code = link.dataset.localeCode;
+        if (!code) return;
+        persistLocale(code);
+        const details = link.closest('[data-locale-switch]');
+        if (details && details.open) details.open = false;
+      });
+    }
+
+    // Native <details> stays open until the summary is clicked again. Add
+    // outside-click + Escape close so it behaves like a real menu.
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      for (const details of document.querySelectorAll('[data-locale-switch][open]')) {
+        if (target instanceof Node && details.contains(target)) continue;
+        details.open = false;
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      for (const details of document.querySelectorAll('[data-locale-switch][open]')) {
+        details.open = false;
+        const summary = details.querySelector('summary');
+        if (summary instanceof HTMLElement) summary.focus();
+      }
+    });
+  };
+
+  const autoAdapt = () => {
+    if (currentFromPath() !== DEFAULT_LOCALE) return;
+    let saved = null;
+    try {
+      saved = normalizeLocale(window.localStorage.getItem(STORAGE_KEY) ?? '');
+    } catch {}
+    const detected =
+      saved ??
+      (Array.isArray(navigator.languages)
+        ? navigator.languages.map(normalizeLocale).find(Boolean)
+        : normalizeLocale(navigator.language));
+    if (detected && detected !== DEFAULT_LOCALE) selectLocale(detected, false);
+  };
+
+  bindSwitchers();
+  autoAdapt();
+})();
+`;
+---
+
+<script is:inline set:html={script} />

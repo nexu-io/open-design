@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from '../../src/components/HomeView';
-import type { PromptTemplateSummary } from '../../src/types';
+import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 
 const MEDIA_PLUGIN = pluginRecord('od-media-generation', 'Media generation');
 const PROTOTYPE_PLUGIN = pluginRecord('example-web-prototype', 'Web prototype');
@@ -93,6 +93,26 @@ describe('HomeView media composer options', () => {
     expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy();
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-voice')).toBeNull();
+  });
+
+  it('includes only published user-created design systems in the Home style picker', async () => {
+    stubFetch();
+    renderHome({
+      designSystems: [
+        designSystem('user:acme-draft', 'Acme Draft System', 'user', 'draft'),
+        designSystem('user:acme-published', 'Acme Published System', 'user', 'published'),
+        designSystem('neutral-modern', 'Neutral Modern', 'built-in', 'published'),
+      ],
+    });
+
+    await clickHomeRailChip('image');
+    await openOption('designSystem');
+
+    const menu = screen.getByTestId('home-hero-footer-option-designSystem-menu');
+    expect(within(menu).getByText('Personal')).toBeTruthy();
+    expect(within(menu).getByRole('option', { name: /Acme Published System/i })).toBeTruthy();
+    expect(within(menu).queryByRole('option', { name: /Acme Draft System/i })).toBeNull();
+    expect(within(menu).getByText('Official preset')).toBeTruthy();
   });
 
   it('switches media chips without opening the replacement dialog', async () => {
@@ -519,6 +539,25 @@ function pluginRecord(id: string, title: string) {
         inputs: [],
       },
     },
+  };
+}
+
+function designSystem(
+  id: string,
+  title: string,
+  source: DesignSystemSummary['source'],
+  status: DesignSystemSummary['status'],
+): DesignSystemSummary {
+  return {
+    id,
+    title,
+    source,
+    status,
+    category: source === 'user' ? 'Brand' : 'Starter',
+    summary: `${title} summary.`,
+    swatches: ['#111111', '#ffffff'],
+    surface: 'web',
+    isEditable: source === 'user',
   };
 }
 

@@ -52,6 +52,7 @@ import type {
   Project,
   ProjectPlatform,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
   PreviewCommentStatus,
@@ -86,6 +87,7 @@ export type {
   OrbitRunSummary,
   OrbitStatusResponse,
   PreviewCommentMember,
+  PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewVisualMarkKind,
 } from '@open-design/contracts';
@@ -172,6 +174,7 @@ export interface MediaProviderCredentials {
   model?: string;
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
+  source?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -355,8 +358,15 @@ export interface AppConfig {
   // rotate or clear the anonymous id without re-opening the consent banner.
   privacyDecisionAt?: number | null;
   // Privacy preferences governing what (if anything) is shipped to the
-  // Langfuse-backed telemetry endpoint. All three default to off until the
-  // user makes an explicit choice.
+  // PostHog / Langfuse telemetry endpoints. `metrics` and `content`
+  // default ON (set by `DEFAULT_CONFIG.telemetry` in state/config.ts) so
+  // the onboarding funnel actually captures the first-run events the
+  // user hasn't had a chance to consent to yet; the post-onboarding
+  // disclosure modal explains this and Settings → Privacy is the
+  // one-click opt-out. `artifactManifest` stays off until the user
+  // turns it on explicitly. A daemon-stored override always wins over
+  // these client defaults — once the user picks a value the modal /
+  // PrivacySection persist it through `syncConfigToDaemon`.
   telemetry?: TelemetryConfig;
   customInstructions?: string;
 }
@@ -513,4 +523,5 @@ export type {
 export interface OpenTabsState {
   tabs: ProjectWorkspaceTabId[];
   active: ProjectWorkspaceTabId | null;
+  hasSavedState?: boolean;
 }

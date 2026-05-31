@@ -3,7 +3,9 @@ name: social-x-post-card
 zh_name: "X (Twitter) 帖子卡"
 en_name: "X / Twitter Post Card"
 emoji: "𝕏"
-description: "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享"
+description: "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards."
+zh_description: "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享"
+en_description: "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards."
 category: card
 scenario: marketing
 aspect_hint: "1280×720 或 1080×1080"
@@ -28,7 +30,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「X (Twitter) 帖子卡」模板把我的内容做成一份「拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the X / Twitter Post Card template to turn my content into a realistic X post card with engagement metrics for a video overlay or shareable image card. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「X (Twitter) 帖子卡」模板把我的内容做成一份「拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: X (Twitter) 帖子卡】

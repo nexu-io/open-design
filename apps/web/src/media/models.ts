@@ -36,6 +36,7 @@ export type MediaProviderId =
   | 'imagerouter'
   | 'openrouter'
   | 'custom-image'
+  | 'comfyui'
   | 'bfl'
   | 'fal'
   | 'replicate'
@@ -146,11 +147,19 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'custom-image',
     label: 'Custom Image API',
-    hint: 'OpenAI-compatible /v1/images/generations endpoint',
+    hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)',
     integrated: true,
     docsUrl: 'https://platform.openai.com/docs/api-reference/images',
     supportsCustomModel: true,
     customModelPlaceholder: 'my-image-model',
+  },
+  {
+    id: 'comfyui',
+    label: 'ComfyUI',
+    hint: 'Local JSON workflow server (planned adapter)',
+    integrated: false,
+    defaultBaseUrl: 'http://127.0.0.1:8188',
+    docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow',
   },
   {
     id: 'bfl',
@@ -163,10 +172,11 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'fal',
     label: 'Fal.ai',
-    hint: 'Sora / Seedance / Veo / FLUX',
-    integrated: false,
+    hint: 'FLUX / Sora / Veo / Wan / Ideogram / Recraft and any fal-ai/* model',
+    integrated: true,
     defaultBaseUrl: 'https://fal.run',
     docsUrl: 'https://fal.ai/dashboard/keys',
+    supportsCustomModel: true,
   },
   {
     id: 'leonardo',
@@ -424,13 +434,13 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
 
-  // Custom OpenAI-compatible /v1/images/generations endpoint.
+  // Custom OpenAI-compatible image generation + edit endpoints.
   {
     id: 'custom-image',
     label: 'custom-image',
     hint: 'Custom · OpenAI-compatible endpoint',
     provider: 'custom-image',
-    caps: ['t2i'],
+    caps: ['t2i', 'i2i'],
   },
 
   // Black Forest Labs FLUX family.
@@ -445,9 +455,16 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'imagen-3', label: 'imagen-3', hint: 'Google', provider: 'google', caps: ['t2i'] },
   { id: 'gemini-3-pro-image-preview', label: 'gemini-3-pro-image', hint: 'Google · Nano Banana Pro', provider: 'google', caps: ['t2i', 'i2i'] },
 
-  // Replicate / Fal hosted image models.
+  // Replicate hosted image models.
   { id: 'ideogram-v2', label: 'ideogram-v2', hint: 'Replicate · typography', provider: 'replicate', caps: ['t2i'] },
   { id: 'sdxl', label: 'stable-diffusion-xl', hint: 'Replicate · SDXL', provider: 'replicate', caps: ['t2i'] },
+
+  // Fal.ai image models — pass any fal-ai/* path as model for custom models.
+  { id: 'flux-pro-ultra', label: 'flux-pro-ultra', hint: 'Fal · FLUX 1.1 Pro Ultra · highest quality', provider: 'fal', caps: ['t2i'] },
+  { id: 'flux-dev-fal', label: 'flux-dev (fal)', hint: 'Fal · FLUX Dev · open weights', provider: 'fal', caps: ['t2i'] },
+  { id: 'flux-schnell-fal', label: 'flux-schnell (fal)', hint: 'Fal · FLUX Schnell · fastest / cheapest', provider: 'fal', caps: ['t2i'] },
+  { id: 'ideogram-v3-fal', label: 'ideogram-v3', hint: 'Fal · Ideogram v3 · typography + design', provider: 'fal', caps: ['t2i'] },
+  { id: 'recraft-v3-fal', label: 'recraft-v3', hint: 'Fal · Recraft v3 · vector + illustration', provider: 'fal', caps: ['t2i'] },
   { id: 'sd-3.5', label: 'stable-diffusion-3.5', hint: 'Fal · SD 3.5', provider: 'fal', caps: ['t2i'] },
 
   // Leonardo.ai models
@@ -553,9 +570,15 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'veo-3', label: 'veo-3', hint: 'Google · sound-on', provider: 'google', caps: ['t2v', 'audio'] },
   { id: 'veo-2', label: 'veo-2', hint: 'Google', provider: 'google', caps: ['t2v'] },
 
-  // OpenAI Sora (via Fal hosting today).
-  { id: 'sora-2', label: 'sora-2', hint: 'OpenAI · via Fal', provider: 'fal', caps: ['t2v'] },
-  { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'OpenAI · via Fal', provider: 'fal', caps: ['t2v'] },
+  // Fal.ai video models — pass any fal-ai/* path as model for custom models.
+  { id: 'veo-3-fal', label: 'veo-3 (fal)', hint: 'Fal · Google Veo 3 · sound-on', provider: 'fal', caps: ['t2v', 'audio'] },
+  { id: 'veo-2-fal', label: 'veo-2 (fal)', hint: 'Fal · Google Veo 2', provider: 'fal', caps: ['t2v'] },
+  { id: 'wan-2.1-t2v', label: 'wan-2.1-t2v', hint: 'Fal · Wan 2.1 text-to-video', provider: 'fal', caps: ['t2v'] },
+  { id: 'wan-2.1-i2v', label: 'wan-2.1-i2v', hint: 'Fal · Wan 2.1 image-to-video', provider: 'fal', caps: ['i2v'] },
+  { id: 'seedance-1-pro-fal', label: 'seedance-1-pro (fal)', hint: 'Fal · Seedance 1 Pro', provider: 'fal', caps: ['t2v', 'i2v'] },
+  { id: 'kling-2.1-t2v-fal', label: 'kling-2.1 (fal)', hint: 'Fal · Kling 2.1 Pro text-to-video', provider: 'fal', caps: ['t2v'] },
+  { id: 'sora-2', label: 'sora-2', hint: 'Fal · OpenAI Sora 2', provider: 'fal', caps: ['t2v'] },
+  { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'Fal · OpenAI Sora 2 Pro', provider: 'fal', caps: ['t2v'] },
 
   // MiniMax video.
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },

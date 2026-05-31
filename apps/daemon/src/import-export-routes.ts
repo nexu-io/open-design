@@ -6,6 +6,7 @@ import {
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
+import { isSandboxModeEnabled } from './sandbox-mode.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
@@ -28,6 +29,11 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
   const { validateProjectDesignSystemId } = ctx.validation;
+  const rejectSandboxFolderImport = () =>
+    isSandboxModeEnabled(process.env)
+      ? 'folder imports are disabled when OD_SANDBOX_MODE is enabled'
+      : null;
+
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -106,6 +112,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const { baseDir } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      const sandboxReason = rejectSandboxFolderImport();
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
@@ -203,6 +213,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const { baseDir, name, skillId, designSystemId } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      const sandboxReason = rejectSandboxFolderImport();
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
@@ -494,7 +508,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   //
   // See nexu-io/open-design#368 and the architecture lock at
   // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
-  app.get('/api/projects/:id/export/*', async (req, res) => {
+  app.get('/api/projects/:id/export/*splat', async (req, res) => {
     try {
       if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -512,7 +526,8 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       }
 
       const project = getProject(db, req.params.id);
-      const relPath = (req.params as any)[0];
+      const splatParam = (req.params as { splat?: string | string[] }).splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
 
       // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
       // readProjectFile so a 100 MiB owner HTML is rejected after a

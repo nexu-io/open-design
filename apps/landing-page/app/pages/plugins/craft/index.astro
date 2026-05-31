@@ -1,0 +1,63 @@
+---
+/*
+ * /plugins/craft/ — craft principles under the new Plugins hub.
+ *
+ * Same renderer as the legacy `/craft/` page, with Plugins-aware
+ * breadcrumb and `active="plugins"` for the nav highlight.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import { getCraftRecords } from '../../../_lib/catalog';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const pcopy = getPluginsCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const craft = await getCraftRecords(locale);
+
+const title = `${pcopy.tileCraft} · ${craft.length} · Open Design`;
+const description = pcopy.craftLead;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL('/plugins/craft/', Astro.site).toString(),
+  numberOfItems: craft.length,
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+    <span>/</span>
+    <span aria-current="page">{pcopy.tileCraft}</span>
+  </nav>
+
+  <header class="catalog-head">
+    <span class="label">{pcopy.craftLabel}</span>
+    <h1 class="display">{pcopy.craftHeading(craft.length)}<span class="dot">.</span></h1>
+    <p class="lead">{pcopy.craftLead}</p>
+  </header>
+
+  <section class="catalog-grid" aria-label={ui.catalog.craft.allAria}>
+    <ol>
+      {craft.map((c, idx) => (
+        <li class="catalog-row">
+          <a href={href(`/craft/${c.slug}/`)}>
+            <span class="row-index">{String(idx + 1).padStart(2, '0')}</span>
+            <span class="row-body">
+              <span class="row-name">{c.name}</span>
+              <span class="row-desc">{c.summary}</span>
+            </span>
+            <span class="row-arrow" aria-hidden="true">→</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </section>
+</Layout>

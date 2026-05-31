@@ -1,0 +1,161 @@
+name: landing-page-production
+
+# Promotes the current landing page to PRODUCTION: the `open-design-landing`
+# Cloudflare Pages project, served at open-design.ai. This is the ONLY
+# workflow that names the production project, and it is manual-only
+# (workflow_dispatch) — a merge to `main` can never reach production on its
+# own; it only updates the staging project (staging.open-design.ai) via
+# `landing-page-staging`. Gate this further by configuring required reviewers
+# on the GitHub `production` environment (Settings → Environments).
+#
+# The build is identical to staging/CI, so what you reviewed on
+# staging.open-design.ai is what ships.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why promote now? (recorded in the run log)'
+        required: false
+
+permissions:
+  contents: read
+  deployments: write
+
+# Never cancel an in-flight production deploy.
+concurrency:
+  group: landing-page-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy landing page to production
+    # Production ships `main` only. workflow_dispatch can be launched from any
+    # ref via the Actions "Use workflow from" dropdown; gate the whole job on
+    # the main ref so a dispatch from a feature branch/tag is skipped outright
+    # (no deploy) instead of recording a non-main production run — which would
+    # also dodge blog-indexing's `workflow_run` `branches: [main]` filter.
+    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://open-design.ai
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          # Production always ships `main`. workflow_dispatch can be launched
+          # from any ref via the Actions "Use workflow from" dropdown, so pin
+          # the checkout to main — the deployed artifact must equal reviewed
+          # main, never whatever branch/tag the operator happened to select.
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          version=$(node -p "require('./apps/landing-page/package.json').devDependencies.playwright.replace(/[^0-9.]/g,'')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache generated previews
+        id: previews-cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: apps/landing-page/public/previews
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
+          restore-keys: |
+            landing-page-previews-${{ runner.os }}-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+
+      - name: Typecheck landing page
+        run: pnpm --filter @open-design/landing-page typecheck
+
+      # Generate previews before build so they end up in `out/previews/`.
+      # Soft vs. hard failure is enforced inside the script itself:
+      # individual broken `example.html` entries are logged and skipped,
+      # but a systemic failure (chromium launch error, every job failing)
+      # exits non-zero so we don't silently ship a deploy with zero
+      # thumbnails to production.
+      - name: Generate skill + template previews
+        # Exact previews-cache hit ⇒ public/previews already holds the correct
+        # thumbnails, skip the slow Playwright render. A restore-keys partial
+        # hit keeps cache-hit false, so we still regenerate — no stale-thumbnail
+        # drift.
+        if: steps.previews-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @open-design/landing-page previews
+
+      - name: Build landing page
+        env:
+          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
+        run: pnpm --filter @open-design/landing-page build:static
+
+      - name: Verify zero external JavaScript
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const html = readFileSync('apps/landing-page/out/index.html', 'utf8');
+          const forbidden = [
+            /<script\b[^>]*\bsrc=/i,
+            /type=["']module["']/i,
+            /\/_astro\/[^"'<>\s]+\.js/i,
+          ];
+          for (const pattern of forbidden) {
+            if (pattern.test(html)) {
+              console.error(`Unexpected client JavaScript matched ${pattern}`);
+              process.exit(1);
+            }
+          }
+          NODE
+
+      - name: Verify Cloudflare image resizing URLs
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const html = readFileSync('apps/landing-page/out/index.html', 'utf8');
+          const resizedUrls = html.match(/https:\/\/static\.open-design\.ai\/cdn-cgi\/image\//g) ?? [];
+          if (resizedUrls.length < 16) {
+            console.error(`Expected at least 16 Cloudflare resized image URLs, found ${resizedUrls.length}`);
+            process.exit(1);
+          }
+          if (/(?:src|content)=["']\/assets\/[A-Za-z0-9_.-]+\.png/.test(html)) {
+            console.error('Found local /assets/*.png image reference in generated landing HTML.');
+            process.exit(1);
+          }
+          NODE
+
+      # `--branch=main` IS the Cloudflare Pages production branch, so this
+      # publishes to the production domain (open-design.ai).
+      - name: Deploy to Cloudflare Pages (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          command: >
+            pages deploy out
+            --project-name=open-design-landing
+            --branch=main

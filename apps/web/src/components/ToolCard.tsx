@@ -10,7 +10,7 @@
  */
 import { useState } from 'react';
 import { useT } from '../i18n';
-import { parseTodoWriteInput } from '../runtime/todos';
+import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
 import type { AgentEvent } from '../types';
 
@@ -89,7 +89,7 @@ export function ToolCard({
         onAnswerToolUse={onAnswerToolUse}
       />
     );
-  if (name === 'TodoWrite' || name === 'todowrite') return <TodoCard input={use.input} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (isTodoWriteToolName(name)) return <TodoCard input={use.input} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'Write' || name === 'write' || name === 'create_file')
     return <FileWriteCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
   if (name === 'Edit' || name === 'str_replace_edit')

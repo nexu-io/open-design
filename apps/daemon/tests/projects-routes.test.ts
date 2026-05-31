@@ -77,6 +77,35 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(detail.resolvedDir).toBe(baseDir);
   });
 
+  it('keeps imported-folder resolvedDir stable in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder }),
+    });
+    expect(importResp.status).toBe(200);
+    const importBody = (await importResp.json()) as {
+      project: { id: string; metadata?: { baseDir?: string } };
+    };
+    const projectId = importBody.project.id;
+    const baseDir = importBody.project.metadata?.baseDir;
+    expect(baseDir).toBeTruthy();
+
+    await withSandboxMode(async () => {
+      const detailResp = await fetch(`${baseUrl}/api/projects/${projectId}`);
+      expect(detailResp.status).toBe(200);
+      const detail = (await detailResp.json()) as {
+        project: { id: string };
+        resolvedDir: string;
+      };
+      expect(detail.project.id).toBe(projectId);
+      expect(detail.resolvedDir).toBe(baseDir);
+    });
+  });
+
   it('returns resolvedDir under <projects root>/<id> for a native project', async () => {
     const projectId = `proj-routes-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {
@@ -128,6 +157,68 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.project.metadata?.skipDiscoveryBrief).toBe(true);
   });
 
+  it('serves project files through raw and files path routes', async () => {
+    const projectId = `proj-raw-route-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Raw route fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const writeResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'index.html', content: '<!doctype html><h1>ok</h1>' }),
+    });
+    expect(writeResp.status).toBe(200);
+
+    const rawResp = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
+    expect(rawResp.status).toBe(200);
+    expect(rawResp.headers.get('content-type')).toContain('text/html');
+    expect(await rawResp.text()).toContain('<h1>ok</h1>');
+
+    const fileResp = await fetch(`${baseUrl}/api/projects/${projectId}/files/index.html`);
+    expect(fileResp.status).toBe(200);
+    expect(await fileResp.text()).toContain('<h1>ok</h1>');
+  });
+
+
+
+  it('serves nested project html files through the raw route and allows Origin: null', async () => {
+    const projectId = `proj-raw-nested-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Nested raw route fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const writeResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'nested/demo/index.html', content: '<!doctype html><h1>nested ok</h1>' }),
+    });
+    expect(writeResp.status).toBe(200);
+
+    const rawResp = await fetch(`${baseUrl}/api/projects/${projectId}/raw/nested/demo/index.html`, {
+      headers: { Origin: 'null' },
+    });
+    expect(rawResp.status).toBe(200);
+    expect(rawResp.headers.get('content-type')).toContain('text/html');
+    expect(rawResp.headers.get('access-control-allow-origin')).toBe('*');
+    expect(await rawResp.text()).toContain('<h1>nested ok</h1>');
+  });
   it('rejects non-boolean skipDiscoveryBrief on POST /api/projects', async () => {
     const projectId = `proj-skip-discovery-bad-${Date.now()}`;
     const resp = await fetch(`${baseUrl}/api/projects`, {
@@ -207,3 +298,14 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.error?.message).toMatch(/fromTrustedPicker/i);
   });
 });
+
+async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
+  const previous = process.env.OD_SANDBOX_MODE;
+  process.env.OD_SANDBOX_MODE = '1';
+  try {
+    return await run();
+  } finally {
+    if (previous == null) delete process.env.OD_SANDBOX_MODE;
+    else process.env.OD_SANDBOX_MODE = previous;
+  }
+}

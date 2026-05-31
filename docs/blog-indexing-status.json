@@ -26,7 +26,7 @@
     },
     "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
       "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-      "inspectedAt": "2026-05-19T10:11:55.870Z",
+      "inspectedAt": "2026-05-21T03:04:29.361Z",
       "result": {
         "verdict": "NEUTRAL",
         "coverageState": "Discovered - currently not indexed",
@@ -38,7 +38,7 @@
     },
     "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
       "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-      "inspectedAt": "2026-05-19T10:12:02.175Z",
+      "inspectedAt": "2026-05-21T03:04:16.961Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
@@ -53,7 +53,7 @@
     },
     "https://open-design.ai/blog/open-source-alternative-to-claude-design/": {
       "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-      "inspectedAt": "2026-05-19T10:12:08.472Z",
+      "inspectedAt": "2026-05-21T03:04:35.481Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
@@ -68,7 +68,7 @@
     },
     "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": {
       "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-      "inspectedAt": "2026-05-19T10:12:14.760Z",
+      "inspectedAt": "2026-05-21T03:04:23.233Z",
       "result": {
         "verdict": "PASS",
         "coverageState": "Submitted and indexed",
@@ -95,6 +95,63 @@
     }
   },
   "history": [
+    {
+      "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+      "inspectedAt": "2026-05-21T03:04:35.481Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-15T12:22:17Z",
+        "googleCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "userCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+      "inspectedAt": "2026-05-21T03:04:29.361Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+      "inspectedAt": "2026-05-21T03:04:23.233Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-19T09:20:41Z",
+        "googleCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "userCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+      "inspectedAt": "2026-05-21T03:04:16.961Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-19T09:20:42Z",
+        "googleCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "userCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
     {
       "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
       "inspectedAt": "2026-05-20T03:04:04.911Z",
@@ -277,10 +334,10 @@
     "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
       "7": {
         "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-        "queriedAt": "2026-05-19T10:12:28.984Z",
+        "queriedAt": "2026-05-21T03:04:42.848Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
+        "startDate": "2026-05-13",
+        "endDate": "2026-05-19",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -288,10 +345,10 @@
       },
       "28": {
         "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
-        "queriedAt": "2026-05-19T10:12:29.090Z",
+        "queriedAt": "2026-05-21T03:04:42.929Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
+        "startDate": "2026-04-22",
+        "endDate": "2026-05-19",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -301,10 +358,10 @@
     "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
       "7": {
         "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-        "queriedAt": "2026-05-19T10:12:29.196Z",
+        "queriedAt": "2026-05-21T03:04:42.455Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
+        "startDate": "2026-05-13",
+        "endDate": "2026-05-19",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -312,10 +369,10 @@
       },
       "28": {
         "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
-        "queriedAt": "2026-05-19T10:12:29.334Z",
+        "queriedAt": "2026-05-21T03:04:42.571Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
+        "startDate": "2026-04-22",
+        "endDate": "2026-05-19",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -325,34 +382,34 @@
     "https://open-design.ai/blog/open-source-alternative-to-claude-design/": {
       "7": {
         "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-        "queriedAt": "2026-05-19T10:12:29.443Z",
+        "queriedAt": "2026-05-21T03:04:43.015Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
-        "clicks": 1,
-        "impressions": 50,
-        "ctr": 0.02,
-        "position": 8.86
+        "startDate": "2026-05-13",
+        "endDate": "2026-05-19",
+        "clicks": 4,
+        "impressions": 107,
+        "ctr": 0.037383177570093455,
+        "position": 7.94392523364486
       },
       "28": {
         "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
-        "queriedAt": "2026-05-19T10:12:29.568Z",
+        "queriedAt": "2026-05-21T03:04:43.089Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
-        "clicks": 1,
-        "impressions": 50,
-        "ctr": 0.02,
-        "position": 8.86
+        "startDate": "2026-04-22",
+        "endDate": "2026-05-19",
+        "clicks": 4,
+        "impressions": 107,
+        "ctr": 0.037383177570093455,
+        "position": 7.94392523364486
       }
     },
     "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": {
       "7": {
         "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-        "queriedAt": "2026-05-19T10:12:29.818Z",
+        "queriedAt": "2026-05-21T03:04:42.666Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
+        "startDate": "2026-05-13",
+        "endDate": "2026-05-19",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -360,10 +417,10 @@
       },
       "28": {
         "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
-        "queriedAt": "2026-05-19T10:12:29.947Z",
+        "queriedAt": "2026-05-21T03:04:42.755Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
+        "startDate": "2026-04-22",
+        "endDate": "2026-05-19",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,

@@ -30,7 +30,13 @@ Every skill is a directory containing at minimum a `SKILL.md`:
 ```yaml
 ---
 name: magazine-web-ppt
+zh_name: "杂志风网页 PPT"
+en_name: "Magazine Web PPT"
 description: |
+  Magazine-style horizontal-swipe web deck.
+  Trigger keywords: 杂志风 PPT, magazine deck, swipe slides.
+zh_description: "杂志风横向翻页网页 PPT。"
+en_description: |
   Magazine-style horizontal-swipe web deck.
   Trigger keywords: 杂志风 PPT, magazine deck, swipe slides.
 triggers:
@@ -62,6 +68,9 @@ od:
     type: html                      # html | jsx | pptx | markdown
     entry: index.html               # relative path produced by the skill
     reload: debounce-100            # how the preview refreshes
+  example_prompt: "Create a magazine-style web deck from my content."
+  example_prompt_i18n:
+    zh-CN: "用杂志风网页 PPT 模板把我的内容做成横向翻页 deck。"
   design_system:
     requires: true                  # this skill reads the active DESIGN.md
     sections: [color, typography]   # which sections it actually uses (for prompt pruning)
@@ -102,8 +111,12 @@ od:
 
 | Field | Used by |
 |---|---|
+| `zh_name` / `en_name` | localized picker title; falls back to `name` |
+| `zh_description` / `en_description` | localized picker description; falls back to `description` |
 | `od.mode` | routing (which mode picker the skill shows up under) |
 | `od.preview.type` | picking the right iframe renderer |
+| `od.example_prompt` | English fallback starter prompt used by picker CTA |
+| `od.example_prompt_i18n` | localized starter prompt map (for example `zh-CN`) |
 | `od.design_system.requires` | whether to inject `DESIGN.md` |
 | `od.design_system.sections` | pruning the injected DESIGN.md to relevant sections only (token savings) |
 | `od.craft.requires` | which brand-agnostic `craft/<slug>.md` references to inject (e.g. `typography`, `color`, `anti-ai-slop`); injected between DESIGN.md and the skill body |
