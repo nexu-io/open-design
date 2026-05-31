@@ -140,8 +140,10 @@ function collapseWhitespace(value: string): string {
  *                       old_string is legitimate progress, not a loop)
  *   - anything else   → a stable stringify of the whole input
  * Falls back to the tool name alone when there is no usable input. The result
- * is whitespace-collapsed and length-capped so it is safe to surface in a UI
- * event and cheap to compare.
+ * is whitespace-collapsed but NOT length-capped: it is the dedup key, so it
+ * must stay full-fidelity or two distinct long actions sharing a prefix would
+ * collide and pool each other's failures. Use `displayToolSignature` for the
+ * bounded form surfaced in the `tool_loop` event.
  */
 export function computeToolSignature(name: string, input: unknown): string {
   const toolName = name || 'tool';
@@ -170,7 +172,16 @@ export function computeToolSignature(name: string, input: unknown): string {
   } else if (typeof input === 'string') {
     detail = input;
   }
-  const signature = detail ? `${toolName} ${collapseWhitespace(detail)}` : toolName;
+  return detail ? `${toolName} ${collapseWhitespace(detail)}` : toolName;
+}
+
+/**
+ * Bound a full signature to a human-readable length for the emitted
+ * `tool_loop` event. Only the DISPLAY form is truncated; the full signature
+ * from `computeToolSignature` remains the dedup key, so two long actions that
+ * share a 160-char prefix still count separately.
+ */
+export function displayToolSignature(signature: string): string {
   return signature.length > SIGNATURE_MAX_LEN
     ? `${signature.slice(0, SIGNATURE_MAX_LEN - 1)}…`
     : signature;
@@ -231,11 +242,18 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
       const use = toolUseId ? uses.get(toolUseId) : undefined;
       if (toolUseId) uses.delete(toolUseId);
 
-      // A successful tool call is progress: it breaks any consecutive-error
-      // streak. It does NOT clear per-signature tallies — fixation that keeps
-      // returning to the same dead end between successes is still a loop.
+      // A successful tool call is progress, so it resets BOTH the consecutive
+      // streak and the per-signature failure tallies. This scopes the
+      // repeated-failure trigger to "failures since the last success": a normal
+      // workflow that keeps landing successful calls between attempts (edit ->
+      // rerun the check -> fix -> rerun) never accumulates to the ceiling, while
+      // a genuine fixation — back-to-back failures with no progress between them
+      // — still trips. The motivating loop was exactly that: a run of identical
+      // failing Edits with no successful tool call between them. (PR #3375
+      // review: a cumulative-across-run counter halted progressing runs.)
       if (!isError) {
         consecutiveErrors = 0;
+        failCounts.clear();
         return null;
       }
 
@@ -252,6 +270,8 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
       const repeatCount = (failCounts.get(signature) ?? 0) + 1;
       failCounts.set(signature, repeatCount);
       evict(failCounts, MAX_TRACKED_SIGNATURES);
+      // Truncate only for the emitted event; `signature` (full) stays the key.
+      const displaySignature = displayToolSignature(signature);
 
       // HALT first (only in halt mode): the hard ceiling supersedes a warn so a
       // run that blew straight past both thresholds is torn down, not merely
@@ -264,8 +284,8 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
           _halted = true;
           _warned = true; // a halt is also, implicitly, the strongest warning
           return repeatHalt
-            ? { type: 'tool_loop', reason: 'repeated-failure', action: 'halt', toolName, signature, count: repeatCount }
-            : { type: 'tool_loop', reason: 'consecutive-errors', action: 'halt', toolName, signature, count: consecutiveErrors };
+            ? { type: 'tool_loop', reason: 'repeated-failure', action: 'halt', toolName, signature: displaySignature, count: repeatCount }
+            : { type: 'tool_loop', reason: 'consecutive-errors', action: 'halt', toolName, signature: displaySignature, count: consecutiveErrors };
         }
       }
 
@@ -275,8 +295,8 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
         if (repeatWarn || consecutiveWarn) {
           _warned = true;
           return repeatWarn
-            ? { type: 'tool_loop', reason: 'repeated-failure', action: 'warn', toolName, signature, count: repeatCount }
-            : { type: 'tool_loop', reason: 'consecutive-errors', action: 'warn', toolName, signature, count: consecutiveErrors };
+            ? { type: 'tool_loop', reason: 'repeated-failure', action: 'warn', toolName, signature: displaySignature, count: repeatCount }
+            : { type: 'tool_loop', reason: 'consecutive-errors', action: 'warn', toolName, signature: displaySignature, count: consecutiveErrors };
         }
       }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeToolSignature,
   createToolLoopGuard,
+  displayToolSignature,
   resolveToolLoopMode,
 } from '../src/tool-loop-guard.js';
 
@@ -38,10 +39,22 @@ describe('computeToolSignature', () => {
     expect(computeToolSignature('Bash', null)).toBe('Bash');
   });
 
-  it('caps signature length', () => {
-    const sig = computeToolSignature('Bash', { command: 'x'.repeat(1000) });
-    expect(sig.length).toBeLessThanOrEqual(160);
-    expect(sig.endsWith('…')).toBe(true);
+  it('keeps the full signature for counting and truncates only for display', () => {
+    const full = computeToolSignature('Bash', { command: 'x'.repeat(1000) });
+    expect(full.length).toBeGreaterThan(160); // full-fidelity dedup key, not capped
+    const shown = displayToolSignature(full);
+    expect(shown.length).toBeLessThanOrEqual(160);
+    expect(shown.endsWith('…')).toBe(true);
+  });
+
+  it('does not collide two distinct long commands sharing a 160-char prefix', () => {
+    const prefix = 'run '.repeat(60); // 240 chars, well over the display cap
+    const a = computeToolSignature('Bash', { command: `${prefix}alpha` });
+    const b = computeToolSignature('Bash', { command: `${prefix}beta` });
+    expect(a).not.toBe(b);
+    // ...and their truncated display forms DO collide, which is exactly why the
+    // display string must not be used as the counting key.
+    expect(displayToolSignature(a)).toBe(displayToolSignature(b));
   });
 });
 
@@ -80,6 +93,24 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     expect(fail(guard, 'b', 'Bash', input)).toBeNull();
     expect(ok(guard, 'c', 'Bash', input)).toBeNull(); // fixed it
     expect(guard.warned).toBe(false);
+  });
+
+  it('does not halt when the same check keeps failing but successful edits land between attempts', () => {
+    // The progressing-run case the cumulative counter wrongly halted (PR #3375
+    // review): rerun the same verification command after each successful edit,
+    // each run failing on the next newly-written case. The intervening success
+    // is real progress, so the repeated-failure tally must not accumulate.
+    const guard = createToolLoopGuard();
+    const check = { command: 'pnpm test' };
+    let tripped = null;
+    for (let i = 0; i < 12; i += 1) {
+      const verdict = fail(guard, `chk-${i}`, 'Bash', check); // same failing check
+      if (verdict) tripped = verdict;
+      ok(guard, `edit-${i}`, 'Edit', { file_path: '/src/a.ts', old_string: `case-${i}` }); // progress
+    }
+    expect(tripped).toBeNull();
+    expect(guard.warned).toBe(false);
+    expect(guard.halted).toBe(false);
   });
 });
 
