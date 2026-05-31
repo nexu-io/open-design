@@ -1018,6 +1018,28 @@ export function SettingsDialog({
   const [versionChecking, setVersionChecking] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
   const [configErrorAgentId, setConfigErrorAgentId] = useState<string | null>(null);
+  // Refs into the CLI env recovery UI so the "Configure" button on a
+  // misconfigured agent card can drive the disclosure open and land focus
+  // on the first editable field — without that, the CTA only flips a
+  // state flag and the env editor stays collapsed and invisible.
+  const cliEnvDetailsRef = useRef<HTMLDetailsElement | null>(null);
+  const cliEnvFirstFieldRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  useEffect(() => {
+    if (!configErrorAgentId) return;
+    const details = cliEnvDetailsRef.current;
+    if (details && !details.open) details.open = true;
+    // Defer focus/scroll until after the disclosure has expanded its body
+    // and the field elements are mounted (the first paint with open=true
+    // is what reveals the input).
+    const id = window.requestAnimationFrame(() => {
+      cliEnvDetailsRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      cliEnvFirstFieldRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [configErrorAgentId]);
 
   const handleInstallLatest = useCallback(async () => {
     if (versionChecking || !appVersionInfo) return;
@@ -3188,6 +3210,7 @@ export function SettingsDialog({
                 if (cliEnvFields.length === 0) return null;
                 return (
                   <details
+                    ref={cliEnvDetailsRef}
                     className="agent-cli-env"
                     data-testid="settings-cli-env"
                   >
@@ -3199,7 +3222,7 @@ export function SettingsDialog({
                     <div className="agent-cli-env-body">
                       <p className="hint">{t('settings.cliEnvHint')}</p>
                       <div className="agent-cli-env-grid">
-                        {cliEnvFields.map((field) => (
+                        {cliEnvFields.map((field, index) => (
                           <label
                             className="field"
                             key={`${field.agentId}:${field.envKey}`}
@@ -3212,6 +3235,13 @@ export function SettingsDialog({
                             </span>
                             {'options' in field && field.options ? (
                               <select
+                                ref={
+                                  index === 0
+                                    ? (el) => {
+                                        cliEnvFirstFieldRef.current = el;
+                                      }
+                                    : undefined
+                                }
                                 value={
                                   cfg.agentCliEnv?.[field.agentId]?.[
                                     field.envKey
@@ -3236,6 +3266,13 @@ export function SettingsDialog({
                               </select>
                             ) : (
                               <input
+                                ref={
+                                  index === 0
+                                    ? (el) => {
+                                        cliEnvFirstFieldRef.current = el;
+                                      }
+                                    : undefined
+                                }
                                 type={
                                   'secret' in field && field.secret
                                     ? 'password'
