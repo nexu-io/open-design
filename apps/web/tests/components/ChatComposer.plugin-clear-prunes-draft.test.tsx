@@ -22,7 +22,7 @@
 //      (#2929 review — boundary alignment).
 
 import { StrictMode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
@@ -93,6 +93,16 @@ function renderComposer() {
       onOpenMcpSettings={vi.fn()}
     />,
   );
+}
+
+function findToolsPluginButton(title: string): HTMLButtonElement | undefined {
+  return within(screen.getByRole('menu'))
+    .getAllByRole('menuitem')
+    .find(
+      (btn): btn is HTMLButtonElement =>
+        btn instanceof HTMLButtonElement &&
+        btn.querySelector('strong')?.textContent?.trim() === title,
+    );
 }
 
 beforeEach(() => {
@@ -177,14 +187,10 @@ describe('ChatComposer plugin clear prunes draft (#2881)', () => {
     fireEvent.click(trigger!);
     await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
 
-    // Pick the plugin from inside the now-open tools popover. The
-    // plugin row's main button title lives inside a <strong> child; we
-    // match against that to avoid the row's description trailing text.
-    const popoverPluginButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('.composer-tools-row-main'),
-    ).find(
-      (btn) => btn.querySelector('strong')?.textContent?.trim() === 'Airbnb',
-    );
+    // Pick the plugin from inside the now-open tools popover. The row
+    // title lives inside a <strong> child; match against that to avoid
+    // the description and action text in the accessible name.
+    const popoverPluginButton = findToolsPluginButton('Airbnb');
     expect(popoverPluginButton).toBeTruthy();
     fireEvent.click(popoverPluginButton!);
 
@@ -698,11 +704,7 @@ describe('ChatComposer plugin clear prunes draft (#2881)', () => {
     fireEvent.click(trigger!);
     await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
 
-    const popoverPluginButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('.composer-tools-row-main'),
-    ).find(
-      (btn) => btn.querySelector('strong')?.textContent?.trim() === 'SecondPlugin',
-    );
+    const popoverPluginButton = findToolsPluginButton('SecondPlugin');
     expect(popoverPluginButton).toBeTruthy();
     fireEvent.click(popoverPluginButton!);
 
@@ -930,11 +932,7 @@ describe('ChatComposer plugin clear prunes draft (#2881)', () => {
     fireEvent.click(trigger!);
     await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
 
-    const popoverPluginButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('.composer-tools-row-main'),
-    ).find(
-      (btn) => btn.querySelector('strong')?.textContent?.trim() === 'Airbnb',
-    );
+    const popoverPluginButton = findToolsPluginButton('Airbnb');
     expect(popoverPluginButton).toBeTruthy();
     fireEvent.click(popoverPluginButton!);
 
@@ -1185,11 +1183,7 @@ describe('ChatComposer plugin clear prunes draft (#2881)', () => {
     fireEvent.click(trigger!);
     await waitFor(() => expect(screen.getByRole('menu')).toBeTruthy());
 
-    const popoverSecondPluginButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>('.composer-tools-row-main'),
-    ).find(
-      (btn) => btn.querySelector('strong')?.textContent?.trim() === 'SecondPlugin',
-    );
+    const popoverSecondPluginButton = findToolsPluginButton('SecondPlugin');
     expect(popoverSecondPluginButton).toBeTruthy();
     fireEvent.click(popoverSecondPluginButton!);
 

@@ -699,7 +699,7 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-width: max-content;
+  min-width: 0;
   min-height: 30px;
   padding: 5px 10px;
   font-size: 11.5px;
@@ -710,7 +710,6 @@
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
-  min-width: 0;
 }
 .composer-tools-tab:hover { color: var(--text); }
 .composer-tools-tab.active {
@@ -763,7 +762,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   min-height: 28px;
+  min-width: 0;
   padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: calc(var(--radius-sm) - 1px);
@@ -772,7 +773,8 @@
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
-  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .composer-tools-segment:hover {
   color: var(--text);
@@ -784,11 +786,6 @@
   border-color: var(--border);
   font-weight: 600;
   box-shadow: var(--shadow-xs);
-}
-.composer-tools-segment {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .composer-tools-search {
   width: 100%;
