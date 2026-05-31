@@ -1845,11 +1845,8 @@
   appearance: none;
   min-width: 0;
   min-height: 112px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  display: flex;
+  align-items: flex-start;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1869,18 +1866,8 @@
     box-shadow 140ms ease;
 }
 .home-hero__prompt-example span {
-  grid-column: 1 / -1;
-  align-self: start;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.home-hero__prompt-example svg {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: end;
-  justify-self: end;
-  color: var(--text-faint);
-  transition: color 140ms ease, transform 140ms ease;
 }
 .home-hero__prompt-example:hover,
 .home-hero__prompt-example:focus-visible {
@@ -1890,11 +1877,6 @@
   color: var(--text-strong);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
-}
-.home-hero__prompt-example:hover svg,
-.home-hero__prompt-example:focus-visible svg {
-  color: var(--accent);
-  transform: translate(1px, -1px);
 }
 
 .home-hero__plugin-presets-wrap {
