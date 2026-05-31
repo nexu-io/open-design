@@ -26,11 +26,15 @@
  *
  *   2. REPEATED failure — the SAME (tool, action) signature errors K times.
  *      Catches fixation: re-running the identical failing Edit/Bash over and
- *      over (the titlebar-left case). Counted across the whole run, not reset
- *      by interleaved successes — returning to the same dead end many times is
- *      itself the loop, even if other work succeeds between visits. K is set
- *      high enough that a couple of legitimate retries of the same command
- *      (fix, re-run, fix, re-run) never trips it.
+ *      over (the titlebar-left case). A read-only success (Read/Glob/LS/Grep,
+ *      TodoWrite, …) does NOT clear this tally: a stuck agent often re-reads the
+ *      file and retries the same wrong assumption, so resetting on those reads
+ *      would let `fail -> read(ok) -> same fail -> read(ok) -> …` loop forever
+ *      (exactly the "re-read, retry the same wrong assumption" shape from the
+ *      motivating report). The tally clears only on real PROGRESS: a successful
+ *      mutating call (Edit/Write/apply_patch/…), or the failing action itself
+ *      finally succeeding. K is set high enough that a couple of legitimate
+ *      retries of the same command (fix, re-run, fix, re-run) never trip it.
  *
  * Two escalation tiers per trigger:
  *   - WARN  — emit a one-shot heads-up event so the UI/CLI surfaces "this run
@@ -129,6 +133,38 @@ const SIGNATURE_MAX_LEN = 160;
  *  reformatted-but-identical actions still hash to the same signature. */
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/gu, ' ').trim();
+}
+
+// Tools whose SUCCESS changes state and therefore counts as real progress: a
+// successful one clears the repeated-failure tally. A successful read-only tool
+// (Read/Glob/LS/Grep/TodoWrite/…) is NOT progress on a failing action, so it
+// must not clear the tally, or a fixation loop that re-reads between identical
+// failing calls would reset every round and never trip. Matched
+// case-insensitively; names span the agents OD drives (Claude, Codex/OpenCode,
+// Copilot, ACP).
+const MUTATING_TOOL_NAMES = new Set([
+  'edit',
+  'write',
+  'multiedit',
+  'notebookedit',
+  'apply_patch',
+  'applypatch',
+  'str_replace',
+  'str_replace_editor',
+  'create',
+  'create_file',
+  'write_file',
+  'edit_file',
+  'update_file',
+  'insert',
+  'patch',
+  'delete_file',
+]);
+
+/** Whether a SUCCESSFUL call of this tool represents progress (state changed),
+ *  as opposed to a read-only inspection. See MUTATING_TOOL_NAMES. */
+export function isMutatingToolName(name: string): boolean {
+  return MUTATING_TOOL_NAMES.has((name ?? '').trim().toLowerCase());
 }
 
 /**
@@ -242,18 +278,28 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
       const use = toolUseId ? uses.get(toolUseId) : undefined;
       if (toolUseId) uses.delete(toolUseId);
 
-      // A successful tool call is progress, so it resets BOTH the consecutive
-      // streak and the per-signature failure tallies. This scopes the
-      // repeated-failure trigger to "failures since the last success": a normal
-      // workflow that keeps landing successful calls between attempts (edit ->
-      // rerun the check -> fix -> rerun) never accumulates to the ceiling, while
-      // a genuine fixation — back-to-back failures with no progress between them
-      // — still trips. The motivating loop was exactly that: a run of identical
-      // failing Edits with no successful tool call between them. (PR #3375
-      // review: a cumulative-across-run counter halted progressing runs.)
+      // A success always breaks the strictly-consecutive error streak. Whether
+      // it also clears the per-signature failure tally depends on whether it was
+      // real PROGRESS:
+      //   - a successful mutating call (Edit/Write/apply_patch/…) changed state,
+      //     so prior failure tallies are stale -> clear them all. This keeps the
+      //     normal "edit -> rerun the check -> fix -> rerun" workflow from ever
+      //     accumulating to the ceiling.
+      //   - the exact action that was failing finally succeeding is that action
+      //     recovering -> drop just its tally.
+      //   - any OTHER success (a read-only Read/Glob/LS/Grep, a TodoWrite) is NOT
+      //     progress on a failing action, so the tallies are kept. Without this a
+      //     fixation loop that re-reads between identical failing calls
+      //     (fail -> read(ok) -> same fail -> …) would reset every round and
+      //     never trip — exactly the "re-read, retry the same wrong assumption"
+      //     shape from the motivating report. (PR #3375 review.)
       if (!isError) {
         consecutiveErrors = 0;
-        failCounts.clear();
+        if (use && isMutatingToolName(use.name)) {
+          failCounts.clear();
+        } else if (use && failCounts.has(use.signature)) {
+          failCounts.delete(use.signature);
+        }
         return null;
       }
 

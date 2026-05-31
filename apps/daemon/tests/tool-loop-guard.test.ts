@@ -3,6 +3,7 @@ import {
   computeToolSignature,
   createToolLoopGuard,
   displayToolSignature,
+  isMutatingToolName,
   resolveToolLoopMode,
 } from '../src/tool-loop-guard.js';
 
@@ -111,6 +112,49 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     expect(tripped).toBeNull();
     expect(guard.warned).toBe(false);
     expect(guard.halted).toBe(false);
+  });
+
+  it('still halts when the same failing call is interleaved with successful read-only calls', () => {
+    // The false negative that clearing failCounts on EVERY success let through
+    // (PR #3375 review): a stuck agent re-reads the file and retries the same
+    // wrong assumption. A successful Read is not progress on the failing action,
+    // so the repeated-failure tally must survive it and the loop must still trip.
+    const guard = createToolLoopGuard();
+    const failing = { command: "python3 -c \"assert 'titlebar-left' in open('v.html').read()\"" };
+    for (let i = 0; i < 8; i += 1) {
+      fail(guard, `chk-${i}`, 'Bash', failing); // same failing verification
+      ok(guard, `read-${i}`, 'Read', { file_path: '/v.html' }); // read-only, NOT progress
+    }
+    expect(guard.halted).toBe(true);
+  });
+
+  it('a successful mutating tool clears the tally but a successful read does not', () => {
+    const failing = { command: 'pnpm test' };
+    // Read between failures: tally survives -> trips.
+    const reads = createToolLoopGuard();
+    for (let i = 0; i < 4; i += 1) {
+      fail(reads, `f-${i}`, 'Bash', failing);
+      ok(reads, `r-${i}`, 'Read', { file_path: '/x' });
+    }
+    expect(reads.warned).toBe(true);
+    // Edit between failures: tally clears each round -> never trips.
+    const edits = createToolLoopGuard();
+    for (let i = 0; i < 4; i += 1) {
+      fail(edits, `f-${i}`, 'Bash', failing);
+      ok(edits, `e-${i}`, 'Edit', { file_path: '/x', old_string: `case-${i}` });
+    }
+    expect(edits.warned).toBe(false);
+  });
+});
+
+describe('isMutatingToolName', () => {
+  it('treats write-style tools as progress and reads as non-progress', () => {
+    for (const name of ['Edit', 'Write', 'MultiEdit', 'apply_patch', 'str_replace_editor']) {
+      expect(isMutatingToolName(name)).toBe(true);
+    }
+    for (const name of ['Read', 'Glob', 'LS', 'Grep', 'TodoWrite', 'Bash']) {
+      expect(isMutatingToolName(name)).toBe(false);
+    }
   });
 });
 
