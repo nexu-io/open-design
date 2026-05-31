@@ -370,7 +370,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
