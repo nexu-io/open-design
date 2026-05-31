@@ -195,10 +195,11 @@ export function isReadOnlyShellCommand(command: string): boolean {
       if (/\bgit\s+(status|diff|log|show|branch|ls-files|rev-parse|describe|blame|cat-file|remote)\b/u.test(seg)) continue;
       return false; // other git subcommands mutate
     }
-    if (head === 'python' || head === 'python3' || head === 'node') {
-      if (/\s-[ce]\b/u.test(seg)) continue; // one-off verification snippet
-      return false; // running a script may do anything
-    }
+    // Interpreters (python/python3/node) and anything else not in the read-only
+    // set count as a state change: an inline `-c`/`-e` snippet or a script can
+    // write files, so a successful one is treated as progress, not inspection.
+    // (PR #3375 review: `python3 -c "...write_text(...)"` mutates the workspace,
+    // so it must clear the tally rather than carry old failures forward.)
     if (!READ_ONLY_SHELL_BINARIES.has(head)) return false;
   }
   return true;

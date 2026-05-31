@@ -163,13 +163,28 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     expect(guard.halted).toBe(false);
     expect(guard.warned).toBe(false);
   });
+
+  it('does not halt when a failing check is fixed by a successful inline python/node script', () => {
+    // PR #3375 review: an inline `python3 -c` / `node -e` snippet can write
+    // files, so a successful one is a real fix and must clear the tally.
+    const guard = createToolLoopGuard({ mode: 'halt' });
+    const check = { command: 'pnpm test' };
+    let tripped = null;
+    for (let i = 0; i < 12; i += 1) {
+      const verdict = fail(guard, `chk-${i}`, 'Bash', check);
+      if (verdict) tripped = verdict;
+      ok(guard, `fix-${i}`, 'Bash', { command: `python3 -c "open('f-${i}.ts','w').write('x')"` }); // inline write = progress
+    }
+    expect(tripped).toBeNull();
+    expect(guard.halted).toBe(false);
+  });
 });
 
 describe('isReadOnlyShellCommand / isProgressSuccess', () => {
   it('classifies pure inspections as read-only', () => {
     for (const cmd of [
       'cat x.ts', 'ls -la', 'grep foo x', 'rg needle', 'wc -l x', 'sed -n p x',
-      'git status', 'git diff HEAD', 'python3 -c "assert 1"', 'find . -name x',
+      'git status', 'git diff HEAD', 'find . -name x',
     ]) {
       expect(isReadOnlyShellCommand(cmd)).toBe(true);
     }
@@ -179,6 +194,7 @@ describe('isReadOnlyShellCommand / isProgressSuccess', () => {
     for (const cmd of [
       'sed -i s/a/b/ x', 'mv a b', 'rm x', 'mkdir y', 'pnpm install', 'npm run build',
       'git commit -m x', 'git add .', 'echo hi > f.txt',
+      'python3 -c "open(\'x\',\'w\').write(\'1\')"', 'node -e "require(\'fs\').writeFileSync(\'x\',\'1\')"',
     ]) {
       expect(isReadOnlyShellCommand(cmd)).toBe(false);
     }
