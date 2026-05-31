@@ -178,19 +178,23 @@ export class DaemonManager {
   }
 
   async stop(): Promise<void> {
-    if (this.childProcess == null) return;
-
+    // Always try IPC shutdown first — the daemon may be running even if
+    // childProcess is null (e.g., after tray relaunch or when attaching to
+    // an externally-launched daemon).
     const ipc = this.getDaemonIpcPath();
     try {
       await requestJsonIpc(ipc, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 3000 });
     } catch {
-      // ignore — will force kill below
+      // IPC unreachable — fall through to force kill via childProcess
     }
 
+    // If this tray instance spawned the daemon, use the child process handle.
+    // Otherwise childProcess is null and we've already tried IPC above.
+    if (this.childProcess == null) return;
+
     await new Promise<void>((resolve) => {
-      if (this.childProcess == null) return resolve();
-      this.childProcess.once("exit", () => resolve());
-      this.childProcess.kill("SIGTERM");
+      this.childProcess!.once("exit", () => resolve());
+      this.childProcess!.kill("SIGTERM");
       setTimeout(resolve, 2000);
     });
 

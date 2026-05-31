@@ -165,14 +165,14 @@ export async function isAutoStartEnabled(): Promise<boolean> {
 
 // ─── macOS implementation ───────────────────────────────────────────────────
 
-export async function enableAutoStartMac(exePath: string): Promise<void> {
+export async function enableAutoStartMac(exePath: string, namespace: string, ipc: string): Promise<void> {
   if (process.platform !== "darwin") return;
   const { mkdir, writeFile } = await import("node:fs/promises");
   const appId = resolveAppId();
   const plistDir = join(homedir(), "Library", "LaunchAgents");
   await mkdir(plistDir, { recursive: true });
   const plistPath = join(plistDir, `ai.open-design.${appId}.plist`);
-  await writeFile(plistPath, generatePlist(exePath, appId), "utf8");
+  await writeFile(plistPath, generatePlist(exePath, appId, namespace, ipc), "utf8");
 }
 
 export async function disableAutoStartMac(): Promise<void> {
@@ -214,7 +214,7 @@ function escapeXml(unsafe: string): string {
   });
 }
 
-function generatePlist(exePath: string, appId: string): string {
+function generatePlist(exePath: string, appId: string, namespace: string, ipc: string): string {
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`,
@@ -227,7 +227,9 @@ function generatePlist(exePath: string, appId: string): string {
     `<string>${escapeXml(exePath)}</string>`,
     `<string>--od-stamp-app=${APP_KEYS.TRAY}</string>`,
     `<string>--od-stamp-mode=dev</string>`,
-    `<string>--od-stamp-source=startup</string>`,
+    `<string>--od-stamp-namespace=${escapeXml(namespace)}</string>`,
+    `<string>--od-stamp-ipc=${escapeXml(ipc)}</string>`,
+    `<string>--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}</string>`,
     `</array>`,
     `<key>RunAtLoad</key>`,
     `<true/>`,

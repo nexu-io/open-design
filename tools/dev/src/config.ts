@@ -141,6 +141,7 @@ export function resolveStopApps(appName: string | undefined): ToolDevAppName[] {
   if (!isToolDevAppName(appName)) throw unsupportedAppError(appName);
   if (appName === APP_KEYS.WEB) return [APP_KEYS.WEB, APP_KEYS.DAEMON];
   if (appName === APP_KEYS.DESKTOP) return [APP_KEYS.DESKTOP];
+  if (appName === APP_KEYS.TRAY) return [APP_KEYS.TRAY, APP_KEYS.DAEMON];
   return [APP_KEYS.DAEMON];
 }
 
