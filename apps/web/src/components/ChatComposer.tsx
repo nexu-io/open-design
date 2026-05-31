@@ -6,7 +6,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { createPortal } from 'react-dom';
 import { useI18n } from '../i18n';
@@ -452,6 +454,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const composingRef = useRef(false);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
+    const toolsSearchRef = useRef<HTMLInputElement | null>(null);
+    const [toolsActiveIndex, setToolsActiveIndex] = useState(0);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const [petMenuOpen, setPetMenuOpen] = useState(false);
     const petWrapRef = useRef<HTMLDivElement | null>(null);
@@ -479,6 +483,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     useEffect(() => {
       saveComposerDraft(draftStorageKey, draft);
     }, [draftStorageKey, draft]);
+
+    useEffect(() => {
+      if (!toolsOpen) return;
+      setToolsActiveIndex(0);
+      requestAnimationFrame(() => {
+        toolsSearchRef.current?.focus();
+      });
+    }, [toolsOpen, toolsTab]);
 
     useEffect(() => {
       if (!toolsOpen) return;
@@ -2203,12 +2215,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   className="composer-tools-menu"
                   role="menu"
                 >
-                  <div className="composer-tools-menu-head">
-                    <span className="composer-tools-menu-title">
-                      <Icon name="blocks" size={13} />
-                      <span>{t('chat.resourcesMenuTitle')}</span>
-                    </span>
-                  </div>
                   <div className="composer-tools-tabs" role="tablist">
                     {availableTabs.map((tab) => (
                       <button
@@ -2252,6 +2258,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       <ToolsPluginsPanel
                         plugins={pluginsForComposer}
                         activePluginId={pinnedPluginId}
+                        activeIndex={toolsActiveIndex}
+                        searchRef={toolsSearchRef}
+                        onActiveIndexChange={setToolsActiveIndex}
                         onApply={async (record) => {
                           // Tools-menu apply: no draft write, so the
                           // tracked-insertion array gets no new
@@ -2290,6 +2299,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       <ToolsSkillsPanel
                         skills={skills}
                         currentSkillId={currentSkillId}
+                        activeIndex={toolsActiveIndex}
+                        searchRef={toolsSearchRef}
+                        onActiveIndexChange={setToolsActiveIndex}
                         onPick={async (skill) => {
                           const applied = await applyProjectSkill(skill);
                           if (!applied) return;
@@ -2316,6 +2328,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       <ToolsMcpPanel
                         servers={enabledMcpServers}
                         templates={mcpTemplates}
+                        activeIndex={toolsActiveIndex}
+                        searchRef={toolsSearchRef}
+                        onActiveIndexChange={setToolsActiveIndex}
                         onInsert={(serverId) => {
                           const ta = textareaRef.current;
                           const server = enabledMcpServers.find((item) => item.id === serverId);
@@ -2343,6 +2358,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     {toolsTab === 'import' ? (
                       <ToolsImportPanel
                         t={t}
+                        activeIndex={toolsActiveIndex}
+                        searchRef={toolsSearchRef}
+                        onActiveIndexChange={setToolsActiveIndex}
                         onLinkFolder={async () => {
                           setToolsOpen(false);
                           await handleLinkFolder();
@@ -2799,11 +2817,17 @@ function StagedCommentAttachments({
 function ToolsPluginsPanel({
   plugins,
   activePluginId,
+  activeIndex,
+  searchRef,
+  onActiveIndexChange,
   onApply,
   onShowDetails,
 }: {
   plugins: InstalledPluginRecord[];
   activePluginId: string | null;
+  activeIndex: number;
+  searchRef: Ref<HTMLInputElement>;
+  onActiveIndexChange: (index: number) => void;
   onApply: (record: InstalledPluginRecord) => void | Promise<void>;
   onShowDetails: (record: InstalledPluginRecord) => void;
 }) {
@@ -2823,6 +2847,19 @@ function ToolsPluginsPanel({
     () => scopedPlugins.filter((p) => pluginMatchesQuery(p, query)),
     [scopedPlugins, query],
   );
+  const activeResourceIndex = resourceActiveIndex(activeIndex, visiblePlugins.length);
+  const pickActivePlugin = () => {
+    const plugin = activeResourceIndex >= 0 ? visiblePlugins[activeResourceIndex] : null;
+    if (!plugin || pendingId !== null) return;
+    void (async () => {
+      setPendingId(plugin.id);
+      try {
+        await onApply(plugin);
+      } finally {
+        setPendingId(null);
+      }
+    })();
+  };
 
   return (
     <>
@@ -2835,6 +2872,12 @@ function ToolsPluginsPanel({
             className={`composer-tools-segment${source === 'community' ? ' active' : ''}`}
             onClick={() => setSource('community')}
             title={`${communityPlugins.length} installed official plugins`}
+            onKeyDown={(event) => handleResourceKeyboardEvent(event, {
+              activeIndex: activeResourceIndex,
+              itemCount: visiblePlugins.length,
+              onActiveIndexChange,
+              onPickActive: pickActivePlugin,
+            })}
           >
             Official
           </button>
@@ -2845,16 +2888,33 @@ function ToolsPluginsPanel({
             className={`composer-tools-segment${source === 'mine' ? ' active' : ''}`}
             onClick={() => setSource('mine')}
             title={`${userPlugins.length} installed user plugins`}
+            onKeyDown={(event) => handleResourceKeyboardEvent(event, {
+              activeIndex: activeResourceIndex,
+              itemCount: visiblePlugins.length,
+              onActiveIndexChange,
+              onPickActive: pickActivePlugin,
+            })}
           >
             My plugins
           </button>
         </div>
         <input
+          ref={searchRef}
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
+          onKeyDown={(event) => handleResourceKeyboardEvent(event, {
+            activeIndex: activeResourceIndex,
+            itemCount: visiblePlugins.length,
+            onActiveIndexChange,
+            onPickActive: pickActivePlugin,
+          })}
           placeholder="Search plugins…"
           aria-label="Search plugins"
+          aria-controls="composer-tools-plugin-results"
+          aria-activedescendant={
+            activeResourceIndex >= 0 ? resourceOptionDomId('plugins', activeResourceIndex) : undefined
+          }
         />
       </div>
       {visiblePlugins.length === 0 ? (
@@ -2871,17 +2931,22 @@ function ToolsPluginsPanel({
           )}
         </div>
       ) : (
-        <div className="composer-tools-list">
-          {visiblePlugins.map((p) => (
-            <div
-              key={p.id}
-              className={`composer-tools-row composer-tools-row--plugin${
+        <div className="composer-tools-list" id="composer-tools-plugin-results">
+          {visiblePlugins.map((p, index) => {
+            const canShowDetails = pluginHasDetails(p);
+            return (
+              <div
+                key={p.id}
+                className="composer-tools-row-group"
+              >
+              <button
+                id={resourceOptionDomId('plugins', index)}
+                type="button"
+                role="menuitem"
+                aria-selected={index === activeResourceIndex}
+                className={`composer-tools-row composer-tools-row--plugin${
                 p.id === activePluginId ? ' active' : ''
               }`}
-            >
-              <button
-                type="button"
-                className="composer-tools-row-main"
                 // Match the @-mention popover: prevent the textarea from
                 // losing focus before the click handler runs so
                 // selectionStart isn't reset to 0 and the inserted token
@@ -2898,6 +2963,14 @@ function ToolsPluginsPanel({
                 disabled={pendingId !== null}
                 aria-busy={pendingId === p.id ? 'true' : undefined}
                 title={p.manifest?.description ?? p.title}
+                onMouseEnter={() => onActiveIndexChange(index)}
+                onFocus={() => onActiveIndexChange(index)}
+                onKeyDown={(event) => handleResourceKeyboardEvent(event, {
+                  activeIndex: activeResourceIndex,
+                  itemCount: visiblePlugins.length,
+                  onActiveIndexChange,
+                  onPickActive: pickActivePlugin,
+                })}
               >
                 <Icon name="sparkles" size={12} />
                 <span className="composer-tools-row-body">
@@ -2913,20 +2986,34 @@ function ToolsPluginsPanel({
                 {pendingId === p.id ? (
                   <span className="composer-tools-row-pending">Applying…</span>
                 ) : (
-                  <span className="composer-tools-action-pill">Apply</span>
+                  <span className="composer-tools-row-actions">
+                    <span className="composer-tools-action-pill">Apply</span>
+                  </span>
                 )}
               </button>
               <button
                 type="button"
                 className="composer-tools-row-side"
                 onClick={() => onShowDetails(p)}
-                title={`View details for ${p.title}`}
-                aria-label={`View details for ${p.title}`}
+                disabled={!canShowDetails}
+                title={
+                  canShowDetails
+                    ? `View details for ${p.title}`
+                    : `No extra details available for ${p.title}`
+                }
+                aria-label={
+                  canShowDetails
+                    ? `View details for ${p.title}`
+                    : `No extra details available for ${p.title}`
+                }
+                onMouseEnter={() => onActiveIndexChange(index)}
+                onFocus={() => onActiveIndexChange(index)}
               >
                 <Icon name="eye" size={12} />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>
@@ -2936,11 +3023,17 @@ function ToolsPluginsPanel({
 function ToolsMcpPanel({
   servers,
   templates,
+  activeIndex,
+  searchRef,
+  onActiveIndexChange,
   onInsert,
   onManage,
 }: {
   servers: McpServerConfig[];
   templates: McpTemplate[];
+  activeIndex: number;
+  searchRef: Ref<HTMLInputElement>;
+  onActiveIndexChange: (index: number) => void;
   onInsert: (serverId: string) => void;
   onManage: () => void;
 }) {
@@ -2953,16 +3046,39 @@ function ToolsMcpPanel({
     () => templates.filter((tpl) => mcpTemplateMatchesQuery(tpl, query)).slice(0, 8),
     [templates, query],
   );
+  const itemCount = visibleServers.length + visibleTemplates.length + 1;
+  const activeResourceIndex = resourceActiveIndex(activeIndex, itemCount);
+  const pickActiveResource = () => {
+    if (activeResourceIndex < 0) return;
+    if (activeResourceIndex < visibleServers.length) {
+      onInsert(visibleServers[activeResourceIndex]!.id);
+      return;
+    }
+    onManage();
+  };
+  const keyboard = (event: ReactKeyboardEvent<HTMLElement>) => handleResourceKeyboardEvent(event, {
+    activeIndex: activeResourceIndex,
+    itemCount,
+    onActiveIndexChange,
+    onPickActive: pickActiveResource,
+  });
+  let itemIndex = 0;
 
   return (
     <>
       <div className="composer-tools-filter">
         <input
+          ref={searchRef}
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
+          onKeyDown={keyboard}
           placeholder="Search MCP…"
           aria-label="Search MCP servers and templates"
+          aria-controls="composer-tools-mcp-results"
+          aria-activedescendant={
+            activeResourceIndex >= 0 ? resourceOptionDomId('mcp', activeResourceIndex) : undefined
+          }
         />
       </div>
       {visibleServers.length === 0 ? (
@@ -2972,61 +3088,84 @@ function ToolsMcpPanel({
             : `No configured MCP results for “${query}”.`}
         </div>
       ) : (
-        <div className="composer-tools-list">
+        <div className="composer-tools-list" id="composer-tools-mcp-results">
           <div className="composer-tools-section-label">Configured</div>
-          {visibleServers.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="menuitem"
-              className="composer-tools-row"
-              // Match the @-mention popover: prevent the textarea from
-              // losing focus before the click handler runs so
-              // selectionStart isn't reset to 0 (#3195).
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onInsert(s.id)}
-              title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
-            >
-              <Icon name="link" size={12} />
+          {visibleServers.map((s) => {
+            const index = itemIndex;
+            itemIndex += 1;
+            return (
+              <button
+                id={resourceOptionDomId('mcp', index)}
+                key={s.id}
+                type="button"
+                role="menuitem"
+                aria-selected={index === activeResourceIndex}
+                className="composer-tools-row"
+                // Match the @-mention popover: prevent the textarea from
+                // losing focus before the click handler runs so
+                // selectionStart isn't reset to 0 (#3195).
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onInsert(s.id)}
+                onMouseEnter={() => onActiveIndexChange(index)}
+                onFocus={() => onActiveIndexChange(index)}
+                onKeyDown={keyboard}
+                title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
+              >
+                <Icon name="link" size={12} />
                 <span className="composer-tools-row-body">
                   <strong>{s.label || s.id}</strong>
                   <span className="composer-tools-row-meta">{s.transport}</span>
                 </span>
                 <span className="composer-tools-action-pill">Insert</span>
               </button>
-            ))}
+            );
+          })}
         </div>
       )}
       {visibleTemplates.length > 0 ? (
         <div className="composer-tools-list">
           <div className="composer-tools-section-label">Templates</div>
-          {visibleTemplates.map((tpl) => (
-            <button
-              key={tpl.id}
-              type="button"
-              role="menuitem"
-              className="composer-tools-row"
-              onClick={onManage}
-              title={`Add ${tpl.label} from Settings`}
-            >
-              <Icon name="plus" size={12} />
-              <span className="composer-tools-row-body">
-                <strong>{tpl.label}</strong>
-                <span className="composer-tools-row-meta">
-                  {tpl.transport}
-                  {tpl.category ? ` · ${tpl.category}` : ''}
+          {visibleTemplates.map((tpl) => {
+            const index = itemIndex;
+            itemIndex += 1;
+            return (
+              <button
+                id={resourceOptionDomId('mcp', index)}
+                key={tpl.id}
+                type="button"
+                role="menuitem"
+                aria-selected={index === activeResourceIndex}
+                className="composer-tools-row"
+                onClick={onManage}
+                onMouseEnter={() => onActiveIndexChange(index)}
+                onFocus={() => onActiveIndexChange(index)}
+                onKeyDown={keyboard}
+                title={`Add ${tpl.label} from Settings`}
+              >
+                <Icon name="plus" size={12} />
+                <span className="composer-tools-row-body">
+                  <strong>{tpl.label}</strong>
+                  <span className="composer-tools-row-meta">
+                    {tpl.transport}
+                    {tpl.category ? ` · ${tpl.category}` : ''}
+                  </span>
                 </span>
-              </span>
-              <span className="composer-tools-action-pill">Manage</span>
-            </button>
-          ))}
+                <span className="composer-tools-action-pill">Manage</span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
       <button
+        id={resourceOptionDomId('mcp', itemIndex)}
         type="button"
         role="menuitem"
+        aria-selected={itemIndex === activeResourceIndex}
         className="composer-tools-row composer-tools-row-action"
         onClick={onManage}
+        onMouseEnter={() => onActiveIndexChange(itemIndex)}
+        onFocus={() => onActiveIndexChange(itemIndex)}
+        onKeyDown={keyboard}
       >
         <Icon name="settings" size={12} />
         <span>Manage MCP servers…</span>
@@ -3038,10 +3177,16 @@ function ToolsMcpPanel({
 function ToolsSkillsPanel({
   skills,
   currentSkillId,
+  activeIndex,
+  searchRef,
+  onActiveIndexChange,
   onPick,
 }: {
   skills: SkillSummary[];
   currentSkillId: string | null;
+  activeIndex: number;
+  searchRef: Ref<HTMLInputElement>;
+  onActiveIndexChange: (index: number) => void;
   onPick: (skill: SkillSummary) => void | Promise<void>;
 }) {
   const { locale } = useI18n();
@@ -3051,15 +3196,40 @@ function ToolsSkillsPanel({
     () => skills.filter((s) => skillMatchesQuery(s, query)).slice(0, 24),
     [skills, query],
   );
+  const activeResourceIndex = resourceActiveIndex(activeIndex, visibleSkills.length);
+  const pickActiveSkill = () => {
+    const skill = activeResourceIndex >= 0 ? visibleSkills[activeResourceIndex] : null;
+    if (!skill || pendingId !== null) return;
+    void (async () => {
+      setPendingId(skill.id);
+      try {
+        await onPick(skill);
+      } finally {
+        setPendingId(null);
+      }
+    })();
+  };
+  const keyboard = (event: ReactKeyboardEvent<HTMLElement>) => handleResourceKeyboardEvent(event, {
+    activeIndex: activeResourceIndex,
+    itemCount: visibleSkills.length,
+    onActiveIndexChange,
+    onPickActive: pickActiveSkill,
+  });
   return (
     <>
       <div className="composer-tools-filter">
         <input
+          ref={searchRef}
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
+          onKeyDown={keyboard}
           placeholder="Search skills…"
           aria-label="Search skills"
+          aria-controls="composer-tools-skill-results"
+          aria-activedescendant={
+            activeResourceIndex >= 0 ? resourceOptionDomId('skills', activeResourceIndex) : undefined
+          }
         />
       </div>
       {visibleSkills.length === 0 ? (
@@ -3067,14 +3237,16 @@ function ToolsSkillsPanel({
           {skills.length === 0 ? 'No skills available yet.' : `No skills found for “${query}”.`}
         </div>
       ) : (
-        <div className="composer-tools-list">
-          {visibleSkills.map((skill) => {
+        <div className="composer-tools-list" id="composer-tools-skill-results">
+          {visibleSkills.map((skill, index) => {
             const active = skill.id === currentSkillId;
             return (
               <button
+                id={resourceOptionDomId('skills', index)}
                 key={skill.id}
                 type="button"
                 role="menuitem"
+                aria-selected={index === activeResourceIndex}
                 className={`composer-tools-row${active ? ' active' : ''}`}
                 // Match the @-mention popover: prevent the textarea from
                 // losing focus before the click handler runs so
@@ -3090,6 +3262,9 @@ function ToolsSkillsPanel({
                 }}
                 disabled={pendingId !== null}
                 title={localizeSkillDescription(locale, skill)}
+                onMouseEnter={() => onActiveIndexChange(index)}
+                onFocus={() => onActiveIndexChange(index)}
+                onKeyDown={keyboard}
               >
                 <Icon name={active ? 'check' : 'file'} size={12} />
                 <span className="composer-tools-row-body">
@@ -3115,6 +3290,19 @@ function ToolsSkillsPanel({
 
 function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
   return pluginMentionScore(plugin, query) !== null;
+}
+
+function pluginHasDetails(plugin: InstalledPluginRecord): boolean {
+  const manifest = plugin.manifest;
+  const od = manifest?.od as Record<string, unknown> | undefined;
+  return Boolean(
+    manifest?.description ||
+      manifest?.tags?.length ||
+      od?.preview ||
+      od?.context ||
+      od?.useCase ||
+      (Array.isArray(od?.inputs) && od.inputs.length > 0),
+  );
 }
 
 function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
@@ -3239,6 +3427,52 @@ function isMentionTokenChar(char: string): boolean {
   return /[a-z0-9]/.test(char);
 }
 
+function resourceOptionDomId(panel: ToolsTab, index: number): string {
+  return `composer-tools-${panel}-option-${index}`;
+}
+
+function resourceActiveIndex(activeIndex: number, itemCount: number): number {
+  if (itemCount <= 0) return -1;
+  return Math.min(Math.max(activeIndex, 0), itemCount - 1);
+}
+
+function handleResourceKeyboardEvent(
+  event: ReactKeyboardEvent<HTMLElement>,
+  {
+    activeIndex,
+    itemCount,
+    onActiveIndexChange,
+    onPickActive,
+  }: {
+    activeIndex: number;
+    itemCount: number;
+    onActiveIndexChange: (index: number) => void;
+    onPickActive: () => void;
+  },
+): void {
+  if (itemCount <= 0) return;
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    onActiveIndexChange((activeIndex + 1) % itemCount);
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    onActiveIndexChange((activeIndex - 1 + itemCount) % itemCount);
+    return;
+  }
+  if (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  ) {
+    event.preventDefault();
+    onPickActive();
+  }
+}
+
 function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -3277,11 +3511,17 @@ function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): strin
 
 function ToolsImportPanel({
   t,
+  activeIndex,
+  searchRef,
+  onActiveIndexChange,
   onLinkFolder,
   currentDesignSystemId,
   onSwitchDesignSystem,
 }: {
   t: TranslateFn;
+  activeIndex: number;
+  searchRef: Ref<HTMLInputElement>;
+  onActiveIndexChange: (index: number) => void;
   onLinkFolder: () => Promise<void> | void;
   currentDesignSystemId?: string | null;
   // When omitted (no active project) the design-system import row stays
@@ -3295,6 +3535,7 @@ function ToolsImportPanel({
   ) => Promise<boolean>;
 }) {
   const [view, setView] = useState<'root' | 'designSystems'>('root');
+  const [query, setQuery] = useState('');
 
   if (view === 'designSystems' && onSwitchDesignSystem) {
     return (
@@ -3307,53 +3548,118 @@ function ToolsImportPanel({
     );
   }
 
+  const items = [
+    { icon: 'upload' as const, label: t('chat.importFig') },
+    { icon: 'grid' as const, label: t('chat.importWeb') },
+    {
+      icon: 'folder' as const,
+      label: t('chat.importFolder'),
+      enabled: true,
+      onClick: () => void onLinkFolder(),
+    },
+    {
+      icon: 'sparkles' as const,
+      label: t('chat.importSkills'),
+      enabled: !!onSwitchDesignSystem,
+      onClick: () => setView('designSystems'),
+      testId: 'composer-import-design-systems',
+    },
+    { icon: 'file' as const, label: t('chat.importProject') },
+  ];
+  const visibleItems = items.filter((item) => item.label.toLowerCase().includes(query.trim().toLowerCase()));
+  const activeResourceIndex = resourceActiveIndex(activeIndex, visibleItems.length);
+  const pickActiveImport = () => {
+    const item = activeResourceIndex >= 0 ? visibleItems[activeResourceIndex] : null;
+    if (!item?.enabled || !item.onClick) return;
+    item.onClick();
+  };
+  const keyboard = (event: ReactKeyboardEvent<HTMLElement>) => handleResourceKeyboardEvent(event, {
+    activeIndex: activeResourceIndex,
+    itemCount: visibleItems.length,
+    onActiveIndexChange,
+    onPickActive: pickActiveImport,
+  });
+
   return (
-    <div className="composer-tools-list">
-      <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
-      <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
-      <ImportItem
-        icon="folder"
-        label={t('chat.importFolder')}
-        t={t}
-        enabled
-        onClick={() => void onLinkFolder()}
-      />
-      <ImportItem
-        icon="sparkles"
-        label={t('chat.importSkills')}
-        t={t}
-        enabled={!!onSwitchDesignSystem}
-        onClick={() => setView('designSystems')}
-        testId="composer-import-design-systems"
-      />
-      <ImportItem icon="file" label={t('chat.importProject')} t={t} />
-    </div>
+    <>
+      <div className="composer-tools-filter">
+        <input
+          ref={searchRef}
+          className="composer-tools-search"
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={keyboard}
+          placeholder="Search imports…"
+          aria-label="Search imports"
+          aria-controls="composer-tools-import-results"
+          aria-activedescendant={
+            activeResourceIndex >= 0 ? resourceOptionDomId('import', activeResourceIndex) : undefined
+          }
+        />
+      </div>
+      {visibleItems.length === 0 ? (
+        <div className="composer-tools-empty">No import options found for “{query}”.</div>
+      ) : (
+        <div className="composer-tools-list" id="composer-tools-import-results">
+          {visibleItems.map((item, index) => (
+            <ImportItem
+              key={item.label}
+              id={resourceOptionDomId('import', index)}
+              icon={item.icon}
+              label={item.label}
+              t={t}
+              enabled={item.enabled}
+              active={index === activeResourceIndex}
+              onActive={() => onActiveIndexChange(index)}
+              onKeyDown={keyboard}
+              onClick={item.enabled ? item.onClick : undefined}
+              testId={item.testId}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
 function ImportItem({
+  id,
   icon,
   label,
   t,
   enabled,
+  active,
+  onActive,
+  onKeyDown,
   onClick,
   testId,
 }: {
+  id: string;
   icon: "upload" | "link" | "grid" | "folder" | "sparkles" | "file";
   label: string;
   t: TranslateFn;
   enabled?: boolean;
+  active: boolean;
+  onActive: () => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   onClick?: () => void;
   testId?: string;
 }) {
   return (
     <button
+      id={id}
       type="button"
-      className={`composer-import-item${enabled ? ' composer-import-item-enabled' : ''}`}
+      className={`composer-tools-row composer-import-item${enabled ? ' composer-import-item-enabled' : ''}`}
       role="menuitem"
-      tabIndex={-1}
+      aria-selected={active}
       disabled={!enabled}
       title={enabled ? label : t('chat.importComingSoon')}
+      // Match the other resource rows: keep textarea selection intact
+      // until the click handler has inserted or routed from the cursor.
+      onMouseDown={(e) => e.preventDefault()}
+      onMouseEnter={onActive}
+      onFocus={onActive}
+      onKeyDown={onKeyDown}
       onClick={enabled && onClick ? onClick : (e) => e.preventDefault()}
       data-testid={testId}
     >

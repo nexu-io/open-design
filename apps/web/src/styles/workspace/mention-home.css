@@ -6,11 +6,9 @@
   max-height: min(480px, 72vh);
   margin: 0 0 6px;
   background: var(--bg-panel);
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
-    var(--shadow-md);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -22,8 +20,8 @@
   gap: 4px;
   min-height: 42px;
   padding: 6px;
-  background: color-mix(in srgb, var(--accent) 9%, var(--bg-subtle));
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-soft));
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-soft);
   overflow-x: auto;
   scrollbar-width: none;
 }

@@ -656,8 +656,9 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Open resources menu'));
 
     await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Search plugins')));
     const menu = screen.getByRole('menu');
-    expect(within(menu).getByText('Resources')).toBeTruthy();
+    expect(within(menu).getByRole('tab', { name: 'Plugins' })).toBeTruthy();
     expect(within(menu).getAllByText('Apply').length).toBeGreaterThan(0);
     expect(screen.queryByText('My Export')).toBeNull();
 
@@ -669,6 +670,33 @@ describe('ChatComposer context pickers', () => {
       target: { value: 'private' },
     });
     expect(screen.getByText('Private export workflow')).toBeTruthy();
+  });
+
+  it('keeps Resources search focused and supports arrow-key selection', async () => {
+    plugins = [
+      COMMUNITY_PLUGIN,
+      makePlugin({
+        id: 'brief-writer',
+        title: 'Brief Writer',
+        description: 'Turns source notes into a concise creative brief.',
+      }),
+    ];
+    renderComposer();
+    fireEvent.click(screen.getByLabelText('Open resources menu'));
+
+    const search = await screen.findByLabelText('Search plugins');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    await waitFor(() => expect(screen.getByText('Brief Writer')).toBeTruthy());
+    expect(search.getAttribute('aria-activedescendant')).toBe('composer-tools-plugins-option-0');
+
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+
+    expect(search.getAttribute('aria-activedescendant')).toBe('composer-tools-plugins-option-1');
+    expect(screen.getByText('Brief Writer').closest('[role="menuitem"]')?.getAttribute('aria-selected')).toBe('true');
+
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   });
 
   it('clears absolute anchors when the pet popover switches to fixed positioning', async () => {

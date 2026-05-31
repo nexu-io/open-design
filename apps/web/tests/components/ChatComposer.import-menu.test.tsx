@@ -91,6 +91,7 @@ describe('ChatComposer Tools -> Import menu', () => {
 
     fireEvent.click(screen.getByLabelText('Open resources menu'));
     fireEvent.click(screen.getByRole('tab', { name: 'Import' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Search imports')));
 
     const folderItem = await screen.findByRole('menuitem', { name: /Link code folder/i });
     expect(folderItem).toBeTruthy();
