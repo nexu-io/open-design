@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
-import { useI18n } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';

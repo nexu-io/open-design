@@ -8,6 +8,16 @@ import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage, Conversation } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string, vars?: Record<string, string | number>) => {
+      if (key === 'chat.renameConversationLabel') {
+        return `chat.renameConversationLabel ${vars?.title ?? ''}`;
+      }
+      return key;
+    },
+  }),
   useT: () => (key: string, vars?: Record<string, string | number>) => {
     if (key === 'chat.renameConversationLabel') {
       return `chat.renameConversationLabel ${vars?.title ?? ''}`;

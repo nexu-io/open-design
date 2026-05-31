@@ -115,6 +115,13 @@ export function DesignSystemsTab({
   templates = [],
 }: Props) {
   const { locale, t } = useI18n();
+  const isZhCN = locale === 'zh-CN';
+  const primaryDesignSystemLabel = isZhCN ? t('ds.userSystemsEyebrow') : 'Design system';
+  const primaryTemplateLabel = isZhCN ? t('ds.templatesTitle') : 'Template';
+  const userSystemsLabel = isZhCN ? t('ds.userSystemsTitle') : 'Your systems';
+  const officialPresetsLabel = isZhCN ? t('ds.libraryTitle') : 'Official presets';
+  const enterpriseLabel = isZhCN ? '企业' : 'Enterprise';
+  const templateMineLabel = isZhCN ? t('ds.templatesTitle') : 'Your templates';
   const analytics = useAnalytics();
   const designSystemsPageViewFiredRef = useRef(false);
   useEffect(() => {
@@ -165,6 +172,10 @@ export function DesignSystemsTab({
     if (userFilter === 'all') return editable;
     return editable.filter((system) => (system.status ?? 'draft') === userFilter);
   }, [systems, userFilter]);
+  const showOfficialLibrary =
+    primaryCollection === 'design-system' &&
+    (designSystemCollection === 'official' ||
+      (designSystemCollection === 'mine' && userSystems.length === 0 && librarySystems.length > 0));
 
   // Total systems per surface, ignoring every active filter. Drives the
   // "this surface is now empty" fallback below — that guard must react to
@@ -390,7 +401,7 @@ export function DesignSystemsTab({
             className={primaryCollection === 'design-system' ? 'active' : ''}
             onClick={() => setPrimaryCollection('design-system')}
           >
-            Design system
+            {primaryDesignSystemLabel}
           </button>
           <button
             type="button"
@@ -399,7 +410,7 @@ export function DesignSystemsTab({
             className={primaryCollection === 'template' ? 'active' : ''}
             onClick={() => setPrimaryCollection('template')}
           >
-            Template
+            {primaryTemplateLabel}
           </button>
         </div>
       </div>
@@ -414,7 +425,7 @@ export function DesignSystemsTab({
               className={designSystemCollection === 'mine' ? 'active' : ''}
               onClick={() => setDesignSystemCollection('mine')}
             >
-              Your systems
+              {userSystemsLabel}
             </button>
             <button
               type="button"
@@ -423,7 +434,7 @@ export function DesignSystemsTab({
               className={designSystemCollection === 'official' ? 'active' : ''}
               onClick={() => setDesignSystemCollection('official')}
             >
-              Official presets
+              {officialPresetsLabel}
             </button>
             <button
               type="button"
@@ -432,7 +443,7 @@ export function DesignSystemsTab({
               className={designSystemCollection === 'enterprise' ? 'active' : ''}
               onClick={() => setDesignSystemCollection('enterprise')}
             >
-              Enterprise
+              {enterpriseLabel}
             </button>
           </div>
         </div>
@@ -446,7 +457,7 @@ export function DesignSystemsTab({
               className={templateCollection === 'mine' ? 'active' : ''}
               onClick={() => setTemplateCollection('mine')}
             >
-              Your templates
+              {templateMineLabel}
             </button>
             <button
               type="button"
@@ -460,6 +471,10 @@ export function DesignSystemsTab({
           </div>
         </div>
       )}
+
+      {primaryCollection === 'design-system' ? (
+        <p className="ds-private-note">{t('ds.privateNote')}</p>
+      ) : null}
 
       {primaryCollection === 'design-system' && designSystemCollection === 'mine' ? (
         <section className="ds-settings-card" aria-label={t('ds.userSystemsAria')}>
@@ -576,7 +591,7 @@ export function DesignSystemsTab({
         </section>
       ) : null}
 
-      {primaryCollection === 'design-system' && designSystemCollection === 'official' ? (
+      {showOfficialLibrary ? (
         <section className="ds-settings-card" aria-label={t('ds.libraryAria')}>
         <div className="ds-settings-card__head">
           <div>
