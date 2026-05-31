@@ -25,9 +25,9 @@ import { DaemonManager } from "./daemon-manager.js";
 import { buildTrayMenu, buildTooltip, type TrayCallbacks, type TrayState } from "./tray-menu.js";
 import { t } from "./i18n.js";
 import {
-  disableAutoStart,
-  enableAutoStart,
-  isAutoStartEnabled,
+  queryAutoStart,
+  resolveElectronBinary,
+  setAutoStart,
 } from "./auto-start.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -234,7 +234,7 @@ export async function runTrayMain(
 
   // Load persisted config
   const config = await loadConfig(runtime.base);
-  const autoStartEnabled = await isAutoStartEnabled();
+  const autoStartEnabled = await queryAutoStart();
   console.log(`[tray] config loaded — daemonPort=${config.daemonPort} autoStart=${autoStartEnabled}`);
 
   const state: TrayState = {
@@ -309,13 +309,11 @@ export async function runTrayMain(
     app.exit(0);
   }
 
-  async function setAutoStart(enabled: boolean): Promise<void> {
+  async function handleAutoStartToggle(enabled: boolean): Promise<void> {
     try {
-      if (enabled) {
-        await enableAutoStart(runtime.namespace, runtime.ipc);
-      } else {
-        await disableAutoStart();
-      }
+      // resolveElectronBinary returns the full path to electron executable (needed for macOS plist)
+      const exePath = resolveElectronBinary();
+      await setAutoStart(enabled, exePath, runtime.namespace, runtime.ipc);
       state.autoStart = enabled;
       await saveConfig(runtime.base, { ...config, autoStart: enabled });
       await refreshTray();
@@ -348,7 +346,7 @@ export async function runTrayMain(
     stopDaemon,
     restartDaemon,
     restartTray,
-    setAutoStart,
+    setAutoStart: handleAutoStartToggle,
     quit: quitTray,
   };
 

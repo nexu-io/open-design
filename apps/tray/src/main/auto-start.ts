@@ -196,6 +196,52 @@ export async function isAutoStartEnabledMac(): Promise<boolean> {
   }
 }
 
+// ─── Platform-aware public API ────────────────────────────────────────────────
+
+/**
+ * Enable or disable auto-start on login (platform-aware).
+ * Windows: writes registry Run key
+ * macOS: writes LaunchAgent plist (requires exePath)
+ */
+/**
+ * Resolve the absolute path to the electron executable.
+ * Exported for use by the platform-aware setAutoStart wrapper.
+ */
+export { resolveElectronBinary };
+
+export async function setAutoStart(enabled: boolean, exePath?: string, namespace?: string, ipc?: string): Promise<void> {
+  if (process.platform === "win32") {
+    if (enabled) {
+      await enableAutoStart(namespace ?? "default", ipc ?? "");
+    } else {
+      await disableAutoStart();
+    }
+  } else if (process.platform === "darwin") {
+    if (!exePath || !namespace || !ipc) {
+      console.warn("[tray] setAutoStart: macOS requires exePath, namespace, ipc");
+      return;
+    }
+    if (enabled) {
+      await enableAutoStartMac(exePath, namespace, ipc);
+    } else {
+      await disableAutoStartMac();
+    }
+  }
+  // Other platforms: no-op
+}
+
+/**
+ * Query whether auto-start is enabled (platform-aware).
+ */
+export async function queryAutoStart(): Promise<boolean> {
+  if (process.platform === "win32") {
+    return isAutoStartEnabled();
+  } else if (process.platform === "darwin") {
+    return isAutoStartEnabledMac();
+  }
+  return false;
+}
+
 /**
  * Escape a string for safe inclusion in an XML plist element.
  * Without this, values containing < > & would break the XML structure
