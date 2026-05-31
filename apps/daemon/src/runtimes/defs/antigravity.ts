@@ -227,16 +227,23 @@ export const antigravityAgentDef = {
     // and the change actually ships in the auto-update channel that
     // packaged OD users get, `-p -` is the contract that actually
     // produces a print-mode reply on the installed CLI.
-    const args: string[] = ['-p'];
+    const args: string[] = [];
     // Always opt into `--log-file` when the daemon supplied a path so
     // it can post-exit grep for the actual upstream failure shape
     // (auth missing vs quota reached vs upstream error) — without it
     // the chat surfaces a generic "empty response" because print mode
     // never echoes those errors on stdout. See server.ts empty-output
     // guard for the consumer.
+    //
+    // Flag order is load-bearing on agy v1.0.3: `agy -p --log-file
+    // /tmp/x -` runs successfully but leaves /tmp/x empty, while `agy
+    // --log-file /tmp/x -p -` captures the diagnostic log, including
+    // `Propagating selected model override to backend: label="<model>"`
+    // and auth/quota failures.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
+    args.push('-p');
     args.push('-');
     return args;
   },
