@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, statSync } from 'node:fs';
+import { accessSync, constants, existsSync, realpathSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -312,10 +312,7 @@ export function inspectAgentExecutableResolution(
   // falling back to first-match (#978).
   let pathResolvedPath: string | null = null;
   if (!configuredOverridePath && def.minVersion) {
-    const cached = versionAwareCache.get(def.id);
-    if (cached && existsSync(cached)) {
-      pathResolvedPath = cached;
-    }
+    pathResolvedPath = cachedVersionAwarePath(def.id);
   }
   if (!pathResolvedPath) {
     const candidates = [
@@ -350,13 +347,28 @@ export function inspectAgentExecutableResolution(
 
 const VERSION_PROBE_TIMEOUT_MS = 1_500;
 
-// agent.id → resolved path that passed the version gate. Populated by
-// `chooseExecutableByMinVersion`; consulted by
+interface VersionAwareExecutableIdentity {
+  realpath: string;
+  dev: number;
+  ino: number;
+  mode: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+}
+
+interface VersionAwareCacheEntry {
+  path: string;
+  identity: VersionAwareExecutableIdentity;
+}
+
+// agent.id → resolved path + file identity that passed the version gate.
+// Populated by `chooseExecutableByMinVersion`; consulted by
 // `inspectAgentExecutableResolution` so the sync chat-spawn path sees
 // the same pick detection landed on. Only writes for the auto-pick path
 // — an explicit `<AGENT>_BIN` override is intentionally NOT cached so
 // clearing the env reliably falls back to auto-pick (#1007 round-2 P2).
-const versionAwareCache = new Map<string, string>();
+const versionAwareCache = new Map<string, VersionAwareCacheEntry>();
 
 export function clearVersionAwareResolutionCache(agentId?: string): void {
   if (agentId === undefined) {
@@ -364,6 +376,63 @@ export function clearVersionAwareResolutionCache(agentId?: string): void {
   } else {
     versionAwareCache.delete(agentId);
   }
+}
+
+function readVersionAwareExecutableIdentity(filePath: string): VersionAwareExecutableIdentity | null {
+  try {
+    const realpath = realpathSync(filePath);
+    const stat = statSync(realpath);
+    if (!stat.isFile()) return null;
+    return {
+      realpath,
+      dev: stat.dev,
+      ino: stat.ino,
+      mode: stat.mode,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      ctimeMs: stat.ctimeMs,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function versionAwareExecutableIdentityEquals(
+  a: VersionAwareExecutableIdentity,
+  b: VersionAwareExecutableIdentity,
+): boolean {
+  return (
+    a.realpath === b.realpath &&
+    a.dev === b.dev &&
+    a.ino === b.ino &&
+    a.mode === b.mode &&
+    a.size === b.size &&
+    a.mtimeMs === b.mtimeMs &&
+    a.ctimeMs === b.ctimeMs
+  );
+}
+
+function cachedVersionAwarePath(agentId: string): string | null {
+  const cached = versionAwareCache.get(agentId);
+  if (!cached) return null;
+  const currentIdentity = readVersionAwareExecutableIdentity(cached.path);
+  if (
+    !currentIdentity ||
+    !versionAwareExecutableIdentityEquals(cached.identity, currentIdentity)
+  ) {
+    versionAwareCache.delete(agentId);
+    return null;
+  }
+  return cached.path;
+}
+
+function rememberVersionAwarePath(agentId: string, selectedPath: string): void {
+  const identity = readVersionAwareExecutableIdentity(selectedPath);
+  if (!identity) {
+    versionAwareCache.delete(agentId);
+    return;
+  }
+  versionAwareCache.set(agentId, { path: selectedPath, identity });
 }
 
 // Strict, anchored semver parse. Accepts a leading `v` and tolerates
@@ -422,8 +491,8 @@ export async function chooseExecutableByMinVersion(
   // (line ~390 below) and via `clearVersionAwareResolutionCache()`, so
   // a missing or relocated cached pick still gets re-probed at the
   // next launch.
-  const cached = versionAwareCache.get(def.id);
-  if (cached && existsSync(cached)) {
+  const cached = cachedVersionAwarePath(def.id);
+  if (cached) {
     return cached;
   }
 
@@ -459,7 +528,7 @@ export async function chooseExecutableByMinVersion(
   for (const probe of probes) {
     const cmp = compareSemver(probe.version, def.minVersion);
     if (cmp !== null && cmp >= 0) {
-      versionAwareCache.set(def.id, probe.path);
+      rememberVersionAwarePath(def.id, probe.path);
       return probe.path;
     }
   }

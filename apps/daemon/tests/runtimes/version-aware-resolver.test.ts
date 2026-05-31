@@ -19,6 +19,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -371,6 +372,47 @@ describe('chooseExecutableByMinVersion (#978: skip stale binaries that fail the 
     } finally {
       rmSync(oldDir, { recursive: true, force: true });
       rmSync(newDir, { recursive: true, force: true });
+    }
+  });
+
+  fsTest('cached pick replaced in place with an older binary is re-probed instead of returned stale', async () => {
+    const cachedDir = mkdtempSync(join(tmpdir(), 'od-cache-replace-cached-'));
+    const fallbackDir = mkdtempSync(join(tmpdir(), 'od-cache-replace-fallback-'));
+    try {
+      const cachedGemini = join(cachedDir, 'gemini');
+      const fallbackGemini = join(fallbackDir, 'gemini');
+      writeFileSync(cachedGemini, '0.40.1\n');
+      writeFileSync(fallbackGemini, '0.41.0\n');
+      chmodSync(cachedGemini, 0o755);
+      chmodSync(fallbackGemini, 0o755);
+      process.env.OD_AGENT_HOME = cachedDir;
+      process.env.PATH = `${cachedDir}${delimiter}${fallbackDir}`;
+
+      const def = minimalAgentDef({ id: 'gemini', bin: 'gemini', minVersion: '0.30.0' });
+      let probes = 0;
+      const runVersion = async (p: string) => {
+        probes += 1;
+        return readFileSync(p, 'utf8');
+      };
+
+      const firstChosen = await chooseExecutableByMinVersion(def, {}, { runVersion });
+      expect(firstChosen).toBe(cachedGemini);
+      const probesAfterCold = probes;
+      expect(probesAfterCold).toBeGreaterThanOrEqual(2);
+
+      // Simulate a package-manager rewrite at the same visible path:
+      // the path still exists, but it now points at an older build that
+      // should not keep bypassing the min-version gate until daemon restart.
+      rmSync(cachedGemini);
+      writeFileSync(cachedGemini, '0.1.12 downgraded in-place\n');
+      chmodSync(cachedGemini, 0o755);
+
+      const secondChosen = await chooseExecutableByMinVersion(def, {}, { runVersion });
+      expect(secondChosen).toBe(fallbackGemini);
+      expect(probes).toBeGreaterThan(probesAfterCold);
+    } finally {
+      rmSync(cachedDir, { recursive: true, force: true });
+      rmSync(fallbackDir, { recursive: true, force: true });
     }
   });
 });
