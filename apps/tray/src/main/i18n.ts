@@ -7,6 +7,8 @@
  * Supported: English, Chinese Simplified (zh-CN), Chinese Traditional (zh-TW/HK/MO)
  */
 
+import { createRequire } from "node:module";
+
 export interface TrayI18n {
   // Menu items
   statusLabel: string;
@@ -115,13 +117,14 @@ function zhTW(): TrayI18n {
 }
 
 function detectLocale(): TrayI18n {
-  // Electron's app.language is available in the main process.
+  // Electron's app.getLocale() returns the OS locale (e.g. "zh-CN", "en-US").
   // Falls back to "en" if we are running outside Electron.
   let lang = "en";
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { app } = require("electron") as { app: { language?: string; getLocale?: () => string } };
-    lang = app.language ?? app.getLocale?.() ?? "en";
+    const electronRequire = createRequire(import.meta.url);
+    const { app } = electronRequire("electron") as { app: { language?: string; getLocale?: () => string } };
+    // getLocale() returns the OS locale; language may be undefined in some Electron versions
+    lang = app.getLocale?.() ?? app.language ?? "en";
   } catch {
     // Not running in Electron — keep "en"
   }
