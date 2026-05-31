@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
   defaultScenarioPluginIdForProjectMetadata,
@@ -18,9 +19,18 @@ import {
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
+import { isSafeId } from './projects.js';
+import {
+  BUILT_IN_PROJECT_LOCATION_ID,
+  allProjectLocations,
+  createLocationProjectDir,
+  ensureProjectLocation,
+  scanProjectLocation,
+  writeProjectManifest,
+} from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
 function projectDetailResolvedDir(
   projectsRoot: string,
@@ -145,6 +155,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
   const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
+  const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
@@ -202,8 +213,199 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     return Array.from(byTaskKind.values());
   }
 
-  app.get('/api/projects', (_req, res) => {
+  async function configuredProjectLocations() {
+    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    const all = allProjectLocations(PROJECTS_DIR, config.projectLocations);
+    const valid = all[0] ? [all[0]] : [];
+    for (const location of all.slice(1)) {
+      const validated = validateLinkedDirs([location.path]);
+      if (validated.error) continue;
+      const canonical = validated.dirs[0];
+      if (!canonical) continue;
+      if (locationOverlapsDaemonData(canonical)) continue;
+      valid.push({ ...location, path: canonical });
+    }
+    return valid;
+  }
+
+  function locationOverlapsDaemonData(locationPath: string): boolean {
+    const runtimeDir = ctx.paths.RUNTIME_DATA_DIR_CANONICAL || ctx.paths.RUNTIME_DATA_DIR;
+    const projectsDir = path.join(runtimeDir, 'projects');
+    const relativeToRuntime = pathRelative(runtimeDir, locationPath);
+    const runtimeInsideLocation = pathRelative(locationPath, runtimeDir);
+    const relativeToProjects = pathRelative(projectsDir, locationPath);
+    const projectsInsideLocation = pathRelative(locationPath, projectsDir);
+    return isInsideOrSame(relativeToRuntime) || isInsideOrSame(runtimeInsideLocation)
+      || isInsideOrSame(relativeToProjects) || isInsideOrSame(projectsInsideLocation);
+  }
+
+  function pathRelative(from: string, to: string): string {
+    return path.relative(from, to);
+  }
+
+  function isInsideOrSame(relative: string): boolean {
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
+  function projectBelongsToLocation(project: any, location: { id: string; path: string }): boolean {
+    const metadata = project?.metadata;
+    if (typeof metadata?.baseDir !== 'string') return metadata?.projectLocationId === location.id;
+    const relative = path.relative(location.path, metadata.baseDir);
+    return isInsideOrSame(relative) && relative !== '';
+  }
+
+  function isProjectLocationProject(project: any): boolean {
+    const metadata = project?.metadata;
+    return metadata?.importedFrom === 'project-location'
+      || typeof metadata?.projectLocationId === 'string';
+  }
+
+  function projectVisibleForLocations(
+    project: any,
+    locations: Array<{ id: string; path: string; builtIn?: boolean }>,
+  ): boolean {
+    if (!isProjectLocationProject(project)) return true;
+    return locations.some((location) => !location.builtIn && projectBelongsToLocation(project, location));
+  }
+
+  async function resolveCreateProjectLocationId(explicitProjectLocationId: unknown): Promise<string> {
+    if (typeof explicitProjectLocationId === 'string' && explicitProjectLocationId.trim()) {
+      return explicitProjectLocationId.trim();
+    }
+    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    const configuredDefault = typeof config.defaultProjectLocationId === 'string'
+      ? config.defaultProjectLocationId.trim()
+      : '';
+    if (!configuredDefault || configuredDefault === BUILT_IN_PROJECT_LOCATION_ID) {
+      return BUILT_IN_PROJECT_LOCATION_ID;
+    }
+    const locations = await configuredProjectLocations();
+    return locations.some((location) => !location.builtIn && location.id === configuredDefault)
+      ? configuredDefault
+      : BUILT_IN_PROJECT_LOCATION_ID;
+  }
+
+  function unregisterProjectsForRemovedLocations(
+    previousLocations: Array<{ id: string; path: string; builtIn?: boolean }>,
+    nextLocations: Array<{ id?: string; path: string }>,
+  ): string[] {
+    const nextIds = new Set(nextLocations.map((location) => location.id).filter(Boolean));
+    const nextPaths = new Set(nextLocations.map((location) => location.path));
+    const removed = previousLocations.filter(
+      (location) => !location.builtIn && !nextIds.has(location.id) && !nextPaths.has(location.path),
+    );
+    if (removed.length === 0) return [];
+    return listProjects(db)
+      .filter((project: any) => removed.some((location) => projectBelongsToLocation(project, location)))
+      .map((project: any) => project.id);
+  }
+
+  app.get('/api/project-locations', async (_req, res) => {
     try {
+      const locations = await configuredProjectLocations();
+      /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
+      const body = { locations };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.put('/api/project-locations', async (req, res) => {
+    try {
+      const requested = Array.isArray(req.body?.locations) ? req.body.locations : null;
+      if (!requested) return sendApiError(res, 400, 'BAD_REQUEST', 'locations must be an array');
+      const previousLocations = await configuredProjectLocations();
+      const prepared = [];
+      for (const loc of requested) {
+        if (!loc || typeof loc !== 'object' || typeof loc.path !== 'string') continue;
+        const canonicalPath = await ensureProjectLocation(loc.path);
+        const validated = validateLinkedDirs([canonicalPath]);
+        if (validated.error) return sendApiError(res, 400, 'BAD_REQUEST', validated.error);
+        if (locationOverlapsDaemonData(canonicalPath)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'project location cannot overlap daemon data');
+        }
+        prepared.push({
+          id: typeof loc.id === 'string' ? loc.id : undefined,
+          name: typeof loc.name === 'string' ? loc.name : undefined,
+          path: canonicalPath,
+        });
+      }
+      const config = await writeAppConfig(ctx.paths.RUNTIME_DATA_DIR, { projectLocations: prepared });
+      const locations = allProjectLocations(PROJECTS_DIR, config.projectLocations);
+      const removedProjectIds = unregisterProjectsForRemovedLocations(previousLocations, config.projectLocations ?? []);
+      /** @type {import('@open-design/contracts').ProjectLocationsResponse} */
+      const body = { locations, removedProjectIds };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/project-locations/scan', async (_req, res) => {
+    try {
+      const locations = (await configuredProjectLocations()).filter((loc: any) => !loc.builtIn);
+      const imported = [];
+      const existing: string[] = [];
+      const skipped: Array<{ path: string; reason: string }> = [];
+      let scanned = 0;
+      const now = Date.now();
+      for (const location of locations) {
+        let found;
+        try {
+          found = await scanProjectLocation(location);
+        } catch (err: any) {
+          skipped.push({ path: location.path, reason: String(err?.message ?? err) });
+          continue;
+        }
+        scanned += found.length;
+        for (const entry of found) {
+          const { manifest } = entry;
+          if (getProject(db, manifest.id)) {
+            existing.push(manifest.id);
+            continue;
+          }
+          try {
+            const project = insertProject(db, {
+              id: manifest.id,
+              name: manifest.name,
+              skillId: manifest.skillId ?? null,
+              designSystemId: manifest.designSystemId ?? null,
+              pendingPrompt: null,
+              metadata: {
+                kind: 'prototype',
+                baseDir: entry.dir,
+                importedFrom: 'project-location',
+                projectLocationId: location.id,
+              },
+              customInstructions: null,
+              createdAt: manifest.createdAt,
+              updatedAt: manifest.updatedAt,
+            });
+            insertConversation(db, {
+              id: randomId(),
+              projectId: manifest.id,
+              title: null,
+              createdAt: now,
+              updatedAt: now,
+            });
+            if (project) imported.push(project);
+          } catch (err: any) {
+            skipped.push({ path: entry.dir, reason: String(err?.message ?? err) });
+          }
+        }
+      }
+      /** @type {import('@open-design/contracts').ScanProjectLocationsResponse} */
+      const body = { scanned, imported, existing, skipped };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects', async (_req, res) => {
+    try {
+      const locations = await configuredProjectLocations();
       const latestRunStatuses = listLatestProjectRunStatuses(db);
       const awaitingInputProjects = listProjectsAwaitingInput(db);
       const activeRunStatuses = new Map();
@@ -224,15 +426,17 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       /** @type {import('@open-design/contracts').ProjectsResponse} */
       const body = {
-        projects: listProjects(db).map((project: any) => ({
-          ...project,
-          status: composeProjectDisplayStatus(
-            activeRunStatuses.get(project.id) ??
-              latestRunStatuses.get(project.id) ?? { value: 'not_started' },
-            awaitingInputProjects,
-            project.id,
-          ),
-        })),
+        projects: listProjects(db)
+          .filter((project: any) => projectVisibleForLocations(project, locations))
+          .map((project: any) => ({
+            ...project,
+            status: composeProjectDisplayStatus(
+              activeRunStatuses.get(project.id) ??
+                latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+              awaitingInputProjects,
+              project.id,
+            ),
+          })),
       };
       res.json(body);
     } catch (err: any) {
@@ -250,9 +454,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
+      const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
-      if (typeof id !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(id)) {
+      if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
       if (typeof name !== 'string' || !name.trim()) {
@@ -306,11 +510,30 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
       }
       const normalizedSkillId = skillValidation.id;
+      const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
+      let externalProjectDir: string | null = null;
+      if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {
+        const location = (await configuredProjectLocations()).find((loc: any) => loc.id === selectedLocationId);
+        if (!location || location.builtIn) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'unknown project location');
+        }
+        if (getProject(db, id)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'project id already exists');
+        }
+        externalProjectDir = await createLocationProjectDir(location, id);
+      }
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
               ...metadata,
               ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(externalProjectDir
+                ? {
+                    baseDir: externalProjectDir,
+                    importedFrom: 'project-location',
+                    projectLocationId: selectedLocationId,
+                  }
+                : {}),
               ...(Array.isArray(metadata.linkedDirs)
                 ? (() => {
                     const v = validateLinkedDirs(metadata.linkedDirs);
@@ -319,23 +542,58 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 : {}),
             }
           : skipDiscoveryBrief === true
-            ? { skipDiscoveryBrief: true }
-            : null;
+            ? {
+                skipDiscoveryBrief: true,
+                ...(externalProjectDir
+                  ? {
+                      baseDir: externalProjectDir,
+                      importedFrom: 'project-location',
+                      projectLocationId: selectedLocationId,
+                    }
+                  : {}),
+              }
+            : externalProjectDir
+              ? {
+                  kind: 'prototype',
+                  baseDir: externalProjectDir,
+                  importedFrom: 'project-location',
+                  projectLocationId: selectedLocationId,
+                }
+              : null;
       const now = Date.now();
-      const project = insertProject(db, {
-        id,
-        name: name.trim(),
-        skillId: normalizedSkillId,
-        designSystemId: normalizedDesignSystemId,
-        pendingPrompt: pendingPrompt || null,
-        metadata: projectMetadata,
-        customInstructions:
-          typeof customInstructions === 'string'
-            ? customInstructions
-            : null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      let project;
+      try {
+        if (externalProjectDir) {
+          await writeProjectManifest(externalProjectDir, {
+            schemaVersion: 1,
+            id,
+            name: name.trim(),
+            createdAt: now,
+            updatedAt: now,
+            skillId: normalizedSkillId,
+            designSystemId: normalizedDesignSystemId,
+          });
+        }
+        project = insertProject(db, {
+          id,
+          name: name.trim(),
+          skillId: normalizedSkillId,
+          designSystemId: normalizedDesignSystemId,
+          pendingPrompt: pendingPrompt || null,
+          metadata: projectMetadata,
+          customInstructions:
+            typeof customInstructions === 'string'
+              ? customInstructions
+              : null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (err) {
+        if (externalProjectDir) {
+          await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+        }
+        throw err;
+      }
       // Seed a default conversation so the UI always has somewhere to write.
       const cid = randomId();
       insertConversation(db, {
@@ -345,7 +603,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         createdAt: now,
         updatedAt: now,
       });
-
       const explicitPlugin =
         typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
           ? true
@@ -398,7 +655,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       ) {
         const tpl = getTemplate(db, metadata.templateId);
         if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
-          await ensureProject(PROJECTS_DIR, id);
+          await ensureProject(PROJECTS_DIR, id, projectMetadata);
           for (const f of tpl.files) {
             if (
               !f ||
@@ -413,6 +670,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 id,
                 f.name,
                 Buffer.from(f.content, 'utf8'),
+                {},
+                projectMetadata,
               );
             } catch {
               // Skip individual file failures — the template snapshot is
@@ -435,9 +694,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.get('/api/projects/:id', (req, res) => {
+  app.get('/api/projects/:id', async (req, res) => {
     const project = getProject(db, req.params.id);
-    if (!project)
+    const locations = await configuredProjectLocations();
+    if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
@@ -483,6 +743,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             baseDir: existingMeta.baseDir,
             ...(existingMeta.importedFrom === 'folder'
               ? { importedFrom: 'folder' }
+              : {}),
+            ...(existingMeta.importedFrom === 'project-location'
+              ? { importedFrom: 'project-location' }
+              : {}),
+            ...(typeof existingMeta.projectLocationId === 'string'
+              ? { projectLocationId: existingMeta.projectLocationId }
               : {}),
             ...(existingMeta.fromTrustedPicker === true
               ? { fromTrustedPicker: true as const }

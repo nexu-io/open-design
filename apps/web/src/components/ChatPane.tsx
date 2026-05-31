@@ -2019,6 +2019,16 @@ export function conversationMetaLabel(
     (latestRun.status === 'succeeded' ||
       latestRun.status === 'failed' ||
       latestRun.status === 'canceled') &&
+    typeof conversation.totalDurationMs === 'number' &&
+    Number.isFinite(conversation.totalDurationMs)
+  ) {
+    return formatDurationShort(conversation.totalDurationMs);
+  }
+  if (
+    latestRun &&
+    (latestRun.status === 'succeeded' ||
+      latestRun.status === 'failed' ||
+      latestRun.status === 'canceled') &&
     typeof latestRun.durationMs === 'number' &&
     Number.isFinite(latestRun.durationMs)
   ) {

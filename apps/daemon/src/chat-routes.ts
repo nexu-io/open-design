@@ -19,7 +19,6 @@ import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
-import { parseMediaExecutionPolicyInput } from './media-policy.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
@@ -45,7 +44,7 @@ export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'htt
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { startChatRun, submitToolResultToRun } = ctx.chat;
+  const { submitToolResultToRun } = ctx.chat;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
@@ -54,7 +53,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     critiqueResponseCapBytes,
     critiqueRunRegistry,
   } = ctx.critique;
-  const isDaemonShuttingDown = ctx.lifecycle?.isDaemonShuttingDown ?? (() => false);
   const rejectProxyPluginContext = (body: Record<string, unknown>, res: any) => {
     if (
       (typeof body.pluginId === 'string' && body.pluginId.trim().length > 0) ||
@@ -79,6 +77,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   // so any handler we wired here was shadowed and never executed. Plugin
   // snapshot resolution, clientType inference, and the daemon-side
   // run_created/finished analytics all live in `server.ts` now.
+  // POST /api/chat is likewise owned by `server.ts`; keep the chat run
+  // launch path single-sourced so validation changes land on the live route.
 
   app.get('/api/runs', (req, res) => {
     const { projectId, conversationId, status } = req.query;
@@ -216,23 +216,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       scoreMetadata,
     });
     res.status(202).json(outcome);
-  });
-
-  app.post('/api/chat', (req, res) => {
-    if (isDaemonShuttingDown()) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const mediaExecution = parseMediaExecutionPolicyInput(
-      (body as { mediaExecution?: unknown }).mediaExecution,
-    );
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const runBody = { ...body, mediaExecution: mediaExecution.policy };
-    const run = design.runs.create(runBody);
-    design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(runBody, run));
   });
 
   // ---- Connection tests (single-shot JSON; no SSE) ------------------------

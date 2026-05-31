@@ -1628,6 +1628,7 @@ function AppInner() {
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+          onProjectsRefresh={refreshProjects}
           onSkillsChanged={handleSkillsChanged}
           onDesignSystemsChanged={handleDesignSystemsChanged}
           providerModelsCache={providerModelsCache}

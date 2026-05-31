@@ -9,6 +9,7 @@ import type {
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
 import type { MediaExecutionPolicy } from './media.js';
+import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
@@ -45,6 +46,12 @@ export interface ChatRequest {
    * local providers.
    */
   mediaExecution?: MediaExecutionPolicy;
+  /**
+   * Run-scoped tool bundle supplied by an orchestrator such as Muginn.
+   * These servers are made available only to the spawned agent for this run
+   * and are never written into the persistent Settings MCP registry.
+   */
+  toolBundle?: RunScopedToolBundle;
   /**
    * Optional analytics context for the v2 run_created / run_finished
    * events. The daemon never trusts these for behavior — they only
@@ -109,6 +116,31 @@ export interface ChatAnalyticsHints {
   designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
 }
 
+export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
+  /**
+   * Omitted means enabled for this run. The daemon normalizes run-scoped
+   * inputs through the same sanitizer as persisted MCP config, but callers
+   * should not need to send persisted-settings boilerplate for disposable
+   * tool bundles.
+   */
+  enabled?: boolean;
+}
+
+export interface RunScopedToolBundle {
+  mcpServers?: RunScopedMcpServerConfig[];
+}
+
+export interface RunScopedToolBundleSummary {
+  mcpServers: Array<{
+    id: string;
+    label?: string;
+    templateId?: string;
+    transport: McpTransport;
+    enabled: boolean;
+    authMode?: McpAuthMode;
+  }>;
+}
+
 export interface ChatRunCreateRequest extends ChatRequest {
   projectId: string;
   conversationId: string;
@@ -130,6 +162,8 @@ export interface McpRunCreateRequest {
   pluginId?: string;
   model?: string;
   pluginInputs?: Record<string, unknown>;
+  mediaExecution?: MediaExecutionPolicy;
+  toolBundle?: RunScopedToolBundle;
 }
 
 export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
@@ -219,6 +253,8 @@ export interface ChatRunStatusResponse {
   eventsLogPath?: string | null;
   /** Present on daemon run status responses that know the effective run policy. */
   mediaExecution?: MediaExecutionPolicy;
+  /** Run-scoped tool bundle summary with secrets and command details redacted. */
+  toolBundle?: RunScopedToolBundleSummary;
 }
 
 export interface ChatRunListResponse {

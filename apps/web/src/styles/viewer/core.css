@@ -978,6 +978,53 @@
 .live-artifact-preview-layer.preview-viewport[data-active='false'] {
   display: none;
 }
+.comment-preview-layer {
+  --comment-side-dock-width: 320px;
+  --comment-side-dock-rail-width: 42px;
+  --comment-side-dock-stacked-height: 220px;
+  --comment-side-dock-stacked-rail-height: 48px;
+}
+.comment-preview-layer-with-side-dock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--comment-side-dock-width);
+  gap: 12px;
+  padding: 8px;
+  overflow: hidden;
+}
+.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-side-dock {
+  display: grid;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 24px;
+  overflow: hidden;
+}
+.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-side-dock-stacked {
+  padding: 8px;
+}
+.comment-preview-layer-with-side-dock.comment-preview-layer-dock-collapsed {
+  grid-template-columns: minmax(0, 1fr) var(--comment-side-dock-rail-width);
+}
+.comment-preview-layer-with-side-dock.comment-preview-layer-side-dock-stacked {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--comment-side-dock-stacked-height);
+}
+.comment-preview-layer-with-side-dock.comment-preview-layer-side-dock-stacked.comment-preview-layer-dock-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--comment-side-dock-stacked-rail-height);
+}
+.comment-preview-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.comment-preview-layer-with-side-dock .comment-preview-canvas {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+}
 .preview-viewport:not(.preview-viewport-desktop) {
   overflow: auto;
   display: flex;
@@ -995,7 +1042,7 @@
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 .preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
-.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip,
+.preview-viewport:not(.preview-viewport-desktop):not(.comment-preview-layer-with-side-dock) .comment-preview-canvas,
 .preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas {
   width: calc(var(--preview-viewport-width) * var(--preview-scale, 1));
   height: calc(var(--preview-viewport-height) * var(--preview-scale, 1));
@@ -1008,19 +1055,23 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
   background: var(--bg-panel);
 }
+.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-side-dock .comment-preview-canvas {
+  width: auto;
+  height: auto;
+}
 .preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip > div,
 .preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip > div,
+.preview-viewport:not(.preview-viewport-desktop) .comment-preview-canvas > .comment-frame-clip > div,
 .preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas > div {
   will-change: transform;
 }
 .preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
-.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip,
 .preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas {
   position: relative;
   inset: auto;
 }
 .preview-viewport-mobile .preview-frame-clip,
-.preview-viewport-mobile .comment-frame-clip,
+.preview-viewport-mobile:not(.comment-preview-layer-with-side-dock) .comment-preview-canvas,
 .preview-viewport-mobile.manual-edit-workspace .manual-edit-canvas {
   border-radius: 28px;
 }
@@ -1324,28 +1375,58 @@
   color: var(--red);
 }
 /* Right-side comment thread panel. Shown while board (comment) mode
-   is on; takes the place of the chat sidebar's removed Comments tab.
-   Floats over the artifact preview at the right edge. */
+   is on; it docks beside the artifact preview so canvas clicks remain
+   available for placing comments. */
+.comment-side-dock {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  width: var(--comment-side-dock-width);
+  height: 100%;
+  display: flex;
+}
+.comment-side-dock.collapsed {
+  width: var(--comment-side-dock-rail-width);
+}
+.comment-preview-layer-side-dock-stacked .comment-side-dock {
+  width: 100%;
+  height: var(--comment-side-dock-stacked-height);
+}
+.comment-preview-layer-side-dock-stacked .comment-side-dock.collapsed {
+  width: 100%;
+  height: var(--comment-side-dock-stacked-rail-height);
+}
+.comment-preview-layer-side-dock-stacked .comment-side-dock.collapsed .comment-side-rail {
+  width: 100%;
+  height: 100%;
+  flex-direction: row;
+  justify-content: center;
+  padding: 0 12px;
+  gap: 12px;
+}
+.comment-preview-layer-side-dock-stacked .comment-side-dock.collapsed .comment-side-rail span {
+  writing-mode: horizontal-tb;
+}
 .comment-side-panel {
   --comment-accent: #ff5a3c;
   --comment-accent-strong: color-mix(in srgb, var(--comment-accent) 78%, var(--text));
   --comment-accent-surface: color-mix(in srgb, var(--comment-accent) 10%, var(--bg-panel));
   --comment-accent-surface-strong: color-mix(in srgb, var(--comment-accent) 18%, var(--bg-panel));
   --comment-accent-border: color-mix(in srgb, var(--comment-accent) 64%, var(--border));
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  bottom: 8px;
+  position: relative;
   width: 320px;
-  max-width: calc(100% - 16px);
+  height: 100%;
+  max-width: 100%;
   background: var(--bg-panel, #fff);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
-  z-index: 30;
   overflow: hidden;
+}
+.comment-preview-layer-side-dock-stacked .comment-side-panel {
+  width: 100%;
 }
 .comment-side-header {
   display: flex;
@@ -1394,7 +1475,7 @@
   cursor: default;
   opacity: 0.45;
 }
-.comment-side-close {
+.comment-side-collapse {
   width: 26px;
   height: 26px;
   flex: 0 0 auto;
@@ -1408,18 +1489,15 @@
   color: var(--text-muted);
   cursor: pointer;
 }
-.comment-side-close:hover {
+.comment-side-collapse:hover {
   background: var(--bg-subtle);
   border-color: var(--border);
   color: var(--text);
 }
 .comment-side-rail {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  bottom: 8px;
-  z-index: 30;
+  position: relative;
   width: 42px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1689,16 +1767,15 @@
   color: #fff;
 }
 
-/* Inspect panel — sibling of the comment popover. Anchored to the
-   right side of the preview surface. Width is fixed so layout doesn't
-   reflow as the user scrubs slider values; controls reserve space for
-   their numeric readouts. */
+/* Inspect panel — sibling of the preview canvas and comment popover.
+   Keep the usual 296px width, but allow narrow board layouts to shrink it
+   inside the unclipped preview layer instead of losing controls. */
 .inspect-panel {
   position: absolute;
   top: 14px;
   right: 14px;
   z-index: 5;
-  width: 296px;
+  width: min(296px, calc(100% - 28px));
   max-height: calc(100% - 28px);
   overflow-y: auto;
   display: flex;
@@ -1883,20 +1960,6 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   justify-content: center;
   gap: 5px;
   pointer-events: none;
-}
-
-.inspect-empty-hint-container.comment-side-panel-open {
-  right: 340px;
-  max-width: min(480px, calc(100% - 368px));
-}
-
-@media (max-width: 760px) {
-  .inspect-empty-hint-container.comment-side-panel-open {
-    left: 14px;
-    right: 14px;
-    top: 54px;
-    max-width: none;
-  }
 }
 
 .inspect-empty-hint-container button,

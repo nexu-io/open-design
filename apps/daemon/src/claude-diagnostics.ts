@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { redactSecrets } from './redact.js';
 
 export interface ClaudeCliDiagnosticInput {
@@ -7,6 +9,7 @@ export interface ClaudeCliDiagnosticInput {
   stderrTail?: string | null;
   stdoutTail?: string | null;
   env?: Record<string, unknown> | null;
+  resolvedBin?: string | null;
 }
 
 export interface ClaudeCliDiagnostic {
@@ -109,6 +112,15 @@ function withContext(
   };
 }
 
+function selectedClaudeCompatibleRuntime(input: ClaudeCliDiagnosticInput): 'claude' | 'openclaude' {
+  if (typeof input.resolvedBin !== 'string' || !input.resolvedBin.trim()) return 'claude';
+  const base = path
+    .basename(input.resolvedBin.trim().replace(/\\/g, '/'))
+    .replace(/\.(exe|cmd|bat)$/i, '')
+    .toLowerCase();
+  return base === 'openclaude' ? 'openclaude' : 'claude';
+}
+
 function diagnoseCliFailure(
   input: ClaudeCliDiagnosticInput,
   config: AgentDiagnosticConfig,
@@ -119,6 +131,14 @@ function diagnoseCliFailure(
   const normalized = text.toLowerCase();
   const hasCustomBaseUrl = envValue(input.env, config.baseUrlEnvKey) !== null;
   const hasConfigDir = envValue(input.env, config.configDirEnvKey) !== null;
+  // OpenClaude is a Claude-family fork that ships under the same agentId
+  // ('claude') with a different bin. When the resolved bin's basename is
+  // openclaude, surface its specific recovery copy instead of the
+  // /login-driven Claude flow. Other agentIds (e.g. codebuddy) ignore
+  // this flag.
+  const isOpenClaude =
+    config.brandName === 'Claude Code' &&
+    selectedClaudeCompatibleRuntime(input) === 'openclaude';
 
   const customEndpointConnectionFailure =
     hasCustomBaseUrl &&
@@ -169,6 +189,14 @@ function diagnoseCliFailure(
   }
   if (authFailure) {
     const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
+    if (isOpenClaude) {
+      return withContext(
+        'OpenClaude could not authenticate with its configured endpoint.',
+        'The spawned OpenClaude process exited before producing a response. Check the OpenClaude API key, endpoint, and local configuration, then retry.',
+        input,
+        config,
+      );
+    }
     // CodeBuddy authenticates via API key in -p mode; all auth failures
     // point at API key setup, not /login (which -p never uses).
     if (config.apiKeyIsPrimaryAuth) {
@@ -264,6 +292,14 @@ function diagnoseCliFailure(
   }
 
   if (!text.trim() && input.exitCode === 1) {
+    if (isOpenClaude) {
+      return withContext(
+        'OpenClaude exited before producing diagnostics.',
+        'Check the OpenClaude API key, endpoint, and local configuration, then retry.',
+        input,
+        config,
+      );
+    }
     if (config.apiKeyIsPrimaryAuth) {
       const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
       const message = hasApiKey

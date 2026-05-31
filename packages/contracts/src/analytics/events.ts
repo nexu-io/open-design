@@ -1383,6 +1383,7 @@ export type TrackingSettingsArea =
   | 'notifications'
   | 'pets'
   | 'design_systems'
+  | 'project_locations'
   | 'privacy'
   | 'about';
 
@@ -2220,6 +2221,8 @@ export function settingsSectionToTracking(
       return 'skills';
     case 'designSystems':
       return 'design_systems';
+    case 'projectLocations':
+      return 'project_locations';
     case 'memory':
       return 'memory';
     case 'privacy':

@@ -29,6 +29,7 @@ import {
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  commentPreviewCanvasSize,
   effectivePreviewScale,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
@@ -75,6 +76,30 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
+  return calls
+    .map(([message]) => message)
+    .filter((message): message is { type: 'od:srcdoc-transport-activate'; html: string } => {
+      if (typeof message !== 'object' || message === null) return false;
+      const data = message as { type?: unknown; html?: unknown };
+      return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
+    });
+}
+
+function testRect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    width,
+    height,
+    top,
+    left,
+    right: left + width,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
 function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
@@ -95,7 +120,10 @@ describe('FileViewer preview scale', () => {
       '.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas',
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\) \.comment-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\):not\(\.comment-preview-layer-with-side-dock\) \.comment-preview-canvas,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*width: calc\(var\(--preview-viewport-width\) \* var\(--preview-scale, 1\)\);/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
     );
   });
 
@@ -119,6 +147,60 @@ describe('FileViewer preview scale', () => {
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
     expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
     expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  });
+
+  it('uses the reduced board canvas size when the side dock is open', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+
+    expect(dockedCanvas).toEqual({ width: 552, height: 684 });
+    expect(effectivePreviewScale('tablet', 1, dockedCanvas)).toBeLessThan(
+      effectivePreviewScale('tablet', 1, { width: 900, height: 700 }),
+    );
+  });
+
+  it('uses stacked canvas sizing for narrow board panes instead of a 1px docked canvas', () => {
+    const narrowCanvas = commentPreviewCanvasSize(
+      { width: 400, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+
+    expect(narrowCanvas).toEqual({ width: 384, height: 452 });
+  });
+
+  it('subtracts only the collapsed stacked rail height when the side dock is collapsed in the stacked layout', () => {
+    const expandedStackedCanvas = commentPreviewCanvasSize(
+      { width: 300, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+    const collapsedStackedCanvas = commentPreviewCanvasSize(
+      { width: 300, height: 700 },
+      { boardMode: true, sidePanelCollapsed: true },
+    );
+
+    expect(expandedStackedCanvas).toEqual({ width: 284, height: 452 });
+    expect(collapsedStackedCanvas).toEqual({ width: 284, height: 624 });
+    expect(collapsedStackedCanvas!.height).toBeGreaterThan(expandedStackedCanvas!.height);
+  });
+
+  it('matches the rendered non-desktop dock padding in board canvas sizing', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false, viewport: 'tablet' },
+    );
+
+    expect(dockedCanvas).toEqual({ width: 520, height: 652 });
+  });
+
+  it('fits non-desktop board previews against the inner canvas without subtracting viewport padding again', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false, viewport: 'tablet' },
+    );
+
+    expect(effectivePreviewScale('tablet', 1, dockedCanvas, { canvasPadding: 0 })).toBeCloseTo(652 / 1180);
   });
 
   it('offsets tablet and mobile overlays to the centered viewport card', () => {
@@ -2034,23 +2116,39 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('inspect-empty-hint-container')).toBeNull();
   });
 
-  it('exits comment mode when closing the comments side panel', () => {
-    const openComment: PreviewComment = {
-      id: 'comment-open',
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-      filePath: 'preview.html',
-      elementId: 'pin-open',
-      selector: '[data-od-pin="pin-open"]',
-      label: 'pin-open',
-      text: '',
-      htmlHint: '',
-      position: { x: 24, y: 32, width: 18, height: 18 },
-      note: 'Open comment',
-      status: 'open',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+  it('keeps the picker hint inside the canvas and clear of the open comment side panel', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    const dock = screen.getByTestId('comment-side-dock');
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByTestId('comment-side-collapsed-rail')).toBeTruthy();
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
+  });
+
+  it('keeps non-docked tablet comment-tool previews fitted to the padded canvas', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        return testRect(0, 0, 0, 0);
+      });
 
     render(
       <FileViewer
@@ -2058,22 +2156,83 @@ describe('FileViewer tweaks toolbar', () => {
         projectKind="prototype"
         file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
-        previewComments={[openComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Preview viewport'));
+    fireEvent.click(screen.getByRole('option', { name: 'Tablet' }));
+    clickAgentTool('board-mode-toggle');
+
+    const layout = screen.getByTestId('comment-preview-layout');
+    await waitFor(() => {
+      expect(layout.className).not.toContain('comment-preview-layer-with-side-dock');
+      expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo((700 - 48) / 1180);
+    });
+  });
+
+  it('docks the comment side panel outside the clickable preview canvas', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this.dataset.testid === 'comment-preview-canvas') return testRect(8, 8, 552, 684);
+        if (this.dataset.testid === 'comment-side-dock') return testRect(572, 8, 320, 684);
+        if (this.dataset.testid === 'comment-side-panel') return testRect(572, 8, 320, 684);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
 
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('comment-saved-marker-pin-open')).toBeTruthy();
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    const dock = screen.getByTestId('comment-side-dock');
+    const panel = screen.getByTestId('comment-side-panel');
+    const canvasBox = canvas.getBoundingClientRect();
+    const dockBox = dock.getBoundingClientRect();
+    const panelBox = panel.getBoundingClientRect();
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(panel)).toBe(true);
+    expect(canvas.contains(panel)).toBe(false);
+    expect(screen.getByTestId('comment-preview-layout').className).toContain(
+      'comment-preview-layer-with-side-dock',
+    );
+    expect(dockBox.left).toBeGreaterThanOrEqual(canvasBox.right);
+    expect(panelBox.left).toBeGreaterThanOrEqual(canvasBox.right);
+  });
 
-    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
-    expect(screen.queryByTestId('comment-saved-marker-pin-open')).toBeNull();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+  it('uses the narrow board layout when docking would leave too little canvas', async () => {
+    const getBoundingClientRectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 400, 700);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-preview-layout').className).toContain(
+        'comment-preview-layer-side-dock-stacked',
+      );
+    });
+
+    getBoundingClientRectSpy.mockRestore();
   });
 
   it('keeps saved comment pins visible while adding another comment', async () => {
@@ -2543,16 +2702,14 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
-  it('closes the comment side panel from the header close button', () => {
+  it('moves focus between comment side panel toggles when collapsing and expanding without a pre-focused click target', async () => {
     const onCollapseChange = vi.fn();
-    const onClose = vi.fn();
     const onSelectAll = vi.fn();
     const onReply = vi.fn();
 
     function Harness() {
       const [collapsed, setCollapsed] = useState(false);
-      const [open, setOpen] = useState(true);
-      return open ? (
+      return (
         <CommentSidePanel
           comments={[
             {
@@ -2579,10 +2736,6 @@ describe('FileViewer tweaks toolbar', () => {
             onCollapseChange(next);
             setCollapsed(next);
           }}
-          onClose={() => {
-            onClose();
-            setOpen(false);
-          }}
           onToggleSelect={() => {}}
           onSelectAll={onSelectAll}
           onClearSelection={() => {}}
@@ -2591,7 +2744,7 @@ describe('FileViewer tweaks toolbar', () => {
           sending={false}
           t={t}
         />
-      ) : null;
+      );
     }
 
     render(<Harness />);
@@ -2603,13 +2756,69 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.click(screen.getByText('不要github，换成微信').closest('[data-testid="comment-side-item"]')!);
     expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'comment-1' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    const hideComments = screen.getByRole('button', { name: /hide comments/i });
 
-    expect(onClose).toHaveBeenCalledOnce();
-    expect(onCollapseChange).not.toHaveBeenCalled();
+    fireEvent.click(hideComments);
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByText('不要github，换成微信')).toBeNull();
     expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
-    expect(screen.queryByTestId('comment-side-collapsed-rail')).toBeNull();
+    const showComments = screen.getByTestId('comment-side-collapsed-rail');
+    await waitFor(() => expect(document.activeElement).toBe(showComments));
+
+    fireEvent.click(showComments);
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(false);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /hide comments/i }));
+    });
+  });
+
+  it('announces comment side dock disclosure state without pointing at an unmounted panel', () => {
+    function Harness() {
+      const [collapsed, setCollapsed] = useState(false);
+      return (
+        <CommentSidePanel
+          comments={[]}
+          selectedIds={new Set()}
+          activeCommentId={null}
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+          onToggleSelect={() => {}}
+          onSelectAll={() => {}}
+          onClearSelection={() => {}}
+          onReply={() => {}}
+          onSendSelected={() => {}}
+          sending={false}
+          t={t}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    const panel = screen.getByTestId('comment-side-panel');
+    const hideComments = screen.getByRole('button', { name: /hide comments/i });
+    const panelId = panel.id;
+
+    expect(panelId).toBeTruthy();
+    expect(hideComments.getAttribute('aria-controls')).toBe(panelId);
+    expect(hideComments.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(hideComments);
+
+    const showComments = screen.getByTestId('comment-side-collapsed-rail');
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(document.getElementById(panelId)).toBeNull();
+    expect(showComments.getAttribute('aria-controls')).toBeNull();
+    expect(showComments.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('lets the inspect panel shrink inside narrow preview layouts', () => {
+    const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
+    const rule = css.match(/\.inspect-panel\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('width: min(296px, calc(100% - 28px));');
   });
 
   it('does not classify text labels containing a standalone article as links', () => {
@@ -2637,7 +2846,6 @@ describe('FileViewer tweaks toolbar', () => {
         activeCommentId={null}
         collapsed={false}
         onCollapsedChange={() => {}}
-        onClose={() => {}}
         onToggleSelect={() => {}}
         onSelectAll={() => {}}
         onClearSelection={() => {}}

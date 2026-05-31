@@ -82,6 +82,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   pet: DEFAULT_PET,
   notifications: DEFAULT_NOTIFICATIONS,
   orbit: DEFAULT_ORBIT,
+  projectLocations: [],
+  defaultProjectLocationId: 'default',
   // Telemetry defaults to ON so fresh-install users emit onboarding /
   // ui_click events from the first frame. The disclosure modal still
   // appears after `onboardingCompleted` flips, and Settings → Privacy
@@ -688,6 +690,12 @@ export function mergeDaemonConfig(
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
   }
+  if (daemonConfig.projectLocations !== undefined) {
+    next.projectLocations = daemonConfig.projectLocations;
+  }
+  if (daemonConfig.defaultProjectLocationId !== undefined) {
+    next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
+  }
   return next;
 }
 
@@ -816,6 +824,8 @@ export async function syncConfigToDaemon(
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
     customInstructions: config.customInstructions ?? null,
+    projectLocations: config.projectLocations ?? [],
+    defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
   };
   const omitSet = options?.omitKeys ? new Set(options.omitKeys) : undefined;
   const prefs = omitSet

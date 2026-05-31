@@ -847,13 +847,15 @@ export function NewProjectPanel({
           ) : null}
         </h3>
 
-        <input
-          className="newproj-name"
-          data-testid="new-project-name"
-          placeholder={t('newproj.namePlaceholder')}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <div className="newproj-name-row">
+          <input
+            className="newproj-name"
+            data-testid="new-project-name"
+            placeholder={t('newproj.namePlaceholder')}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
 
         {showDesignSystemPicker ? (
           <DesignSystemPicker
