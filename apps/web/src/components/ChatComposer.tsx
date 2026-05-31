@@ -953,16 +953,31 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const applied = await applyProjectSkill(skill);
       if (!applied) return;
       replaceMentionWithText(`${inlineMentionToken(skill.name)} `);
+      // Stage the skill so its chip mounts and the per-turn meta.skillIds
+      // reaches the daemon (#1635 / #2552). Dedupe by id so the same skill
+      // picked twice produces one chip.
+      setStagedSkills((prev) => [
+        ...prev.filter((s) => s.id !== skill.id),
+        skill,
+      ]);
     }
 
     function removeStagedSkill(id: string) {
+      // Capture the chip's user-visible token (`@<name>`) from the
+      // current closure before mutating state — keeping the updater pure
+      // and the strip correct regardless of pending updates. The chip's
+      // identity is the skill id, but the token form is the name,
+      // mirroring `insertSkillMention` and what the parser renders.
+      const removedName = stagedSkills.find((s) => s.id === id)?.name ?? null;
       setStagedSkills((prev) => prev.filter((s) => s.id !== id));
-      // Also strip the matching `@<id>` token from the draft so the chip
-      // and the textarea stay in sync. We allow trailing whitespace to be
-      // collapsed too.
+      if (!removedName) return;
+      const token = inlineMentionToken(removedName);
       updateDraft((d) =>
         d
-          .replace(new RegExp(`(^|\\s)@${escapeRegExp(id)}(\\s|$)`, 'g'), '$1$2')
+          .replace(
+            new RegExp(`(^|\\s)${escapeRegExp(token)}(\\s|$)`, 'g'),
+            '$1$2',
+          )
           .replace(/\s{2,}/g, ' '),
       );
     }
@@ -1254,17 +1269,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // matching every other setDraft path for free.
       updateDraft(value);
       // Keep the staged-skill chips in sync with the draft. If the user
-      // hand-deletes an `@<id>` token from the textarea, the chip must
+      // hand-deletes the `@<name>` token from the textarea, the chip must
       // disappear too — otherwise submit() would still forward that id in
       // skillIds and the daemon would compose a skill the prompt no
-      // longer references. Mirror the removeStagedSkill() boundary
-      // (whitespace or string edge) so partial matches don't keep a chip
-      // alive accidentally. We do not run the same prune for `staged`
-      // file attachments because users frequently attach files via the
-      // upload button without leaving an `@<path>` token in the draft.
+      // longer references. Match by `@<name>` since that is the token
+      // `insertSkillMention` writes and the inline-mention parser
+      // renders. We do not run the same prune for `staged` file
+      // attachments because users frequently attach files via the upload
+      // button without leaving an `@<path>` token in the draft.
       setStagedSkills((prev) =>
         prev.filter((s) =>
-          new RegExp(`(^|\\s)@${escapeRegExp(s.id)}(\\s|$)`).test(value),
+          new RegExp(`(^|\\s)${escapeRegExp(inlineMentionToken(s.name))}(\\s|$)`).test(value),
         ),
       );
       // Skip mention and slash detection during IME composition (e.g.,
@@ -2090,6 +2105,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                           const after = currentDraft.slice(cursor);
                           const next = before + insert + after;
                           updateDraft(next);
+                          // Mirror insertSkillMention() so the tools-menu
+                          // picker also stages the chip and forwards the
+                          // skill id to the daemon (#1635 / #2552).
+                          setStagedSkills((prev) => [
+                            ...prev.filter((s) => s.id !== skill.id),
+                            skill,
+                          ]);
                           setToolsOpen(false);
                           requestAnimationFrame(() => {
                             const el = textareaRef.current;
@@ -2523,13 +2545,13 @@ function StagedSkills({
             <Icon name="sparkles" size={12} />
           </span>
           <span className="staged-name" title={s.description || s.name}>
-            @{s.id}
+            @{s.name}
           </span>
           <button
             className="staged-remove"
             onClick={() => onRemove(s.id)}
             title={t('common.delete')}
-            aria-label={`Remove skill ${s.id}`}
+            aria-label={`Remove skill ${s.name}`}
           >
             <Icon name="close" size={11} />
           </button>
