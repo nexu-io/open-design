@@ -241,6 +241,7 @@ import {
   countDesignSystemPreviewModules,
   countNewHtmlArtifacts,
   didRunCreateDesignSystemFile,
+  runAskedUserQuestion,
 } from './run-artifacts.js';
 import {
   reportRunCompletedFromDaemon,
@@ -13532,6 +13533,12 @@ export async function startServer({
             // for the dedup semantics; tested in
             // `tests/run-artifacts.test.ts`.
             artifact_count: countNewHtmlArtifacts(run.events),
+            // True when the run raised an AskUserQuestion clarification
+            // card. Clarification turns inherently produce no artifact, so
+            // the dashboard excludes them from the "run finished -> has
+            // artifact" funnel instead of counting them as failures. See
+            // `run-artifacts.ts`; tested in `tests/run-artifacts.test.ts`.
+            asked_user_question: runAskedUserQuestion(run.events),
             ...(isDesignSystemRun ? {
               // DS runs land a `DESIGN.md` write when generation
               // succeeded; the run-artifacts inspector reuses the
