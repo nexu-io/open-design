@@ -3223,9 +3223,24 @@ export function SettingsDialog({
                   users no longer wonder "are these fields I forgot to
                   fill in?".
                 */
-                const cliEnvFields = AGENT_CLI_ENV_FIELDS.filter(
-                  (field) => field.agentId === cfg.agentId || field.agentId === configErrorAgentId,
-                );
+                const cliEnvFields = (() => {
+                  const matches = AGENT_CLI_ENV_FIELDS.filter(
+                    (field) => field.agentId === cfg.agentId || field.agentId === configErrorAgentId,
+                  );
+                  // When the recovery flow is active for an agent OTHER than
+                  // the currently selected one, surface that agent's fields
+                  // first so the auto-focus target (index === 0) is the
+                  // misconfigured field the user just clicked Configure for —
+                  // not the selected agent's first advanced field, which they
+                  // did not ask to edit.
+                  if (configErrorAgentId && configErrorAgentId !== cfg.agentId) {
+                    return [
+                      ...matches.filter((f) => f.agentId === configErrorAgentId),
+                      ...matches.filter((f) => f.agentId !== configErrorAgentId),
+                    ];
+                  }
+                  return matches;
+                })();
                 if (cliEnvFields.length === 0) return null;
                 return (
                   <details
