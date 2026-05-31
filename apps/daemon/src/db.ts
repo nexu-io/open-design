@@ -722,6 +722,11 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
+  // Single prepared statement: latest run summary + cumulative wall-clock
+  // duration + a count of completed runs that are missing wall-clock data
+  // (so JS can decide whether to fall back to per-row usage events). The
+  // batching invariant (one prepare per call regardless of conversation
+  // count) is asserted by `project-status.test.ts:127` (#3371 review).
   const conversations = rows(db
     .prepare(
       `WITH project_conversations AS (
@@ -752,19 +757,60 @@ export function listConversations(db: SqliteDb, projectId: string) {
                  AND m.run_status IS NOT NULL
             )
            WHERE rn = 1
+        ),
+        total_durations AS (
+          SELECT m.conversation_id AS conversationId,
+                 SUM(
+                   CASE
+                     WHEN m.started_at IS NOT NULL AND m.ended_at IS NOT NULL
+                       THEN MAX(0, m.ended_at - m.started_at)
+                     ELSE 0
+                   END
+                 ) AS wallClockTotalMs,
+                 SUM(
+                   CASE
+                     WHEN m.started_at IS NULL OR m.ended_at IS NULL THEN 1
+                     ELSE 0
+                   END
+                 ) AS incompleteRunCount
+            FROM messages m
+            JOIN project_conversations c ON c.id = m.conversation_id
+           WHERE m.role = 'assistant'
+             AND m.run_status IN ('succeeded', 'failed', 'canceled')
+           GROUP BY m.conversation_id
         )
         SELECT c.id, c.projectId, c.title, c.createdAt, c.updatedAt,
                lr.latestRunStatus, lr.latestRunStartedAt,
-               lr.latestRunEndedAt, lr.latestRunEventsJson
+               lr.latestRunEndedAt, lr.latestRunEventsJson,
+               td.wallClockTotalMs, td.incompleteRunCount
           FROM project_conversations c
           LEFT JOIN latest_runs lr ON lr.conversationId = c.id
+          LEFT JOIN total_durations td ON td.conversationId = c.id
          ORDER BY c.updatedAt DESC`,
     )
-    .all(projectId)).map(normalizeConversation);
-  return conversations.map((c) => ({
-    ...c,
-    totalDurationMs: cumulativeConversationRunDurationMs(db, c.id),
-  }));
+    .all(projectId)).map((row) => {
+      const base = normalizeConversation(row);
+      const wallClock =
+        row.wallClockTotalMs == null ? undefined : Number(row.wallClockTotalMs);
+      const incomplete =
+        row.incompleteRunCount == null ? 0 : Number(row.incompleteRunCount);
+      // Fast path: no rows with missing wall-clock → SQL sum is exact.
+      // Slow path: a completed run was missing started_at/ended_at — fall
+      // back to the JS helper that scans usage events. In practice this
+      // only happens for very old conversations; the typical sidebar load
+      // never enters this branch.
+      const totalDurationMs =
+        incomplete === 0
+          ? Number.isFinite(wallClock) && (wallClock as number) > 0
+            ? wallClock
+            : undefined
+          : cumulativeConversationRunDurationMs(db, base.id as string);
+      return {
+        ...base,
+        ...(totalDurationMs === undefined ? {} : { totalDurationMs }),
+      };
+    });
+  return conversations;
 }
 
 export function getConversation(db: SqliteDb, id: string) {
