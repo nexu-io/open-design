@@ -41,6 +41,27 @@ function resolveElectronBinary(): string {
   return join(pkgDir, "dist", pathTxt);
 }
 
+/**
+ * Resolve the workspace root directory for the tray app.
+ * Used to find the entry script path for auto-start commands.
+ */
+function resolveWorkspaceRootForTray(): string {
+  // Derive from electron binary: <workspace>/node_modules/.pnpm/electron@X.X.X/node_modules/electron/dist/electron.exe
+  // Walk up 7 levels: dist -> electron -> node_modules -> .pnpm -> node_modules -> workspace
+  const electronExe = resolveElectronBinary();
+  const candidate = join(electronExe, "..", "..", "..", "..", "..", "..", "..");
+  if (existsSync(join(candidate, "apps"))) return candidate;
+  // Fallback: walk up from __dirname (dev mode)
+  // __dirname is apps/tray/dist/main, so go up 4 levels
+  const { fileURLToPath } = require("node:url");
+  const { dirname } = require("node:path");
+  const selfPath = fileURLToPath(import.meta.url);
+  const parts = dirname(selfPath).split(/[/\\]/);
+  const appsIdx = parts.indexOf("apps");
+  if (appsIdx >= 1) return parts.slice(0, appsIdx).join("/");
+  throw new Error("Could not resolve workspace root for tray auto-start");
+}
+
 // ─── Name resolution ──────────────────────────────────────────────────────────
 
 /**
@@ -100,6 +121,9 @@ function validateElectronPath(path: string): void {
  */
 function buildRunCommand(namespace: string, ipc: string): string {
   const electronExe = resolveElectronBinary();
+  // Resolve the tray entry script path relative to workspace
+  const workspaceRoot = resolveWorkspaceRootForTray();
+  const entryScript = join(workspaceRoot, "apps/tray/dist/main/index.js");
 
   if (!existsSync(electronExe)) {
     throw new Error(`electron not found at: ${electronExe}`);
@@ -116,8 +140,8 @@ function buildRunCommand(namespace: string, ipc: string): string {
   ];
 
   // `start "" /b` — empty title, background (no new console)
-  // Path must be quoted for the space-in-path case.
-  const args = ["/c", "start", "", "/b", `"${electronExe}"`, ...stamp];
+  // electron.exe is quoted, entry script path is quoted
+  const args = ["/c", "start", "", "/b", `"${electronExe}"`, `"${entryScript}"`, ...stamp];
 
   return ["cmd.exe", ...args].join(" ");
 }
@@ -261,6 +285,10 @@ function escapeXml(unsafe: string): string {
 }
 
 function generatePlist(exePath: string, appId: string, namespace: string, ipc: string): string {
+  // Resolve the entry script path relative to workspace
+  const workspaceRoot = resolveWorkspaceRootForTray();
+  const entryScript = join(workspaceRoot, "apps/tray/dist/main/index.js");
+
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`,
@@ -271,6 +299,7 @@ function generatePlist(exePath: string, appId: string, namespace: string, ipc: s
     `<key>ProgramArguments</key>`,
     `<array>`,
     `<string>${escapeXml(exePath)}</string>`,
+    `<string>${escapeXml(entryScript)}</string>`,
     `<string>--od-stamp-app=${APP_KEYS.TRAY}</string>`,
     `<string>--od-stamp-mode=dev</string>`,
     `<string>--od-stamp-namespace=${escapeXml(namespace)}</string>`,
