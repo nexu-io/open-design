@@ -20,6 +20,7 @@ import {
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
 
+import { crc32 } from "./utils/crc32.js";
 import { DaemonManager } from "./daemon-manager.js";
 import { buildTrayMenu, buildTooltip, type TrayCallbacks, type TrayState } from "./tray-menu.js";
 import { t } from "./i18n.js";
@@ -74,24 +75,6 @@ function createPngChunk(type: string, data: Buffer): Buffer {
   const crcBuf = Buffer.alloc(4);
   crcBuf.writeUInt32BE(crc >>> 0);
   return Buffer.concat([len, typeB, data, crcBuf]);
-}
-
-// CRC32 lookup table
-const crcTable = new Uint32Array(256);
-for (let n = 0; n < 256; n++) {
-  let c = n;
-  for (let k = 0; k < 8; k++) {
-    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  }
-  crcTable[n] = c;
-}
-
-function crc32(buf: Buffer): number {
-  let crc = 0xffffffff;
-  for (const byte of buf) {
-    crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  }
-  return crc ^ 0xffffffff;
 }
 
 function createPngImage(size: number, rgba: Buffer): Buffer {

@@ -15,71 +15,78 @@ export type AppRuntimeLookup = {
   namespace: string;
 };
 
+// ─── Generic helpers ────────────────────────────────────────────────────────
+
+function resolveIpcPath(runtime: AppRuntimeLookup, app: string): string {
+  return resolveAppIpcPath({ app, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+}
+
+async function inspectRuntime<T>(runtime: AppRuntimeLookup, app: string, timeoutMs: number): Promise<T | null> {
+  try {
+    return await requestJsonIpc<T>(resolveIpcPath(runtime, app), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
+  } catch {
+    return null;
+  }
+}
+
+async function waitForRuntime<T extends { url?: string | null }>(
+  runtime: AppRuntimeLookup,
+  app: string,
+  timeoutMs: number,
+  pollIntervalMs = 150,
+): Promise<T> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const snapshot = await inspectRuntime<T>(runtime, app, 800);
+    if (snapshot != null) return snapshot;
+    await new Promise((resolveWait) => setTimeout(resolveWait, pollIntervalMs));
+  }
+  throw new Error(`${app} runtime did not expose status in time`);
+}
+
+// ─── Daemon ─────────────────────────────────────────────────────────────────
+
 export function resolveDaemonIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.DAEMON, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
-}
-
-export function resolveWebIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.WEB, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
-}
-
-export function resolveDesktopIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+  return resolveIpcPath(runtime, APP_KEYS.DAEMON);
 }
 
 export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DaemonStatusSnapshot | null> {
-  try {
-    return await requestJsonIpc<DaemonStatusSnapshot>(resolveDaemonIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
-  } catch {
-    return null;
-  }
+  return inspectRuntime<DaemonStatusSnapshot>(runtime, APP_KEYS.DAEMON, timeoutMs);
 }
 
 export async function waitForDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 35000): Promise<DaemonStatusSnapshot> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const snapshot = await inspectDaemonRuntime(runtime, 800);
-    if (snapshot?.url != null) return snapshot;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  throw new Error("daemon did not expose status in time");
+  return waitForRuntime<DaemonStatusSnapshot>(runtime, APP_KEYS.DAEMON, timeoutMs);
+}
+
+// ─── Web ────────────────────────────────────────────────────────────────────
+
+export function resolveWebIpcPath(runtime: AppRuntimeLookup): string {
+  return resolveIpcPath(runtime, APP_KEYS.WEB);
 }
 
 export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<WebStatusSnapshot | null> {
-  try {
-    return await requestJsonIpc<WebStatusSnapshot>(resolveWebIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
-  } catch {
-    return null;
-  }
+  return inspectRuntime<WebStatusSnapshot>(runtime, APP_KEYS.WEB, timeoutMs);
 }
 
 export async function waitForWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 35000): Promise<WebStatusSnapshot> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const snapshot = await inspectWebRuntime(runtime, 800);
-    if (snapshot?.url != null) return snapshot;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  throw new Error("web did not expose status in time");
+  return waitForRuntime<WebStatusSnapshot>(runtime, APP_KEYS.WEB, timeoutMs);
+}
+
+// ─── Desktop ────────────────────────────────────────────────────────────────
+
+export function resolveDesktopIpcPath(runtime: AppRuntimeLookup): string {
+  return resolveIpcPath(runtime, APP_KEYS.DESKTOP);
 }
 
 export async function inspectDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DesktopStatusSnapshot | null> {
-  try {
-    return await requestJsonIpc<DesktopStatusSnapshot>(resolveDesktopIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
-  } catch {
-    return null;
-  }
+  return inspectRuntime<DesktopStatusSnapshot>(runtime, APP_KEYS.DESKTOP, timeoutMs);
 }
 
 export async function waitForDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs = 15000): Promise<DesktopStatusSnapshot> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const snapshot = await inspectDesktopRuntime(runtime, 800);
-    if (snapshot != null) return snapshot;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  throw new Error("desktop did not expose status in time");
+  return waitForRuntime<DesktopStatusSnapshot>(runtime, APP_KEYS.DESKTOP, timeoutMs);
 }
+
+// ─── Tray ───────────────────────────────────────────────────────────────────
 
 export type TrayStatusSnapshot = {
   isRunning: boolean;
@@ -90,26 +97,18 @@ export type TrayStatusSnapshot = {
 };
 
 export function resolveTrayIpcPath(runtime: AppRuntimeLookup): string {
-  return resolveAppIpcPath({ app: APP_KEYS.TRAY, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+  return resolveIpcPath(runtime, APP_KEYS.TRAY);
 }
 
 export async function inspectTrayRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<TrayStatusSnapshot | null> {
-  try {
-    return await requestJsonIpc<TrayStatusSnapshot>(resolveTrayIpcPath(runtime), { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs });
-  } catch {
-    return null;
-  }
+  return inspectRuntime<TrayStatusSnapshot>(runtime, APP_KEYS.TRAY, timeoutMs);
 }
 
 export async function waitForTrayRuntime(runtime: AppRuntimeLookup, timeoutMs = 15000): Promise<TrayStatusSnapshot> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const snapshot = await inspectTrayRuntime(runtime, 800);
-    if (snapshot != null) return snapshot;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  throw new Error("tray did not expose status in time");
+  return waitForRuntime<TrayStatusSnapshot>(runtime, APP_KEYS.TRAY, timeoutMs);
 }
+
+// ─── Utilities ──────────────────────────────────────────────────────────────
 
 /** Generate a unique namespace suffix to avoid pipe/socket conflicts after daemon restart */
 export function uniqueNamespace(baseNamespace: string): string {
