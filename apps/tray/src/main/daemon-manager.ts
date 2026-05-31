@@ -35,14 +35,7 @@ function resolveNodeExe(): string {
 // Resolve workspace root: tray app is at apps/tray/dist/main/index.js
 // Go up: dist -> tray -> apps -> workspace
 function getWorkspaceRoot(): string {
-  // 1. Try OD_DATA_DIR env var (used by packaged daemon)
-  const odDataDir = process.env.OD_DATA_DIR;
-  if (odDataDir) {
-    // OD_DATA_DIR points to .od/ parent, i.e. the workspace root
-    return resolve(odDataDir);
-  }
-
-  // 2. Derive from the resolved node.exe path: <workspace>/nodejs/node.exe → <workspace>
+  // 1. Derive from the resolved node.exe path: <workspace>/nodejs/node.exe → <workspace>
   const nodeExe = resolveNodeExe();
   if (nodeExe !== "node") {
     const candidate = resolve(nodeExe, "..");
@@ -50,12 +43,12 @@ function getWorkspaceRoot(): string {
     if (existsSync(join(candidate, "apps"))) return candidate;
   }
 
-  // 3. Walk up from __dirname as fallback (dev mode)
+  // 2. Walk up from __dirname as fallback (dev mode)
   const parts = __dirname.split(/[/\\]/);
   const appsIdx = parts.indexOf("apps");
   if (appsIdx >= 2) return parts.slice(0, appsIdx).join("/");
 
-  // 4. Try environment variable or current working directory
+  // 3. Try PWD environment variable
   if (process.env.PWD) {
     const pwdParts = process.env.PWD.split(/[/\\]/);
     const pwdAppsIdx = pwdParts.indexOf("apps");
@@ -235,17 +228,12 @@ export class DaemonManager {
         url: this._url,
         pid: this._pid,
       };
-    } catch (err) {
-      // Only report not running if we have no cached URL either
-      if (this._url != null) {
-        return {
-          isRunning: true,
-          port: this._port,
-          url: this._url,
-          pid: this._pid,
-        };
-      }
-      return { isRunning: false, port: this._port, url: null, pid: null };
+    } catch {
+      // IPC failed — clear cached URL since daemon is not responding.
+      // Treat IPC failure as not running.
+      this._url = null;
+      this._port = 0;
+      return { isRunning: false, port: 0, url: null, pid: null };
     }
   }
 
