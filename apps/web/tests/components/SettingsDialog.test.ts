@@ -17,6 +17,7 @@ import {
   updateAgentCliEnvValue,
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
+import { KNOWN_PROVIDERS } from '../../src/state/config';
 import type { AppConfig, ConnectionTestResponse } from '../../src/types';
 
 const originalFetch = globalThis.fetch;
@@ -40,6 +41,18 @@ afterEach(() => {
 });
 
 describe('SettingsDialog API protocol switching', () => {
+  it('offers Token Table as an OpenAI-compatible quick-fill provider', () => {
+    expect(KNOWN_PROVIDERS).toContainEqual(
+      expect.objectContaining({
+        label: 'Token Table',
+        protocol: 'openai',
+        baseUrl: 'https://tokentable.asia/v1',
+        model: 'auto',
+        models: ['auto'],
+      }),
+    );
+  });
+
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
