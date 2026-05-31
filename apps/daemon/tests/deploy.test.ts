@@ -309,8 +309,15 @@ describe('netlify and railway deploys', () => {
       }
       // GitHub repo check (exists)
       if (url === 'https://api.github.com/repos/testuser/od-p1' && method === 'GET') {
-        return new Response(JSON.stringify({ name: 'od-p1' }), {
+        return new Response(JSON.stringify({ id: 123, name: 'od-p1' }), {
           status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // GitHub deploy key creation
+      if (url === 'https://api.github.com/repos/testuser/od-p1/keys' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), {
+          status: 201,
           headers: { 'content-type': 'application/json' },
         });
       }
@@ -331,7 +338,19 @@ describe('netlify and railway deploys', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
+      if (url.endsWith('/deploy_keys') && method === 'POST') {
+        return new Response(JSON.stringify({ id: 'deploy-key-1', public_key: 'ssh-rsa AAAAB3NzaC1...' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url.endsWith('/sites') && method === 'POST') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'PUT') {
         return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
