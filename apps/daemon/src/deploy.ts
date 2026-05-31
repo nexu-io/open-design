@@ -671,6 +671,7 @@ export async function deployToNetlify({
     },
   });
 
+  let repoId: number;
   if (repoCheck.status === 404) {
     const createResp = await fetch('https://api.github.com/user/repos', {
       method: 'POST',
@@ -690,7 +691,53 @@ export async function deployToNetlify({
       const errText = await createResp.text();
       throw new DeployError(`Failed to create GitHub repository: ${errText}`, 502);
     }
+    const createJson = (await createResp.json()) as any;
+    repoId = createJson.id;
     await new Promise((resolve) => setTimeout(resolve, 3000));
+  } else if (!repoCheck.ok) {
+    const errText = await repoCheck.text();
+    throw new DeployError(`Failed to check GitHub repository: ${errText}`, 502);
+  } else {
+    const repoJson = (await repoCheck.json()) as any;
+    repoId = repoJson.id;
+  }
+
+  // Generate a deploy key on Netlify
+  const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!deployKeyResp.ok) {
+    const errText = await deployKeyResp.text();
+    throw new DeployError(`Failed to create Netlify deploy key: ${errText}`, 502);
+  }
+  const deployKey = (await deployKeyResp.json()) as any;
+  const deployKeyId = deployKey.id;
+  const publicKey = deployKey.public_key;
+
+  // Add the public key to the GitHub repository as a deploy key
+  const addKeyResp = await fetch(`https://api.github.com/repos/${username}/${repoName}/keys`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+    body: JSON.stringify({
+      title: 'Netlify Deploy Key',
+      key: publicKey,
+      read_only: true,
+    }),
+  });
+  if (!addKeyResp.ok) {
+    const errText = await addKeyResp.text();
+    if (!errText.includes('already_exists') && !errText.includes('already exists')) {
+      throw new DeployError(`Failed to add deploy key to GitHub repository: ${errText}`, 502);
+    }
   }
 
   // 3. Sync files to the GitHub repository
@@ -730,10 +777,12 @@ export async function deployToNetlify({
         repo: {
           provider: 'github',
           repo: `${username}/${repoName}`,
+          repo_id: repoId,
           private: false,
           branch: 'main',
           cmd: '',
           dir: '.',
+          deploy_key_id: deployKeyId,
         },
       }),
     });
@@ -753,11 +802,12 @@ export async function deployToNetlify({
         repo: {
           provider: 'github',
           repo: `${username}/${repoName}`,
+          repo_id: repoId,
           private: false,
           branch: 'main',
           cmd: '',
           dir: '.',
-          installation_id: undefined,
+          deploy_key_id: deployKeyId,
         },
       }),
     });
@@ -790,10 +840,12 @@ export async function deployToNetlify({
           repo: {
             provider: 'github',
             repo: `${username}/${repoName}`,
+            repo_id: repoId,
             private: false,
             branch: 'main',
             cmd: '',
             dir: '.',
+            deploy_key_id: deployKeyId,
           },
         }),
       });
