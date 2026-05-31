@@ -32,7 +32,7 @@
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { renderMediaGenerationContract, MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
@@ -687,7 +687,7 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'video'
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
-    parts.push(MEDIA_GENERATION_CONTRACT);
+    parts.push(renderMediaGenerationContract(mediaExecution));
   } else {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
