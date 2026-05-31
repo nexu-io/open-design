@@ -568,6 +568,38 @@ const AGENT_CLI_ENV_FIELDS = [
   },
 ] as const;
 
+/**
+ * Compute the CLI env fields shown in the Advanced disclosure.
+ *
+ * Always include fields for the currently selected agent. When the
+ * recovery flow is active for a DIFFERENT agent (the user clicked
+ * "Configure" on a misconfigured agent card while another agent is
+ * selected), include that agent's fields too AND surface them first
+ * so the auto-focus target (`index === 0`) lands on the misconfigured
+ * field the user came to fix — not the selected agent's first
+ * advanced field, which they did not ask to edit.
+ *
+ * Exported for unit-testing the ordering and the recovery-state
+ * stickiness regression that PR #2022 review flagged.
+ */
+export function computeCliEnvFields<F extends { agentId: string }>(
+  fields: readonly F[],
+  selectedAgentId: string | null | undefined,
+  configErrorAgentId: string | null,
+): F[] {
+  const matches = fields.filter(
+    (field) =>
+      field.agentId === selectedAgentId || field.agentId === configErrorAgentId,
+  );
+  if (configErrorAgentId && configErrorAgentId !== selectedAgentId) {
+    return [
+      ...matches.filter((f) => f.agentId === configErrorAgentId),
+      ...matches.filter((f) => f.agentId !== configErrorAgentId),
+    ];
+  }
+  return matches;
+}
+
 function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   const provider = KNOWN_PROVIDERS.find((p) => p.protocol === protocol);
   return {
@@ -1022,6 +1054,12 @@ export function SettingsDialog({
   const [versionChecking, setVersionChecking] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
   const [configErrorAgentId, setConfigErrorAgentId] = useState<string | null>(null);
+  // Bumped on every Configure click (even repeats for the same agent) so
+  // the recovery effect re-runs and re-focuses/re-scrolls. Without this
+  // tick, clicking Configure twice in a row for the same misconfigured
+  // agent is a no-op because `configErrorAgentId` did not change between
+  // the two renders.
+  const [configErrorRequestNonce, setConfigErrorRequestNonce] = useState(0);
   // Refs into the CLI env recovery UI so the "Configure" button on a
   // misconfigured agent card can drive the disclosure open and land focus
   // on the first editable field — without that, the CTA only flips a
@@ -1043,7 +1081,31 @@ export function SettingsDialog({
       cliEnvFirstFieldRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(id);
-  }, [configErrorAgentId]);
+  }, [configErrorAgentId, configErrorRequestNonce]);
+  // Reset the recovery target whenever the user switches the active agent
+  // tab. Otherwise the field-order partition below would keep prepending
+  // the misconfigured agent's fields for the rest of the dialog session,
+  // even after the user moved on and the recovery flow no longer applies.
+  // Comparing against the latest cfg.agentId in a ref avoids clearing on
+  // the initial mount (when both are still in sync) and on the very tick
+  // the user clicks Configure (the click sets configErrorAgentId before
+  // cfg.agentId changes, so this effect would otherwise wipe the click
+  // immediately).
+  const recoveryStartedAgentIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!configErrorAgentId) {
+      recoveryStartedAgentIdRef.current = null;
+      return;
+    }
+    if (recoveryStartedAgentIdRef.current === null) {
+      recoveryStartedAgentIdRef.current = cfg.agentId;
+      return;
+    }
+    if (recoveryStartedAgentIdRef.current !== cfg.agentId) {
+      setConfigErrorAgentId(null);
+      recoveryStartedAgentIdRef.current = null;
+    }
+  }, [cfg.agentId, configErrorAgentId]);
 
   const handleInstallLatest = useCallback(async () => {
     if (versionChecking || !appVersionInfo) return;
@@ -3112,7 +3174,14 @@ export function SettingsDialog({
                                   <button
                                     type="button"
                                     className="agent-card-link agent-card-link--ghost"
-                                    onClick={() => setConfigErrorAgentId(a.id)}
+                                    onClick={() => {
+                                      setConfigErrorAgentId(a.id);
+                                      // Always bump so a second click on the
+                                      // same agent re-triggers the
+                                      // scroll/focus effect — without this
+                                      // the CTA is one-shot per agent.
+                                      setConfigErrorRequestNonce((n) => n + 1);
+                                    }}
                                   >
                                     {t('settings.agentConfigError.configure')}
                                   </button>
@@ -3223,24 +3292,11 @@ export function SettingsDialog({
                   users no longer wonder "are these fields I forgot to
                   fill in?".
                 */
-                const cliEnvFields = (() => {
-                  const matches = AGENT_CLI_ENV_FIELDS.filter(
-                    (field) => field.agentId === cfg.agentId || field.agentId === configErrorAgentId,
-                  );
-                  // When the recovery flow is active for an agent OTHER than
-                  // the currently selected one, surface that agent's fields
-                  // first so the auto-focus target (index === 0) is the
-                  // misconfigured field the user just clicked Configure for —
-                  // not the selected agent's first advanced field, which they
-                  // did not ask to edit.
-                  if (configErrorAgentId && configErrorAgentId !== cfg.agentId) {
-                    return [
-                      ...matches.filter((f) => f.agentId === configErrorAgentId),
-                      ...matches.filter((f) => f.agentId !== configErrorAgentId),
-                    ];
-                  }
-                  return matches;
-                })();
+                const cliEnvFields = computeCliEnvFields(
+                  AGENT_CLI_ENV_FIELDS,
+                  cfg.agentId,
+                  configErrorAgentId,
+                );
                 if (cliEnvFields.length === 0) return null;
                 return (
                   <details

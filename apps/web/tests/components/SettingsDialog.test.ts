@@ -3,6 +3,7 @@ import {
   agentRefreshOptionsForConfig,
   canFetchProviderModels,
   canRunProviderConnectionTest,
+  computeCliEnvFields,
   deriveComposioCredentialState,
   configForManualOrbitRun,
   isOrbitRunDisabled,
@@ -987,5 +988,75 @@ describe('sanitizeSettingsSavePayload', () => {
     expect(sanitized.mode).toBe('daemon');
     expect(sanitized.agentId).toBe('claude-code');
     expect(sanitized.theme).toBe('system');
+  });
+});
+
+describe('computeCliEnvFields (Configure recovery flow)', () => {
+  type EnvField = { agentId: string; envKey: string };
+  const FIELDS: readonly EnvField[] = [
+    { agentId: 'claude', envKey: 'CLAUDE_CONFIG_DIR' },
+    { agentId: 'claude', envKey: 'ANTHROPIC_BASE_URL' },
+    { agentId: 'claude', envKey: 'ANTHROPIC_API_KEY' },
+    { agentId: 'codebuddy', envKey: 'CODEBUDDY_CONFIG_DIR' },
+    { agentId: 'codebuddy', envKey: 'CODEBUDDY_API_KEY' },
+    { agentId: 'codex', envKey: 'CODEX_HOME' },
+  ];
+
+  it('returns only the selected agent fields when no recovery is active', () => {
+    const result = computeCliEnvFields(FIELDS, 'claude', null);
+    expect(result.map((f) => f.envKey)).toEqual([
+      'CLAUDE_CONFIG_DIR',
+      'ANTHROPIC_BASE_URL',
+      'ANTHROPIC_API_KEY',
+    ]);
+  });
+
+  it('puts the recovery agent fields FIRST when configErrorAgentId differs from the selected agent', () => {
+    // Regression test for PR #2022 review feedback (discussion_r3329925123):
+    // when Claude is selected and the user clicks Configure on a misconfigured
+    // CodeBuddy card, the focus target (index === 0) must be a CodeBuddy field,
+    // not CLAUDE_CONFIG_DIR.
+    const result = computeCliEnvFields(FIELDS, 'claude', 'codebuddy');
+    expect(result[0]?.agentId).toBe('codebuddy');
+    expect(result[0]?.envKey).toBe('CODEBUDDY_CONFIG_DIR');
+    // All matched fields are present in the output, just reordered.
+    expect(result.map((f) => f.envKey).sort()).toEqual(
+      [
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_BASE_URL',
+        'CLAUDE_CONFIG_DIR',
+        'CODEBUDDY_API_KEY',
+        'CODEBUDDY_CONFIG_DIR',
+      ].sort(),
+    );
+  });
+
+  it('does not duplicate fields when configErrorAgentId equals the selected agent', () => {
+    // After the user fixes CodeBuddy and switches to the CodeBuddy tab —
+    // or clicks Configure for the same agent that is already selected —
+    // the merged set must not include duplicates and must keep stable order.
+    const result = computeCliEnvFields(FIELDS, 'codebuddy', 'codebuddy');
+    expect(result.map((f) => f.envKey)).toEqual([
+      'CODEBUDDY_CONFIG_DIR',
+      'CODEBUDDY_API_KEY',
+    ]);
+  });
+
+  it('returns an empty list when neither selected nor recovery agent matches any field', () => {
+    const result = computeCliEnvFields(FIELDS, 'unknown', null);
+    expect(result).toEqual([]);
+  });
+
+  it('does NOT leak unrelated fields after the recovery target is cleared', () => {
+    // Regression test for PR #2022 review feedback (discussion_r3329951063):
+    // After the user dismisses the recovery flow (configErrorAgentId reset to
+    // null), the misconfigured agent's fields must not stay in the result —
+    // otherwise the disclosure would keep prepending a stale agent's fields
+    // for the rest of the dialog session.
+    const beforeReset = computeCliEnvFields(FIELDS, 'claude', 'codebuddy');
+    const afterReset = computeCliEnvFields(FIELDS, 'claude', null);
+    expect(beforeReset.some((f) => f.agentId === 'codebuddy')).toBe(true);
+    expect(afterReset.some((f) => f.agentId === 'codebuddy')).toBe(false);
+    expect(afterReset.map((f) => f.agentId)).toEqual(['claude', 'claude', 'claude']);
   });
 });
