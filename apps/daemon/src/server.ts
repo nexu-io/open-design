@@ -1181,6 +1181,8 @@ import {
   deployToNetlify,
   RENDER_PROVIDER_ID,
   deployToRender,
+  RAILWAY_PROVIDER_ID,
+  deployToRailway,
 } from './deploy.js';
 import {
   checkCloudflarePagesDeploymentLinks,
@@ -8503,6 +8505,7 @@ export async function startServer({
     CLOUDFLARE_PAGES_PROVIDER_ID,
     NETLIFY_PROVIDER_ID,
     RENDER_PROVIDER_ID,
+    RAILWAY_PROVIDER_ID,
     isDeployProviderId,
     publicDeployConfigForProvider,
     readDeployConfig,
@@ -8526,6 +8529,7 @@ export async function startServer({
     prepareDeployPreflight,
     deployToNetlify,
     deployToRender,
+    deployToRailway,
   };
   const mediaDeps = {
     MEDIA_PROVIDERS,
