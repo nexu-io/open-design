@@ -2366,7 +2366,7 @@ function runSseEventToPersistedAgentEvent(event, data) {
   return daemonAgentPayloadToPersistedAgentEvent(data);
 }
 
-function daemonAgentPayloadToPersistedAgentEvent(data) {
+export function daemonAgentPayloadToPersistedAgentEvent(data) {
   const type = data?.type;
   if (type === 'status' && typeof data.label === 'string') {
     const detail =
@@ -2437,6 +2437,20 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
       label: 'warning',
       detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated at this point to prevent unauthorized instruction injection. See issue #3247.`,
     };
+  }
+  // Persist tool-loop warnings/halts so the signal survives a reload or history
+  // replay. Without this the event is transient-only, and in
+  // OD_TOOL_LOOP_GUARD=warn (no terminal TOOL_LOOP_DETECTED error) the user
+  // would lose the only record that a loop was detected. Mirrors the live
+  // mapping in apps/web/src/providers/daemon.ts so replayed and live views match.
+  if (type === 'tool_loop' && typeof data.toolName === 'string') {
+    const toolName = data.toolName;
+    const count = typeof data.count === 'number' ? data.count : 0;
+    const detail =
+      data.action === 'halt'
+        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
+        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
+    return { kind: 'status', label: 'warning', detail };
   }
   if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
   return null;
