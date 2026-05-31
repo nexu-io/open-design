@@ -4,7 +4,24 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { detectEntryFile, listFiles, resolveProjectDir } from '../src/projects.js';
+import {
+  assertSandboxProjectRootAvailable,
+  detectEntryFile,
+  listFiles,
+  resolveProjectDir,
+  SandboxImportedProjectError,
+} from '../src/projects.js';
+
+function withSandboxMode<T>(run: () => T): T {
+  const previous = process.env.OD_SANDBOX_MODE;
+  process.env.OD_SANDBOX_MODE = '1';
+  try {
+    return run();
+  } finally {
+    if (previous == null) delete process.env.OD_SANDBOX_MODE;
+    else process.env.OD_SANDBOX_MODE = previous;
+  }
+}
 
 describe('resolveProjectDir', () => {
   const projectsRoot = '/var/od/projects';
@@ -49,6 +66,22 @@ describe('resolveProjectDir', () => {
         baseDir: '/Users/me/site',
       }),
     ).not.toThrow();
+  });
+
+  it('rejects metadata.baseDir in sandbox mode before resolving a project file root', () => {
+    withSandboxMode(() => {
+      const baseDir = '/Users/me/projects/site';
+      expect(
+        () => resolveProjectDir(projectsRoot, projectId, { kind: 'prototype', baseDir }),
+      ).toThrowError(SandboxImportedProjectError);
+      expect(() =>
+        assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
+      ).toThrowError(SandboxImportedProjectError);
+      expect(() => resolveProjectDir(projectsRoot, '../escape', {
+        kind: 'prototype',
+        baseDir,
+      })).toThrowError();
+    });
   });
 });
 

@@ -1,11 +1,24 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
+import { resolveProjectRootFromNestedModule } from '../project-root.js';
+import {
+  applySandboxRuntimeEnv,
+  isSandboxModeEnabled,
+  resolveSandboxRuntimeConfig,
+  type SandboxRuntimeConfig,
+} from '../sandbox-mode.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
+
+const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
+  path.dirname(fileURLToPath(import.meta.url)),
+);
 
 // Valid values for CODEBUDDY_INTERNET_ENVIRONMENT (closed enum per IAM docs).
 // Must stay in sync with AGENT_CLI_ENV_ENUMS in app-config.ts.
@@ -96,6 +109,7 @@ export function spawnEnvForAgent(
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
 ): NodeJS.ProcessEnv {
+  const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const env = mergeProxyAwareEnv(
     process.platform,
     systemProxyEnv,
@@ -115,18 +129,18 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return env;
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
     stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
-    return env;
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
     stripUnlessCustomBaseUrl(env, 'OPENAI_BASE_URL', [
       'OPENAI_API_KEY',
       'CODEX_API_KEY',
     ]);
-    return env;
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   // CodeBuddy's `-p` mode requires CODEBUDDY_API_KEY for authentication.
   // Do not strip it — the key is the primary auth path, not a fallback.
@@ -198,7 +212,28 @@ export function spawnEnvForAgent(
       }
     }
   }
-  return env;
+  return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+}
+
+function sandboxRuntimeConfigForBaseEnv(
+  baseEnv: RuntimeEnvMap,
+): SandboxRuntimeConfig | null {
+  if (!isSandboxModeEnabled(baseEnv)) return null;
+  const dataDir = baseEnv.OD_DATA_DIR?.trim();
+  if (!dataDir) return null;
+  const resolvedDataDir = resolveProjectRelativePath(
+    dataDir,
+    RUNTIME_MODULE_PROJECT_ROOT,
+  );
+  return resolveSandboxRuntimeConfig(true, resolvedDataDir);
+}
+
+function reapplySandboxRuntimeEnv(
+  env: NodeJS.ProcessEnv,
+  sandboxRuntime: SandboxRuntimeConfig | null,
+): NodeJS.ProcessEnv {
+  if (!sandboxRuntime) return env;
+  return applySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
 // Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty

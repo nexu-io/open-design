@@ -25,7 +25,10 @@ import {
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
+import { resolveProjectRoot } from './project-root.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
+
+export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
 import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
@@ -90,6 +93,12 @@ import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './nati
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import { parseMediaExecutionPolicyInput } from './media-policy.js';
+import {
+  applySandboxRuntimeEnv,
+  ensureSandboxRuntimeDirs,
+  isSandboxModeEnabled,
+  resolveSandboxRuntimeConfig,
+} from './sandbox-mode.js';
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
@@ -252,6 +261,7 @@ import {
   type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
+  mergeNoProxyWithLoopbackDefaults,
   redactSecrets,
   testAgentConnection,
   testProviderConnection,
@@ -335,6 +345,7 @@ import {
   buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
+  assertSandboxProjectRootAvailable,
   detectEntryFile,
   ensureProject,
   isSafeId,
@@ -346,6 +357,7 @@ import {
   renameProjectFile,
   removeProjectDir,
   resolveProjectDir,
+  SandboxImportedProjectError,
   sanitizeName,
   searchProjectFiles,
   resolveProjectDir,
@@ -476,13 +488,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
-export function resolveProjectRoot(moduleDir: string): string {
-  const base = path.basename(moduleDir);
-  const daemonDir =
-    base === 'dist' || base === 'src' ? path.dirname(moduleDir) : moduleDir;
-  return path.resolve(daemonDir, '../..');
-}
-
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0
     ? path.resolve(value)
@@ -1328,8 +1333,14 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
   };
 }
 
-export function resolveDataDir(raw, projectRoot) {
-  if (!raw) return path.join(projectRoot, '.od');
+export function resolveDataDir(raw, projectRoot, options = {}) {
+  const value = raw?.trim();
+  if (!value) {
+    if (options.requireExplicit) {
+      throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+    }
+    return path.join(projectRoot, '.od');
+  }
   // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
   // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
   // Some launchers (systemd unit files, NixOS modules, certain Docker
@@ -1338,7 +1349,7 @@ export function resolveDataDir(raw, projectRoot) {
   // expandHomePrefix turns those (and the ~ shorthand, with both / and \
   // separators) into os.homedir() before path.resolve runs so launch
   // surfaces stay consistent.
-  const resolved = resolveProjectRelativePath(raw, projectRoot);
+  const resolved = resolveProjectRelativePath(value, projectRoot);
   try {
     fs.mkdirSync(resolved, { recursive: true });
     fs.accessSync(resolved, fs.constants.W_OK);
@@ -1364,7 +1375,12 @@ export function resolveDataDir(raw, projectRoot) {
   }
   return resolved;
 }
-const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
+const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
+  requireExplicit: SANDBOX_MODE_ENABLED,
+});
+const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
+ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
 // Canonical (realpath-resolved) form of RUNTIME_DATA_DIR for the few callers
 // that compare it against a user-supplied realpath() result. On macOS, /var
@@ -1623,15 +1639,25 @@ export function createAgentRuntimeEnv(
   toolTokenGrant: { token?: string } | null = null,
   nodeBin: string = process.execPath,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...baseEnv,
-    OD_DATA_DIR: RUNTIME_DATA_DIR,
-    OD_DAEMON_URL: daemonUrl,
-    OD_NODE_BIN: nodeBin,
-  };
+  const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
+    {
+      ...baseEnv,
+      OD_DATA_DIR: RUNTIME_DATA_DIR,
+      OD_DAEMON_URL: daemonUrl,
+      OD_NODE_BIN: nodeBin,
+    },
+    SANDBOX_RUNTIME,
+  );
   const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
   if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
     env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
+  }
+  if (SANDBOX_RUNTIME.enabled) {
+    const noProxy = mergeNoProxyWithLoopbackDefaults(env.NO_PROXY ?? env.no_proxy);
+    if (noProxy) {
+      env.NO_PROXY = noProxy;
+      if (process.platform !== 'win32') env.no_proxy = noProxy;
+    }
   }
 
   // Ensure the node binary directory is on PATH so agent sub-processes —
@@ -3842,10 +3868,18 @@ export async function startServer({
   // Active only when OD_API_TOKEN is set. Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / version / status remain
-  // open so monitoring probes don't need the token.
+  // value matching `OD_API_TOKEN`. Health / readiness / version remain
+  // open so monitoring probes don't need the token. Rich daemon status
+  // stays authenticated because it includes local runtime paths.
   if (apiToken.length > 0) {
-    const openProbePaths = new Set(['/api/health', '/api/version', '/api/daemon/status']);
+    const openProbePaths = new Set([
+      '/health',
+      '/api/health',
+      '/ready',
+      '/api/ready',
+      '/version',
+      '/api/version',
+    ]);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
       // Loopback short-circuit. We ignore the proxied X-Forwarded-For
@@ -4356,6 +4390,16 @@ export async function startServer({
     res.json({ ok: true, version: versionInfo.version });
   });
 
+  app.get('/api/ready', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    const ready = !daemonShuttingDown;
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      ready,
+      version: versionInfo.version,
+    });
+  });
+
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
@@ -4409,6 +4453,10 @@ export async function startServer({
       port: Number(process.env.OD_PORT ?? 7456),
       dataDir: RUNTIME_DATA_DIR,
       mediaConfigDir: process.env.OD_MEDIA_CONFIG_DIR ?? null,
+      sandboxMode: SANDBOX_RUNTIME.enabled,
+      sandbox: SANDBOX_RUNTIME.enabled
+        ? { enabled: true, roots: SANDBOX_RUNTIME.roots }
+        : { enabled: false },
       pid: process.pid,
       shuttingDown: daemonShuttingDown,
       installedPlugins: (() => {
@@ -10720,14 +10768,13 @@ export async function startServer({
       try {
         const chatProject = getProject(db, projectId);
         const chatMeta = chatProject?.metadata;
-        if (chatMeta?.baseDir) {
-          cwd = path.normalize(chatMeta.baseDir);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        } else {
-          cwd = await ensureProject(PROJECTS_DIR, projectId);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        assertSandboxProjectRootAvailable(chatMeta);
+        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return design.runs.fail(run, 'BAD_REQUEST', err.message);
         }
-      } catch {
         cwd = null;
       }
     }
@@ -13036,7 +13083,18 @@ export async function startServer({
     ) {
       try {
         const convs = listConversations(db, meta.projectId);
-        const defaultConv = Array.isArray(convs) && convs.length > 0 ? convs[0] : null;
+        // listConversations is ordered for the UI by recent activity; this
+        // fallback must bind to the seeded default conversation instead.
+        const defaultConv = Array.isArray(convs) && convs.length > 0
+          ? [...convs].sort((a, b) => {
+              const aCreated = Number(a?.createdAt);
+              const bCreated = Number(b?.createdAt);
+              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+                return aCreated - bCreated;
+              }
+              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+            })[0]
+          : null;
         if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
           meta.conversationId = defaultConv.id;
           if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
@@ -13070,10 +13128,13 @@ export async function startServer({
         const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
           ? appCfg.agentId
           : null;
-        if (cfgAgent) {
+        const agents = await detectAgents(appCfg.agentCliEnv ?? {}).catch(() => []);
+        const cfgAgentAvailable = cfgAgent
+          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
+          : false;
+        if (cfgAgent && cfgAgentAvailable) {
           meta.agentId = cfgAgent;
         } else {
-          const agents = await detectAgents(appCfg.agentCliEnv ?? {}).catch(() => []);
           const firstAvailable = agents.find((a) => a.available)?.id ?? null;
           if (firstAvailable) meta.agentId = firstAvailable;
         }

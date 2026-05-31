@@ -4580,6 +4580,10 @@ export function ProjectView({
           githubConnected={githubConnected}
           commentPortalId={commentInspectorPortalId}
           onCommentModeChange={setCommentInspectorActive}
+          messages={messages}
+          artifactHtml={artifact?.html}
+          conversationError={error}
+          onRetry={handleRetry}
         />
       </div>
       {projectActionsToast ? (

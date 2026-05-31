@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { relative, resolve } from 'node:path';
 import {
   assert, chmodSync, claude, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
@@ -403,6 +404,77 @@ fsTest(
       // same Vitest worker.
       rmSync(sandbox, { recursive: true, force: true });
       rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_SANDBOX_MODE scopes fallback toolchain discovery to OD_DATA_DIR',
+  () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'od-agents-sandbox-data-'));
+    const emptyPath = mkdtempSync(join(tmpdir(), 'od-agents-empty-path-'));
+    const realPrefix = mkdtempSync(join(tmpdir(), 'od-agents-real-prefix-'));
+    const realPrefixBin = join(realPrefix, 'bin');
+    try {
+      return withEnvSnapshot(
+        ['PATH', 'OD_AGENT_HOME', 'OD_DATA_DIR', 'OD_SANDBOX_MODE', 'NPM_CONFIG_PREFIX'],
+        () => {
+          mkdirSync(realPrefixBin, { recursive: true });
+          writeFileSync(join(realPrefixBin, 'gemini'), '');
+          chmodSync(join(realPrefixBin, 'gemini'), 0o755);
+
+          delete process.env.OD_AGENT_HOME;
+          process.env.OD_DATA_DIR = dataDir;
+          process.env.OD_SANDBOX_MODE = '1';
+          process.env.PATH = emptyPath;
+          process.env.NPM_CONFIG_PREFIX = realPrefix;
+
+          const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
+          assert.equal(
+            resolved,
+            null,
+            `sandbox mode must not see the host $NPM_CONFIG_PREFIX bin; got ${resolved}`,
+          );
+        },
+      );
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+      rmSync(emptyPath, { recursive: true, force: true });
+      rmSync(realPrefix, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest(
+  'OD_SANDBOX_MODE resolves relative OD_DATA_DIR before fallback toolchain discovery',
+  () => {
+    const projectRoot = resolve(process.cwd(), '../..');
+    const parent = mkdtempSync(join(tmpdir(), 'od-agents-relative-data-parent-'));
+    const dataDir = join(parent, 'data');
+    const sandboxBin = join(dataDir, 'sandbox', 'agent-home', '.local', 'bin');
+    const emptyPath = mkdtempSync(join(tmpdir(), 'od-agents-empty-path-'));
+    try {
+      return withEnvSnapshot(
+        ['PATH', 'OD_AGENT_HOME', 'OD_DATA_DIR', 'OD_SANDBOX_MODE', 'NPM_CONFIG_PREFIX'],
+        () => {
+          mkdirSync(sandboxBin, { recursive: true });
+          const geminiPath = join(sandboxBin, 'gemini');
+          writeFileSync(geminiPath, '');
+          chmodSync(geminiPath, 0o755);
+
+          delete process.env.OD_AGENT_HOME;
+          delete process.env.NPM_CONFIG_PREFIX;
+          process.env.OD_DATA_DIR = relative(projectRoot, dataDir);
+          process.env.OD_SANDBOX_MODE = '1';
+          process.env.PATH = emptyPath;
+
+          const resolved = resolveAgentExecutable(minimalAgentDef({ bin: 'gemini' }));
+          assert.equal(resolved, geminiPath);
+        },
+      );
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+      rmSync(emptyPath, { recursive: true, force: true });
     }
   },
 );

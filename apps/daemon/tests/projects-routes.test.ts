@@ -77,6 +77,35 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(detail.resolvedDir).toBe(baseDir);
   });
 
+  it('keeps imported-folder resolvedDir stable in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder }),
+    });
+    expect(importResp.status).toBe(200);
+    const importBody = (await importResp.json()) as {
+      project: { id: string; metadata?: { baseDir?: string } };
+    };
+    const projectId = importBody.project.id;
+    const baseDir = importBody.project.metadata?.baseDir;
+    expect(baseDir).toBeTruthy();
+
+    await withSandboxMode(async () => {
+      const detailResp = await fetch(`${baseUrl}/api/projects/${projectId}`);
+      expect(detailResp.status).toBe(200);
+      const detail = (await detailResp.json()) as {
+        project: { id: string };
+        resolvedDir: string;
+      };
+      expect(detail.project.id).toBe(projectId);
+      expect(detail.resolvedDir).toBe(baseDir);
+    });
+  });
+
   it('returns resolvedDir under <projects root>/<id> for a native project', async () => {
     const projectId = `proj-routes-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {
@@ -269,3 +298,14 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.error?.message).toMatch(/fromTrustedPicker/i);
   });
 });
+
+async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
+  const previous = process.env.OD_SANDBOX_MODE;
+  process.env.OD_SANDBOX_MODE = '1';
+  try {
+    return await run();
+  } finally {
+    if (previous == null) delete process.env.OD_SANDBOX_MODE;
+    else process.env.OD_SANDBOX_MODE = previous;
+  }
+}

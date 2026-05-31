@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import path from 'node:path';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
@@ -20,6 +21,25 @@ import { listSkills } from './skills.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
+
+function projectDetailResolvedDir(
+  projectsRoot: string,
+  project: any,
+  resolveProjectDir: (
+    projectsRoot: string,
+    projectId: string,
+    metadata?: unknown,
+    opts?: { allowUnavailableSandboxImportedProject?: boolean },
+  ) => string,
+): string {
+  const baseDir = typeof project?.metadata?.baseDir === 'string'
+    ? path.normalize(project.metadata.baseDir)
+    : null;
+  if (baseDir && path.isAbsolute(baseDir)) return baseDir;
+  return resolveProjectDir(projectsRoot, project.id, project.metadata, {
+    allowUnavailableSandboxImportedProject: true,
+  });
+}
 
 const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
 (function(){
@@ -419,7 +439,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const project = getProject(db, req.params.id);
     if (!project)
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-    const resolvedDir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project, resolvedDir };
     res.json(body);
