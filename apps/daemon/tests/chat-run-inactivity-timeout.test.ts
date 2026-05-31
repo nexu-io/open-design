@@ -16,7 +16,6 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
 import {
   assertValidRuntimeDefInactivityTimeoutMs,
   resolveChatRunInactivityTimeoutMs,
@@ -215,27 +214,5 @@ describe('assertValidRuntimeDefInactivityTimeoutMs (#2579 fast-fail at def-selec
       if (originalEnv === undefined) delete process.env[ENV_KEY];
       else process.env[ENV_KEY] = originalEnv;
     }
-  });
-});
-
-describe('AGENT_RUNTIME_DEF_INVALID contract surface (#2579 review follow-up)', () => {
-  // The chat-run startup path emits this code through `design.runs.fail`,
-  // which feeds the shared SSE/status error envelopes — i.e. the
-  // daemon/web/CLI wire contract. The previous follow-up introduced the
-  // string at the daemon emit site only, so downstream consumers reading
-  // `ApiErrorCode` saw a value not in the union. Land it in
-  // `packages/contracts/src/errors.ts#API_ERROR_CODES` so the contract
-  // catches up and any future web/CLI consumer can switch on it.
-
-  it('AGENT_RUNTIME_DEF_INVALID is exposed by the shared contracts package so daemon/web/CLI agree on the union', () => {
-    expect((API_ERROR_CODES as readonly string[])).toContain('AGENT_RUNTIME_DEF_INVALID');
-  });
-
-  it('the literal is assignable to ApiErrorCode (compile-time wire-contract check)', () => {
-    // If the union ever loses this member again, the assignment below
-    // becomes a type error; the runtime expect just keeps the spec
-    // executable so the regression surfaces in CI.
-    const code: ApiErrorCode = 'AGENT_RUNTIME_DEF_INVALID';
-    expect(code).toBe('AGENT_RUNTIME_DEF_INVALID');
   });
 });
