@@ -40,9 +40,10 @@
  * Two escalation tiers per trigger:
  *   - WARN  — emit a one-shot heads-up event so the UI/CLI surfaces "this run
  *             may be stuck" while it is still cheap to stop. Never destructive.
- *   - HALT  — at a hard ceiling, signal the run loop to terminate the child so
- *             the worst case is bounded instead of open-ended. Gated by mode so
- *             operators can downgrade to warn-only (see OD_TOOL_LOOP_GUARD).
+ *   - HALT  — at a hard ceiling, terminate the child so the worst case is
+ *             bounded instead of open-ended. Opt-in: the daemon defaults to
+ *             warn (heads-up only); operators enable the hard stop via
+ *             OD_TOOL_LOOP_GUARD=halt.
  *
  * Latching: WARN fires at most once; after it, continued failures can still
  * escalate to HALT (also once). HALT supersedes WARN if the first counted
@@ -56,9 +57,10 @@ export type ToolLoopReason = 'consecutive-errors' | 'repeated-failure';
 /** What the run loop should do about it. */
 export type ToolLoopAction = 'warn' | 'halt';
 
-/** Operating mode. `off` disables the guard entirely. `warn` only ever emits
- *  heads-up events (never halts). `halt` (default) warns first, then halts at
- *  the hard ceiling. */
+/** Operating mode. `off` disables the guard entirely. `warn` (the daemon
+ *  default) only ever emits heads-up events and never halts. `halt` warns
+ *  first, then terminates the run at the hard ceiling; opt in via
+ *  OD_TOOL_LOOP_GUARD=halt. */
 export type ToolLoopMode = 'off' | 'warn' | 'halt';
 
 /** The verdict returned the instant a threshold is crossed. Shaped to match
@@ -85,7 +87,7 @@ export interface ToolLoopGuardOptions {
   warnRepeat?: number;
   /** Repeats of the same failing signature that trigger a HALT. Default 8. */
   haltRepeat?: number;
-  /** Operating mode. Default `halt`. */
+  /** Operating mode. Default `warn`. */
   mode?: ToolLoopMode;
 }
 
@@ -285,7 +287,7 @@ export function displayToolSignature(signature: string): string {
  *   //                 if (v) { send('agent', v); if (v.action === 'halt') abortForToolLoop(v); }
  */
 export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoopGuard {
-  const mode: ToolLoopMode = options.mode ?? 'halt';
+  const mode: ToolLoopMode = options.mode ?? 'warn';
   const warnConsecutive = options.warnConsecutive ?? DEFAULTS.warnConsecutive;
   const haltConsecutive = options.haltConsecutive ?? DEFAULTS.haltConsecutive;
   const warnRepeat = options.warnRepeat ?? DEFAULTS.warnRepeat;
@@ -405,12 +407,14 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
 
 /**
  * Resolve the guard mode from the environment. `OD_TOOL_LOOP_GUARD` accepts
- * `halt` (default), `warn`, or `off`; anything else falls back to the default
- * so a typo never silently disables the guard. Mirrors the OD_*_GUARD
- * convention used elsewhere (e.g. OD_ARTIFACT_STUB_GUARD).
+ * `warn` (default), `halt`, or `off`. The default is `warn`: a heuristic guard
+ * should surface a heads-up before it terminates anyone's run, and operators
+ * opt into `halt` for the hard stop. Anything unrecognised falls back to `warn`
+ * so a typo never changes behavior unexpectedly. Mirrors the OD_*_GUARD
+ * convention (e.g. OD_ARTIFACT_STUB_GUARD).
  */
 export function resolveToolLoopMode(env: NodeJS.ProcessEnv = process.env): ToolLoopMode {
   const raw = (env.OD_TOOL_LOOP_GUARD ?? '').trim().toLowerCase();
   if (raw === 'off' || raw === 'warn' || raw === 'halt') return raw;
-  return 'halt';
+  return 'warn';
 }

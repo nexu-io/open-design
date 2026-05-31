@@ -80,7 +80,7 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
   });
 
   it('halts when the same failing action repeats haltRepeat times', () => {
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const input = { file_path: '/x.html', old_string: 'titlebar-left' };
     let halt = null;
     for (let i = 0; i < 8; i += 1) halt = fail(guard, `t${i}`, 'Edit', input);
@@ -102,7 +102,7 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     // review): rerun the same verification command after each successful edit,
     // each run failing on the next newly-written case. The intervening success
     // is real progress, so the repeated-failure tally must not accumulate.
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const check = { command: 'pnpm test' };
     let tripped = null;
     for (let i = 0; i < 12; i += 1) {
@@ -120,7 +120,7 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     // (PR #3375 review): a stuck agent re-reads the file and retries the same
     // wrong assumption. A successful Read is not progress on the failing action,
     // so the repeated-failure tally must survive it and the loop must still trip.
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const failing = { command: "python3 -c \"assert 'titlebar-left' in open('v.html').read()\"" };
     for (let i = 0; i < 8; i += 1) {
       fail(guard, `chk-${i}`, 'Bash', failing); // same failing verification
@@ -151,7 +151,7 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     // PR #3375 review: agents change state through the shell, so a successful
     // `sed -i` (or install/build/git commit) between failing checks is real
     // progress and must clear the tally even though the tool is Bash.
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const check = { command: 'pnpm test' };
     let tripped = null;
     for (let i = 0; i < 12; i += 1) {
@@ -212,7 +212,7 @@ describe('createToolLoopGuard — consecutive-errors trigger', () => {
   });
 
   it('halts after haltConsecutive failures in a row', () => {
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     let last = null;
     for (let i = 0; i < 10; i += 1) last = fail(guard, `t${i}`, 'Bash', { command: `distinct-${i}` });
     expect(last).toMatchObject({ reason: 'consecutive-errors', action: 'halt', count: 10 });
@@ -222,7 +222,7 @@ describe('createToolLoopGuard — consecutive-errors trigger', () => {
 
 describe('createToolLoopGuard — latching and modes', () => {
   it('emits warn at most once, then escalates to halt once', () => {
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const input = { command: 'same' };
     const verdicts = [];
     for (let i = 0; i < 12; i += 1) {
@@ -253,8 +253,16 @@ describe('createToolLoopGuard — latching and modes', () => {
     expect(guard.halted).toBe(false);
   });
 
+  it('defaults to warn: it warns but never halts', () => {
+    const guard = createToolLoopGuard(); // no mode -> warn (the daemon default)
+    const input = { command: 'same' };
+    for (let i = 0; i < 20; i += 1) fail(guard, `t${i}`, 'Bash', input);
+    expect(guard.warned).toBe(true);
+    expect(guard.halted).toBe(false);
+  });
+
   it('is inert after halting', () => {
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const input = { command: 'same' };
     for (let i = 0; i < 8; i += 1) fail(guard, `t${i}`, 'Bash', input);
     expect(guard.halted).toBe(true);
@@ -264,7 +272,7 @@ describe('createToolLoopGuard — latching and modes', () => {
   it('reproduces the titlebar-left loop: repeated failing assertion halts the run', () => {
     // The exact shape that motivated the guard: the agent re-runs the same
     // shell assertion against an element name that does not exist.
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const cmd = { command: "python3 -c \"assert 'titlebar-left' in open('v.html').read()\"" };
     const actions: string[] = [];
     for (let i = 0; i < 8; i += 1) {
@@ -278,15 +286,15 @@ describe('createToolLoopGuard — latching and modes', () => {
 });
 
 describe('resolveToolLoopMode', () => {
-  it('defaults to halt', () => {
-    expect(resolveToolLoopMode({})).toBe('halt');
+  it('defaults to warn', () => {
+    expect(resolveToolLoopMode({})).toBe('warn');
   });
   it('reads off/warn/halt case-insensitively', () => {
     expect(resolveToolLoopMode({ OD_TOOL_LOOP_GUARD: 'OFF' })).toBe('off');
     expect(resolveToolLoopMode({ OD_TOOL_LOOP_GUARD: ' warn ' })).toBe('warn');
-    expect(resolveToolLoopMode({ OD_TOOL_LOOP_GUARD: 'halt' })).toBe('halt');
+    expect(resolveToolLoopMode({ OD_TOOL_LOOP_GUARD: 'HALT' })).toBe('halt');
   });
-  it('falls back to halt on an unrecognized value so a typo never disables it', () => {
-    expect(resolveToolLoopMode({ OD_TOOL_LOOP_GUARD: 'disable' })).toBe('halt');
+  it('falls back to warn on an unrecognized value', () => {
+    expect(resolveToolLoopMode({ OD_TOOL_LOOP_GUARD: 'disable' })).toBe('warn');
   });
 });

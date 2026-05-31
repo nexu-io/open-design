@@ -327,7 +327,7 @@ describe('structured agent stream fixtures', () => {
     // stopped. The server now emits every agent event through one choke point
     // that feeds the guard; this composes the real Copilot parser with the real
     // guard the same way, so the runtime cannot silently drift out of coverage.
-    const guard = createToolLoopGuard();
+    const guard = createToolLoopGuard({ mode: 'halt' });
     const handler = createCopilotStreamHandler((event: any) => {
       // Mirror server.ts emitAgentEvent's observation of tool events.
       if (event?.type === 'tool_use' && typeof event.id === 'string') {
