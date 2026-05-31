@@ -89,9 +89,7 @@ function zhCN(): TrayI18n {
 }
 
 function zhTW(): TrayI18n {
-  const zh = zhCN();
   return {
-    ...zh,
     statusLabel: "狀態",
     running: "運行中",
     stopped: "已停止",
@@ -106,6 +104,13 @@ function zhTW(): TrayI18n {
     autoStart: "開機自動啟動",
     about: (v) => `關於 Open Design v${v}`,
     quit: "退出 Open Design",
+    tooltipRunning: (url) => url ? `Open Design — 運行中\nWeb: ${url}` : "Open Design — 運行中",
+    tooltipStopped: "Open Design — 已停止",
+    tooltipStarting: "Open Design — 啟動中...",
+    tooltipStartingDaemon: "Open Design — 啟動服務中...",
+    tooltipStoppingDaemon: "Open Design — 停止服務中...",
+    tooltipRestartingDaemon: "Open Design — 重啟守護程序...",
+    tooltipRestartingApp: "Open Design — 重啟主程式...",
   };
 }
 
