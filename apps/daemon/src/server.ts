@@ -12250,6 +12250,18 @@ export async function startServer({
       }
     }
 
+    // Single choke point for emitting an agent event to the client. EVERY
+    // stream handler (sendAgentEvent, the Claude callback, Copilot, ACP, …)
+    // emits through here, never via a bare send('agent', …), so the tool-loop
+    // guard sees every runtime's tool activity and no handler can drift out of
+    // coverage. observe runs AFTER the send so a `tool_loop` warning/halt
+    // follows the result that triggered it in the stream. (PR #3375 review:
+    // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
+    function emitAgentEvent(ev: any) {
+      send('agent', ev);
+      observeToolEventForLoop(ev);
+    }
+
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
@@ -12302,16 +12314,14 @@ export async function startServer({
         emitGuardedTextDelta(ev.delta);
         return;
       }
-      observeToolEventForLoop(ev);
-      send('agent', ev);
+      emitAgentEvent(ev);
     };
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
-        send('agent', ev);
-        observeToolEventForLoop(ev);
+        emitAgentEvent(ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
         // run-scoped guard above, so its `fabricated_role_marker` events
         // surface here directly from the stream handler, not via
@@ -12383,7 +12393,7 @@ export async function startServer({
           emitGuardedTextDelta(ev.delta);
           return;
         }
-        send('agent', ev);
+        emitAgentEvent(ev);
       });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
@@ -12460,7 +12470,11 @@ export async function startServer({
             emitGuardedTextDelta(data.delta);
             return;
           }
-          send(event, data);
+          if (event === 'agent') {
+            emitAgentEvent(data);
+          } else {
+            send(event, data);
+          }
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
