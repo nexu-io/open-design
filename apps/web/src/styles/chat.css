@@ -508,6 +508,12 @@
 .composer-textarea-layer {
   position: relative;
   min-height: 88px;
+  /* Single source of truth for the input font size. The real (transparent)
+     textarea owns the caret and the .composer-input-overlay renders the
+     visible glyphs; both inherit from here so they stay metric-identical.
+     Pinning the size on only one layer drifts them ~0.5px/em apart, which
+     reads as the caret sitting a full character off after a mention. */
+  font-size: 13px;
 }
 .composer-input-overlay {
   position: absolute;
@@ -517,7 +523,11 @@
   padding: 0;
   color: var(--text);
   font: inherit;
-  line-height: normal;
+  /* Mirror the textarea's inherited line-height (body is 1.5) instead of
+     forcing `normal`. The overlay is a visual echo of the transparent
+     textarea that owns the caret, so any line-height difference drifts the
+     glyphs off the caret vertically and accumulates per wrapped line. */
+  line-height: inherit;
   pointer-events: none;
   white-space: pre-wrap;
   overflow: hidden;
@@ -539,7 +549,14 @@
 .composer-inline-mention {
   display: inline-block;
   max-width: min(240px, 25vw);
-  margin: 0;
+  /* The 1px horizontal padding pads the highlight background, but it also
+     widens this inline-block past the raw token width. The transparent
+     textarea that owns the caret has no such padding, so its caret lands
+     ~2px left of the rendered glyphs after every mention. Cancel the
+     padding's layout advance with a matching negative margin: the
+     background still fills the padded box, but the net horizontal advance
+     equals the token's content width, keeping caret and glyphs aligned. */
+  margin: 0 -1px;
   padding: 0 1px;
   border: 0;
   border-radius: 5px;
