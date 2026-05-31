@@ -426,6 +426,7 @@ test('attachAcpSession recovers when bracket-prefixed logs precede JSON frames',
   child.stdout.write('[vela] starting OpenCode bridge\n');
   child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
   child.stdout.write('{not json but looks like an object log\n');
+  child.stdout.write('more startup text after the bad object log\n');
   child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
 
   const methods = parseRpcWrites(writes)
