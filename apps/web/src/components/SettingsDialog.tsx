@@ -3038,6 +3038,7 @@ export function SettingsDialog({
                           const description = a.authMessage ?? AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
+                          const isConfigError = a.unavailableReason === 'config_error';
                           return (
                             <div
                               key={a.id}
@@ -3245,7 +3246,11 @@ export function SettingsDialog({
                                     field.envKey
                                   ] ?? ''
                                 }
-                                placeholder={field.placeholder}
+                                placeholder={
+                                  'placeholder' in field
+                                    ? field.placeholder
+                                    : undefined
+                                }
                                 spellCheck={false}
                                 autoComplete="off"
                                 onChange={(e) =>
