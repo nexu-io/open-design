@@ -279,6 +279,8 @@ interface Props {
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: (section?: SettingsSection) => void;
+  showByokRecoveryAction?: boolean;
+  onSwitchToLocalCli?: () => void;
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
   // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
@@ -387,6 +389,8 @@ export function ChatPane({
   onDeleteConversation,
   onRenameConversation,
   onOpenSettings,
+  showByokRecoveryAction = false,
+  onSwitchToLocalCli,
   onOpenAmrSettings,
   onSwitchToAmrAndRetry,
   onLaunchAntigravityOauth,
@@ -483,6 +487,9 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
+  const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
+  const showErrorActions =
+    showByokRecoveryCta || Boolean(retryAssistant && onRetry && runFailureUi);
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
@@ -1192,61 +1199,74 @@ export function ChatPane({
               {displayError ? (
                 <div className="msg error">
                   <span className="chat-error-text">{displayError}</span>
-                  {retryAssistant && onRetry && runFailureUi ? (
+                  {showErrorActions ? (
                     <div className="chat-error-actions">
-                      {runFailureUi.primaryAction === 'authorize' ? (
+                      {showByokRecoveryCta ? (
                         <button
                           type="button"
                           className="chat-error-action"
-                          onClick={() => {
-                            if (onSwitchToAmrAndRetry) {
-                              onSwitchToAmrAndRetry(retryAssistant);
-                            } else {
-                              onOpenAmrSettings?.();
-                            }
-                          }}
+                          onClick={onSwitchToLocalCli}
                         >
-                          {t('chat.amrError.authorizeCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            onLaunchAntigravityOauth?.();
-                          }}
-                        >
-                          {t('chat.antigravityError.launchTerminalCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            onLaunchAntigravityOauth?.();
-                          }}
-                        >
-                          {t('chat.antigravityError.launchSwitchModelCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'recharge' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() =>
-                            window.open(AMR_RECHARGE_URL, '_blank', 'noopener,noreferrer')
-                          }
-                        >
-                          {t('chat.amrError.rechargeCta')}
+                          {t('avatar.useLocal')}
                         </button>
                       ) : null}
-                      {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
-                        <button
-                          type="button"
-                          className="ghost chat-error-retry"
-                          onClick={() => onRetry(retryAssistant)}
-                        >
-                          {t('promptTemplates.retry')}
-                        </button>
+                      {retryAssistant && onRetry && runFailureUi ? (
+                        <>
+                          {runFailureUi.primaryAction === 'authorize' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                if (onSwitchToAmrAndRetry) {
+                                  onSwitchToAmrAndRetry(retryAssistant);
+                                } else {
+                                  onOpenAmrSettings?.();
+                                }
+                              }}
+                            >
+                              {t('chat.amrError.authorizeCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                onLaunchAntigravityOauth?.();
+                              }}
+                            >
+                              {t('chat.antigravityError.launchTerminalCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                onLaunchAntigravityOauth?.();
+                              }}
+                            >
+                              {t('chat.antigravityError.launchSwitchModelCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'recharge' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() =>
+                                window.open(AMR_RECHARGE_URL, '_blank', 'noopener,noreferrer')
+                              }
+                            >
+                              {t('chat.amrError.rechargeCta')}
+                            </button>
+                          ) : null}
+                          {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                            <button
+                              type="button"
+                              className="ghost chat-error-retry"
+                              onClick={() => onRetry(retryAssistant)}
+                            >
+                              {t('promptTemplates.retry')}
+                            </button>
+                          ) : null}
+                        </>
                       ) : null}
                     </div>
                   ) : null}
