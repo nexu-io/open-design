@@ -132,4 +132,47 @@ describe('conversation timestamps', () => {
 
     expect(conversationMetaLabel(conversation, t as never)).toBe('15s');
   });
+
+  it('prefers totalDurationMs over latestRun.durationMs so multi-run sessions show cumulative time (#3287)', () => {
+    const t = (key: string) => key;
+    const conversation: Conversation = {
+      id: 'conv-multi',
+      projectId: 'project-1',
+      title: 'Multi-run conversation',
+      createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      updatedAt: Date.parse('2025-01-15T12:30:00Z'),
+      // Three runs of 5s + 12s + 7s — the latest is 7s but the
+      // session total is 24s. Pre-fix the label rendered "7s" because
+      // it only saw `latestRun`.
+      latestRun: {
+        status: 'succeeded',
+        startedAt: 30_000,
+        endedAt: 37_000,
+        durationMs: 7_000,
+      },
+      totalDurationMs: 24_000,
+    };
+
+    expect(conversationMetaLabel(conversation, t as never)).toBe('24s');
+  });
+
+  it('falls back to latestRun.durationMs when totalDurationMs is absent (single-run / older daemons)', () => {
+    const t = (key: string) => key;
+    const conversation: Conversation = {
+      id: 'conv-legacy',
+      projectId: 'project-1',
+      title: 'Legacy single run',
+      createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      updatedAt: Date.parse('2025-01-15T12:01:00Z'),
+      latestRun: {
+        status: 'succeeded',
+        startedAt: 1_000,
+        endedAt: 16_000,
+        durationMs: 15_000,
+      },
+      // totalDurationMs intentionally absent
+    };
+
+    expect(conversationMetaLabel(conversation, t as never)).toBe('15s');
+  });
 });

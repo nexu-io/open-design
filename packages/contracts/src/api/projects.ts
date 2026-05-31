@@ -201,6 +201,11 @@ export interface Conversation {
     endedAt?: number;
     durationMs?: number;
   };
+  // Cumulative runtime across every completed assistant run in this
+  // conversation. Surfaced for the conversation-list duration label so
+  // multi-run sessions report the full session time instead of just the
+  // most recent run's `durationMs` (#3287).
+  totalDurationMs?: number;
 }
 
 export interface CreateProjectRequest {

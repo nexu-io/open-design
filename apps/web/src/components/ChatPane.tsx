@@ -2013,6 +2013,15 @@ export function conversationMetaLabel(
   conversation: Conversation,
   t: TranslateFn,
 ): string {
+  // Prefer the cumulative session runtime when the daemon supplied it
+  // so multi-run conversations show the full time spent, not just the
+  // latest run (#3287). Fall back to the latest run's durationMs for
+  // single-run sessions, then to relative-time when neither aggregate
+  // is available (e.g. a freshly created conversation with no runs).
+  const totalDurationMs = conversation.totalDurationMs;
+  if (typeof totalDurationMs === 'number' && Number.isFinite(totalDurationMs)) {
+    return formatDurationShort(totalDurationMs);
+  }
   const latestRun = conversation.latestRun;
   if (
     latestRun &&

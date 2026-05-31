@@ -722,7 +722,7 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
-  return rows(db
+  const conversations = rows(db
     .prepare(
       `WITH project_conversations AS (
           SELECT id, project_id AS projectId, title,
@@ -761,6 +761,10 @@ export function listConversations(db: SqliteDb, projectId: string) {
          ORDER BY c.updatedAt DESC`,
     )
     .all(projectId)).map(normalizeConversation);
+  return conversations.map((c) => ({
+    ...c,
+    totalDurationMs: cumulativeConversationRunDurationMs(db, c.id),
+  }));
 }
 
 export function getConversation(db: SqliteDb, id: string) {
@@ -775,6 +779,7 @@ export function getConversation(db: SqliteDb, id: string) {
   return {
     ...normalizeConversation(r),
     latestRun: latestConversationRunSummary(db, r.id) ?? undefined,
+    totalDurationMs: cumulativeConversationRunDurationMs(db, r.id as string),
   };
 }
 
@@ -830,6 +835,51 @@ function conversationRunSummaryFromRow(row: DbRow | undefined) {
       ? { durationMs }
       : {}),
   };
+}
+
+// Sum durationMs across every completed assistant run in the
+// conversation. "Completed" means `run_status` is one of the terminal
+// statuses (succeeded / failed / canceled) — running / pending runs
+// are excluded so an in-flight turn does not inflate the displayed
+// total. Per-run duration prefers wall-clock (started_at - ended_at);
+// when those are missing we fall back to the latest usage event in
+// `events_json`, mirroring `conversationRunSummaryFromRow`. Returns
+// undefined when no completed runs contributed a finite duration so
+// callers can decide between rendering "0s" and falling back to a
+// different label (#3287).
+function cumulativeConversationRunDurationMs(
+  db: SqliteDb,
+  conversationId: string,
+): number | undefined {
+  const rs = db
+    .prepare(
+      `SELECT run_status AS runStatus,
+              started_at AS startedAt,
+              ended_at AS endedAt,
+              events_json AS eventsJson
+         FROM messages
+        WHERE conversation_id = ?
+          AND role = 'assistant'
+          AND run_status IN ('succeeded', 'failed', 'canceled')`,
+    )
+    .all(conversationId) as DbRow[];
+  let sum = 0;
+  let contributed = false;
+  for (const row of rs) {
+    const startedAt = row.startedAt == null ? undefined : Number(row.startedAt);
+    const endedAt = row.endedAt == null ? undefined : Number(row.endedAt);
+    const wallClock =
+      Number.isFinite(startedAt) && Number.isFinite(endedAt)
+        ? Math.max(0, (endedAt as number) - (startedAt as number))
+        : undefined;
+    const usage = latestUsageDurationMs(row.eventsJson);
+    const durationMs = wallClock ?? usage;
+    if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+      sum += durationMs;
+      contributed = true;
+    }
+  }
+  return contributed ? sum : undefined;
 }
 
 function latestUsageDurationMs(eventsJson: unknown): number | undefined {
