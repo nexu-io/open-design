@@ -537,26 +537,24 @@
   color: transparent;
 }
 .composer-inline-mention {
-  display: inline;
-  max-width: none;
+  display: inline-block;
+  max-width: min(240px, 25vw);
   margin: 0;
-  padding: 0;
+  padding: 0 1px;
   border: 0;
   border-radius: 5px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
   color: color-mix(in srgb, var(--accent) 62%, var(--text));
   font: inherit;
   font-size: inherit;
   font-weight: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  vertical-align: baseline;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: inherit;
+  vertical-align: bottom;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .composer-row {
   display: flex;

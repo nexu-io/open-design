@@ -30,7 +30,8 @@
 //   * provider 'imagerouter'→ ImageRouter OpenAI-compatible image/video
 //                              generation endpoints
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
-//                              /v1/images/generations endpoint
+//                              /v1/images/generations + /v1/images/edits
+//                              endpoints
 //
 // The fallback stub handlers are gated behind OD_MEDIA_ALLOW_STUBS=1; in
 // release builds they throw StubProviderDisabledError (mapped to HTTP
@@ -709,7 +710,7 @@ function withMediaRequestInit(
 
 async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
+    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);
@@ -866,7 +867,7 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   const baseUrl = (credentials.baseUrl || '').trim();
   if (!baseUrl) {
     throw new Error(
-      'Custom Image API base URL required — configure a /v1/images/generations compatible endpoint in Settings',
+      'Custom Image API base URL required — configure an OpenAI-compatible /v1/images/generations or /v1/images/edits endpoint in Settings',
     );
   }
   const wireModel = (
@@ -891,8 +892,14 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
     n: 1,
     size: openaiSizeFor('gpt-image-1', ctx.aspect),
   };
+  let url = buildOpenAIImageUrl(baseUrl, false);
+  if (ctx.imageRef?.dataUrl) {
+    body.response_format = 'b64_json';
+    body.images = [{ image_url: ctx.imageRef.dataUrl }];
+    url = buildOpenAIImageEditUrl(baseUrl);
+  }
 
-  const resp = await fetch(buildOpenAIImageUrl(baseUrl, false), withMediaRequestInit(ctx, {
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -988,19 +995,34 @@ function detectAzureEndpoint(baseUrl: string): boolean {
  * appending the default api-version for Azure when the user didn't
  * specify one. Returns a string ready for `fetch`.
  */
+function normalizeOpenAICompatiblePath(pathname: string, endpoint: 'images' | 'videos', mode: 'generations' | 'edits'): string {
+  const strippedPath = pathname.replace(/\/+$/, '');
+  const generationsSuffix = `/${endpoint}/generations`;
+  const editsSuffix = endpoint === 'images' ? '/images/edits' : null;
+  if (strippedPath.endsWith(generationsSuffix)) {
+    if (mode === 'generations') return strippedPath;
+    return endpoint === 'images'
+      ? `${strippedPath.slice(0, -generationsSuffix.length)}${editsSuffix}`
+      : strippedPath;
+  }
+  if (editsSuffix && strippedPath.endsWith(editsSuffix)) {
+    if (mode === 'edits') return strippedPath;
+    return `${strippedPath.slice(0, -editsSuffix.length)}${generationsSuffix}`;
+  }
+  return mode === 'edits' && editsSuffix
+    ? `${strippedPath}${editsSuffix}`
+    : `${strippedPath}${generationsSuffix}`;
+}
+
 function buildOpenAICompatibleGenerationUrl(baseUrl: string, endpoint: 'images' | 'videos'): string {
-  const suffix = `/${endpoint}/generations`;
   let parsed;
   try {
     parsed = new URL(baseUrl);
   } catch {
     const stripped = baseUrl.replace(/\/$/, '');
-    return stripped.endsWith(suffix) ? stripped : `${stripped}${suffix}`;
+    return normalizeOpenAICompatiblePath(stripped, endpoint, 'generations');
   }
-  const strippedPath = parsed.pathname.replace(/\/+$/, '');
-  if (!strippedPath.endsWith(suffix)) {
-    parsed.pathname = `${strippedPath}${suffix}`;
-  }
+  parsed.pathname = normalizeOpenAICompatiblePath(parsed.pathname, endpoint, 'generations');
   return parsed.toString();
 }
 
@@ -1016,6 +1038,18 @@ function buildOpenAIImageUrl(baseUrl: string, isAzure: boolean): string {
   if (isAzure && !parsed.searchParams.has('api-version')) {
     parsed.searchParams.set('api-version', AZURE_DEFAULT_API_VERSION);
   }
+  return parsed.toString();
+}
+
+function buildOpenAIImageEditUrl(baseUrl: string): string {
+  let parsed;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    const stripped = baseUrl.replace(/\/$/, '');
+    return normalizeOpenAICompatiblePath(stripped, 'images', 'edits');
+  }
+  parsed.pathname = normalizeOpenAICompatiblePath(parsed.pathname, 'images', 'edits');
   return parsed.toString();
 }
 
@@ -1083,7 +1117,7 @@ function openaiSpeechFormatFor(fileName: string): string {
 
 async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI credential — configure an API key in Settings, set OPENAI_API_KEY, or refresh Codex/Hermes OAuth');
+    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);

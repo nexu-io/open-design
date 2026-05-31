@@ -45,6 +45,37 @@ describe('POST /api/import/folder', () => {
     });
   }
 
+  async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.env.OD_SANDBOX_MODE;
+    process.env.OD_SANDBOX_MODE = '1';
+    try {
+      return await run();
+    } finally {
+      if (previous == null) delete process.env.OD_SANDBOX_MODE;
+      else process.env.OD_SANDBOX_MODE = previous;
+    }
+  }
+
+  async function waitForRunStatus(
+    runId: string,
+  ): Promise<{ status: string; error?: string | null; errorCode?: string | null }> {
+    let lastStatus = 'unknown';
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+      const statusBody = (await statusResponse.json()) as {
+        status: string;
+        error?: string | null;
+        errorCode?: string | null;
+      };
+      lastStatus = statusBody.status;
+      if (statusBody.status !== 'queued' && statusBody.status !== 'running') {
+        return statusBody;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`run did not reach a terminal status; last status: ${lastStatus}`);
+  }
+
   it('creates a project rooted at the submitted folder', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -60,6 +91,80 @@ describe('POST /api/import/folder', () => {
     expect(body.project.metadata?.importedFrom).toBe('folder');
     expect(body.conversationId).toBeTruthy();
     expect(body.entryFile).toBe('index.html');
+  });
+
+  it('rejects folder imports in sandbox mode', async () => {
+    await withSandboxMode(async () => {
+      const folder = makeFolder();
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      const resp = await importFolder({ baseDir: folder });
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/OD_SANDBOX_MODE/i);
+    });
+  });
+
+  it('fails sandbox runs for imported folders instead of using an empty managed project', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: project.id,
+          message: 'Inspect the imported project.',
+        }),
+      });
+      expect(runResp.status).toBe(202);
+      const { runId } = (await runResp.json()) as { runId: string };
+      const status = await waitForRunStatus(runId);
+      expect(status.status).toBe('failed');
+      expect(status.errorCode).toBe('BAD_REQUEST');
+      expect(status.error).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+    });
+  });
+
+  it('still opens an imported-folder project record in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const resp = await fetch(`${baseUrl}/api/projects/${project.id}`);
+      expect(resp.status).toBe(200);
+      const body = (await resp.json()) as {
+        project?: { id?: string; metadata?: { baseDir?: string } };
+      };
+      expect(body.project?.id).toBe(project.id);
+      expect(body.project?.metadata?.baseDir).toBeTruthy();
+    });
+  });
+
+  it('rejects imported-folder project file listing in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const resp = await fetch(`${baseUrl}/api/projects/${project.id}/files`);
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+    });
   });
 
   it('auto-detects the entry file when present', async () => {

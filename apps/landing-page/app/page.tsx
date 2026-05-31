@@ -730,23 +730,23 @@ export default function Page({
                 </h2>
               </div>
               <div className='pills' data-reveal='right'>
-                <a className='pill active' href={href('/skills/')}>
+                <a className='pill active' href={href('/plugins/skills/')}>
                   {home.labs.pills.all}
                   <span className='count'>{skills}</span>
                 </a>
-                <a className='pill' href={href('/skills/mode/prototype/')}>
+                <a className='pill' href={href('/plugins/templates/')}>
                   {home.labs.pills.prototype}
                   <span className='count'>{prototypeCount}</span>
                 </a>
-                <a className='pill' href={href('/skills/mode/deck/')}>
+                <a className='pill' href={href('/plugins/templates/')}>
                   {home.labs.pills.deck}
                   <span className='count'>{deckCount}</span>
                 </a>
-                <a className='pill' href={href('/skills/')}>
+                <a className='pill' href={href('/plugins/templates/')}>
                   {home.labs.pills.mobile}
                   <span className='count'>{mobileCount}</span>
                 </a>
-                <a className='pill' href={href('/skills/')}>
+                <a className='pill' href={href('/plugins/templates/')}>
                   {home.labs.pills.office}
                   <span className='count'>—</span>
                 </a>
@@ -839,7 +839,7 @@ export default function Page({
                 {home.labs.foot(skills)}
                 {NBSP}·{NBSP}
                 <a
-                  href={href('/skills/')}
+                  href={href('/plugins/skills/')}
                   className='library-link'
                   style={{ color: 'var(--coral)' }}
                 >
@@ -953,7 +953,7 @@ export default function Page({
                   {home.work.titleSuffix}
                   <span className='dot'>.</span>
                 </h2>
-                <a className='work-link' href={href('/skills/')}>
+                <a className='work-link' href={href('/plugins/skills/')}>
                   {home.work.viewAll(skills)}
                 </a>
               </div>
@@ -1325,17 +1325,17 @@ export default function Page({
                 <h5>{home.footer.columns.library}</h5>
                 <ul>
                   <li>
-                    <a href={href('/skills/')}>
+                    <a href={href('/plugins/skills/')}>
                       {home.footer.libraryLinks.skills(skills)}
                     </a>
                   </li>
                   <li>
-                    <a href={href('/systems/')}>
+                    <a href={href('/plugins/systems/')}>
                       {home.footer.libraryLinks.systems(systems)}
                     </a>
                   </li>
                   <li>
-                    <a href={href('/templates/')}>
+                    <a href={href('/plugins/templates/')}>
                       {home.footer.libraryLinks.templates}
                     </a>
                   </li>

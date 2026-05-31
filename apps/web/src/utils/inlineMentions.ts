@@ -142,9 +142,33 @@ function pickEarlierMention(
   return known.token.length >= unknown.token.length ? known : unknown;
 }
 
-function isMentionBoundary(text: string, start: number): boolean {
+/**
+ * Left boundary rule for inline mentions: `@<token>` is a candidate
+ * mention only when the character before `@` is the start of the
+ * string or whitespace / opening bracket / quote. Exported so the
+ * draft-side plugin-insertion tracker stays in lockstep with this
+ * parser — see `apps/web/src/utils/pluginInsertionTracking.ts`.
+ */
+export function isMentionBoundary(text: string, start: number): boolean {
   if (start === 0) return true;
   return /[\s([{"']/.test(text[start - 1] ?? '');
+}
+
+/**
+ * Right boundary rule for inline mentions: the parser's unknown
+ * mention regex is `/@[^\s@]+/`, so a `@<token>` candidate is the
+ * full mention only when the character after the token is the end
+ * of the string, whitespace, or another `@` (which would start a
+ * new mention). Anything else extends the parser's tokenization
+ * past the candidate — e.g. `@Airbnb/foo` is parsed as a single
+ * mention even when `@Airbnb` is a known plugin. Exported for the
+ * same reason as `isMentionBoundary`: the draft-side tracker must
+ * not declare an entry "still valid" when the parser would no
+ * longer see the tracked token as a standalone mention.
+ */
+export function isMentionRightBoundary(text: string, end: number): boolean {
+  if (end >= text.length) return true;
+  return /[\s@]/.test(text[end] ?? '');
 }
 
 function coalesceTextParts(parts: InlineMentionPart[]): InlineMentionPart[] {

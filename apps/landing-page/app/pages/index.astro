@@ -259,6 +259,36 @@ const pageHtml = renderToStaticMarkup(
             );
           }
 
+          // Hamburger menu toggle. Active only at narrow viewports (CSS
+          // hides the toggle button at ≥1080px). Click toggles `.is-open`
+          // on the header; outside-click, Escape, and clicking any link
+          // inside the menu close it again. Keeps `aria-expanded` in sync.
+          // This mirrors the handler in `header-enhancer.astro` — the
+          // homepage runs its own inline enhancer instead of importing
+          // that component, so the toggle has to be wired up here too.
+          const navToggle = document.querySelector('[data-nav-toggle]');
+          const primaryNav = document.querySelector('[data-nav-primary]');
+          const navEl = navToggle ? navToggle.closest('header.nav') : null;
+          if (navToggle && primaryNav && navEl) {
+            const setNavOpen = (open) => {
+              navEl.classList.toggle('is-open', open);
+              navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            };
+            navToggle.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              setNavOpen(!navEl.classList.contains('is-open'));
+            });
+            primaryNav.querySelectorAll('a').forEach((link) => {
+              link.addEventListener('click', () => setNavOpen(false));
+            });
+            document.addEventListener('click', (ev) => {
+              if (!navEl.contains(ev.target)) setNavOpen(false);
+            });
+            document.addEventListener('keydown', (ev) => {
+              if (ev.key === 'Escape') setNavOpen(false);
+            });
+          }
+
           const stars = document.querySelector('[data-github-stars]');
           if (stars) {
             fetch('https://api.github.com/repos/nexu-io/open-design', {

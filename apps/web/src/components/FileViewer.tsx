@@ -53,8 +53,8 @@ import {
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
+  downloadImageDataUrl,
   exportAsHtml,
-  exportAsImage,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
@@ -62,10 +62,11 @@ import {
   exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
+  imageDataUrlToBlob,
   openSandboxedPreviewInNewTab,
+  prepareImageExportTarget,
   requestPreviewSnapshot,
-  requestPreviewSnapshotResult,
-  type PreviewSnapshotResult,
+  type ImageExportFormat,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -149,6 +150,15 @@ type PreviewViewportPreset = {
   labelKey: keyof Dict;
   titleKey: keyof Dict;
 };
+const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
+  value: ImageExportFormat;
+  label: string;
+  extension: string;
+}> = [
+  { value: 'png', label: 'PNG', extension: '.png' },
+  { value: 'jpeg', label: 'JPEG', extension: '.jpg' },
+  { value: 'webp', label: 'WebP', extension: '.webp' },
+];
 type DeployProviderOption = {
   id: WebDeployProviderId;
   labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
@@ -240,6 +250,8 @@ type InspectTarget = {
 
 const MAX_CACHED_SLIDE_STATES = 64;
 const htmlPreviewSlideState = new Map<string, SlideState>();
+const MAX_CACHED_PREVIEW_VIEWPORTS = 128;
+const htmlPreviewViewportState = new Map<string, PreviewViewportId>();
 const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
 const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
@@ -515,6 +527,27 @@ export function effectivePreviewScale(
   return Math.min(previewScale, fitScale);
 }
 
+type PreviewOverlayTransform = { scale: number; offsetX: number; offsetY: number };
+
+export function previewOverlayTransform(
+  viewport: PreviewViewportId,
+  previewScale: number,
+  canvasSize?: PreviewCanvasSize,
+): PreviewOverlayTransform {
+  const scale = effectivePreviewScale(viewport, previewScale, canvasSize);
+  if (viewport === 'desktop') return { scale, offsetX: 0, offsetY: 0 };
+  const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport);
+  const pad = 24;
+  if (!preset?.width || !preset.height) return { scale, offsetX: pad, offsetY: pad };
+  const availableWidth = Math.max(1, (canvasSize?.width ?? preset.width * scale + pad * 2) - pad * 2);
+  const scaledWidth = preset.width * scale;
+  return {
+    scale,
+    offsetX: pad + Math.max(0, (availableWidth - scaledWidth) / 2),
+    offsetY: pad,
+  };
+}
+
 function previewScaleShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
@@ -549,65 +582,6 @@ function manualEditPreviewShellStyle(
     };
   }
   return previewScaleShellStyle(viewport, previewScale);
-}
-
-async function previewSnapshotDataUrlToBlob(dataUrl: string): Promise<Blob> {
-  const response = await fetch(dataUrl);
-  return response.blob();
-}
-
-async function previewSnapshotBlobFromIframes(
-  iframes: Array<HTMLIFrameElement | null>,
-  t: (key: keyof Dict, vars?: Record<string, string | number>) => string,
-): Promise<{ blob: Blob; fallback?: PreviewSnapshotResult }> {
-  let fallback: PreviewSnapshotResult | undefined;
-  for (const iframe of iframes) {
-    if (!iframe) {
-      fallback ??= { ok: false, reason: 'loading' };
-      continue;
-    }
-    const result = await requestPreviewSnapshotResultWithRetries(iframe);
-    if (result.ok) {
-      return { blob: await previewSnapshotDataUrlToBlob(result.snapshot.dataUrl), fallback };
-    }
-    fallback ??= result;
-  }
-  throw new Error(snapshotFailureMessage(fallback, t));
-}
-
-async function requestPreviewSnapshotResultWithRetries(
-  iframe: HTMLIFrameElement,
-): Promise<PreviewSnapshotResult> {
-  let last: PreviewSnapshotResult | null = null;
-  const timeouts = [750, 1500, 3000, 8000];
-  for (const timeout of timeouts) {
-    const result = await requestPreviewSnapshotResult(iframe, timeout);
-    if (result.ok) return result;
-    last = result;
-    if (result.reason === 'render-error' || result.reason === 'post-message-error') return result;
-  }
-  return last ?? { ok: false, reason: 'timeout' };
-}
-
-function snapshotFailureMessage(
-  result: PreviewSnapshotResult | undefined,
-  t: (key: keyof Dict, vars?: Record<string, string | number>) => string,
-): string {
-  if (!result) return t('fileViewer.screenshotCaptureFailed');
-  if (!result.ok && result.reason === 'loading') return t('fileViewer.screenshotPreviewLoading');
-  return t('fileViewer.screenshotCaptureFailed');
-}
-
-function clipboardFailureMessage(
-  err: unknown,
-  t: (key: keyof Dict, vars?: Record<string, string | number>) => string,
-): string {
-  const message = err instanceof Error ? err.message : String(err || '');
-  if (/clipboard|notallowed|permission|denied|write/i.test(message)) {
-    return t('fileViewer.screenshotClipboardDenied');
-  }
-  if (message === t('fileViewer.screenshotPreviewLoading')) return message;
-  return message || t('fileViewer.screenshotCaptureFailed');
 }
 
 function manualEditFloatingPanelStyle(
@@ -698,6 +672,33 @@ function setSlideStateCached(key: string, state: SlideState) {
   if (htmlPreviewSlideState.size > MAX_CACHED_SLIDE_STATES) {
     const oldest = htmlPreviewSlideState.keys().next().value;
     if (oldest != null) htmlPreviewSlideState.delete(oldest);
+  }
+}
+
+function waitForIframeLoadOrTimeout(iframe: HTMLIFrameElement, timeout = 750): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      iframe.removeEventListener('load', finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, timeout);
+    iframe.addEventListener('load', finish, { once: true });
+  });
+}
+
+function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path'>): string {
+  return `${projectId}:${file.path || file.name}`;
+}
+
+function setPreviewViewportCached(key: string, viewport: PreviewViewportId) {
+  htmlPreviewViewportState.set(key, viewport);
+  if (htmlPreviewViewportState.size > MAX_CACHED_PREVIEW_VIEWPORTS) {
+    const oldest = htmlPreviewViewportState.keys().next().value;
+    if (oldest != null) htmlPreviewViewportState.delete(oldest);
   }
 }
 
@@ -844,7 +845,14 @@ export function LiveArtifactViewer({
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [zoom, setZoom] = useState(100);
-  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
+  const liveArtifactViewportKey = `${projectId}:live-artifact:${liveArtifact.artifactId}`;
+  const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
+    () => htmlPreviewViewportState.get(liveArtifactViewportKey) ?? 'desktop',
+  );
+  const setPreviewViewport = useCallback((viewport: PreviewViewportId) => {
+    setPreviewViewportCached(liveArtifactViewportKey, viewport);
+    setPreviewViewportState(viewport);
+  }, [liveArtifactViewportKey]);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -853,6 +861,8 @@ export function LiveArtifactViewer({
   const [refreshEvents, setRefreshEvents] = useState<LiveArtifactRefreshEvent[]>([]);
   const [refreshHistory, setRefreshHistory] = useState<LiveArtifactRefreshLogEntry[]>([]);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
+  const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
+  const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [inTabPresent, setInTabPresent] = useState(false);
   const presentWrapRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
@@ -884,6 +894,10 @@ export function LiveArtifactViewer({
     setRefreshSuccess(null);
     setRefreshEvents([]);
   }, [projectId, liveArtifact.artifactId]);
+
+  useEffect(() => {
+    setPreviewViewportState(htmlPreviewViewportState.get(liveArtifactViewportKey) ?? 'desktop');
+  }, [liveArtifactViewportKey]);
 
   useEffect(() => {
     if (!refreshSuccess) return;
@@ -1010,10 +1024,6 @@ export function LiveArtifactViewer({
     });
   }, [mode, previewUrl, liveArtifact.artifactId, projectId]);
 
-  function bumpZoom(delta: number) {
-    setZoom((z) => Math.max(25, Math.min(200, z + delta)));
-  }
-
   async function handleRefresh() {
     if (refreshing) return;
     setRefreshing(true);
@@ -1076,6 +1086,23 @@ export function LiveArtifactViewer({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [inTabPresent]);
+
+  useEffect(() => {
+    if (!zoomMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!zoomMenuRef.current) return;
+      if (!zoomMenuRef.current.contains(e.target as Node)) setZoomMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [zoomMenuOpen]);
 
   return (
     <div className={`viewer html-viewer live-artifact-viewer${inTabPresent ? ' is-tab-present' : ''}`}>
@@ -1161,35 +1188,40 @@ export function LiveArtifactViewer({
               tabIndex={mode === 'preview' ? 0 : -1}
             />
             <span className="viewer-divider" aria-hidden />
-            <button
-              type="button"
-              className="icon-only"
-              onClick={() => bumpZoom(-25)}
-              title={t('fileViewer.zoomOut')}
-              aria-label={t('fileViewer.zoomOut')}
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <Icon name="minus" size={14} />
-            </button>
-            <button
-              type="button"
-              className="viewer-action viewer-zoom-level"
-              onClick={() => setZoom(100)}
-              title={t('fileViewer.resetZoom')}
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-            </button>
-            <button
-              type="button"
-              className="icon-only"
-              onClick={() => bumpZoom(25)}
-              title={t('fileViewer.zoomIn')}
-              aria-label={t('fileViewer.zoomIn')}
-              tabIndex={mode === 'preview' ? 0 : -1}
-            >
-              <Icon name="plus" size={14} />
-            </button>
+            <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
+              <button
+                type="button"
+                className="viewer-action zoom-trigger"
+                aria-haspopup="menu"
+                aria-expanded={zoomMenuOpen}
+                title={t('fileViewer.resetZoom')}
+                tabIndex={mode === 'preview' ? 0 : -1}
+                onClick={() => setZoomMenuOpen((v) => !v)}
+              >
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
+              </button>
+              {zoomMenuOpen && mode === 'preview' ? (
+                <div className="zoom-menu-popover" role="menu">
+                  {[50, 75, 100, 125, 150, 200].map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
+                      role="menuitem"
+                      onClick={() => {
+                        setZoom(level);
+                        setZoomMenuOpen(false);
+                      }}
+                    >
+                      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                      {zoom === level ? (
+                        <Icon name="check" size={13} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <span className="viewer-divider" aria-hidden />
             <a
               className="ghost-link"
@@ -2008,6 +2040,30 @@ function formatCommentTime(ts: number, t: TranslateFn): string {
   return new Date(ts).toLocaleDateString();
 }
 
+function commentActivityAt(comment: PreviewComment): number {
+  return Math.max(
+    Number.isFinite(comment.updatedAt) ? comment.updatedAt : 0,
+    Number.isFinite(comment.createdAt) ? comment.createdAt : 0,
+  );
+}
+
+function commentTargetIntersectsPreview(
+  target: PreviewCommentSnapshot | null,
+  scale: number,
+  offset: { x: number; y: number },
+  bounds?: PreviewCanvasSize,
+): boolean {
+  if (!target || !bounds?.width || !bounds.height) return true;
+  const rect = overlayBoundsFromSnapshot(target, scale, offset);
+  const margin = 8;
+  return (
+    rect.left + rect.width > margin &&
+    rect.top + rect.height > margin &&
+    rect.left < bounds.width - margin &&
+    rect.top < bounds.height - margin
+  );
+}
+
 function commentDisplayLabel(comment: PreviewComment, t: TranslateFn): string {
   if (comment.elementId.startsWith('pin-')) return t('chat.comments.pin');
   const label = String(comment.label || '').trim().toLowerCase();
@@ -2032,6 +2088,7 @@ export function CommentSidePanel({
   onCollapsedChange,
   onClose,
   onToggleSelect,
+  onSelectAll,
   onClearSelection,
   onReply,
   onSendSelected,
@@ -2047,6 +2104,7 @@ export function CommentSidePanel({
   onCollapsedChange: (collapsed: boolean) => void;
   onClose: () => void;
   onToggleSelect: (commentId: string) => void;
+  onSelectAll: () => void;
   onClearSelection: () => void;
   onReply: (comment: PreviewComment) => void;
   onSendSelected: () => void | Promise<void>;
@@ -2056,9 +2114,10 @@ export function CommentSidePanel({
   composer?: ReactNode;
 }) {
   const [newCommentDraft, setNewCommentDraft] = useState('');
-  const sorted = [...comments].sort((a, b) => b.createdAt - a.createdAt);
+  const sorted = [...comments].sort((a, b) => commentActivityAt(b) - commentActivityAt(a));
   const visibleSelectedIds = new Set(comments.filter((comment) => selectedIds.has(comment.id)).map((comment) => comment.id));
   const selectedCount = visibleSelectedIds.size;
+  const allSelected = comments.length > 0 && selectedCount === comments.length;
   const commentsLabel = t('chat.tabComments');
   const canCreateComment = Boolean(onCreateComment) && newCommentDraft.trim().length > 0 && !sending;
   const submitNewComment = async () => {
@@ -2090,6 +2149,17 @@ export function CommentSidePanel({
           <RemixIcon name="message-3-line" size={15} />
           <span>{commentsLabel}</span>
         </div>
+        <div className="comment-side-header-actions">
+          {comments.length > 0 ? (
+            <button
+              type="button"
+              className="comment-side-select-all"
+              disabled={allSelected}
+              onClick={onSelectAll}
+            >
+              {t('chat.comments.selectAll')}
+            </button>
+          ) : null}
         <button
           type="button"
           className="comment-side-close"
@@ -2099,6 +2169,7 @@ export function CommentSidePanel({
         >
           <Icon name="close" size={12} />
         </button>
+        </div>
       </div>
       <div className="comment-side-list">
         {sorted.length === 0 ? (
@@ -2115,31 +2186,34 @@ export function CommentSidePanel({
               data-testid="comment-side-item"
               data-comment-id={comment.id}
               aria-current={active ? 'true' : undefined}
+              role="button"
+              tabIndex={0}
+              onClick={() => onReply(comment)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                onReply(comment);
+              }}
             >
               <div className="comment-side-item-head">
                 <span className="comment-side-author">
                   <strong>{`${index + 1}. ${commentDisplayLabel(comment, t)}`}</strong>
                 </span>
-                <span className="comment-side-time">{formatCommentTime(comment.createdAt, t)}</span>
+                <span className="comment-side-time">{formatCommentTime(commentActivityAt(comment), t)}</span>
                 <button
                   type="button"
                   className={`comment-side-check${selected ? ' checked' : ''}`}
                   aria-label={selected ? t('chat.comments.deselect') : t('chat.comments.select')}
                   aria-pressed={selected}
-                  onClick={() => onToggleSelect(comment.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleSelect(comment.id);
+                  }}
                 >
                   {selected ? <Icon name="check" size={11} /> : null}
                 </button>
               </div>
               <div className="comment-side-body">{comment.note}</div>
-              <button
-                type="button"
-                className="comment-side-reply"
-                data-testid="comment-side-edit"
-                onClick={() => onReply(comment)}
-              >
-                {t('chat.comments.edit')}
-              </button>
             </div>
           );
         })}
@@ -2938,6 +3012,8 @@ function CommentPreviewOverlays({
   boardTool,
   showActivePin = false,
   scale,
+  offsetX,
+  offsetY,
   strokePoints,
   onOpenComment,
 }: {
@@ -2949,9 +3025,12 @@ function CommentPreviewOverlays({
   boardTool: BoardTool;
   showActivePin?: boolean;
   scale: number;
+  offsetX: number;
+  offsetY: number;
   strokePoints: StrokePoint[];
   onOpenComment: (comment: PreviewComment, snapshot: PreviewCommentSnapshot) => void;
 }) {
+  const overlayOffset = { x: offsetX, y: offsetY };
   const visibleComments = comments
     .map((comment, index) => ({
       comment,
@@ -2971,7 +3050,7 @@ function CommentPreviewOverlays({
   return (
     <div className="comment-overlay-layer" aria-hidden={false}>
       {visibleComments.map(({ comment, index, snapshot }) => {
-        const bounds = overlayBoundsFromSnapshot(snapshot, scale);
+        const bounds = overlayBoundsFromSnapshot(snapshot, scale, overlayOffset);
         const label = commentTargetDisplayName(comment);
         return (
           <div
@@ -3006,6 +3085,7 @@ function CommentPreviewOverlays({
         <CommentTargetOverlay
           snapshot={targetOverlay}
           scale={scale}
+          offset={overlayOffset}
           selected={Boolean(activeTarget)}
           hoveredMemberId={hoveredPodMemberId}
         />
@@ -3013,7 +3093,7 @@ function CommentPreviewOverlays({
       {showActivePin && activeTarget ? (
         <div
           className="comment-active-pin"
-          style={activeCommentPinStyle(activeTarget, scale)}
+          style={activeCommentPinStyle(activeTarget, scale, overlayOffset)}
           data-testid="comment-active-pin"
           aria-hidden="true"
         >
@@ -3023,7 +3103,7 @@ function CommentPreviewOverlays({
       {boardTool === 'pod' && strokePoints.length > 1 ? (
         <svg className="board-pod-stroke">
           <polyline
-            points={strokePoints.map((point) => `${point.x * scale},${point.y * scale}`).join(' ')}
+            points={strokePoints.map((point) => `${offsetX + point.x * scale},${offsetY + point.y * scale}`).join(' ')}
           />
         </svg>
       ) : null}
@@ -3031,36 +3111,43 @@ function CommentPreviewOverlays({
   );
 }
 
-function activeCommentPinStyle(target: PreviewCommentSnapshot, scale: number): CSSProperties {
+function activeCommentPinStyle(
+  target: PreviewCommentSnapshot,
+  scale: number,
+  offset: { x: number; y: number } = { x: 0, y: 0 },
+): CSSProperties {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const anchor = target.hoverPoint ?? {
     x: target.position.x,
     y: target.position.y,
   };
   return {
-    left: Math.round(anchor.x * safeScale),
-    top: Math.round(anchor.y * safeScale),
+    left: Math.round(offset.x + anchor.x * safeScale),
+    top: Math.round(offset.y + anchor.y * safeScale),
   };
 }
 
 export function CommentTargetOverlay({
   snapshot,
   scale,
+  offset,
   selected,
   hoveredMemberId,
 }: {
   snapshot: PreviewCommentSnapshot;
   scale: number;
+  offset?: { x: number; y: number };
   selected: boolean;
   hoveredMemberId?: string | null;
 }) {
+  const overlayOffset = offset ?? { x: 0, y: 0 };
   const displayMembers = podDisplayMembers(snapshot);
   if (displayMembers.length > 0) {
     const overlayWeights = podOverlayWeights(displayMembers);
     return (
       <>
         {displayMembers.map((member, index) => {
-          const bounds = overlayBoundsFromSnapshot(member, scale);
+          const bounds = overlayBoundsFromSnapshot(member, scale, overlayOffset);
           const width = Math.round(member.position.width);
           const height = Math.round(member.position.height);
           const overlayWeight = overlayWeights[index] ?? {
@@ -3095,7 +3182,7 @@ export function CommentTargetOverlay({
   // Non-member fallback: single-element snapshots have no per-member chips,
   // so the hover-focus channel never reaches this branch — no is-hover-focused
   // class needed here.
-  const bounds = overlayBoundsFromSnapshot(snapshot, scale);
+  const bounds = overlayBoundsFromSnapshot(snapshot, scale, overlayOffset);
   return (
     <div
       className={`comment-target-overlay${selected ? ' selected' : ''}`}
@@ -3939,7 +4026,14 @@ function HtmlViewer({
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
-  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
+  const fileViewportKey = previewViewportStateKey(projectId, file);
+  const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
+    () => htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop',
+  );
+  const setPreviewViewport = useCallback((viewport: PreviewViewportId) => {
+    setPreviewViewportCached(fileViewportKey, viewport);
+    setPreviewViewportState(viewport);
+  }, [fileViewportKey]);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
@@ -3952,6 +4046,10 @@ function HtmlViewer({
   const [templateNote, setTemplateNote] = useState<string | null>(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
+
+  useEffect(() => {
+    setPreviewViewportState(htmlPreviewViewportState.get(fileViewportKey) ?? 'desktop');
+  }, [fileViewportKey]);
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
@@ -3984,9 +4082,6 @@ function HtmlViewer({
   const [inspectMode, setInspectMode] = useState(false);
   const [agentToolsOpen, setAgentToolsOpen] = useState(false);
   const [drawOverlayOpen, setDrawOverlayOpen] = useState(false);
-  const [drawOverlayIntent, setDrawOverlayIntent] = useState<'draw' | 'screenshot'>('draw');
-  const [screenshotCaptureActive, setScreenshotCaptureActive] = useState(false);
-  const [screenshotToast, setScreenshotToast] = useState<string | null>(null);
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
@@ -4158,6 +4253,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
+  const imageExportTitleId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -4198,6 +4294,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
+  const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
+  const [imageExportBusy, setImageExportBusy] = useState(false);
+  const [imageExportPreparing, setImageExportPreparing] = useState(false);
+  const [imageExportError, setImageExportError] = useState<string | null>(null);
+  const [imageExportSavedToast, setImageExportSavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [imageExportPreparedBlob, setImageExportPreparedBlob] = useState<{ format: ImageExportFormat; blob: Blob } | null>(null);
+  const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
+  const imageExportPrepareIdRef = useRef(0);
   const [exportToast, setExportToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
@@ -4327,7 +4432,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [slideState, setSlideState] = useState<SlideState | null>(
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
-  const overlayPreviewScale = effectivePreviewScale(previewViewport, previewScale, previewBodySize);
+  const overlayPreviewTransform = previewOverlayTransform(previewViewport, previewScale, previewBodySize);
+  const overlayPreviewScale = overlayPreviewTransform.scale;
   const shareRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -4445,12 +4551,12 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     editMode: manualEditMode,
     urlModeBridge,
     inspectMode,
-    drawMode: drawOverlayOpen || screenshotCaptureActive,
+    drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -4536,7 +4642,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   // Tweaks, etc.), mount the real artifact HTML directly so we do not depend on
   // a postMessage activation that can race (#2253) and strand the iframe blank
   // (#2361, #2791).
-  const captureModeActive = drawOverlayOpen || screenshotCaptureActive;
+  const captureModeActive = drawOverlayOpen;
   const useLazySrcDocTransport = !manualEditMode && !captureModeActive && useUrlLoadPreview;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
@@ -4586,6 +4692,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
   }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  const activateSrcDocSnapshotTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    if (!srcDoc) return false;
+    const win = target?.contentWindow;
+    if (!win) return false;
+    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    return true;
+  }, [srcDoc]);
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
@@ -4623,7 +4736,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   
   useEffect(() => {
     restorePreviewScrollPosition();
-  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+  }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -4960,7 +5073,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           current
             ? current.selectionKind === 'pod'
               ? current
-              : next.get(current.elementId) ?? null
+              : next.get(current.elementId) ?? current
             : null
         ));
         setHoveredCommentTarget((current) => (
@@ -4969,6 +5082,18 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               ? current
               : next.get(current.elementId) ?? null
             : null
+        ));
+        return;
+      }
+      if (data.type === 'od:comment-active-target-update') {
+        const snapshot = snapshotFromData(data);
+        if (!snapshot.elementId) return;
+        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        setActiveCommentTarget((current) => (
+          current && current.elementId === snapshot.elementId ? snapshot : current
+        ));
+        setHoveredCommentTarget((current) => (
+          current && current.elementId === snapshot.elementId ? snapshot : current
         ));
         return;
       }
@@ -4986,19 +5111,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       if (data.type === 'od:comment-target') {
         const snapshot = snapshotFromData(data);
         if (!snapshot.elementId) return;
-        const existing = previewComments.find((comment) =>
-          comment.filePath === file.name &&
-          comment.status === 'open' &&
-          comment.elementId === snapshot.elementId,
-        );
         const shouldOpenComposer = boardMode || commentCreateMode;
         setActiveCommentTarget((current) => (shouldOpenComposer ? snapshot : current));
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
-        if (boardMode && shouldOpenComposer) {
-          setCommentCreateMode(true);
-          setActivePreviewCommentId(existing?.id ?? null);
-          setCommentDraft(existing?.note ?? '');
+        if (shouldOpenComposer) {
+          setActivePreviewCommentId(null);
+          setCommentDraft('');
           setQueuedBoardNotes([]);
         }
         return;
@@ -5042,6 +5161,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [activeCommentTarget, boardMode, boardTool, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments]);
+
+  useEffect(() => {
+    if (!boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
+    iframeRef.current?.contentWindow?.postMessage({
+      type: 'od:comment-active-target',
+      elementId: activeCommentTarget.elementId,
+      selector: activeCommentTarget.selector,
+    }, '*');
+  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeCommentTarget?.selectionKind, boardMode]);
 
   useEffect(() => {
     if (!manualEditMode) {
@@ -5203,11 +5331,18 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setManualEditError(null);
   }
 
+  function refreshSrcDocPreviewAfterManualEditExit() {
+    activatedSrcDocTransportHtmlRef.current = null;
+    setSrcDocShellReady(false);
+    setSrcDocTransportResetKey((key) => key + 1);
+  }
+
   async function exitManualEditModeAfterFlush(): Promise<boolean> {
     const ok = await flushManualEditStyleSave();
     if (!ok) return false;
     setManualEditPanelPosition(null);
     setManualEditMode(false);
+    refreshSrcDocPreviewAfterManualEditExit();
     return true;
   }
 
@@ -5219,6 +5354,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
     setManualEditError(null);
     setManualEditMode(false);
+    refreshSrcDocPreviewAfterManualEditExit();
     postSelectedManualEditTargetToIframe(null);
   }
 
@@ -5918,19 +6054,19 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
 
   function activateDrawTool() {
     fireArtifactToolbarClick('draw');
-    const next = !(drawOverlayOpen && drawOverlayIntent === 'draw');
+    const next = !drawOverlayOpen;
     if (!next) {
       setDrawOverlayOpen(false);
       setAgentToolsOpen(false);
       return;
     }
+    capturePreviewScrollPosition();
     const activateDraw = () => {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
       setBoardMode(false);
       clearBoardComposer();
       setInspectMode(false);
-      setDrawOverlayIntent('draw');
       setMode('preview');
       setDrawOverlayOpen(true);
       closeArtifactToolMenus();
@@ -5942,52 +6078,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       return;
     }
     activateDraw();
-  }
-
-  function activateScreenshotTool() {
-    fireArtifactToolbarClick('draw');
-    const activateScreenshot = async () => {
-      setCommentPanelOpen(false);
-      setCommentCreateMode(false);
-      setBoardMode(false);
-      clearBoardComposer();
-      setInspectMode(false);
-      setDrawOverlayIntent('screenshot');
-      setMode('preview');
-      setScreenshotToast(t('fileViewer.screenshotCopying'));
-      setDrawOverlayOpen(false);
-      closeArtifactToolMenus();
-      setScreenshotCaptureActive(true);
-      try {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-        const srcDocIframe = srcDocPreviewIframeRef.current;
-        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-          setScreenshotToast(t('fileViewer.screenshotClipboardDenied'));
-          return;
-        }
-        const activeIframe = iframeRef.current;
-        const { blob } = await previewSnapshotBlobFromIframes([
-          srcDocIframe,
-          activeIframe === srcDocIframe ? null : activeIframe,
-        ], t);
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob }),
-        ]);
-        setScreenshotToast(t('fileViewer.screenshotCopied'));
-      } catch (err) {
-        console.warn('[screenshot] failed to copy preview snapshot:', err);
-        setScreenshotToast(clipboardFailureMessage(err, t));
-      } finally {
-        setScreenshotCaptureActive(false);
-      }
-    };
-    if (manualEditMode) {
-      void exitManualEditModeAfterFlush().then((ok) => {
-        if (ok) void activateScreenshot();
-      });
-      return;
-    }
-    void activateScreenshot();
   }
 
   function activateCommentTool() {
@@ -6005,7 +6095,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setCommentCreateMode(false);
       clearBoardComposer();
       setInspectMode(false);
-      setDrawOverlayIntent('draw');
       setDrawOverlayOpen(false);
       setMode('preview');
       activateBoard('inspect');
@@ -6035,9 +6124,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setCommentPanelOpen(true);
       setCommentSidePanelCollapsed(false);
       setCommentCreateMode(true);
-      clearBoardComposer();
+      if (!activeCommentTarget) clearBoardComposer();
       setInspectMode(false);
-      setDrawOverlayIntent('draw');
       setDrawOverlayOpen(false);
       setMode('preview');
       activateBoard('inspect');
@@ -6061,7 +6149,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setBoardMode(false);
       clearBoardComposer();
       setInspectMode(false);
-      setDrawOverlayIntent('draw');
       setDrawOverlayOpen(false);
       setMode('preview');
       setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
@@ -6153,12 +6240,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     }
   }
 
-  useEffect(() => {
-    if (!screenshotToast) return;
-    const id = window.setTimeout(() => setScreenshotToast(null), 2200);
-    return () => window.clearTimeout(id);
-  }, [screenshotToast]);
-
   const showPresent = source !== null;
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
@@ -6180,16 +6261,122 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     markExportReadyNudgeSeen(projectId, file.name);
     setShareMenuOpen((v) => !v);
   };
+  const captureExportImageSnapshot = useCallback(async () => {
+    if (!useUrlLoadPreview) {
+      const activeIframe = iframeRef.current;
+      return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
+    }
+
+    const srcDocIframe = srcDocPreviewIframeRef.current;
+    if (!srcDocIframe) {
+      const activeIframe = iframeRef.current;
+      return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
+    }
+
+    if (!srcDocShellReady) {
+      await waitForIframeLoadOrTimeout(srcDocIframe, 500);
+    }
+    const activated = activateSrcDocSnapshotTransport(srcDocIframe);
+    if (activated) {
+      await waitForIframeLoadOrTimeout(srcDocIframe);
+    }
+    return requestPreviewSnapshot(srcDocIframe);
+  }, [
+    activateSrcDocSnapshotTransport,
+    srcDocShellReady,
+    useUrlLoadPreview,
+  ]);
+
+  const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
+    const prepareId = imageExportPrepareIdRef.current + 1;
+    imageExportPrepareIdRef.current = prepareId;
+    setImageExportPreparing(true);
+    setImageExportError(null);
+    setImageExportPreparedBlob(null);
+    try {
+      let dataUrl = imageExportSnapshotDataUrlRef.current;
+      if (!dataUrl) {
+        const snap = await captureExportImageSnapshot();
+        if (!snap) throw new Error('Snapshot capture returned null');
+        dataUrl = snap.dataUrl;
+        imageExportSnapshotDataUrlRef.current = dataUrl;
+      }
+      const blob = await imageDataUrlToBlob(dataUrl, format);
+      if (blob.size <= 0) throw new Error('Snapshot capture produced an empty image');
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportPreparedBlob({ format, blob });
+      }
+    } catch (err) {
+      console.warn('[exportAsImage] failed to prepare snapshot:', err);
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportError(t('fileViewer.exportImageFailed'));
+      }
+    } finally {
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportPreparing(false);
+      }
+    }
+  }, [captureExportImageSnapshot, t]);
+
+  const openImageExportModal = () => {
+    setShareMenuOpen(false);
+    setImageExportError(null);
+    setImageExportPreparedBlob(null);
+    imageExportSnapshotDataUrlRef.current = null;
+    setImageExportModalOpen(true);
+    void prepareImageExportBlob(imageExportFormat);
+  };
+
+  const changeImageExportFormat = (format: ImageExportFormat) => {
+    setImageExportFormat(format);
+    void prepareImageExportBlob(format);
+  };
+
+  async function handleImageExportSave() {
+    const prepared = imageExportPreparedBlob;
+    if (!prepared || prepared.format !== imageExportFormat) {
+      setImageExportError(t('fileViewer.exportImageFailed'));
+      return;
+    }
+    setImageExportBusy(true);
+    setImageExportError(null);
+    try {
+      const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
+      if (!target) return;
+      const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
+      if (target.method === 'download' && imageExportFormat === 'png' && preparedDataUrl) {
+        downloadImageDataUrl(preparedDataUrl, target.filename);
+      } else {
+        await target.save(prepared.blob);
+      }
+      setImageExportModalOpen(false);
+      setImageExportSavedToast({
+        message: target.method === 'picker'
+          ? t('fileViewer.exportImageSaved')
+          : t('fileViewer.exportImageDownloadStarted'),
+        details: target.method === 'picker'
+          ? target.filename
+          : t('fileViewer.exportImageDownloadDetails', { filename: target.filename }),
+      });
+    } catch (err) {
+      console.warn('[exportAsImage] failed to save snapshot:', err);
+      setImageExportError(t('fileViewer.exportImageFailed'));
+    } finally {
+      setImageExportBusy(false);
+    }
+  }
   const visibleSideComments = useMemo(
     () => previewComments
       .filter((comment) => comment.filePath === file.name && comment.status === 'open')
-      .sort((a, b) => b.createdAt - a.createdAt),
+      .sort((a, b) => commentActivityAt(b) - commentActivityAt(a)),
     [file.name, previewComments],
   );
-  const activeSideCommentId = activePreviewCommentId ?? (
-    activeCommentTarget
-      ? visibleSideComments.find((comment) => comment.elementId === activeCommentTarget.elementId)?.id ?? null
-      : null
+  const activeSideCommentId = activePreviewCommentId;
+  const activeCommentTargetVisible = commentTargetIntersectsPreview(
+    activeCommentTarget,
+    overlayPreviewScale,
+    { x: overlayPreviewTransform.offsetX, y: overlayPreviewTransform.offsetY },
+    previewBodySize,
   );
   useEffect(() => {
     if (!boardMode || !activePreviewCommentId) return;
@@ -6354,10 +6541,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }}
     />
   ) : null;
-  const commentComposer = boardMode && activeCommentTarget ? (
+  const activeComposerComment = activePreviewCommentId
+    ? visibleSideComments.find((comment) => comment.id === activePreviewCommentId) ?? null
+    : null;
+  const commentComposer = boardMode && activeCommentTarget && activeCommentTargetVisible ? (
     <BoardComposerPopover
       target={activeCommentTarget}
-      existing={visibleSideComments.find((comment) => comment.elementId === activeCommentTarget.elementId) ?? null}
+      existing={activeComposerComment}
       draft={commentDraft}
       notes={queuedBoardNotes}
       onDraft={setCommentDraft}
@@ -6377,10 +6567,24 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         setHoveredPodMemberId((current) => (current === elementId ? null : current));
       }}
       onHoverMember={setHoveredPodMemberId}
+      onDeleteComment={onRemovePreviewComment ? async (commentId) => {
+        await onRemovePreviewComment(commentId);
+        clearBoardComposer();
+        setSelectedSideCommentIds((current) => {
+          if (!current.has(commentId)) return current;
+          const next = new Set(current);
+          next.delete(commentId);
+          return next;
+        });
+        setActivePreviewCommentId((current) => (current === commentId ? null : current));
+      } : undefined}
       sending={sendingBoardBatch || streaming}
       t={t}
       scale={overlayPreviewScale}
+      offset={{ x: overlayPreviewTransform.offsetX, y: overlayPreviewTransform.offsetY }}
+      bounds={previewBodySize}
       docked={false}
+      commenting
     />
   ) : null;
   const commentSidePanel = commentPanelOpen ? (
@@ -6393,6 +6597,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       onClose={() => {
         setCommentPanelOpen(false);
         setCommentSidePanelCollapsed(false);
+        setCommentCreateMode(false);
+        setBoardMode(false);
         clearBoardComposer();
       }}
       onToggleSelect={(commentId) => {
@@ -6403,25 +6609,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           return next;
         });
       }}
-      onClearSelection={() => {
-        if (selectedSideCommentIds.size === 0) return;
-        if (!onRemovePreviewComment) {
-          setSelectedSideCommentIds(new Set());
-          return;
-        }
-        const selectedIds = new Set(selectedSideCommentIds);
-        const targets = visibleSideComments
-          .filter((comment) => selectedIds.has(comment.id))
-          .map((comment) => comment.id);
-        if (targets.length === 0) {
-          setSelectedSideCommentIds(new Set());
-          return;
-        }
-        void (async () => {
-          await Promise.allSettled(targets.map((id) => onRemovePreviewComment(id)));
-          setSelectedSideCommentIds(new Set());
-        })();
-      }}
+      onSelectAll={() => setSelectedSideCommentIds(new Set(visibleSideComments.map((comment) => comment.id)))}
+      onClearSelection={() => setSelectedSideCommentIds(new Set())}
       onReply={(comment) => {
         // Reply == edit on a flat-thread model: prefill the
         // popover with the existing note so the user sees and
@@ -6559,44 +6748,32 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   onClick={activateCommentTool}
                 >
                   <RemixIcon name="chat-new-line" size={15} />
-                  {boardMode && !commentCreateMode && boardTool === 'inspect' ? <span className="viewer-action-active-dot" aria-hidden /> : null}
                 </button>
               </div>
               <button
-                className={`viewer-action viewer-action-icon${manualEditMode ? ' active' : ''}`}
-                type="button"
-                data-testid="manual-edit-mode-toggle"
-                data-tooltip="Edit"
-                title="Edit"
-                aria-label="Edit"
-                aria-pressed={manualEditMode}
-                onClick={activateManualEditTool}
-              >
-                <RemixIcon name="edit-line" size={15} />
-              </button>
-              <button
-                className={`viewer-action viewer-action-icon${drawOverlayOpen && drawOverlayIntent === 'draw' ? ' active' : ''}`}
+                className={`viewer-action viewer-action-icon${drawOverlayOpen ? ' active' : ''}`}
                 type="button"
                 data-testid="draw-overlay-toggle"
-                data-tooltip="Draw"
-                title="Draw"
-                aria-label="Draw"
-                aria-pressed={drawOverlayOpen && drawOverlayIntent === 'draw'}
+                data-tooltip={t('fileViewer.mark')}
+                title={t('fileViewer.mark')}
+                aria-label={t('fileViewer.mark')}
+                aria-pressed={drawOverlayOpen}
                 onClick={activateDrawTool}
               >
                 <RemixIcon name="mark-pen-line" size={15} />
               </button>
+              <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
-                className={`viewer-action viewer-action-icon${drawOverlayOpen && drawOverlayIntent === 'screenshot' ? ' active' : ''}`}
+                className={`viewer-action viewer-action-icon${manualEditMode ? ' active' : ''}`}
                 type="button"
-                data-testid="screenshot-capture-toggle"
-                data-tooltip="Screenshot"
-                title="Screenshot"
-                aria-label="Screenshot"
-                aria-pressed={drawOverlayOpen && drawOverlayIntent === 'screenshot'}
-                onClick={activateScreenshotTool}
+                data-testid="manual-edit-mode-toggle"
+                data-tooltip={t('fileViewer.edit')}
+                title={t('fileViewer.edit')}
+                aria-label={t('fileViewer.edit')}
+                aria-pressed={manualEditMode}
+                onClick={activateManualEditTool}
               >
-                <RemixIcon name="screenshot-2-line" size={15} />
+                <RemixIcon name="edit-line" size={15} />
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
@@ -6611,7 +6788,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               >
                 <RemixIcon name="message-3-line" size={15} />
                 <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
-                {boardMode && commentCreateMode ? <span className="viewer-action-active-dot" aria-hidden /> : null}
               </button>
               {source !== null && mode === 'preview' ? (
                 <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
@@ -6833,33 +7009,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
                     <span>{t('fileViewer.exportPptx') + '…'}</span>
                   </button>
-                  {!useUrlLoadPreview ? (
-                    <button
-                      type="button"
-                      className="share-menu-item share-menu-subitem"
-                      role="menuitem"
-                      onClick={async () => {
-                        setShareMenuOpen(false);
-                        const iframe = iframeRef.current;
-                        if (!iframe) return;
-                        const snap = await requestPreviewSnapshot(iframe);
-                        try {
-                          if (snap) {
-                            exportAsImage(snap.dataUrl, exportTitle);
-                          } else {
-                            console.warn('[exportAsImage] snapshot capture returned null');
-                            alert(t('fileViewer.exportImageFailed'));
-                          }
-                        } catch (err) {
-                          console.warn('[exportAsImage] failed to convert snapshot:', err);
-                          alert(t('fileViewer.exportImageFailed'));
-                        }
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
-                      <span>{t('fileViewer.exportImage')}</span>
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="share-menu-item share-menu-subitem"
+                    role="menuitem"
+                    onClick={openImageExportModal}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
+                    <span>{t('fileViewer.exportImage')}</span>
+                  </button>
                   <div className="share-menu-subsection-label" role="presentation">
                     {t('fileViewer.shareMenuSourceFiles')}
                   </div>
@@ -6963,7 +7121,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               >
                 <PreviewDrawOverlay
                   active={drawOverlayOpen}
-                  captureViewport={drawOverlayIntent === 'screenshot'}
                   onActiveChange={setDrawOverlayOpen}
                   captureTarget={null}
                   filePath={file.name}
@@ -7093,6 +7250,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 boardTool={boardTool}
                 showActivePin={commentCreateMode}
                 scale={overlayPreviewScale}
+                offsetX={overlayPreviewTransform.offsetX}
+                offsetY={overlayPreviewTransform.offsetY}
                 strokePoints={strokePoints}
                 onOpenComment={(comment, snapshot) => {
                   setCommentPanelOpen(true);
@@ -7134,28 +7293,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 />
               </div>
             ) : null}
-            {screenshotToast ? (
-              <div className="screenshot-toast-anchor">
-                <div className="screenshot-toast" role="status" aria-live="polite">
-                  <RemixIcon name="checkbox-circle-line" size={16} />
-                  <span>{screenshotToast}</span>
-                  <button
-                    type="button"
-                    aria-label={t('common.close')}
-                    onClick={() => setScreenshotToast(null)}
-                  >
-                    <RemixIcon name="close-line" size={16} />
-                  </button>
-                </div>
-              </div>
-            ) : null}
             {commentComposer}
             {boardMode && !commentCreateMode && hoveredCommentTarget && (!activeCommentTarget || commentPortalHost) ? (
               <AnnotationHoverPopover target={hoveredCommentTarget} scale={overlayPreviewScale} />
             ) : null}
             {commentPortalHost && commentSidePanel
               ? createPortal(commentSidePanel, commentPortalHost)
-              : commentSidePanel}
+              : commentPortalId
+                ? null
+                : commentSidePanel}
             {inspectMode && activeInspectTarget ? (
               <InspectPanel
                 target={activeInspectTarget}
@@ -7284,6 +7430,74 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               srcDoc={srcDoc}
             />
           )}
+        </div>
+      ) : null}
+      {imageExportModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal deploy-modal image-export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={imageExportTitleId}
+          >
+            <div className="modal-head">
+              <div className="kicker">IMAGE</div>
+              <h2 id={imageExportTitleId}>{t('fileViewer.exportImage')}</h2>
+              <p className="subtitle">{t('fileViewer.exportImageModalSubtitle')}</p>
+            </div>
+            <div className="deploy-form image-export-form">
+              <fieldset className="image-export-format-field" disabled={imageExportBusy}>
+                <legend>{t('fileViewer.exportImageFormatLabel')}</legend>
+                <div className="image-export-format-options">
+                  {IMAGE_EXPORT_FORMAT_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`image-export-format-option${imageExportFormat === option.value ? ' active' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="image-export-format"
+                        value={option.value}
+                        aria-label={option.label}
+                        checked={imageExportFormat === option.value}
+                        onChange={() => changeImageExportFormat(option.value)}
+                      />
+                      <span className="image-export-format-text">
+                        <strong>{option.label}</strong>
+                        <span aria-hidden="true">{option.extension}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {imageExportError ? (
+                <p className="deploy-error" role="alert">{imageExportError}</p>
+              ) : null}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={imageExportBusy}
+                onClick={() => {
+                  setImageExportModalOpen(false);
+                  setImageExportError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={imageExportBusy || imageExportPreparing || !imageExportPreparedBlob}
+                onClick={() => {
+                  void handleImageExportSave();
+                }}
+              >
+                {imageExportBusy || imageExportPreparing ? t('fileViewer.exportImageSaving') : t('common.save')}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {templateModalOpen ? (
@@ -7613,6 +7827,16 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           placement="top"
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
+        />
+      ) : null}
+      {imageExportSavedToast ? (
+        <Toast
+          message={imageExportSavedToast.message}
+          details={imageExportSavedToast.details}
+          tone="success"
+          placement="top"
+          ttlMs={3600}
+          onDismiss={() => setImageExportSavedToast(null)}
         />
       ) : null}
     </div>

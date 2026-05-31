@@ -988,6 +988,7 @@ export interface ProjectsListControlsClickProps {
     | 'your_designs'
     | 'search_input'
     | 'select'
+    | 'create_project'
     | 'grid_view'
     | 'list_view';
 }

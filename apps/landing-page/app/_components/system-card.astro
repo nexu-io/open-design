@@ -1,8 +1,14 @@
 ---
 /*
- * Shared system card used on `/systems/` and
- * `/systems/category/<slug>/`. Displays palette swatches, name,
- * category, and tagline as a clickable card.
+ * Shared system card used on `/plugins/systems/`. Displays palette
+ * swatches, name, category, and tagline as a clickable card.
+ *
+ * The card links to `/systems/<slug>/`, which `public/_redirects`
+ * 301s to the bundled-plugin detail (`/plugins/design-system-<slug>/`)
+ * for the 142 systems that have one, and degrades the 8 without a
+ * detail page to `/plugins/systems/`. Linking through the redirect
+ * (rather than hard-coding `design-system-<slug>`) keeps those 8 from
+ * pointing at a non-existent detail page.
  */
 import type { SystemRecord } from '../_lib/catalog';
 import { localeFromPath, localizedHref } from '../i18n';

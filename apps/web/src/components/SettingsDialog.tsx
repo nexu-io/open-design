@@ -36,7 +36,7 @@ import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
-  renderModelOptions,
+  SearchableModelSelect,
 } from './modelOptions';
 import {
   DEFAULT_NOTIFICATIONS,
@@ -207,6 +207,8 @@ interface Props {
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
 }
 
 export interface AgentRefreshOptions {
@@ -839,6 +841,8 @@ export function SettingsDialog({
   onProjectsRefresh,
   onSkillsChanged,
   onDesignSystemsChanged,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -949,9 +953,11 @@ export function SettingsDialog({
         initial.apiVersion ?? '',
       );
     });
-  const [providerModelsCache, setProviderModelsCache] = useState<
+  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
   >({});
+  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
+  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
   const agentTestAbortRef = useRef<AbortController | null>(null);
   const providerTestAbortRef = useRef<AbortController | null>(null);
   const providerModelsAbortRef = useRef<AbortController | null>(null);
@@ -963,7 +969,7 @@ export function SettingsDialog({
   const providerAutoTestKeyRef = useRef<string | null>(null);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const baseUrlInputRef = useRef<HTMLInputElement | null>(null);
-  const modelSelectRef = useRef<HTMLSelectElement | null>(null);
+  const modelSelectRef = useRef<HTMLButtonElement | null>(null);
   const customModelInputRef = useRef<HTMLInputElement | null>(null);
   const focusByokRequiredFieldAfterProtocolSwitchRef = useRef(false);
   const [apiModelCustomEditing, setApiModelCustomEditing] = useState(false);
@@ -2147,10 +2153,16 @@ export function SettingsDialog({
                 </span>
               </span>
               <div className="agent-model-select-wrap">
-                <select
+                <SearchableModelSelect
+                  className="inline-switcher__select settings-model-select"
                   value={selectValue}
-                  onChange={(e) => {
-                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                  aria-label={t('settings.modelPicker')}
+                  searchPlaceholder={t('designs.searchPlaceholder')}
+                  searchInputTestId={`settings-agent-model-search-${selected.id}`}
+                  popoverTestId={`settings-agent-model-popover-${selected.id}`}
+                  models={selected.models!}
+                  onChange={(nextValue) => {
+                    if (nextValue === CUSTOM_MODEL_SENTINEL) {
                       setAgentCustomModelIds((prev) => {
                         const next = new Set(prev);
                         next.add(selected.id);
@@ -2164,21 +2176,19 @@ export function SettingsDialog({
                         next.delete(selected.id);
                         return next;
                       });
-                      setChoice({ model: e.target.value });
+                      setChoice({ model: nextValue });
                     }
                   }}
-                >
-                  {renderModelOptions(selected.models!)}
-                  {allowCustomModel ? (
-                    <option value={CUSTOM_MODEL_SENTINEL}>
-                      {t('settings.modelCustom')}
-                    </option>
-                  ) : null}
-                </select>
-                <Icon
-                  name="chevron-down"
-                  size={12}
-                  className="agent-model-select-chevron"
+                  additionalOptions={
+                    allowCustomModel
+                      ? [
+                          {
+                            value: CUSTOM_MODEL_SENTINEL,
+                            label: t('settings.modelCustom'),
+                          },
+                        ]
+                      : undefined
+                  }
                 />
               </div>
             </label>
@@ -3389,13 +3399,21 @@ export function SettingsDialog({
                     *
                   </span>
                 </span>
-                <select
+                <SearchableModelSelect
                   ref={modelSelectRef}
+                  className="inline-switcher__select settings-model-select settings-model-select--byok"
                   aria-label={
                     apiProtocol === 'azure'
                       ? t('settings.azureDeploymentModel')
                       : t('settings.model')
                   }
+                  searchPlaceholder={t('designs.searchPlaceholder')}
+                  searchInputTestId="settings-byok-model-search"
+                  popoverTestId="settings-byok-model-popover"
+                  models={apiModelOptions.map((m) => ({
+                    id: m.id,
+                    label: apiModelOptionLabel(m),
+                  }))}
                   value={apiModelSelectValue}
                   onFocus={() => {
                     const byokProviderId = byokProtocolToTracking(apiProtocol);
@@ -3409,21 +3427,22 @@ export function SettingsDialog({
                       });
                     }
                   }}
-                  onChange={(e) => {
-                    if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                  onChange={(nextValue) => {
+                    if (nextValue === CUSTOM_MODEL_SENTINEL) {
                       setApiModelCustomEditing(true);
                       updateApiConfig({ model: '' });
                     } else {
                       setApiModelCustomEditing(false);
-                      updateApiConfig({ model: e.target.value });
+                      updateApiConfig({ model: nextValue });
                     }
                   }}
-                >
-                  {apiModelOptions.map((m) => (
-                    <option value={m.id} key={m.id}>{apiModelOptionLabel(m)}</option>
-                  ))}
-                  <option value={CUSTOM_MODEL_SENTINEL}>{t('settings.modelCustom')}</option>
-                </select>
+                  additionalOptions={[
+                    {
+                      value: CUSTOM_MODEL_SENTINEL,
+                      label: t('settings.modelCustom'),
+                    },
+                  ]}
+                />
                 {loadedAccountModelCount > 0 ? (
                   <span className="field-inline-status success" role="status">
                     {t('settings.modelsLoadedFromAccount', {
@@ -5123,6 +5142,8 @@ function MediaProvidersSection({
   setCfg,
   mediaProvidersNotice,
   onReloadMediaProviders,
+  providerModelsCache: sharedProviderModelsCache,
+  onProviderModelsCacheChange,
   pendingLocalProviderIds,
   onChange,
 }: {
@@ -5130,6 +5151,8 @@ function MediaProvidersSection({
   setCfg: Dispatch<SetStateAction<AppConfig>>;
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   pendingLocalProviderIds: ReadonlySet<string>;
   onChange: (providerId: string) => void;
 }) {

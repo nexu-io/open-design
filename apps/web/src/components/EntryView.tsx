@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
 import type {
   ConnectorDetail,
@@ -22,6 +22,7 @@ import type {
   ProjectMetadata,
   ProjectTemplate,
   PromptTemplateSummary,
+  ProviderModelOption,
   SkillSummary,
 } from '../types';
 // `EntryShell` owns the redesigned home layout (left rail + centered
@@ -60,6 +61,8 @@ interface Props {
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
   config: AppConfig;
+  providerModelsCache?: Record<string, ProviderModelOption[]>;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   integrationInitialTab?: IntegrationTab;
   composioConfigLoading?: boolean;
   daemonLive: boolean;
@@ -255,6 +258,8 @@ export function EntryView({
   defaultDesignSystemId,
   agents,
   config,
+  providerModelsCache,
+  onProviderModelsCacheChange,
   integrationInitialTab,
   composioConfigLoading = false,
   daemonLive,
@@ -355,6 +360,8 @@ export function EntryView({
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
       config={config}
+      providerModelsCache={providerModelsCache}
+      onProviderModelsCacheChange={onProviderModelsCacheChange}
       agents={agents}
       daemonLive={daemonLive}
       onModeChange={onModeChange}

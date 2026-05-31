@@ -117,6 +117,17 @@ const residualAllowedPathPrefixes = [
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
+  // Replay-based mock CLIs that impersonate the agent CLIs OD spawns
+  // (opencode/claude/codex/gemini/cursor-agent + ACP family). Need to
+  // be directly executable via Node so `child_process.spawn` from test
+  // harnesses and PATH-overlay shells work without any transform step.
+  // `mocks/scripts/` holds the maintainer-facing helpers (manifest math,
+  // fetch from R2) which are also pure-node single-file modules — same
+  // precedent as `apps/daemon/tests/fixtures/fake-vela.mjs` (an ACP
+  // stdio stub, allowlisted individually above). See `mocks/README.md`.
+  "mocks/lib/",
+  "mocks/mock-agent.mjs",
+  "mocks/scripts/",
   "test-results/",
   "vendor/",
 ];
