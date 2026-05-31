@@ -60,7 +60,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: 
 }
 
 async function openImportTab(): Promise<void> {
-  const trigger = await screen.findByLabelText(/Open CLI and model settings/i);
+  const trigger = await screen.findByLabelText(/Open resources menu/i);
   fireEvent.click(trigger);
   // The composer auto-snaps to the first available tab; when no MCP
   // wiring is passed in tests, that is the Import tab — but the tab strip
