@@ -289,6 +289,7 @@ function currentModelFromSessionResult(result: JsonObject): string | null {
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
   let pendingJson = '';
+  let pendingJsonLineCount = 0;
 
   const emit = (candidate: string): boolean => {
     try {
@@ -301,18 +302,32 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
 
   const startPendingJson = (line: string) => {
     pendingJson = line;
+    pendingJsonLineCount = 1;
   };
 
   const handleLine = (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) return;
     if (pendingJson) {
+      if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && emit(trimmed)) {
+        pendingJson = '';
+        pendingJsonLineCount = 0;
+        return;
+      }
       const nextCandidate = `${pendingJson}\n${trimmed}`;
       if (emit(nextCandidate)) {
         pendingJson = '';
+        pendingJsonLineCount = 0;
         return;
       }
-      pendingJson = nextCandidate.length <= 128_000 ? nextCandidate : '';
+      pendingJsonLineCount += 1;
+      if (nextCandidate.length <= 128_000 && pendingJsonLineCount <= 256) {
+        pendingJson = nextCandidate;
+        return;
+      }
+      pendingJson = '';
+      pendingJsonLineCount = 0;
+      handleLine(trimmed);
       return;
     }
     if (emit(trimmed)) return;

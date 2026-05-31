@@ -408,6 +408,33 @@ test('attachAcpSession accepts pretty-printed ACP startup responses', () => {
   assert.equal(events.some((entry) => entry.event === 'error'), false);
 });
 
+test('attachAcpSession recovers when bracket-prefixed logs precede JSON frames', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stdout.write('[vela] starting OpenCode bridge\n');
+  child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+  child.stdout.write('{not json but looks like an object log\n');
+  child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+  const methods = parseRpcWrites(writes)
+    .map((entry) => entry.method)
+    .filter(Boolean);
+  assert.deepEqual(methods, ['initialize', 'session/new', 'session/prompt']);
+  assert.equal(events.some((entry) => entry.event === 'error'), false);
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')
