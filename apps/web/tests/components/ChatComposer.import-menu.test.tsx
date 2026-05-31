@@ -89,7 +89,7 @@ describe('ChatComposer Tools -> Import menu', () => {
     const onProjectMetadataChange = vi.fn();
     renderComposer({ onProjectMetadataChange });
 
-    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
+    fireEvent.click(screen.getByLabelText('Open resources menu'));
     fireEvent.click(screen.getByRole('tab', { name: 'Import' }));
 
     const folderItem = await screen.findByRole('menuitem', { name: /Link code folder/i });

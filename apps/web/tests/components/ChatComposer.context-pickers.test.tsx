@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,6 +40,22 @@ const USER_PLUGIN = {
     description: 'Private export workflow',
   },
 };
+
+function makePlugin(overrides: { id: string; title: string; description: string }): typeof COMMUNITY_PLUGIN {
+  return {
+    ...COMMUNITY_PLUGIN,
+    id: overrides.id,
+    title: overrides.title,
+    source: `bundled/${overrides.id}`,
+    manifest: {
+      ...COMMUNITY_PLUGIN.manifest,
+      name: overrides.id,
+      title: overrides.title,
+      description: overrides.description,
+    },
+    fsPath: `/plugins/${overrides.id}`,
+  };
+}
 
 const SKILL = {
   id: 'deck-builder',
@@ -211,6 +227,181 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
     expect(screen.getByText('Search plugins, skills, MCP servers, connectors, and Design Files.')).toBeTruthy();
+  });
+
+  it('opens the same @ panel from the composer mention button', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open mention picker' }));
+
+    expect(screen.getByTestId('mention-popover')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Plugins' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Skills' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
+
+    await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
+    expect(screen.getByText('Deck Builder')).toBeTruthy();
+    expect(screen.getByText('Slack MCP')).toBeTruthy();
+    expect(screen.getByText('designs/landing.html')).toBeTruthy();
+  });
+
+  it('navigates typed @ results with arrow keys and picks the active result', async () => {
+    renderComposer();
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@', selectionStart: 1 },
+    });
+
+    await waitFor(() => expect(screen.getByText('My Export')).toBeTruthy());
+    const popover = screen.getByTestId('mention-popover');
+    const selectedText = () =>
+      popover.querySelector('[role="option"][aria-selected="true"]')?.textContent ?? '';
+
+    expect(selectedText()).toContain('Community Deck');
+    expect(input.getAttribute('aria-activedescendant')).toBe('chat-composer-mention-option-0');
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(selectedText()).toContain('My Export');
+    expect(input.getAttribute('aria-activedescendant')).toBe('chat-composer-mention-option-1');
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(selectedText()).toContain('Community Deck');
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(input.value).toBe('@My Export '));
+    expect(screen.queryByTestId('mention-popover')).toBeNull();
+  });
+
+  it('supports keyboard selection after opening the @ picker button', async () => {
+    plugins = [];
+    skills = [];
+    servers = [];
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open mention picker' }));
+
+    await waitFor(() => expect(input.value).toBe('@'));
+    expect(screen.getByTestId('mention-popover')).toBeTruthy();
+    expect(
+      screen
+        .getByTestId('mention-popover')
+        .querySelector('[role="option"][aria-selected="true"]')?.textContent,
+    ).toContain('designs/landing.html');
+
+    fireEvent.keyDown(input, { key: 'Tab' });
+
+    expect(input.value).toBe('@designs/landing.html ');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.queryByTestId('mention-popover')).toBeNull();
+  });
+
+  it('closes the @ picker when the tools panel opens', async () => {
+    renderComposer();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open mention picker' }));
+    expect(screen.getByTestId('mention-popover')).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Open resources menu'));
+
+    expect(screen.queryByTestId('mention-popover')).toBeNull();
+    await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
+  });
+
+  it('does not hijack Enter or arrows when @ search has no results', async () => {
+    plugins = [];
+    skills = [];
+    servers = [];
+    renderComposer();
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@missing', selectionStart: 8 },
+    });
+
+    expect(screen.getByText('No results for “missing”.')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(input.value).toBe('@missing');
+    expect(screen.getByTestId('mention-popover')).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByTestId('mention-popover')).toBeNull();
+  });
+
+  it('ranks direct plugin name matches above incidental substring matches', async () => {
+    plugins = [
+      makePlugin({
+        id: 'stone-staircase',
+        title: '3D Stone Staircase Evolution Infographic',
+        description: 'Transforms a flat evolutionary timeline into a realistic 3D stone staircase infographic.',
+      }),
+      makePlugin({
+        id: 'airbnb',
+        title: 'Airbnb',
+        description: 'Travel marketplace. Warm coral accent, photography-driven, rounded UI.',
+      }),
+      makePlugin({
+        id: 'airtable',
+        title: 'Airtable',
+        description: 'Spreadsheet-database hybrid. Colorful, friendly, structured data aesthetic.',
+      }),
+      makePlugin({
+        id: 'dcf-valuation',
+        title: 'Dcf Valuation',
+        description: 'Discounted cash flow valuation and intrinsic value analysis using fair value assumptions.',
+      }),
+    ];
+    renderComposer();
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@air', selectionStart: 4 },
+    });
+
+    await waitFor(() => expect(screen.getByText('Airtable')).toBeTruthy());
+    const popover = screen.getByTestId('mention-popover');
+    const pluginNames = Array.from(
+      popover.querySelectorAll('.mention-section [role="option"] strong'),
+      (node) => node.textContent,
+    );
+
+    expect(pluginNames.slice(0, 3)).toEqual([
+      'Airbnb',
+      'Airtable',
+      '3D Stone Staircase Evolution Infographic',
+    ]);
+    expect(
+      popover.querySelector('[role="option"][aria-selected="true"]')?.textContent,
+    ).toContain('Airbnb');
   });
 
   it('localizes @ panel tabs and empty states in Chinese mode', async () => {
@@ -462,9 +653,12 @@ describe('ChatComposer context pickers', () => {
 
   it('lets the tools panel switch between Official and My plugins', async () => {
     renderComposer();
-    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
+    fireEvent.click(screen.getByLabelText('Open resources menu'));
 
     await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByText('Resources')).toBeTruthy();
+    expect(within(menu).getAllByText('Apply').length).toBeGreaterThan(0);
     expect(screen.queryByText('My Export')).toBeNull();
 
     fireEvent.click(screen.getByText('My plugins'));
