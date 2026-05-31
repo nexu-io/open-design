@@ -83,6 +83,15 @@ function migrate(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_conv_project
       ON conversations(project_id, updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      conversation_id TEXT NOT NULL,
+      agent_id        TEXT NOT NULL,
+      session_id      TEXT NOT NULL,
+      updated_at      INTEGER NOT NULL,
+      PRIMARY KEY (conversation_id, agent_id),
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
@@ -881,6 +890,44 @@ export function updateConversation(db: SqliteDb, id: string, patch: DbRow) {
 
 export function deleteConversation(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM conversations WHERE id = ?`).run(id);
+}
+
+// ---------- agent sessions ----------
+
+export function getAgentSession(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): string | null {
+  const row = db
+    .prepare(
+      `SELECT session_id FROM agent_sessions
+        WHERE conversation_id = ? AND agent_id = ?`,
+    )
+    .get(conversationId, agentId) as { session_id?: string } | undefined;
+  return row && typeof row.session_id === 'string' ? row.session_id : null;
+}
+
+export function upsertAgentSession(
+  db: SqliteDb,
+  input: { conversationId: string; agentId: string; sessionId: string },
+): void {
+  db.prepare(
+    `INSERT INTO agent_sessions (conversation_id, agent_id, session_id, updated_at)
+       VALUES (?, ?, ?, ?)
+     ON CONFLICT(conversation_id, agent_id)
+       DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at`,
+  ).run(input.conversationId, input.agentId, input.sessionId, Date.now());
+}
+
+export function clearAgentSession(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): void {
+  db.prepare(
+    `DELETE FROM agent_sessions WHERE conversation_id = ? AND agent_id = ?`,
+  ).run(conversationId, agentId);
 }
 
 // ---------- messages ----------
