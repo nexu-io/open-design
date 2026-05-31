@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_MESSAGES, type DaemonStatusSnapshot } from "@open-design/sidecar-proto";
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_MESSAGES, SIDECAR_SOURCES, type DaemonStatusSnapshot } from "@open-design/sidecar-proto";
 import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -120,7 +120,7 @@ export class DaemonManager {
       `--od-stamp-ipc=${ipc}`,
       `--od-stamp-mode=dev`,
       `--od-stamp-namespace=${this.namespace}`,
-      `--od-stamp-source=tray`,
+      `--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}`,
     ];
   }
 

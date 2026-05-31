@@ -14,8 +14,8 @@ export type NodeRuntimeDiagnosticInput = {
   nodeVersion: string;
 };
 
-const SUPPORTED_NODE_MAJOR = 25;
-const SUPPORTED_NODE_RANGE = "Node ~24-25";
+const SUPPORTED_NODE_MAJOR = 24;
+const SUPPORTED_NODE_RANGE = "Node ~24";
 const NATIVE_ADDON_ABI_MISMATCH_PATTERN = /was compiled against a different Node\.js version[\s\S]*?NODE_MODULE_VERSION\s+\d+[\s\S]*?requires\s+NODE_MODULE_VERSION\s+\d+/i;
 const NODE_MODULE_VERSION_PATTERN = /NODE_MODULE_VERSION\s+\d+[\s\S]*?NODE_MODULE_VERSION\s+\d+/i;
 const NEXT_PACKAGE_RESOLUTION_PATTERN = /couldn't find the Next\.js package.*from the project directory:/i;
