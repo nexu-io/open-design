@@ -3,7 +3,8 @@ import {
   computeToolSignature,
   createToolLoopGuard,
   displayToolSignature,
-  isMutatingToolName,
+  isProgressSuccess,
+  isReadOnlyShellCommand,
   resolveToolLoopMode,
 } from '../src/tool-loop-guard.js';
 
@@ -145,16 +146,49 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     }
     expect(edits.warned).toBe(false);
   });
+
+  it('does not halt when a failing check is fixed by successful mutating Bash between attempts', () => {
+    // PR #3375 review: agents change state through the shell, so a successful
+    // `sed -i` (or install/build/git commit) between failing checks is real
+    // progress and must clear the tally even though the tool is Bash.
+    const guard = createToolLoopGuard();
+    const check = { command: 'pnpm test' };
+    let tripped = null;
+    for (let i = 0; i < 12; i += 1) {
+      const verdict = fail(guard, `chk-${i}`, 'Bash', check); // same failing check
+      if (verdict) tripped = verdict;
+      ok(guard, `fix-${i}`, 'Bash', { command: `sed -i 's/old/new/' src/file-${i}.ts` }); // shell fix = progress
+    }
+    expect(tripped).toBeNull();
+    expect(guard.halted).toBe(false);
+    expect(guard.warned).toBe(false);
+  });
 });
 
-describe('isMutatingToolName', () => {
-  it('treats write-style tools as progress and reads as non-progress', () => {
-    for (const name of ['Edit', 'Write', 'MultiEdit', 'apply_patch', 'str_replace_editor']) {
-      expect(isMutatingToolName(name)).toBe(true);
+describe('isReadOnlyShellCommand / isProgressSuccess', () => {
+  it('classifies pure inspections as read-only', () => {
+    for (const cmd of [
+      'cat x.ts', 'ls -la', 'grep foo x', 'rg needle', 'wc -l x', 'sed -n p x',
+      'git status', 'git diff HEAD', 'python3 -c "assert 1"', 'find . -name x',
+    ]) {
+      expect(isReadOnlyShellCommand(cmd)).toBe(true);
     }
-    for (const name of ['Read', 'Glob', 'LS', 'Grep', 'TodoWrite', 'Bash']) {
-      expect(isMutatingToolName(name)).toBe(false);
+  });
+
+  it('classifies state-changing shell commands as not read-only', () => {
+    for (const cmd of [
+      'sed -i s/a/b/ x', 'mv a b', 'rm x', 'mkdir y', 'pnpm install', 'npm run build',
+      'git commit -m x', 'git add .', 'echo hi > f.txt',
+    ]) {
+      expect(isReadOnlyShellCommand(cmd)).toBe(false);
     }
+  });
+
+  it('treats a Bash fix as progress and a Bash read or read-only tool as non-progress', () => {
+    expect(isProgressSuccess('Bash', 'Bash sed -i s/a/b/ x')).toBe(true);
+    expect(isProgressSuccess('Bash', 'Bash cat x')).toBe(false);
+    expect(isProgressSuccess('Read', 'Read /x')).toBe(false);
+    expect(isProgressSuccess('Edit', 'Edit /x')).toBe(true);
   });
 });
 

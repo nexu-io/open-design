@@ -32,7 +32,8 @@
  *      would let `fail -> read(ok) -> same fail -> read(ok) -> …` loop forever
  *      (exactly the "re-read, retry the same wrong assumption" shape from the
  *      motivating report). The tally clears only on real PROGRESS: a successful
- *      mutating call (Edit/Write/apply_patch/…), or the failing action itself
+ *      mutating call (Edit/Write, or a state-changing shell command like
+ *      `sed -i` / `pnpm install` / `git commit`), or the failing action itself
  *      finally succeeding. K is set high enough that a couple of legitimate
  *      retries of the same command (fix, re-run, fix, re-run) never trip it.
  *
@@ -135,36 +136,87 @@ function collapseWhitespace(value: string): string {
   return value.replace(/\s+/gu, ' ').trim();
 }
 
-// Tools whose SUCCESS changes state and therefore counts as real progress: a
-// successful one clears the repeated-failure tally. A successful read-only tool
-// (Read/Glob/LS/Grep/TodoWrite/…) is NOT progress on a failing action, so it
-// must not clear the tally, or a fixation loop that re-reads between identical
-// failing calls would reset every round and never trip. Matched
-// case-insensitively; names span the agents OD drives (Claude, Codex/OpenCode,
-// Copilot, ACP).
-const MUTATING_TOOL_NAMES = new Set([
-  'edit',
-  'write',
-  'multiedit',
-  'notebookedit',
-  'apply_patch',
-  'applypatch',
-  'str_replace',
-  'str_replace_editor',
-  'create',
-  'create_file',
-  'write_file',
-  'edit_file',
-  'update_file',
-  'insert',
-  'patch',
-  'delete_file',
+// Deciding which SUCCESSFUL calls count as real progress (clearing the
+// repeated-failure tally) vs. read-only inspections (which do not, so a
+// re-read-between-failures fixation loop still trips). The default leans toward
+// "progress": only EXPLICIT inspections are treated as non-progress, so the
+// guard never halts a run that is genuinely fixing things. (PR #3375 review:
+// agents change state through the shell — sed -i, pnpm install, git commit — so
+// a name-only allowlist that excluded Bash wrongly carried failures forward
+// through real fixes.)
+
+// Tools whose success only inspects state.
+const READ_ONLY_TOOL_NAMES = new Set([
+  'read', 'glob', 'ls', 'grep', 'notebookread', 'webfetch', 'websearch', 'todowrite', 'askuserquestion',
 ]);
 
-/** Whether a SUCCESSFUL call of this tool represents progress (state changed),
- *  as opposed to a read-only inspection. See MUTATING_TOOL_NAMES. */
-export function isMutatingToolName(name: string): boolean {
-  return MUTATING_TOOL_NAMES.has((name ?? '').trim().toLowerCase());
+// Tool names that run a shell command — the command itself decides progress.
+const SHELL_TOOL_NAMES = new Set([
+  'bash', 'shell', 'sh', 'run_command', 'run_terminal_cmd', 'execute_command', 'terminal',
+]);
+
+// Leading binaries of a shell command that only inspect state.
+const READ_ONLY_SHELL_BINARIES = new Set([
+  'cat', 'ls', 'grep', 'rg', 'egrep', 'fgrep', 'find', 'head', 'tail', 'pwd', 'echo', 'printf',
+  'which', 'type', 'wc', 'stat', 'file', 'tree', 'diff', 'jq', 'awk', 'env', 'date', 'test',
+  'true', 'false', 'basename', 'dirname', 'realpath', 'readlink', 'cut', 'sort', 'uniq', 'column', 'cmp',
+]);
+
+/** First binary of a shell segment, path- and case-stripped (`/usr/bin/sed` -> `sed`). */
+function shellHead(segment: string): string {
+  const match = segment.trim().match(/^[A-Za-z0-9_./-]+/u);
+  return (match?.[0] ?? '').toLowerCase().replace(/^.*\//u, '');
+}
+
+/**
+ * Heuristic: does this shell command ONLY inspect state? A successful read-only
+ * shell call must not clear the repeated-failure tally, while a state-changing
+ * one (sed -i, mv, pnpm install, a build, a redirect to a file, git add/commit)
+ * should. Conservative by design — anything not recognised as a pure inspection
+ * is treated as a state change (progress), so the guard never halts a run that
+ * is making real changes through the shell.
+ */
+export function isReadOnlyShellCommand(command: string): boolean {
+  const cmd = (command ?? '').trim();
+  if (!cmd) return false;
+  // A surviving output redirection writes a real file (ignore >/dev/null, 2>&1).
+  const redirs = cmd.replace(/\d*>\s*\/dev\/null/gu, '').replace(/\d*>&\d+/gu, '');
+  if (/>/u.test(redirs)) return false;
+  for (const seg of cmd.split(/\|\||&&|[;|]/u)) {
+    const head = shellHead(seg);
+    if (!head) continue;
+    if (head === 'sed' || head === 'perl') {
+      if (/\s-[a-z]*i|\s--in-place/iu.test(seg)) return false; // in-place edit mutates
+      continue;
+    }
+    if (head === 'git') {
+      if (/\bgit\s+(status|diff|log|show|branch|ls-files|rev-parse|describe|blame|cat-file|remote)\b/u.test(seg)) continue;
+      return false; // other git subcommands mutate
+    }
+    if (head === 'python' || head === 'python3' || head === 'node') {
+      if (/\s-[ce]\b/u.test(seg)) continue; // one-off verification snippet
+      return false; // running a script may do anything
+    }
+    if (!READ_ONLY_SHELL_BINARIES.has(head)) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether a SUCCESSFUL tool call is progress on the work (so it clears the
+ * repeated-failure tally). Read-only tools and pure-inspection shell commands
+ * are not; everything else is. `signature` is the value from
+ * computeToolSignature (`<tool> <detail>`), used to recover the shell command.
+ */
+export function isProgressSuccess(name: string, signature: string): boolean {
+  const lower = (name ?? '').trim().toLowerCase();
+  if (READ_ONLY_TOOL_NAMES.has(lower)) return false;
+  if (SHELL_TOOL_NAMES.has(lower)) {
+    const prefix = `${name} `;
+    const command = signature.startsWith(prefix) ? signature.slice(prefix.length) : signature;
+    return !isReadOnlyShellCommand(command);
+  }
+  return true;
 }
 
 /**
@@ -295,7 +347,7 @@ export function createToolLoopGuard(options: ToolLoopGuardOptions = {}): ToolLoo
       //     shape from the motivating report. (PR #3375 review.)
       if (!isError) {
         consecutiveErrors = 0;
-        if (use && isMutatingToolName(use.name)) {
+        if (use && isProgressSuccess(use.name, use.signature)) {
           failCounts.clear();
         } else if (use && failCounts.has(use.signature)) {
           failCounts.delete(use.signature);
