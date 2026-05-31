@@ -54,10 +54,15 @@ deploy/azure/deploy-azure.sh \
 ```
 
 First container start takes a couple of minutes while Azure pulls the image.
-Poll the health endpoint until it returns `ok`:
+`deploy-azure.sh` prints the exact `Health:` URL when it finishes — poll that
+until it returns `ok`:
 
 ```bash
+# App Service
 curl -fsS https://<app>.azurewebsites.net/api/health
+
+# ACI (note the :7456 port)
+curl -fsS http://<dns>.<region>.azurecontainer.io:7456/api/health
 ```
 
 ## Deploy with `az` directly
