@@ -98,6 +98,15 @@ const MCP_SERVER = {
   command: 'slack-mcp',
 };
 
+const MCP_TEMPLATE = {
+  id: 'figma-context',
+  label: 'Figma Context',
+  description: 'Read design frames from Figma files.',
+  transport: 'stdio' as const,
+  category: 'design-systems' as const,
+  command: 'figma-mcp',
+};
+
 const APPLY_RESULT = {
   ok: true,
   query: 'Run plugin.',
@@ -132,6 +141,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
 let servers = [MCP_SERVER];
+let templates = [MCP_TEMPLATE];
 
 function renderComposer(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
@@ -168,9 +178,10 @@ beforeEach(() => {
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
   skills = [SKILL];
   servers = [MCP_SERVER];
+  templates = [MCP_TEMPLATE];
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/api/mcp/servers') {
-      return new Response(JSON.stringify({ servers, templates: [] }), {
+      return new Response(JSON.stringify({ servers, templates }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -697,6 +708,79 @@ describe('ChatComposer context pickers', () => {
     fireEvent.keyDown(search, { key: 'Enter' });
 
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
+  it('ranks Resources search results and resets the active option as the query changes', async () => {
+    plugins = [
+      makePlugin({
+        id: 'stone-staircase',
+        title: '3D Stone Staircase Evolution Infographic',
+        description: 'Transforms a flat evolutionary timeline into realistic stone stairs.',
+      }),
+      makePlugin({
+        id: 'airbnb',
+        title: 'Airbnb',
+        description: 'Travel marketplace with warm coral UI.',
+      }),
+      makePlugin({
+        id: 'airtable',
+        title: 'Airtable',
+        description: 'Spreadsheet-database hybrid.',
+      }),
+    ];
+    renderComposer();
+    fireEvent.click(screen.getByLabelText('Open resources menu'));
+
+    const search = await screen.findByLabelText('Search plugins');
+    fireEvent.change(search, { target: { value: 'air' } });
+
+    await waitFor(() => expect(screen.getByText('Airtable')).toBeTruthy());
+    const menu = screen.getByRole('menu');
+    const pluginNames = within(menu)
+      .getAllByRole('menuitem')
+      .map((item) => item.querySelector('strong')?.textContent)
+      .filter(Boolean);
+    expect(pluginNames.slice(0, 3)).toEqual([
+      'Airbnb',
+      'Airtable',
+      '3D Stone Staircase Evolution Infographic',
+    ]);
+
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    expect(search.getAttribute('aria-activedescendant')).toBe('composer-tools-plugins-option-1');
+
+    fireEvent.change(search, { target: { value: 'stone' } });
+
+    expect(search.getAttribute('aria-activedescendant')).toBe('composer-tools-plugins-option-0');
+    expect(
+      screen.getByText('3D Stone Staircase Evolution Infographic').closest('[role="menuitem"]')?.getAttribute('aria-selected'),
+    ).toBe('true');
+  });
+
+  it('keeps MCP Resources search wired to a stable result container for templates and empty results', async () => {
+    servers = [];
+    templates = [MCP_TEMPLATE];
+    const onOpenMcpSettings = vi.fn();
+    renderComposer({ onOpenMcpSettings });
+    fireEvent.click(screen.getByLabelText('Open resources menu'));
+    fireEvent.click(await screen.findByRole('tab', { name: 'MCP' }));
+
+    const search = await screen.findByLabelText('Search MCP servers and templates');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    expect(document.getElementById('composer-tools-mcp-results')).toBeTruthy();
+    expect(search.getAttribute('aria-activedescendant')).toBe('composer-tools-mcp-option-0');
+
+    fireEvent.change(search, { target: { value: 'figma' } });
+
+    expect(screen.getByText('Figma Context')).toBeTruthy();
+    expect(document.getElementById(search.getAttribute('aria-activedescendant') ?? '')).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'definitely-missing' } });
+
+    expect(screen.getByText('No MCP results for “definitely-missing”.')).toBeTruthy();
+    expect(document.getElementById(search.getAttribute('aria-activedescendant') ?? '')).toBeTruthy();
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(onOpenMcpSettings).toHaveBeenCalledTimes(1);
   });
 
   it('clears absolute anchors when the pet popover switches to fixed positioning', async () => {

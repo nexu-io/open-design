@@ -2844,7 +2844,7 @@ function ToolsPluginsPanel({
   );
   const scopedPlugins = source === 'community' ? communityPlugins : userPlugins;
   const visiblePlugins = useMemo(
-    () => scopedPlugins.filter((p) => pluginMatchesQuery(p, query)),
+    () => rankMentionItems(scopedPlugins, query, pluginMentionScore),
     [scopedPlugins, query],
   );
   const activeResourceIndex = resourceActiveIndex(activeIndex, visiblePlugins.length);
@@ -2870,7 +2870,10 @@ function ToolsPluginsPanel({
             role="tab"
             aria-selected={source === 'community'}
             className={`composer-tools-segment${source === 'community' ? ' active' : ''}`}
-            onClick={() => setSource('community')}
+            onClick={() => {
+              setSource('community');
+              onActiveIndexChange(0);
+            }}
             title={`${communityPlugins.length} installed official plugins`}
             onKeyDown={(event) => handleResourceKeyboardEvent(event, {
               activeIndex: activeResourceIndex,
@@ -2886,7 +2889,10 @@ function ToolsPluginsPanel({
             role="tab"
             aria-selected={source === 'mine'}
             className={`composer-tools-segment${source === 'mine' ? ' active' : ''}`}
-            onClick={() => setSource('mine')}
+            onClick={() => {
+              setSource('mine');
+              onActiveIndexChange(0);
+            }}
             title={`${userPlugins.length} installed user plugins`}
             onKeyDown={(event) => handleResourceKeyboardEvent(event, {
               activeIndex: activeResourceIndex,
@@ -2902,7 +2908,10 @@ function ToolsPluginsPanel({
           ref={searchRef}
           className="composer-tools-search"
           value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
+          onChange={(e) => {
+            setQuery(e.currentTarget.value);
+            onActiveIndexChange(0);
+          }}
           onKeyDown={(event) => handleResourceKeyboardEvent(event, {
             activeIndex: activeResourceIndex,
             itemCount: visiblePlugins.length,
@@ -3039,11 +3048,11 @@ function ToolsMcpPanel({
 }) {
   const [query, setQuery] = useState('');
   const visibleServers = useMemo(
-    () => servers.filter((s) => mcpServerMatchesQuery(s, query)),
+    () => rankMentionItems(servers, query, mcpServerMentionScore),
     [servers, query],
   );
   const visibleTemplates = useMemo(
-    () => templates.filter((tpl) => mcpTemplateMatchesQuery(tpl, query)).slice(0, 8),
+    () => rankMentionItems(templates, query, mcpTemplateMentionScore).slice(0, 8),
     [templates, query],
   );
   const itemCount = visibleServers.length + visibleTemplates.length + 1;
@@ -3071,7 +3080,10 @@ function ToolsMcpPanel({
           ref={searchRef}
           className="composer-tools-search"
           value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
+          onChange={(e) => {
+            setQuery(e.currentTarget.value);
+            onActiveIndexChange(0);
+          }}
           onKeyDown={keyboard}
           placeholder="Search MCP…"
           aria-label="Search MCP servers and templates"
@@ -3081,14 +3093,9 @@ function ToolsMcpPanel({
           }
         />
       </div>
-      {visibleServers.length === 0 ? (
-        <div className="composer-tools-empty">
-          {servers.length === 0
-            ? 'No enabled MCP servers configured yet.'
-            : `No configured MCP results for “${query}”.`}
-        </div>
-      ) : (
-        <div className="composer-tools-list" id="composer-tools-mcp-results">
+      <div className="composer-tools-list" id="composer-tools-mcp-results">
+        {visibleServers.length > 0 ? (
+          <>
           <div className="composer-tools-section-label">Configured</div>
           {visibleServers.map((s) => {
             const index = itemIndex;
@@ -3120,10 +3127,10 @@ function ToolsMcpPanel({
               </button>
             );
           })}
-        </div>
-      )}
-      {visibleTemplates.length > 0 ? (
-        <div className="composer-tools-list">
+          </>
+        ) : null}
+        {visibleTemplates.length > 0 ? (
+          <>
           <div className="composer-tools-section-label">Templates</div>
           {visibleTemplates.map((tpl) => {
             const index = itemIndex;
@@ -3154,8 +3161,15 @@ function ToolsMcpPanel({
               </button>
             );
           })}
-        </div>
-      ) : null}
+          </>
+        ) : null}
+        {visibleServers.length === 0 && visibleTemplates.length === 0 ? (
+          <div className="composer-tools-empty">
+            {servers.length === 0 && templates.length === 0
+              ? 'No enabled MCP servers configured yet.'
+              : `No MCP results for “${query}”.`}
+          </div>
+        ) : null}
       <button
         id={resourceOptionDomId('mcp', itemIndex)}
         type="button"
@@ -3170,6 +3184,7 @@ function ToolsMcpPanel({
         <Icon name="settings" size={12} />
         <span>Manage MCP servers…</span>
       </button>
+      </div>
     </>
   );
 }
@@ -3193,7 +3208,7 @@ function ToolsSkillsPanel({
   const [query, setQuery] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const visibleSkills = useMemo(
-    () => skills.filter((s) => skillMatchesQuery(s, query)).slice(0, 24),
+    () => rankMentionItems(skills, query, skillMentionScore).slice(0, 24),
     [skills, query],
   );
   const activeResourceIndex = resourceActiveIndex(activeIndex, visibleSkills.length);
@@ -3222,7 +3237,10 @@ function ToolsSkillsPanel({
           ref={searchRef}
           className="composer-tools-search"
           value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
+          onChange={(e) => {
+            setQuery(e.currentTarget.value);
+            onActiveIndexChange(0);
+          }}
           onKeyDown={keyboard}
           placeholder="Search skills…"
           aria-label="Search skills"
@@ -3288,10 +3306,6 @@ function ToolsSkillsPanel({
   );
 }
 
-function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
-  return pluginMentionScore(plugin, query) !== null;
-}
-
 function pluginHasDetails(plugin: InstalledPluginRecord): boolean {
   const manifest = plugin.manifest;
   const od = manifest?.od as Record<string, unknown> | undefined;
@@ -3303,10 +3317,6 @@ function pluginHasDetails(plugin: InstalledPluginRecord): boolean {
       od?.useCase ||
       (Array.isArray(od?.inputs) && od.inputs.length > 0),
   );
-}
-
-function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
-  return skillMentionScore(skill, query) !== null;
 }
 
 function rankMentionItems<T>(
@@ -3473,36 +3483,18 @@ function handleResourceKeyboardEvent(
   }
 }
 
-function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    server.id,
-    server.label ?? '',
-    server.transport,
-    server.url ?? '',
-    server.command ?? '',
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
-}
-
-function mcpTemplateMatchesQuery(tpl: McpTemplate, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    tpl.id,
-    tpl.label,
-    tpl.description,
-    tpl.transport,
-    tpl.category,
-    tpl.homepage ?? '',
-    tpl.example ?? '',
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
+function mcpTemplateMentionScore(tpl: McpTemplate, query: string): number | null {
+  return bestMentionTextScore(query, [
+    { value: tpl.label, base: 0 },
+    { value: tpl.id, base: 0 },
+    { value: tpl.category, base: 3 },
+    { value: tpl.transport, base: 4 },
+    { value: tpl.command, base: 6 },
+    { value: tpl.url, base: 6 },
+    { value: tpl.description, base: 8 },
+    { value: tpl.homepage, base: 10 },
+    { value: tpl.example, base: 10 },
+  ]);
 }
 
 function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): string {
@@ -3566,7 +3558,9 @@ function ToolsImportPanel({
     },
     { icon: 'file' as const, label: t('chat.importProject') },
   ];
-  const visibleItems = items.filter((item) => item.label.toLowerCase().includes(query.trim().toLowerCase()));
+  const visibleItems = rankMentionItems(items, query, (item, q) => bestMentionTextScore(q, [
+    { value: item.label, base: 0 },
+  ]));
   const activeResourceIndex = resourceActiveIndex(activeIndex, visibleItems.length);
   const pickActiveImport = () => {
     const item = activeResourceIndex >= 0 ? visibleItems[activeResourceIndex] : null;
@@ -3587,7 +3581,10 @@ function ToolsImportPanel({
           ref={searchRef}
           className="composer-tools-search"
           value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
+          onChange={(event) => {
+            setQuery(event.currentTarget.value);
+            onActiveIndexChange(0);
+          }}
           onKeyDown={keyboard}
           placeholder="Search imports…"
           aria-label="Search imports"
