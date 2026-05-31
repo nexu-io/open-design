@@ -531,7 +531,10 @@
   pointer-events: none;
   white-space: pre-wrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  /* Match the textarea's overflow-wrap so both layers break long runs at the
+     same points; `anywhere` here against the textarea's `break-word` can
+     diverge on long unbroken tokens and drift the caret off the glyphs. */
+  overflow-wrap: break-word;
 }
 .composer-input-overlay-inner {
   min-height: 100%;
@@ -547,15 +550,18 @@
   color: transparent;
 }
 .composer-inline-mention {
-  display: inline-block;
-  max-width: min(240px, 25vw);
-  /* The 1px horizontal padding pads the highlight background, but it also
-     widens this inline-block past the raw token width. The transparent
-     textarea that owns the caret has no such padding, so its caret lands
-     ~2px left of the rendered glyphs after every mention. Cancel the
-     padding's layout advance with a matching negative margin: the
-     background still fills the padded box, but the net horizontal advance
-     equals the token's content width, keeping caret and glyphs aligned. */
+  /* Render the mention as an inline run, not an atomic inline-block chip.
+     The transparent textarea that owns the caret breaks long tokens at
+     normal opportunities (e.g. after the hyphens in a filename), so a
+     nowrap inline-block that refuses to break wraps the whole token to the
+     next line while the textarea splits it. That drifts the caret off the
+     glyphs the moment a mention sits across a wrap boundary. An inline run
+     wraps at the same points as the textarea text, keeping the two locked. */
+  display: inline;
+  /* Padding pads the highlight background; the matching negative margin
+     cancels its layout advance so the net width equals the token's content
+     width. box-decoration-break stays default (slice), so the 1px pads apply
+     only at the run's start and end, never at a wrap fragment. */
   margin: 0 -1px;
   padding: 0 1px;
   border: 0;
@@ -568,10 +574,6 @@
   font-weight: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  vertical-align: bottom;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .composer-row {
   display: flex;
