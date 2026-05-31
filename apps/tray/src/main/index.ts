@@ -114,24 +114,71 @@ function createPngImage(size: number, rgba: Buffer): Buffer {
   return Buffer.concat([sig, ihdrC, idat, iend]);
 }
 
-function createYellowCirclePng(size: number): Buffer {
+/**
+ * Create a modern tray icon with a rounded square base and stylized "O" mark.
+ * Sizes: 16px (menu bar), 22px (retina menu bar), 32px (dock/notification)
+ * Colors: Blue gradient (#3B82F6 to #1D4ED8) with white "O" mark
+ */
+function createTrayIconPng(size: number): Buffer {
   const rgba = Buffer.alloc(size * size * 4);
   const center = size / 2;
-  const radius = size / 2 - 1;
+  const radius = size * 0.44; // rounded square with ~11% corner radius
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const dx = x - center;
-      const dy = y - center;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Distance from center (for rounded square)
+      const dx = Math.abs(x - center);
+      const dy = Math.abs(y - center);
+      const cornerRadius = size * 0.18;
+
+      let inside = false;
+      if (dx <= radius - cornerRadius && dy <= radius) {
+        inside = true;
+      } else if (dx <= radius && dy <= radius - cornerRadius) {
+        inside = true;
+      } else if (dx <= radius && dy <= radius) {
+        const cdx = dx - (radius - cornerRadius);
+        const cdy = dy - (radius - cornerRadius);
+        if (cdx * cdx + cdy * cdy <= cornerRadius * cornerRadius) {
+          inside = true;
+        }
+      }
+
       const idx = (y * size + x) * 4;
 
-      if (dist <= radius) {
-        // Claude yellow #EAB308
-        rgba[idx] = 234;
-        rgba[idx + 1] = 179;
-        rgba[idx + 2] = 8;
-        rgba[idx + 3] = 255;
+      if (inside) {
+        // Blue gradient from top-left to bottom-right
+        const gradientFactor = (x + y) / (size * 2);
+        // Primary blue #3B82F6 → darker #1D4ED8
+        const r = Math.round(59 + (29 - 59) * gradientFactor);   // 59 → 29
+        const g = Math.round(130 + (78 - 130) * gradientFactor); // 130 → 78
+        const b = Math.round(246 + (216 - 246) * gradientFactor); // 246 → 216
+
+        // Draw "O" letter mark in center
+        const oCenter = center;
+        const oOuterRadius = size * 0.22;
+        const oInnerRadius = size * 0.12;
+        const oDist = Math.sqrt((x - oCenter) ** 2 + (y - oCenter) ** 2);
+
+        if (oDist <= oOuterRadius && oDist >= oInnerRadius) {
+          // White "O" ring
+          rgba[idx] = 255;
+          rgba[idx + 1] = 255;
+          rgba[idx + 2] = 255;
+          rgba[idx + 3] = 255;
+        } else if (oDist < oInnerRadius) {
+          // Transparent center of "O"
+          rgba[idx] = 0;
+          rgba[idx + 1] = 0;
+          rgba[idx + 2] = 0;
+          rgba[idx + 3] = 0;
+        } else {
+          // Blue background
+          rgba[idx] = r;
+          rgba[idx + 1] = g;
+          rgba[idx + 2] = b;
+          rgba[idx + 3] = 255;
+        }
       } else {
         // Transparent
         rgba[idx] = 0;
@@ -169,8 +216,9 @@ async function getTrayIcon(): Promise<Electron.NativeImage> {
   }
 
   // 2. Fallback: programmatically create PNG
-  console.log("[tray] using programmatic icon (32px yellow circle)");
-  const png32 = createYellowCirclePng(32);
+  // Create multi-size icon: 16px, 22px (macOS menu bar), 32px
+  console.log("[tray] using programmatic icon (blue 'O' on rounded square)");
+  const png32 = createTrayIconPng(32);
   return nativeImage.createFromBuffer(png32);
 }
 
