@@ -156,9 +156,10 @@ describe('renderMarkdown', () => {
   it('adds copy controls to fenced code blocks', () => {
     const out = html('```tsx\nexport const ok = true;\n```');
     expect(out).toContain('class="md-code-block"');
+    expect(out).toContain('class="md-code-header"');
     expect(out).toContain('class="md-code-actions"');
     expect(out).toContain('class="md-code-action"');
-    expect(out).toContain('>Copy</button>');
+    expect(out).toContain('<span>Copy</span>');
     expect(out).toContain('export const ok = true;');
   });
 

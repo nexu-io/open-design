@@ -2418,9 +2418,12 @@ export interface Dict {
   'assistant.openFile': string;
   'assistant.downloadFile': string;
   'assistant.thinking': string;
+  'assistant.thought': string;
+  'assistant.thoughtFor': string;
   'assistant.systemReminder': string;
   'assistant.waitingFirstOutput': string;
   'assistant.statusBootingAgent': string;
+  'assistant.statusPreparing': string;
   'assistant.statusStarting': string;
   'assistant.statusRequesting': string;
   'assistant.statusThinking': string;

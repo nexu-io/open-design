@@ -40,7 +40,8 @@
     "openai": "6.38.0",
     "posthog-js": "1.374.2",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "shiki": "4.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.0",

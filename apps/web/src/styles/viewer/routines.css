@@ -856,21 +856,13 @@
   border-radius: 8px;
 }
 .app .chat-log {
-  gap: 12px;
-  padding: 16px 16px 18px;
+  gap: 14px;
+  padding: 18px 18px 20px;
   background: var(--bg-panel);
 }
-.app .chat-day-separator {
-  margin: 2px 0 4px;
-  gap: 9px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--text-soft);
-}
-.app .chat-day-separator::before,
-.app .chat-day-separator::after {
-  background: var(--border-soft);
+/* Cancel the 14px flex gap so the idle spacer adds no trailing space. */
+.app .chat-log-tail-spacer {
+  margin-top: -14px;
 }
 .app .msg {
   max-width: 100%;
@@ -897,7 +889,8 @@
   color: var(--text-muted);
   font-weight: 560;
 }
-.app .msg .role > span:first-child {
+.app .msg .role > span:first-child,
+.app .msg .role .role-name {
   color: var(--text);
   font-weight: 650;
 }
@@ -906,7 +899,17 @@
   color: var(--text-soft);
 }
 .app .msg.assistant .role {
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
   color: var(--text-soft);
+}
+.app .msg.assistant .role .role-name {
+  font-weight: 600;
+}
+.app .msg.assistant .role .role-agent-icon {
+  flex: 0 0 auto;
+  border-radius: 5px;
 }
 .app .msg-time {
   font-size: 10.5px;
@@ -914,7 +917,7 @@
   font-weight: 500;
 }
 .app .msg.user .user-text {
-  padding: 8px 34px 8px 11px;
+  padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
   border-radius: 14px 14px 4px 14px;
   background: var(--selected);
@@ -924,66 +927,247 @@
   box-shadow: var(--shadow-xs);
 }
 .app .msg.user .user-copy-btn {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-soft);
 }
 .app .msg.user .user-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--bg-subtle);
+  color: var(--text);
 }
 .app .msg.assistant .assistant-flow {
-  gap: 7px;
+  gap: 14px;
 }
 .app .msg.assistant .prose-block {
-  max-width: 62ch;
+  max-width: 68ch;
   color: var(--text);
-  font-size: 13.5px;
-  line-height: 1.56;
+  font-size: var(--prose-font-size, 15px);
+  line-height: var(--prose-line-height, 1.75);
 }
 .app .msg.assistant .prose-block .md-p + .md-p {
-  margin-top: 7px;
+  margin-top: 14px;
 }
 .app .status-pill,
 .app .op-waiting,
 .app .assistant-footer {
-  border-radius: 10px;
+  border: none;
+  border-radius: 0;
   box-shadow: none;
+  background: none;
 }
 .app .status-pill {
+  gap: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.app .assistant-footer {
+  padding: 4px 0;
   gap: 6px;
-  padding: 4px 10px;
-  border-color: var(--border);
-  background: var(--bg-subtle);
+  font-size: 11px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.app .msg.assistant:hover .assistant-footer,
+.app .assistant-footer[data-streaming="true"],
+.app .assistant-footer[data-last="true"] { opacity: 1; }
+.app .assistant-footer .dot {
+  width: 5px;
+  height: 5px;
+  background: var(--text-faint);
+}
+.app .assistant-footer .dot[data-active="true"] {
+  background: var(--green);
+  box-shadow: none;
+}
+.app .assistant-footer .assistant-label {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.app .assistant-footer .assistant-stats {
   font-size: 11.5px;
+  color: var(--text-muted);
 }
 .app .op-waiting {
   width: fit-content;
-  padding: 5px 10px;
-  border-color: var(--border);
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  font-size: 11.5px;
+  padding: 7px 14px;
+  font-size: 12px;
 }
 .app .op-waiting-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
+  margin-top: 1px;
 }
 .app .action-card {
-  border-radius: 10px;
-  border-color: var(--border);
-  background: var(--bg-panel);
+  border: none;
+  border-radius: 0;
+  background: none;
   box-shadow: none;
 }
-.app .action-card-toggle {
-  min-height: 34px;
-  padding: 7px 10px;
-  border-radius: 10px;
-  font-size: 12.5px;
+.app .action-card:hover {
+  background: none;
 }
-.app .action-card-toggle .ico {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: var(--bg-subtle);
+.app .action-card-toggle {
+  min-height: 36px;
+  padding: 4px;
+  gap: 6px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.app .action-card-toggle:hover {
+  background: var(--bg-fill-tertiary);
+}
+.app .action-card-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+.app .action-card-toggle .summary {
+  font-size: 13px;
+}
+.app .action-card-body {
+  padding: 8px 0 8px 32px;
+  border-top: none;
+}
+.app .op-card {
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  transition: background 160ms ease;
+}
+.app .op-card:hover {
+  background: none;
+}
+.app .op-card-head {
+  padding: 4px;
+  gap: 6px;
+  border-radius: 8px;
+}
+.app .op-card-head:hover {
+  background: var(--bg-fill-tertiary);
+}
+/* `.app .op-card` above resets border/background to none; re-assert the live
+   code box framing inside the app scope so the streaming panel stays boxed. */
+.app .live-code-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-fill-secondary);
+}
+.app .live-code-box .live-code-head {
+  cursor: default;
+  border-radius: 0;
+}
+.app .live-code-box .live-code-head:hover {
+  background: transparent;
+}
+.app .op-status {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+.app .thinking-block {
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app .thinking-toggle {
+  min-height: 36px;
+  padding: 4px;
+  gap: 6px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.app .thinking-toggle:hover {
+  background: var(--bg-fill-tertiary);
+}
+.app .thinking-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+.app .thinking-label {
+  font-size: 13px;
+}
+.app .thinking-body {
+  padding: 4px 8px 8px 32px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  border-top: none;
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
+}
+.app .produced-files {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.app .produced-files-label {
+  font-size: 11.5px;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+}
+.app .produced-file {
+  padding: 6px 10px;
+  border-radius: 8px;
+  gap: 10px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  transition: background 160ms ease;
+}
+.app .produced-file:hover {
+  background: var(--bg-fill-tertiary);
+}
+.app .produced-file-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  background: none;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.app .produced-file-name {
+  font-size: 13px;
+}
+.app .produced-file-size {
+  font-size: 11px;
+}
+.app .produced-file-actions .ghost,
+.app .produced-file-actions .ghost-link {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+}
+.app .produced-file-actions .ghost:hover,
+.app .produced-file-actions .ghost-link:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
+}
+.app .status-detail {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  border: none;
+  font-size: 11.5px;
+  font-family: var(--mono);
 }
 .app .chat-empty-wrap {
   flex: 0 0 auto;
@@ -1027,9 +1211,11 @@
   display: none;
 }
 .app .chat-example-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
+  background: var(--bg-fill-secondary);
+  box-shadow: none;
 }
 .app .chat-example-title {
   font-size: 12.8px;

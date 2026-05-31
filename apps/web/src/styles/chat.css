@@ -6,9 +6,9 @@
 .chat-project-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: none;
   background: var(--bg-panel);
   min-width: 0;
   height: 38px;
@@ -213,11 +213,39 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px;
+  padding: 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 24px;
   min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 18%, transparent) transparent;
+}
+.chat-log::-webkit-scrollbar {
+  width: 8px;
+}
+.chat-log::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 12px 0;
+}
+.chat-log::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.chat-log:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 28%, transparent);
+  background-clip: padding-box;
+}
+
+/* Anchor-to-top tail spacer. Height is driven imperatively by ChatPane; the
+   negative margin cancels the flex `gap` so it contributes nothing when idle
+   (height: 0). */
+.chat-log-tail-spacer {
+  flex: 0 0 auto;
+  height: 0;
+  margin-top: -24px;
 }
 
 /* -------- Messages -------------------------------------------------- */
@@ -229,6 +257,14 @@
   word-wrap: break-word;
   min-width: 0;
   max-width: 100%;
+  animation: msg-enter 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes msg-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg { animation: none; }
 }
 .msg.user {
   align-self: flex-end;
@@ -241,10 +277,10 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 13.5px;
   text-transform: none;
   color: var(--text-strong);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
   letter-spacing: 0;
   font-weight: 600;
 }
@@ -255,22 +291,6 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.chat-day-separator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 600;
-  margin: 4px 0 0;
-}
-.chat-day-separator::before,
-.chat-day-separator::after {
-  content: '';
-  height: 1px;
-  background: var(--border);
-  flex: 1;
-}
 .msg.user .role::before { content: ''; }
 .msg.user .role {
   justify-content: flex-end;
@@ -278,13 +298,14 @@
 }
 .msg.user .user-text {
   white-space: pre-wrap;
-  color: #fff;
-  background: var(--selected);
-  border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
-  border-radius: 14px 14px 4px 14px;
-  padding: 8px 11px;
-  line-height: 1.45;
-  box-shadow: var(--shadow-xs);
+  color: var(--text);
+  background: var(--bg-fill-tertiary);
+  border: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  line-height: 1.5;
+  font-size: 14.5px;
+  box-shadow: none;
 }
 .msg-plugin-chip {
   display: inline-flex;
@@ -293,8 +314,8 @@
   margin: 4px 0 6px;
   padding: 4px 10px 4px 8px;
   border-radius: 999px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  background: var(--bg-fill-tertiary);
+  border: none;
   font-size: 11.5px;
   line-height: 1;
   color: var(--text-muted);
@@ -338,18 +359,17 @@
   font-variant-numeric: tabular-nums;
 }
 .msg-plugin-chip__task {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--bg-fill-secondary);
   padding-left: 8px;
 }
 
-/* Wrapper for user bubble + copy button */
+/* Wrapper for user bubble + hover action footer */
 .msg.user .user-text-wrap {
   position: relative;
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   max-width: 100%;
-}
-.msg.user .user-text-wrap .user-text {
-  padding-inline-end: 28px;
 }
 .msg.user .user-status-wrap {
   display: flex;
@@ -362,9 +382,9 @@
   max-width: min(320px, 100%);
   padding: 9px 11px;
   border-radius: 14px 14px 4px 14px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-xs);
+  background: var(--bg-fill-tertiary);
+  border: none;
+  box-shadow: none;
   color: var(--text);
   text-align: start;
 }
@@ -395,39 +415,51 @@
   color: var(--text-muted);
 }
 
+/* Hover-revealed footer below the user bubble: time + copy (Lobe style) */
+.msg.user .user-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  min-height: 20px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.msg.user .user-text-wrap:hover .user-actions,
+.msg.user .user-text-wrap:focus-within .user-actions {
+  opacity: 1;
+}
+.msg.user .user-actions-time {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .msg.user .user-copy-btn {
-  position: absolute;
-  inset-block-start: 6px;
-  inset-inline-end: 6px;
   padding: 4px;
   border: none;
   background: none;
-  border-radius: 4px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-  color: rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  color: var(--text-soft);
   cursor: pointer;
-  z-index: 1;
+  display: inline-flex;
+  transition: color 120ms ease, background 120ms ease;
 }
 .msg.user .user-copy-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-}
-.msg.user .user-text-wrap:hover .user-copy-btn,
-.msg.user .user-text-wrap:focus-within .user-copy-btn,
-.msg.user .user-copy-btn:focus-visible {
-  opacity: 1;
+  color: var(--text);
+  background: var(--bg-subtle);
 }
 .msg.user .user-copy-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 @media (hover: none) {
-  .msg.user .user-copy-btn {
+  .msg.user .user-actions {
     opacity: 1;
   }
 }
-.msg.assistant .prose { margin-top: 4px; }
+.msg.assistant .prose { margin-top: 8px; }
 .msg .artifact-badge {
   display: inline-block;
   margin-top: 8px;
@@ -440,11 +472,11 @@
 /* Run-failure error card. Neutral gray (not red): the actionable next step
    lives in the AMR card below it; this card just states what happened. */
 .msg.error {
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
+  border: none;
+  background: var(--bg-fill-tertiary);
   color: var(--text-muted);
   padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -484,9 +516,9 @@
 .amr-card {
   margin-top: 8px;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
-  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--bg-fill-tertiary);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -560,7 +592,8 @@
 
 /* -------- Composer -------------------------------------------------- */
 .composer {
-  padding: 10px;
+  border-top: none;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -585,19 +618,19 @@
   }
 }
 .composer-shell {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
-  padding: 0;
+  border: 1px solid var(--bg-fill-secondary);
+  border-radius: 12px;
+  background: var(--bg-fill-tertiary);
+  box-shadow: none;
+  padding: 8px 10px 6px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 .composer-shell:focus-within {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--bg-fill);
+  background: var(--bg-fill-secondary);
 }
 /* Design-system picker row at the top of the composer card (moved out of
    the former chrome header). A full-bleed hairline divider separates it
@@ -612,9 +645,8 @@
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 .composer.drag-active .composer-shell {
-  outline: 2px dashed var(--accent);
-  outline-offset: 4px;
-  border-radius: var(--radius);
+  border-color: var(--accent);
+  background: var(--accent-tint);
 }
 .composer textarea {
   min-height: 56px;
@@ -726,29 +758,28 @@
 .composer-spacer { flex: 1; }
 .composer-import {
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: 6px;
   padding: 4px 12px;
   font-size: 12px;
   color: var(--text-muted);
 }
-.composer-import:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-import:hover:not(:disabled) { background: var(--bg-fill-tertiary); color: var(--text); }
 .composer-research {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: 6px;
   padding: 4px 10px;
   font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
 }
-.composer-research:hover:not(:disabled) { background: var(--bg-subtle); color: var(--text); }
+.composer-research:hover:not(:disabled) { background: var(--bg-fill-tertiary); color: var(--text); }
 .composer-research.on {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
-  border-color: var(--accent);
   color: var(--accent);
 }
 .composer-research-dot {
@@ -782,10 +813,10 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  box-shadow: var(--shadow-xs);
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-fill-tertiary);
+  box-shadow: none;
 }
 
 .chat-queued-send-header {
@@ -914,12 +945,12 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px 4px 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--bg-fill-tertiary);
+  border: none;
+  border-radius: 8px;
   max-width: 220px;
   font-size: 11.5px;
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 .staged-chip img {
   width: 28px;
@@ -974,8 +1005,8 @@
   max-height: calc(100vh - 48px);
   padding: 12px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: none;
+  border-radius: 12px;
   box-shadow: var(--shadow-lg);
 }
 .staged-preview-head {
@@ -1080,9 +1111,9 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--bg-fill-tertiary);
+  border: none;
+  border-radius: 6px;
   font-size: 11.5px;
   color: var(--text-muted);
   max-width: 220px;
@@ -1106,9 +1137,9 @@
   align-items: center;
   gap: 8px;
   padding: 4px 10px 4px 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--bg-fill-tertiary);
+  border: none;
+  border-radius: 8px;
   font-size: 11.5px;
   max-width: 240px;
   color: var(--text);
@@ -1119,8 +1150,7 @@
 }
 .user-attachment.openable { cursor: pointer; }
 .user-attachment.openable:hover {
-  background: var(--bg-subtle);
-  border-color: var(--accent);
+  background: var(--bg-fill-secondary);
 }
 .user-attachment img {
   width: 28px;

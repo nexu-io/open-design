@@ -40,20 +40,20 @@
   align-items: flex-start;
   gap: 2px;
   padding: 7px 11px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 8px;
-  background: var(--bg-panel);
+  background: var(--bg-fill-tertiary);
   color: var(--text);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: background 120ms ease;
 }
-.op-ask-question-option:hover { border-color: var(--accent); }
+.op-ask-question-option:hover { background: var(--bg-fill-secondary); }
 .op-ask-question-option.on {
-  border-color: var(--accent);
-  background: var(--accent-bg, var(--bg-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 .op-ask-question-option:disabled {
   cursor: default;
@@ -102,13 +102,13 @@
  * would wipe the selected state and the card would look unanswered.
  */
 .op-ask-question-locked .op-ask-question-option:not(.on) {
-  border-color: var(--border-soft);
-  background: transparent;
+  background: var(--bg-fill-tertiary);
   color: var(--text-muted);
+  opacity: 0.6;
 }
 .op-ask-question-locked .op-ask-question-option.on {
-  border-color: var(--accent);
-  background: var(--accent-bg, var(--bg-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
   cursor: default;
 }
 .op-ask-question-locked .op-ask-question-option.on .op-ask-question-option-desc {
@@ -117,7 +117,7 @@
 .op-meta { color: var(--text-muted); font-size: 11.5px; }
 .op-desc { font-style: italic; }
 .op-path {
-  background: var(--bg-subtle);
+  background: var(--bg-fill-tertiary);
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 11px;
@@ -129,81 +129,75 @@
   max-width: min(220px, 100%);
 }
 .op-status {
-  margin-left: auto;
-  font-size: 10.5px;
-  padding: 2px 9px;
-  border-radius: var(--radius-pill);
-  letter-spacing: 0.02em;
-  border: 1px solid var(--border);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
   color: var(--text-muted);
-  background: var(--bg-subtle);
+  flex-shrink: 0;
+  font-size: 12px;
 }
-.op-status-running {
-  border-color: var(--purple-border);
-  background: var(--purple-bg);
-  color: var(--purple);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-/*
- * Static waiting-for-input variant. Same purple chrome as `op-status-running`
- * but no pulse: an AskUserQuestion card is parked until the user clicks, not
- * actively working, so the animation is misleading.
- */
-.op-status-awaiting {
-  border-color: var(--purple-border);
-  background: var(--purple-bg);
-  color: var(--purple);
-}
-.op-status-ok { border-color: var(--green-border); background: var(--green-bg); color: var(--green); }
-.op-status-error { border-color: var(--red-border); background: var(--red-bg); color: var(--red); }
+.op-status-running { color: var(--purple); }
+.op-status-awaiting { color: var(--purple); }
+.op-status-ok { color: var(--green); }
+.op-status-error { color: var(--red); }
 .op-toggle {
   font-size: 10.5px;
   padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: transparent;
+  border: none;
+  border-radius: 6px;
+  background: none;
   color: var(--text-muted);
 }
 .op-open {
   font-size: 10.5px;
-  padding: 2px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text);
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
   cursor: pointer;
 }
 .op-open:hover {
-  background: var(--bg-subtle);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
 }
 
 .produced-files {
-  margin-top: 4px;
-  padding: 12px 14px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
 }
 .produced-files-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  font-weight: 600;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+  font-weight: 500;
 }
-.produced-files-list { display: flex; flex-direction: column; gap: 4px; }
+.produced-files-list { display: flex; flex-direction: column; gap: 2px; }
 .produced-file {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  font-size: 12px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  box-shadow: none;
+  transition: background 160ms ease;
+}
+.produced-file:hover {
+  background: var(--bg-fill-tertiary);
 }
 .produced-file-icon { width: 22px; text-align: center; color: var(--text-muted); }
 .produced-file-name {
@@ -219,11 +213,20 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.produced-file-actions { display: flex; gap: 6px; }
+.produced-file-actions { display: flex; gap: 4px; }
 .produced-file-actions .ghost,
 .produced-file-actions .ghost-link {
   font-size: 11px;
-  padding: 3px 9px;
+  padding: 2px 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  border-radius: 6px;
+}
+.produced-file-actions .ghost:hover,
+.produced-file-actions .ghost-link:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
 }
 
 .plugin-action-panel {

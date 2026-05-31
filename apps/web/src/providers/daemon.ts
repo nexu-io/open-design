@@ -187,6 +187,14 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
 
 export interface DaemonStreamHandlers extends StreamHandlers {
   onAgentEvent: (ev: AgentEvent) => void;
+  /**
+   * Live-only incremental tool-input fragment (Claude `input_json_delta`).
+   * Kept off `AgentEvent`/`PersistedAgentEvent` because it is ephemeral and
+   * never persisted — consumers accumulate by tool-use `id` for real-time
+   * display and discard once the full `tool_use` event arrives. `name` is the
+   * tool name so the UI can gate the live preview to code-writing tools.
+   */
+  onToolInputDelta?: (id: string, name: string, delta: string) => void;
 }
 
 export interface DaemonStreamOptions {
@@ -719,6 +727,16 @@ async function consumeDaemonRun({
           }
 
           if (event.event === 'agent') {
+            if (event.data.type === 'tool_input_delta') {
+              if (
+                typeof event.data.id === 'string' &&
+                typeof event.data.name === 'string' &&
+                typeof event.data.delta === 'string'
+              ) {
+                handlers.onToolInputDelta?.(event.data.id, event.data.name, event.data.delta);
+              }
+              continue;
+            }
             const translated = translateAgentEvent(event.data);
             if (!translated) continue;
             if (translated.kind === 'text') {

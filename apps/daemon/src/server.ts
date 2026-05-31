@@ -2406,6 +2406,10 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
   if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
     return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
   }
+  // Live-only incremental tool-input fragments are for real-time display only.
+  // Returning null skips persistence so history replay isn't polluted with
+  // mid-token JSON shards; the full `tool_use` above is the persisted record.
+  if (type === 'tool_input_delta') return null;
   if (type === 'tool_result' && typeof data.toolUseId === 'string') {
     return {
       kind: 'tool_result',
