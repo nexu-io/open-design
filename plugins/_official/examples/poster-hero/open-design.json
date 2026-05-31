@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-poster-hero",
-  "title": "营销海报",
+  "title": "Marketing Poster",
+  "title_i18n": {
+    "en": "Marketing Poster",
+    "zh-CN": "营销海报",
+    "zh-TW": "行銷海報",
+    "ja": "マーケティングポスター",
+    "ko": "마케팅 포스터",
+    "de": "Marketing-Poster",
+    "fr": "Affiche Marketing",
+    "ru": "Маркетинговый постер",
+    "es": "Póster de Marketing",
+    "pt-BR": "Pôster de Marketing",
+    "it": "Poster Marketing",
+    "vi": "Poster Marketing",
+    "pl": "Plakat Marketingowy",
+    "id": "Poster Marketing",
+    "nl": "Marketingposter",
+    "ar": "ملصق تسويقي",
+    "tr": "Pazarlama Posteri",
+    "uk": "Маркетинговий постер"
+  },
   "version": "0.1.0",
-  "description": "竖版海报 / 朋友圈分享图, 强视觉冲击",
+  "description": "Vertical poster or Moments-style share image with strong visual impact.",
+  "description_i18n": {
+    "en": "Vertical poster or Moments-style share image with strong visual impact.",
+    "zh-CN": "竖版海报 / 朋友圈分享图, 强视觉冲击",
+    "zh-TW": "直式海報或限時動態風格分享圖，具有強烈視覺衝擊力。",
+    "ja": "縦型ポスターやストーリーズ風のシェア画像、視覚的インパクトが強い。",
+    "ko": "강한 시각적 임팩트를 주는 세로형 포스터 또는 스토리 스타일 공유 이미지입니다.",
+    "de": "Hochformat-Poster oder Moments-Style-Teilen-Bild mit starker visueller Wirkung.",
+    "fr": "Affiche verticale ou image de partage style Stories avec un fort impact visuel.",
+    "ru": "Вертикальный постер или изображение для публикации в стиле Stories с сильным визуальным эффектом.",
+    "es": "Póster vertical o imagen para compartir estilo Historias con fuerte impacto visual.",
+    "pt-BR": "Pôster vertical ou imagem de compartilhamento estilo Stories com forte impacto visual.",
+    "it": "Poster verticale o immagine da condividere in stile Stories con forte impatto visivo.",
+    "vi": "Poster dọc hoặc ảnh chia sẻ kiểu Moments với hiệu ứng thị giác mạnh mẽ.",
+    "pl": "Pionowy plakat lub obraz do udostępniania w stylu Stories o silnym efekcie wizualnym.",
+    "id": "Poster vertikal atau gambar berbagi gaya Stories dengan dampak visual yang kuat.",
+    "nl": "Verticale poster of Stories-stijl deelafbeelding met sterke visuele impact.",
+    "ar": "ملصق عمودي أو صورة مشاركة بأسلوب القصص مع تأثير بصري قوي.",
+    "tr": "Güçlü görsel etkiye sahip dikey poster veya Hikayeler tarzı paylaşım görseli.",
+    "uk": "Вертикальний постер або зображення для публікації в стилі Moments із сильним візуальним ефектом."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -40,11 +80,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「营销海报」模板把我的内容做成一份「竖版海报 / 朋友圈分享图, 强视觉冲击」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Marketing Poster template to turn my content into a vertical poster or Moments-style share image with strong visual impact. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「营销海报」模板把我的内容做成一份「竖版海报 / 朋友圈分享图, 强视觉冲击」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "营销海报"
+          "title": "Marketing Poster",
+          "title_i18n": {
+            "en": "Marketing Poster",
+            "zh-CN": "营销海报"
+          }
         }
       ]
     },

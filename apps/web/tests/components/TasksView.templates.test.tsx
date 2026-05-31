@@ -162,113 +162,6 @@ describe('TasksView automation templates', () => {
     });
   });
 
-  it('ingests pasted source content into source packets and proposals', async () => {
-    const postBodies: unknown[] = [];
-    let proposals: AutomationEvolutionProposal[] = [];
-    let packets = [] as Array<{
-      id: string;
-      sourceKind: string;
-      title: string;
-      capturedAt: string;
-      tokenStats: { originalTokens: number };
-    }>;
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = input.toString();
-      if (url === '/api/routines' && (!init || init.method === undefined)) {
-        return new Response(JSON.stringify({ routines: [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === '/api/projects' && (!init || init.method === undefined)) {
-        return new Response(JSON.stringify({ projects: [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
-        return new Response(JSON.stringify({ templates: [daemonTemplate] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === '/api/automation-proposals?status=pending-review' && (!init || init.method === undefined)) {
-        return new Response(JSON.stringify({ proposals }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === '/api/automation-source-packets?limit=3' && (!init || init.method === undefined)) {
-        return new Response(JSON.stringify({ packets }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === '/api/automation-ingestions' && init?.method === 'POST') {
-        postBodies.push(JSON.parse(String(init.body)));
-        const packet = {
-          id: 'packet-1',
-          sourceKind: 'repo',
-          sourceRef: 'https://github.com/acme/design',
-          title: 'Acme source',
-          capturedAt: '2026-05-18T00:00:00.000Z',
-          bodyMarkdown: 'Primary color #335CFF',
-          provenance: [],
-          attachments: [],
-          sensitivity: 'workspace',
-          capabilityHints: [],
-          tokenStats: { originalTokens: 6 },
-          candidateSinks: ['memory', 'design-system'],
-        };
-        proposals = [{ ...memoryProposal, id: 'proposal-ingested-1', title: 'Memory: Acme source' }];
-        packets = [packet];
-        return new Response(JSON.stringify({
-          packet,
-          compressionReport: {
-            mode: 'balanced',
-            status: 'skipped',
-            beforeTokens: 6,
-            afterTokens: 6,
-            summary: 'Already compact',
-            preservedSourcePacketId: 'packet-1',
-          },
-          proposals,
-        }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
-    }) as typeof fetch;
-
-    render(<TasksView />);
-
-    await screen.findByText('Ingest source');
-    fireEvent.change(screen.getByLabelText('Title'), {
-      target: { value: 'Acme source' },
-    });
-    fireEvent.change(screen.getByLabelText('Source ref'), {
-      target: { value: 'https://github.com/acme/design' },
-    });
-    fireEvent.change(screen.getByLabelText('Content'), {
-      target: { value: 'Primary color #335CFF' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Ingest$/i }));
-
-    await waitFor(() => {
-      expect(postBodies).toHaveLength(1);
-      expect(postBodies[0]).toMatchObject({
-        templateId: 'ingest-source-memory-tree',
-        sourceKind: 'connector',
-        title: 'Acme source',
-        sourceRef: 'https://github.com/acme/design',
-        bodyMarkdown: 'Primary color #335CFF',
-      });
-      expect(screen.getByText('Memory: Acme source')).toBeTruthy();
-      expect(screen.getByText('Acme source')).toBeTruthy();
-    });
-  });
-
   it('crystallizes a successful automation run into reviewable proposals', async () => {
     const crystallizeCalls: string[] = [];
     let proposals: AutomationEvolutionProposal[] = [];
@@ -404,7 +297,6 @@ describe('TasksView automation templates', () => {
         '/api/routines/routine-1/runs/run-succeeded-1/crystallize',
       ]);
       expect(screen.getByText('Skill: Artifact polish loop run')).toBeTruthy();
-      expect(screen.getByText('Artifact polish loop run')).toBeTruthy();
     });
   });
 });

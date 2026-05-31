@@ -6,9 +6,13 @@ import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
+import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-cli-help.js';
+import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { requestJsonIpc } from '@open-design/sidecar';
+import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 
 const argv = process.argv.slice(2);
 
@@ -148,6 +152,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'title', 'against',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -191,6 +196,8 @@ const RECOVERABLE_EXIT_CODES = {
   'plugin-requires-daemon':   71,
   'snapshot-stale':           72,
   'genui-surface-awaiting':   73,
+  'desktop-auth-pending':     74,
+  'desktop-import-token-rejected': 75,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -306,6 +313,10 @@ function printRootHelp() {
 
   od plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
       Discover, install, and apply plugins through the local daemon.
+  od plugin publish-repo <folder>
+      Create/update the author's GitHub repo for a local plugin folder.
+  od plugin open-design-pr <folder>
+      Push a community-catalog branch and open the Open Design PR form.
 
   od automation <list|get|create|update|run|runs|pause|resume|delete> [args]
       Drive the Automations surface headlessly. Same store as the UI's
@@ -471,7 +482,8 @@ async function runMediaGenerate(rawArgs) {
 
   const daemonUrl = await cliDaemonUrl(flags);
   const projectId = flags.project || process.env.OD_PROJECT_ID;
-  if (!projectId) {
+  const token = process.env.OD_TOOL_TOKEN;
+  if (!projectId && !token) {
     console.error(
       'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
     );
@@ -505,12 +517,17 @@ async function runMediaGenerate(rawArgs) {
   if (flags['prompt-influence'] != null) body.promptInfluence = Number(flags['prompt-influence']);
   if (flags.loop === true) body.loop = true;
 
-  const url = `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
+  const url = token
+    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/generate`
+    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
   let resp;
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch (err) {
@@ -742,6 +759,22 @@ function parseFlags(argv, opts = {}) {
   return out;
 }
 
+function positionalArgs(argv, stringFlags = new Set()) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a) continue;
+    if (!a.startsWith('--')) {
+      out.push(a);
+      continue;
+    }
+    const eq = a.indexOf('=');
+    const key = eq >= 0 ? a.slice(2, eq) : a.slice(2);
+    if (eq < 0 && stringFlags.has(key)) i++;
+  }
+  return out;
+}
+
 async function cliDaemonUrl(flags) {
   return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'] });
 }
@@ -781,7 +814,7 @@ Common options:
                             it, and forwards it to the upstream API.
   --daemon-url <url>
 
-Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}.
+Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}
 
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
@@ -878,19 +911,36 @@ function exitWithStructuredError({ code, message, data }) {
 async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
   let parsed;
   try { parsed = await resp.json(); } catch { parsed = {}; }
-  const errCode = parsed?.error?.code;
+  const errCode = normalizeRecoverableErrorCode(parsed?.error?.code, parsed?.error?.message);
   if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
     exitWithStructuredError({
       code:    errCode,
       message: parsed.error.message ?? `HTTP ${resp.status}`,
-      data:    parsed.error.data,
+      data:    structuredErrorData(parsed.error),
     });
   }
   exitWithStructuredError({
     code:    fallbackCode,
     message: parsed?.error?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
-    data:    parsed?.error?.data,
+    data:    structuredErrorData(parsed?.error),
   });
+}
+
+function normalizeRecoverableErrorCode(code, message) {
+  if (code === 'DESKTOP_AUTH_PENDING') return 'desktop-auth-pending';
+  if (code === 'FORBIDDEN' && /desktop import token rejected/i.test(String(message ?? ''))) {
+    return 'desktop-import-token-rejected';
+  }
+  return code;
+}
+
+function structuredErrorData(error) {
+  if (!error || typeof error !== 'object') return undefined;
+  const data = {};
+  if ('data' in error && error.data !== undefined) Object.assign(data, error.data);
+  if ('details' in error && error.details !== undefined) data.details = error.details;
+  if (typeof error.retryable === 'boolean') data.retryable = error.retryable;
+  return Object.keys(data).length > 0 ? data : undefined;
 }
 
 async function runPlugin(args) {
@@ -924,10 +974,13 @@ async function runPlugin(args) {
     case 'scaffold': return runPluginScaffold(rest);
     case 'validate': return runPluginValidate(rest);
     case 'pack':     return runPluginPack(rest);
+    case 'candidates': return runPluginCandidates(rest);
     case 'login':    return runPluginLogin(rest);
     case 'whoami':   return runPluginWhoami(rest);
     case 'export':   return runPluginExport(rest);
     case 'publish':  return runPluginPublish(rest);
+    case 'publish-repo': return runPluginPublishRepo(rest);
+    case 'open-design-pr': return runPluginOpenDesignPr(rest);
     case 'yank':     return runPluginYank(rest);
     default:
       console.error(`unknown subcommand: od plugin ${sub}`);
@@ -1176,12 +1229,12 @@ Wraps GitHub CLI auth for Open Design registry publishing. The token stays in gh
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
-  const version = await execFileBuffered('gh', ['--version'], { timeout: 10_000 });
+  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
   if (!version.ok) {
     console.error('[plugin login] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
     process.exit(1);
   }
-  const result = await spawnPassthrough('gh', ['auth', 'login', '--hostname', host, '--web']);
+  const result = await spawnGhPassthrough(['auth', 'login', '--hostname', host, '--web']);
   process.exit(result.code ?? 0);
 }
 
@@ -1198,7 +1251,7 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
-  const auth = await execFileBuffered('gh', ['auth', 'status', '--hostname', host], { timeout: 10_000 });
+  const auth = await execGhBuffered(['auth', 'status', '--hostname', host], { timeout: 10_000 });
   if (!auth.ok) {
     if (flags.json) {
       process.stdout.write(JSON.stringify({
@@ -1213,7 +1266,7 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
     if (auth.stderr || auth.stdout) console.error(auth.stderr || auth.stdout);
     process.exit(1);
   }
-  const user = await execFileBuffered('gh', ['api', 'user', '--hostname', host], { timeout: 10_000 });
+  const user = await execGhBuffered(['api', 'user', '--hostname', host], { timeout: 10_000 });
   let login = '';
   let name = '';
   try {
@@ -1256,12 +1309,42 @@ async function execFileBuffered(command, args, opts = {}) {
   });
 }
 
-async function spawnPassthrough(command, args) {
+function quotePosixShellArg(value) {
+  const text = String(value ?? '');
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function buildGhShellCommand(args) {
+  return ['gh', ...args].map(quotePosixShellArg).join(' ');
+}
+
+function buildLoginShellCommand(innerCommand) {
+  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
+}
+
+async function execGhBuffered(args, opts = {}) {
+  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+    env: process.env,
+    ...opts,
+  });
+}
+
+async function spawnPassthrough(command, args, opts = {}) {
   const { spawn } = await import('node:child_process');
   return await new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: 'inherit' });
+    const child = spawn(command, args, { stdio: 'inherit', ...opts });
     child.on('error', (error) => resolve({ code: 1, error }));
     child.on('close', (code) => resolve({ code }));
+  });
+}
+
+async function spawnGhPassthrough(args) {
+  if (process.platform === 'win32') return spawnPassthrough('gh', args);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return spawnPassthrough(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+    env: process.env,
   });
 }
 
@@ -2980,6 +3063,85 @@ function coerceCliValue(raw) {
   return raw;
 }
 
+async function runPluginCandidates(rest) {
+  const sub = rest[0];
+  const args = rest.slice(1);
+  const flags = parseFlags(args, {
+    string: new Set(['daemon-url', 'project', 'action']),
+    boolean: new Set(['help', 'h', 'json', 'include-dismissed']),
+  });
+  if (!sub || flags.help || flags.h) {
+    console.log(`Usage:
+  od plugin candidates list --project <projectId> [--json] [--include-dismissed]
+  od plugin candidates draft <candidateId> --project <projectId> [--json]
+  od plugin candidates dismiss <candidateId> --project <projectId> [--json]
+
+Lists and formalizes persisted skill-to-plugin candidates.`);
+    process.exit(!sub ? 2 : 0);
+  }
+  const projectId = typeof flags.project === 'string' && flags.project.length > 0 ? flags.project : '';
+  if (!projectId) {
+    console.error('--project <projectId> is required');
+    process.exit(2);
+  }
+  const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
+  if (sub === 'list') {
+    const qs = flags['include-dismissed'] ? '?includeDismissed=true' : '';
+    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates${qs}`);
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      console.error(`GET plugin candidates failed: ${resp.status} ${JSON.stringify(data)}`);
+      process.exit(1);
+    }
+    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+    if (candidates.length === 0) {
+      console.log('No plugin candidates.');
+      return;
+    }
+    for (const candidate of candidates) {
+      console.log(`${candidate.id}\t${candidate.status}\t${candidate.title}\t${candidate.draftPath ?? ''}`);
+    }
+    return;
+  }
+  const candidateId = args.find((a) => !a.startsWith('-') && a !== flags.project && a !== flags.action);
+  if (!candidateId) {
+    console.error(`candidate id is required for ${sub}`);
+    process.exit(2);
+  }
+  if (sub === 'draft') {
+    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await resp.json().catch(() => null);
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    } else if (resp.ok) {
+      console.log(`[candidate] draft: ${data.draftPath}`);
+      console.log(`[candidate] validation ok=${data.validation?.ok}`);
+    } else {
+      console.error(`[candidate] draft failed: ${data?.message ?? JSON.stringify(data)}`);
+    }
+    process.exit(resp.ok ? 0 : resp.status === 422 ? 4 : 1);
+  }
+  if (sub === 'dismiss') {
+    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/dismiss`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await resp.json().catch(() => null);
+    if (flags.json) process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    else if (resp.ok) console.log(`[candidate] dismissed ${candidateId}`);
+    else console.error(`[candidate] dismiss failed: ${data?.message ?? JSON.stringify(data)}`);
+    process.exit(resp.ok ? 0 : 1);
+  }
+  console.error(`unknown subcommand: od plugin candidates ${sub}`);
+  process.exit(2);
+}
+
 // Phase 4 / spec §14.1 — `od plugin publish --to <catalog>`.
 //
 // Reads the installed plugin's manifest metadata (or the snapshot's
@@ -3106,6 +3268,288 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   }
 }
 
+async function runPluginPublishRepo(rest) {
+  const flags = parseFlags(rest, {
+    string: new Set(['host', 'owner']),
+    boolean: new Set(['help', 'h', 'json', 'dry-run']),
+  });
+  if (rest.length === 0 || flags.help || flags.h) {
+    console.log(`Usage:
+  od plugin publish-repo <folder> [--host github.com] [--owner github-login-or-org] [--dry-run] [--json]
+
+Creates or updates the public GitHub repository named by the plugin manifest.
+If plugin.repo is missing or uses a placeholder owner, the CLI resolves the
+target from --owner, a trusted manifest owner, local gh auth status, then the
+GitHub API as a last resort. It never publishes to placeholder owners.`);
+    process.exit(rest.length === 0 ? 2 : 0);
+  }
+  const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
+  if (!folder) {
+    console.error('Usage: od plugin publish-repo <folder>');
+    process.exit(2);
+  }
+
+  const [{ resolve, join }, { readFile, writeFile, stat, mkdtemp, readdir, rm, mkdir, cp }, { pathToFileURL }, os] = await Promise.all([
+    import('node:path'),
+    import('node:fs/promises'),
+    import('node:url'),
+    import('node:os'),
+  ]);
+  const absFolder = resolve(process.cwd(), folder);
+  const manifestPath = resolve(absFolder, 'open-design.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const host = typeof flags.host === 'string' ? flags.host : 'github.com';
+  const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'publish-repo' });
+  const normalized = normalizeManifestRepoForOwner(manifest, target.owner);
+  if (normalized.changed && !flags['dry-run']) {
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    await pluginCliValidateFolder(absFolder);
+  }
+
+  const repo = parseGithubRepoUrl(normalized.repoUrl);
+  if (!repo) {
+    console.error(`[publish-repo] invalid plugin.repo after normalization: ${normalized.repoUrl}`);
+    process.exit(2);
+  }
+  const steps = [];
+  const run = async (label, command, args, opts = {}) => {
+    steps.push({ label, command: [command, ...args].join(' ') });
+    if (flags['dry-run']) return { ok: true, stdout: '', stderr: '' };
+    const result = await (command === 'gh'
+      ? execGhBuffered(args, { cwd: opts.cwd ?? absFolder, timeout: opts.timeout ?? 120_000 })
+      : execFileBuffered(command, args, { cwd: opts.cwd ?? absFolder, timeout: opts.timeout ?? 120_000 }));
+    steps[steps.length - 1].ok = result.ok;
+    steps[steps.length - 1].stdout = result.stdout;
+    steps[steps.length - 1].stderr = result.stderr;
+    if (!result.ok) {
+      emitPluginWorkflowResult(flags, {
+        ok: false,
+        action: 'publish-repo',
+        folder: absFolder,
+        repoUrl: normalized.repoUrl,
+        login: target.login,
+        owner: target.owner,
+        ownerSource: target.ownerSource,
+        apiRateLimited: target.apiRateLimited,
+        steps,
+        error: { label, stdout: result.stdout, stderr: result.stderr, code: result.code },
+      });
+      process.exit(1);
+    }
+    return result;
+  };
+
+  let exists = false;
+  const view = flags['dry-run']
+    ? { ok: false, stderr: 'dry-run' }
+    : await execGhBuffered(['repo', 'view', repo.fullName], { cwd: absFolder, timeout: 30_000 });
+  steps.push({ label: 'check repo', command: `gh repo view ${repo.fullName}`, ok: view.ok, stdout: view.stdout, stderr: view.stderr });
+  if (view.ok) {
+    exists = true;
+  } else if (!flags['dry-run'] && !isRepoNotFound(view)) {
+    emitPluginWorkflowResult(flags, {
+      ok: false,
+      action: 'publish-repo',
+      folder: absFolder,
+      repoUrl: normalized.repoUrl,
+      login: target.login,
+      owner: target.owner,
+      ownerSource: target.ownerSource,
+      apiRateLimited: target.apiRateLimited,
+      steps,
+      error: { label: 'check repo', stdout: view.stdout, stderr: view.stderr, code: view.code },
+    });
+    process.exit(1);
+  }
+
+  let workdir = absFolder;
+  let cleanupDir = null;
+  if (exists && !flags['dry-run']) {
+    cleanupDir = await mkdtemp(join(os.tmpdir(), 'od-plugin-publish-sync-'));
+    workdir = join(cleanupDir, repo.name);
+    await run('clone repo', 'gh', ['repo', 'clone', repo.fullName, workdir], { cwd: cleanupDir, timeout: 240_000 });
+    for (const entry of await readdir(workdir)) {
+      if (entry === '.git') continue;
+      await rm(join(workdir, entry), { recursive: true, force: true });
+    }
+    await mkdir(workdir, { recursive: true });
+    for (const entry of await readdir(absFolder)) {
+      if (entry === '.git') continue;
+      await cp(join(absFolder, entry), join(workdir, entry), { recursive: true, force: true });
+    }
+  } else if (!flags['dry-run']) {
+    let hasGit = false;
+    try { await stat(resolve(absFolder, '.git')); hasGit = true; } catch {}
+    if (!hasGit) await run('git init', 'git', ['init']);
+  }
+
+  await run('git add', 'git', ['add', '-A'], { cwd: workdir });
+  const status = flags['dry-run']
+    ? { stdout: 'dry-run' }
+    : await execFileBuffered('git', ['status', '--porcelain'], { cwd: workdir });
+  if (status.stdout.trim().length > 0 || !exists) {
+    const commitMessage = exists
+      ? `Update: ${manifest.name} v${manifest.version ?? '0.0.0'}`
+      : `Initial commit: ${manifest.name} v${manifest.version ?? '0.0.0'}`;
+    await run('git commit', 'git', ['commit', '-m', commitMessage], { cwd: workdir });
+  }
+  const tag = `v${manifest.version ?? '0.0.0'}`;
+  if (!flags['dry-run']) {
+    const localTag = await execFileBuffered('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`], { cwd: workdir });
+    if (!localTag.ok) await run('git tag', 'git', ['tag', tag], { cwd: workdir });
+  }
+
+  if (exists) {
+    await run('git push', 'git', ['push', 'origin', 'HEAD'], { cwd: workdir });
+  } else {
+    await run('gh repo create', 'gh', [
+      'repo', 'create', repo.fullName, '--public', '--source', '.', '--push',
+      '--description', String(manifest.description ?? ''),
+    ], { cwd: workdir });
+  }
+  await run('git push tags', 'git', ['push', '--tags'], { cwd: workdir });
+  const verify = flags['dry-run']
+    ? { ok: true, stdout: JSON.stringify({ nameWithOwner: repo.fullName, url: normalized.repoUrl }) }
+    : await run('verify repo', 'gh', ['repo', 'view', repo.fullName, '--json', 'url,nameWithOwner'], { cwd: workdir });
+  const parsedVerify = safeJson(verify.stdout);
+  if (cleanupDir && !flags['dry-run']) {
+    await rm(cleanupDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+  emitPluginWorkflowResult(flags, {
+    ok: true,
+    action: 'publish-repo',
+    folder: absFolder,
+    login: target.login,
+    owner: target.owner,
+    ownerSource: target.ownerSource,
+    apiRateLimited: target.apiRateLimited,
+    repoUrl: parsedVerify?.url ?? normalized.repoUrl,
+    manifestRewritten: normalized.changed,
+    manifestPath: pathToFileURL(manifestPath).pathname,
+    steps,
+  });
+}
+
+async function runPluginOpenDesignPr(rest) {
+  const flags = parseFlags(rest, {
+    string: new Set(['host', 'owner']),
+    boolean: new Set(['help', 'h', 'json', 'dry-run']),
+  });
+  if (rest.length === 0 || flags.help || flags.h) {
+    console.log(`Usage:
+  od plugin open-design-pr <folder> [--host github.com] [--owner github-login-or-fork-owner] [--dry-run] [--json]
+
+Copies a local plugin folder into plugins/community/<name>/ on the author's
+fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`);
+    process.exit(rest.length === 0 ? 2 : 0);
+  }
+  const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
+  if (!folder) {
+    console.error('Usage: od plugin open-design-pr <folder>');
+    process.exit(2);
+  }
+  const [{ resolve, join }, fsp, os] = await Promise.all([
+    import('node:path'),
+    import('node:fs/promises'),
+    import('node:os'),
+  ]);
+  const absFolder = resolve(process.cwd(), folder);
+  const manifestPath = resolve(absFolder, 'open-design.json');
+  const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  const host = typeof flags.host === 'string' ? flags.host : 'github.com';
+  const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'open-design-pr' });
+  const name = String(manifest.name ?? '').trim();
+  if (!name) {
+    console.error('[open-design-pr] manifest.name is required');
+    process.exit(2);
+  }
+  const title = String(manifest.title ?? name).trim();
+  const branch = `plugin/${name}-${Math.floor(Date.now() / 1000)}`;
+  const tmpRoot = await fsp.mkdtemp(join(os.tmpdir(), 'od-open-design-pr-'));
+  const checkout = join(tmpRoot, 'open-design');
+  const steps = [];
+  const run = async (label, command, args, opts = {}) => {
+    steps.push({ label, command: [command, ...args].join(' ') });
+    if (flags['dry-run']) return { ok: true, stdout: '', stderr: '' };
+    const result = await (command === 'gh'
+      ? execGhBuffered(args, { cwd: opts.cwd ?? process.cwd(), timeout: opts.timeout ?? 180_000 })
+      : execFileBuffered(command, args, { cwd: opts.cwd ?? process.cwd(), timeout: opts.timeout ?? 180_000 }));
+    steps[steps.length - 1].ok = result.ok;
+    steps[steps.length - 1].stdout = result.stdout;
+    steps[steps.length - 1].stderr = result.stderr;
+    if (!result.ok && !opts.tolerate?.(result)) {
+      emitPluginWorkflowResult(flags, {
+        ok: false,
+        action: 'open-design-pr',
+        folder: absFolder,
+        login: target.login,
+        owner: target.owner,
+        ownerSource: target.ownerSource,
+        apiRateLimited: target.apiRateLimited,
+        branch,
+        steps,
+        error: { label, stdout: result.stdout, stderr: result.stderr, code: result.code },
+      });
+      process.exit(1);
+    }
+    return result;
+  };
+
+  await run('fork', 'gh', ['repo', 'fork', 'nexu-io/open-design'], {
+    tolerate: (r) => /already exists|existing fork/i.test(`${r.stdout}\n${r.stderr}`),
+  });
+  await run('clone fork', 'git', [
+    'clone',
+    '--depth', '1',
+    '--single-branch',
+    '--branch', 'main',
+    '--filter=blob:none',
+    '--sparse',
+    `https://github.com/${target.owner}/open-design.git`,
+    checkout,
+  ], { timeout: 240_000 });
+  await run('sparse checkout', 'git', ['sparse-checkout', 'set', 'plugins/community'], { cwd: checkout });
+  await run('checkout branch', 'git', ['checkout', '-b', branch], { cwd: checkout });
+  const dest = join(checkout, 'plugins', 'community', name);
+  if (!flags['dry-run']) {
+    await fsp.rm(dest, { recursive: true, force: true });
+    await fsp.mkdir(dest, { recursive: true });
+    await fsp.cp(absFolder, dest, { recursive: true, force: true, filter: (src) => !src.includes(`${absFolder}/.git`) });
+  }
+  await run('git add', 'git', ['add', `plugins/community/${name}`], { cwd: checkout });
+  await run('git commit', 'git', ['commit', '-m', `Add ${title} plugin`], { cwd: checkout });
+  await run('git push branch', 'git', ['push', '-u', 'origin', branch], { cwd: checkout });
+  const body = [
+    `Add ${title} (${name}) plugin.`,
+    '',
+    `Version: ${manifest.version ?? '0.0.0'}`,
+    manifest.description ? `Description: ${manifest.description}` : '',
+  ].filter(Boolean).join('\n');
+  const pr = await run('open PR form', 'gh', [
+    'pr', 'create',
+    '--repo', 'nexu-io/open-design',
+    '--head', `${target.owner}:${branch}`,
+    '--base', 'main',
+    '--title', `Add ${title} plugin`,
+    '--body', body,
+    '--web',
+  ], { cwd: checkout });
+  const prUrl = extractFirstUrl(pr.stdout || pr.stderr) ?? `https://github.com/${target.owner}/open-design/pull/new/${branch}`;
+  emitPluginWorkflowResult(flags, {
+    ok: true,
+    action: 'open-design-pr',
+    folder: absFolder,
+    login: target.login,
+    owner: target.owner,
+    ownerSource: target.ownerSource,
+    apiRateLimited: target.apiRateLimited,
+    branch,
+    prUrl,
+    checkout,
+    steps,
+  });
+}
+
 async function publishToMarketplaceJson({ catalogPath, meta }) {
   const [{ dirname, resolve }, { mkdir, readFile, writeFile }, { PublishError, upsertMarketplaceJsonEntry }] = await Promise.all([
     import('node:path'),
@@ -3143,6 +3587,202 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
       plugins: outcome.manifest.plugins.length,
     },
   };
+}
+
+async function resolvePluginGithubTarget({ host = 'github.com', owner, manifest, purpose }) {
+  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
+  if (!version.ok) {
+    console.error('[plugin github] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
+    process.exit(1);
+  }
+  let status = await execGhBuffered(['auth', 'status', '--hostname', host, '--active'], { timeout: 10_000 });
+  if (!status.ok && /unknown flag: --active/i.test(`${status.stdout}\n${status.stderr}`)) {
+    status = await execGhBuffered(['auth', 'status', '--hostname', host], { timeout: 10_000 });
+  }
+  if (!status.ok) {
+    console.error(`[plugin github] gh is not authenticated for ${host}.`);
+    if (status.stderr || status.stdout) console.error(status.stderr || status.stdout);
+    console.error('Run: gh auth login -h github.com -s repo,workflow');
+    process.exit(1);
+  }
+  const manifestRepo = parseGithubRepoUrl(typeof manifest?.plugin?.repo === 'string' ? manifest.plugin.repo.trim() : '');
+  const trustedManifestOwner = purpose === 'publish-repo' && manifestRepo && !isPlaceholderRepoOwner(manifestRepo.owner) ? manifestRepo.owner : '';
+  const explicitOwner = typeof owner === 'string' ? owner.trim() : '';
+  if (explicitOwner && isPlaceholderRepoOwner(explicitOwner)) {
+    console.error(`[plugin github] refusing placeholder owner "${explicitOwner}". Pass a real GitHub login or org.`);
+    process.exit(2);
+  }
+  const statusLogin = parseGhAuthStatusLogin(status.stderr || status.stdout);
+  let login = statusLogin;
+  let resolvedOwner = explicitOwner || trustedManifestOwner || statusLogin;
+  let source = explicitOwner ? '--owner' : trustedManifestOwner ? 'plugin.repo' : statusLogin ? 'gh auth status' : '';
+  let apiError = null;
+  if (!resolvedOwner || !login) {
+    const user = await execGhBuffered(['api', 'user', '--hostname', host, '--jq', '.login'], { timeout: 20_000 });
+    if (user.ok && user.stdout.trim()) {
+      login = user.stdout.trim();
+      if (!resolvedOwner) {
+        resolvedOwner = login;
+        source = 'gh api user';
+      }
+    } else {
+      apiError = user;
+    }
+  }
+  if (!resolvedOwner) {
+    console.error(`[plugin github] could not resolve the GitHub owner for ${purpose}.`);
+    if (apiError?.stderr || apiError?.stdout) console.error(apiError.stderr || apiError.stdout);
+    if (apiError && isGhApiRateLimit(apiError)) {
+      const ownerHint = purpose === 'open-design-pr' ? '<github-login-or-fork-owner>' : '<github-login-or-org>';
+      console.error(`GitHub API is rate limited. Re-run with --owner ${ownerHint}, or authenticate/refresh gh and retry.`);
+    } else {
+      console.error('Run: gh auth refresh -h github.com -s repo,workflow');
+      console.error('Or:  gh auth login -h github.com -s repo,workflow');
+      console.error(purpose === 'open-design-pr'
+        ? 'If the fork owner differs from your auth login, pass --owner <github-login-or-fork-owner>.'
+        : 'If this is an org-owned plugin, pass --owner <github-org>.');
+    }
+    process.exit(1);
+  }
+  if (apiError && isGhApiRateLimit(apiError)) {
+    console.warn('[plugin github] GitHub API is rate limited; continuing with the owner resolved locally.');
+  }
+  if (isPlaceholderRepoOwner(resolvedOwner)) {
+    console.error(`[plugin github] refusing placeholder owner "${resolvedOwner}". Pass --owner <github-login-or-org>.`);
+    process.exit(2);
+  }
+  return {
+    host,
+    login: login || resolvedOwner,
+    owner: resolvedOwner,
+    ownerSource: source,
+    apiRateLimited: Boolean(apiError && isGhApiRateLimit(apiError)),
+    version: version.stdout,
+    status: status.stderr || status.stdout,
+  };
+}
+
+function parseGhAuthStatusLogin(output) {
+  const text = String(output ?? '');
+  const activeAccount = /Logged in to [^\s]+ account ([^\s()]+)/i.exec(text);
+  if (activeAccount?.[1]) return activeAccount[1].trim();
+  const tokenAccount = /Token account:\s*([^\s()]+)/i.exec(text);
+  if (tokenAccount?.[1]) return tokenAccount[1].trim();
+  return '';
+}
+
+function isGhApiRateLimit(result) {
+  const text = `${result?.stdout ?? ''}\n${result?.stderr ?? ''}`;
+  return /rate limit exceeded|authenticated requests get a higher rate limit/i.test(text);
+}
+
+function normalizeManifestRepoForOwner(manifest, owner) {
+  const name = String(manifest?.name ?? '').trim();
+  if (!name) {
+    console.error('[plugin repo] manifest.name is required');
+    process.exit(2);
+  }
+  const rawRepo = typeof manifest?.plugin?.repo === 'string' ? manifest.plugin.repo.trim() : '';
+  const parsed = parseGithubRepoUrl(rawRepo);
+  const placeholder = parsed ? isPlaceholderRepoOwner(parsed.owner) : false;
+  const shouldRewrite = !parsed || placeholder || parsed.name.toLowerCase() !== name.toLowerCase() || parsed.owner.toLowerCase() !== owner.toLowerCase();
+  const repoUrl = shouldRewrite ? `https://github.com/${owner}/${name}` : parsed.url;
+  if (shouldRewrite) {
+    if (!manifest.plugin || typeof manifest.plugin !== 'object') manifest.plugin = {};
+    manifest.plugin.repo = repoUrl;
+    manifest.homepage = repoUrl;
+    if (!manifest.author || typeof manifest.author !== 'object') manifest.author = {};
+    manifest.author.url = `https://github.com/${owner}`;
+  }
+  return {
+    changed: shouldRewrite,
+    repoUrl,
+    previousRepoUrl: rawRepo || null,
+  };
+}
+
+function parseGithubRepoUrl(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim().replace(/\.git$/i, '');
+  let owner = '';
+  let name = '';
+  try {
+    const url = new URL(trimmed);
+    if (!/^github\.com$/i.test(url.hostname)) return null;
+    const parts = url.pathname.split('/').filter(Boolean);
+    owner = parts[0] ?? '';
+    name = parts[1] ?? '';
+  } catch {
+    const match = /^([^/\s]+)\/([^/\s]+)$/.exec(trimmed);
+    if (!match) return null;
+    owner = match[1];
+    name = match[2];
+  }
+  if (!owner || !name) return null;
+  return {
+    owner,
+    name,
+    fullName: `${owner}/${name}`,
+    url: `https://github.com/${owner}/${name}`,
+  };
+}
+
+function isPlaceholderRepoOwner(owner) {
+  return /^(open-design-user|<vendor>|vendor|example-user|your-org|your-username|owner|user|username)$/i.test(String(owner ?? '').trim());
+}
+
+function isRepoNotFound(result) {
+  const text = `${result?.stdout ?? ''}\n${result?.stderr ?? ''}`;
+  return /could not resolve to a repository|not found|repository not found/i.test(text);
+}
+
+async function pluginCliValidateFolder(folder) {
+  const result = await execFileBuffered(process.execPath, [process.argv[1], 'plugin', 'validate', folder], {
+    timeout: 120_000,
+  });
+  if (!result.ok) {
+    console.error('[plugin validate] failed after manifest normalization');
+    if (result.stdout) console.error(result.stdout);
+    if (result.stderr) console.error(result.stderr);
+    process.exit(1);
+  }
+  return result;
+}
+
+function emitPluginWorkflowResult(flags, payload) {
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    return;
+  }
+  if (!payload.ok) {
+    console.error(`[${payload.action}] failed${payload.error?.label ? ` at ${payload.error.label}` : ''}`);
+    if (payload.error?.stderr) console.error(payload.error.stderr);
+    if (payload.error?.stdout) console.error(payload.error.stdout);
+    return;
+  }
+  if (payload.action === 'publish-repo') {
+    console.log(`Plugin published: ${payload.repoUrl}`);
+    if (payload.ownerSource) console.log(`[publish-repo] owner resolved from ${payload.ownerSource}: ${payload.owner}`);
+    if (payload.apiRateLimited) console.log('[publish-repo] GitHub API was rate limited; continued with the locally resolved owner.');
+    if (payload.manifestRewritten) console.log('[publish-repo] manifest repo fields were normalized before publishing.');
+    return;
+  }
+  if (payload.action === 'open-design-pr') {
+    if (payload.ownerSource) console.log(`[open-design-pr] owner resolved from ${payload.ownerSource}: ${payload.owner}`);
+    if (payload.apiRateLimited) console.log('[open-design-pr] GitHub API was rate limited; continued with the locally resolved owner.');
+    console.log(`Open this URL and click Create to file the PR: ${payload.prUrl}`);
+    return;
+  }
+  console.log(JSON.stringify(payload, null, 2));
+}
+
+function safeJson(raw) {
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function extractFirstUrl(text) {
+  const match = /https?:\/\/\S+/i.exec(String(text ?? ''));
+  return match ? match[0].replace(/[)\].,]+$/, '') : null;
 }
 
 async function runPluginYank(rest) {
@@ -3638,6 +4278,12 @@ function printPluginHelp() {
                                           (manifest parse + atom + ref checks).
   od plugin pack <folder> [--out <path>]  Build a .tgz archive of a plugin
                                           folder for distribution.
+  od plugin candidates list --project <id>
+                                          List persisted skill-to-plugin candidates.
+  od plugin publish-repo <folder>         Create/update the author's public
+                                          GitHub repo for a plugin folder.
+  od plugin open-design-pr <folder>       Push a community-catalog branch and
+                                          open the nexu-io/open-design PR form.
   od plugin publish <folder> --to open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
                                           Prepare a registry submission link.
   od plugin login [--host github.com]      Authenticate registry publishing via gh.
@@ -3682,6 +4328,7 @@ async function runProject(args) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
+  od project import <baseDir> [--name "<title>"]
   od project list                         List projects.
   od project info <id>                    Print one project.
   od project delete <id>                  Delete a project.
@@ -3786,6 +4433,35 @@ Common options:
       }
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] created ${data.project?.id ?? id} (conversation ${data.conversationId})`);
+      return;
+    }
+    case 'import': {
+      const [baseDir] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const importBaseDir = typeof baseDir === 'string' ? baseDir.trim() : '';
+      if (!importBaseDir) {
+        console.error('Usage: od project import <baseDir> [--name "<title>"]');
+        process.exit(2);
+      }
+      const body = { baseDir: importBaseDir };
+      if (typeof flags.name === 'string' && flags.name.length > 0) body.name = flags.name;
+      if (typeof flags.skill === 'string' && flags.skill.length > 0) body.skillId = flags.skill;
+      if (typeof flags['design-system'] === 'string' && flags['design-system'].length > 0) {
+        body.designSystemId = flags['design-system'];
+      }
+      const headers = { 'content-type': 'application/json' };
+      const importToken = await mintCliImportToken(importBaseDir);
+      if (importToken != null) {
+        headers['x-od-desktop-import-token'] = importToken;
+      }
+      const resp = await fetch(`${base}/api/import/folder`, {
+        method:  'POST',
+        headers,
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] imported ${data.project?.id ?? '-'} (conversation ${data.conversationId ?? '-'})`);
       return;
     }
     case 'delete': {
@@ -4014,6 +4690,8 @@ async function runFiles(args) {
   od files upload <projectId> <localpath> [--as <relpath>]
                                                Upload a local file.
   od files delete <projectId> <name>           Delete a project file.
+  od files diff   <projectId> <relpathA> [<relpathB> | --against -]
+                                               Print a unified diff.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -4126,15 +4804,178 @@ Common options:
       console.log(`[files] deleted ${name}`);
       return;
     }
+    case 'diff': {
+      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const [id, relA, relB] = positional;
+      const against = typeof flags.against === 'string' ? flags.against : null;
+      if (!id || !relA || (!relB && !against) || (relB && against)) {
+        console.error('Usage: od files diff <projectId> <relpathA> [<relpathB> | --against -]');
+        process.exit(2);
+      }
+      const left = await fetchProjectFileText(base, id, relA);
+      const rightLabel = against ?? relB;
+      const right = against === '-'
+        ? await readStdinUtf8()
+        : await fetchProjectFileText(base, id, rightLabel);
+      const diff = createUnifiedDiff(`a/${relA}`, `b/${rightLabel}`, left, right);
+      if (flags.json) return process.stdout.write(JSON.stringify({ diff }, null, 2) + '\n');
+      process.stdout.write(diff);
+      return;
+    }
     default:
       console.error(`unknown subcommand: od files ${sub}`);
       process.exit(2);
   }
 }
 
+function encodeProjectRelpath(rel) {
+  return String(rel).split('/').map(encodeURIComponent).join('/');
+}
+
+async function fetchProjectFileText(base, id, rel) {
+  const resp = await fetch(
+    `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}`,
+  );
+  if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+  const buf = Buffer.from(await resp.arrayBuffer());
+  return buf.toString('utf8');
+}
+
+async function readStdinUtf8() {
+  const fs = await import('node:fs');
+  return fs.readFileSync(0, 'utf8');
+}
+
+async function mintCliImportToken(baseDir) {
+  const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
+  if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
+  let result;
+  try {
+    result = await requestJsonIpc(
+      socketPath,
+      { type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, input: { baseDir } },
+      { timeoutMs: 800 },
+    );
+  } catch {
+    return null;
+  }
+  if (result?.ok === true && typeof result.token === 'string' && result.token.length > 0) {
+    return result.token;
+  }
+  if (result?.ok === false && result.code === 'DESKTOP_AUTH_PENDING') {
+    exitWithStructuredError({
+      code: 'desktop-auth-pending',
+      message: result.message ?? 'desktop auth required but secret not yet registered',
+      data: { retryable: result.retryable === true },
+    });
+  }
+  return null;
+}
+
+function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {
+  if (leftText === rightText) return '';
+  const leftLines = splitDiffLines(leftText);
+  const rightLines = splitDiffLines(rightText);
+  let prefix = 0;
+  while (
+    prefix < leftLines.length
+    && prefix < rightLines.length
+    && leftLines[prefix] === rightLines[prefix]
+  ) {
+    prefix++;
+  }
+  let leftEnd = leftLines.length;
+  let rightEnd = rightLines.length;
+  while (
+    leftEnd > prefix
+    && rightEnd > prefix
+    && leftLines[leftEnd - 1] === rightLines[rightEnd - 1]
+  ) {
+    leftEnd--;
+    rightEnd--;
+  }
+  const oldMid = leftLines.slice(prefix, leftEnd);
+  const newMid = rightLines.slice(prefix, rightEnd);
+  const body = diffLineBody(oldMid, newMid);
+  if (body.length === 0) {
+    body.push(...oldMid.map((line) => diffLine('-', line)), ...newMid.map((line) => diffLine('+', line)));
+  }
+  const oldStart = oldMid.length === 0 ? prefix : prefix + 1;
+  const newStart = newMid.length === 0 ? prefix : prefix + 1;
+  return [
+    `--- ${leftLabel}`,
+    `+++ ${rightLabel}`,
+    `@@ -${formatDiffRange(oldStart, oldMid.length)} +${formatDiffRange(newStart, newMid.length)} @@`,
+    ...body,
+  ].join('\n') + '\n';
+}
+
+function splitDiffLines(text) {
+  const value = String(text);
+  if (value.length === 0) return [];
+  return value.match(/.*?(?:\r\n|\n|\r|$)/gs).filter((line) => line.length > 0);
+}
+
+function formatDiffRange(start, length) {
+  return length === 1 ? String(start) : `${start},${length}`;
+}
+
+function diffLineBody(oldLines, newLines) {
+  if (oldLines.length === 0) return newLines.map((line) => diffLine('+', line));
+  if (newLines.length === 0) return oldLines.map((line) => diffLine('-', line));
+  if (oldLines.length * newLines.length > 1_000_000) {
+    return [...oldLines.map((line) => diffLine('-', line)), ...newLines.map((line) => diffLine('+', line))];
+  }
+  const width = newLines.length + 1;
+  const lcs = Array.from(
+    { length: oldLines.length + 1 },
+    () => new Uint32Array(width),
+  );
+  for (let i = oldLines.length - 1; i >= 0; i--) {
+    for (let j = newLines.length - 1; j >= 0; j--) {
+      lcs[i][j] = oldLines[i] === newLines[j]
+        ? lcs[i + 1][j + 1] + 1
+        : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < oldLines.length && j < newLines.length) {
+    if (oldLines[i] === newLines[j]) {
+      out.push(diffLine(' ', oldLines[i]));
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      out.push(diffLine('-', oldLines[i]));
+      i++;
+    } else {
+      out.push(diffLine('+', newLines[j]));
+      j++;
+    }
+  }
+  while (i < oldLines.length) out.push(diffLine('-', oldLines[i++]));
+  while (j < newLines.length) out.push(diffLine('+', newLines[j++]));
+  return out;
+}
+
+function diffLine(prefix, line) {
+  const value = String(line);
+  if (value.endsWith('\r\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
+  if (value.endsWith('\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
+  if (value.endsWith('\r')) return `${prefix}${renderDiffLineContent(value)}`;
+  return `${prefix}${renderDiffLineContent(value)}\n\\ No newline at end of file`;
+}
+
+function renderDiffLineContent(value) {
+  return String(value).replace(/\r/g, '\\r');
+}
+
 async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
+  od conversation new  <projectId> [--title "<title>"]
+                                           Create a conversation in a project.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
 
@@ -4148,6 +4989,25 @@ Common options:
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
+    case 'new': {
+      const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      if (!id) {
+        console.error('Usage: od conversation new <projectId> [--title "<title>"]');
+        process.exit(2);
+      }
+      const body = {};
+      if (typeof flags.title === 'string') body.title = flags.title;
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[conversation] created ${data.conversation?.id ?? '-'}`);
+      return;
+    }
     case 'list': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
@@ -4549,8 +5409,52 @@ async function runLibraryList(name, args) {
 }
 
 async function runSkills(args)        { return runLibraryList('skills', args); }
-async function runDesignSystems(args) { return runLibraryList('design-systems', args); }
 async function runCraft(args)         { return runLibraryList('craft', args); }
+
+async function runDesignSystems(args) {
+  if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (!args[0] || isDesignSystemsHelpArg(args[0])) {
+    console.log(DESIGN_SYSTEMS_USAGE);
+    process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
+  }
+  return runLibraryList('design-systems', args);
+}
+
+// od design-systems rename <id> --title <new-title> [--json]
+// Renames an editable (user-created) design system via PATCH
+// /api/design-systems/:id. Built-in systems are read-only and the daemon
+// returns 404, surfaced here as a structured failure. Arg parsing lives in
+// design-system-rename-args.ts so it can be unit-tested.
+async function runDesignSystemRename(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems rename <id> --title <new-title> [--json] [--daemon-url <url>]
+  od design-systems rename <id> "<new title>" [--json]
+
+Renames an editable (user-created) design system. Built-in systems are read-only.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const parsed = parseDesignSystemRenameArgs(args);
+  if (!parsed) {
+    console.error('Usage: od design-systems rename <id> --title <new-title>');
+    process.exit(2);
+  }
+  const flags = parseFlags(args, {
+    string: new Set([...LIBRARY_STRING_FLAGS, 'title']),
+    boolean: LIBRARY_BOOLEAN_FLAGS,
+  });
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(parsed.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: parsed.title }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const renamed = data.designSystem ?? data;
+  console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
+}
 
 async function runStatus(args) {
   // Alias of `od daemon status`.

@@ -38,6 +38,24 @@ describe('PLUGIN_AUTHORING_PROMPT_TEMPLATE', () => {
     expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('plugin.repo');
   });
 
+  it('forbids placeholder plugin.repo owners in generated manifests', () => {
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('gh --version');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('gh auth status');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('gh api user --jq .login');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toMatch(/only use `gh api user --jq \.login` as a fallback/i);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toMatch(/rate-limited/i);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toMatch(/do not silently omit/i);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toMatch(/omit plugin\.repo/i);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toMatch(/explicitly report the auth problem/i);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('gh auth refresh -h github.com -s repo,workflow');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('gh auth login -h github.com -s repo,workflow');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('od plugin publish-repo generated-plugin --owner <github-login-or-org>');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toMatch(/Never write placeholder owners/i);
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('open-design-user');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('<vendor>');
+    expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('your-username');
+  });
+
   it('still drives the local validation chain', () => {
     expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('od plugin validate');
     expect(PLUGIN_AUTHORING_PROMPT_TEMPLATE).toContain('od plugin pack');

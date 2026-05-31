@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-mockup-device-3d",
-  "title": "iPhone × MacBook 立体展架",
+  "title": "Device 3D Showcase",
+  "title_i18n": {
+    "en": "Device 3D Showcase",
+    "zh-CN": "iPhone × MacBook 立体展架",
+    "zh-TW": "裝置 3D 展示",
+    "ja": "デバイス 3D ショーケース",
+    "ko": "기기 3D 쇼케이스",
+    "de": "Geräte-3D-Showcase",
+    "fr": "Vitrine 3D d'appareils",
+    "ru": "3D-витрина устройств",
+    "es": "Escaparate 3D de dispositivos",
+    "pt-BR": "Showcase 3D de dispositivos",
+    "it": "Vetrina 3D di dispositivi",
+    "vi": "Trưng bày 3D thiết bị",
+    "pl": "Prezentacja 3D urządzeń",
+    "id": "Tampilan 3D perangkat",
+    "nl": "Apparaat 3D-showcase",
+    "ar": "عرض ثلاثي الأبعاد للأجهزة",
+    "tr": "Cihaz 3D vitrin",
+    "uk": "3D-вітрина пристроїв"
+  },
   "version": "0.1.0",
-  "description": "iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图",
+  "description": "Static iPhone and MacBook 3D-style showcase with real HTML embedded on screens, glass-lens refraction, and 360-degree turntable composition.",
+  "description_i18n": {
+    "en": "Static iPhone and MacBook 3D-style showcase with real HTML embedded on screens, glass-lens refraction, and 360-degree turntable composition.",
+    "zh-CN": "iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图",
+    "zh-TW": "靜態 iPhone 和 MacBook 3D 風格展示，支援在螢幕上嵌入真實 HTML、玻璃鏡頭折射效果和 360 度轉盤組合。",
+    "ja": "iPhone と MacBook の静的な 3D スタイルショーケース。画面に実際の HTML を埋め込み、ガラスレンズの屈折効果と 360 度ターンテーブル構成を実現。",
+    "ko": "실제 HTML을 화면에 임베드하고 유리 렌즈 굴절 및 360도 턴테이블 구성을 제공하는 정적 iPhone 및 MacBook 3D 스타일 쇼케이스입니다.",
+    "de": "Statisches iPhone- und MacBook-3D-Showcase mit echtem HTML auf Bildschirmen, Glaslinsen-Brechung und 360-Grad-Drehteller-Komposition.",
+    "fr": "Vitrine 3D statique d'iPhone et MacBook avec intégration HTML réelle sur les écrans, réfraction de lentille en verre et composition rotative à 360 degrés.",
+    "ru": "Статичная 3D-витрина iPhone и MacBook с встроенным HTML на экранах, преломлением стеклянной линзы и поворотной композицией на 360 градусов.",
+    "es": "Escaparate estático en 3D de iPhone y MacBook con HTML real incrustado en las pantallas, refracción de lente de vidrio y composición giratoria de 360 grados.",
+    "pt-BR": "Showcase estático em 3D de iPhone e MacBook com HTML real incorporado nas telas, refração de lente de vidro e composição giratória de 360 graus.",
+    "it": "Vetrina statica in 3D di iPhone e MacBook con HTML reale incorporato sugli schermi, rifrazione della lente in vetro e composizione girevole a 360 gradi.",
+    "vi": "Trưng bày 3D tĩnh của iPhone và MacBook với HTML thực được nhúng trên màn hình, khúc xạ thấu kính thủy tinh và bố cục xoay 360 độ.",
+    "pl": "Statyczna prezentacja 3D iPhone'a i MacBooka z rzeczywistym HTML osadzonym na ekranach, refrakcją szklanej soczewki i kompozycją obrotową 360 stopni.",
+    "id": "Tampilan statis iPhone dan MacBook bergaya 3D dengan HTML asli tertanam di layar, refraksi lensa kaca, dan komposisi meja putar 360 derajat.",
+    "nl": "Statische iPhone en MacBook 3D-showcase met echte HTML ingebed op schermen, glaslensrefractie en 360-graden draaitafelcompositie.",
+    "ar": "عرض ثابت ثلاثي الأبعاد لـ iPhone و MacBook مع HTML حقيقي مضمن على الشاشات، وانكسار عدسة زجاجية، وتركيب دوار بزاوية 360 درجة.",
+    "tr": "Ekranlara gömülü gerçek HTML, cam lens kırılması ve 360 derece döner tabla kompozisyonu ile statik iPhone ve MacBook 3D tarzı vitrin.",
+    "uk": "Статична 3D-вітрина iPhone та MacBook з вбудованим HTML на екранах, заломленням скляної лінзи та обертальною композицією на 360 градусів."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -43,11 +83,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「iPhone × MacBook 立体展架」模板把我的内容做成一份「iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Device 3D Showcase template to turn my content into a static iPhone and MacBook 3D-style showcase with real HTML embedded on the screens. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「iPhone × MacBook 立体展架」模板把我的内容做成一份「iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "iPhone × MacBook 立体展架"
+          "title": "Device 3D Showcase",
+          "title_i18n": {
+            "en": "Device 3D Showcase",
+            "zh-CN": "iPhone × MacBook 立体展架"
+          }
         }
       ]
     },

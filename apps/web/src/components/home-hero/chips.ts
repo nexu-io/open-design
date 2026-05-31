@@ -5,7 +5,7 @@
 // plugin to apply, which lands them in the generic agent path and
 // stretches the convergence loop. This chip rail exposes high-signal
 // NewProjectModal categories plus a small set of lower-row shortcuts
-// (plugin authoring / Figma / folder / template), so the same Enter
+// (plugin authoring / Figma / template), so the same Enter
 // keystroke can hit a scenario-bound run. The generic "other" path stays
 // in the free-form prompt instead of becoming a redundant chip.
 //
@@ -51,7 +51,6 @@ export type ChipAction =
       projectMetadata?: ProjectMetadata;
     }
   | { kind: 'create-plugin' }
-  | { kind: 'import-folder' }
   | { kind: 'open-template-picker' };
 
 // Two intent groups: "create" = produce a design artifact, "migrate" =
@@ -215,14 +214,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         targetStack: 'React 18 + Tailwind',
       },
     },
-  },
-  {
-    id: 'folder',
-    label: 'From folder',
-    icon: 'folder',
-    group: 'migrate',
-    hint: 'Import an existing local folder and continue editing.',
-    action: { kind: 'import-folder' },
   },
   {
     id: 'template',

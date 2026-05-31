@@ -54,6 +54,10 @@
   #     in browsers (same failure mode QUICKSTART.md calls out for
   #     nginx).
   #   * generous read/write timeouts for long-running streams.
+  #
+  # Site address is explicitly `http://` — a bare `host:port` lets Caddy
+  # pick the listener scheme by port, which collides with `auto_https
+  # off` and surfaces as TLS errors when the browser hits plain HTTP.
   caddyfile = pkgs.writeText "open-design-web.Caddyfile" ''
     {
       auto_https off
@@ -61,7 +65,7 @@
       persist_config off
     }
 
-    ${cfg.webFrontend.host}:${toString cfg.webFrontend.port} {
+    http://${cfg.webFrontend.host}:${toString cfg.webFrontend.port} {
       handle /api/* {
         reverse_proxy 127.0.0.1:${toString cfg.port} {
           flush_interval -1

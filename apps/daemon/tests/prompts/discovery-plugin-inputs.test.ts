@@ -41,6 +41,7 @@ describe('discovery.ts — Plugin inputs are authoritative for Quick brief defau
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('`platform`');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('Target platform');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('`artifactKind`');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`slideCount` / `slides` / `pageCount` answers Slide count');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('`audience` answers "Who is this for?"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('`designSystem`');
   });

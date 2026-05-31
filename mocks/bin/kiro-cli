@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Alias wrapper for kiro-cli — the primary bin name OD resolves for the
+# kiro RuntimeAgentDef (bin: 'kiro-cli').
+# Delegates to the same mock as mocks/bin/kiro.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec node "$HERE/../mock-agent.mjs" --as kiro "$@"

@@ -24,9 +24,12 @@ import {
   startServer,
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
+import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
+
+const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
 
 function symlinkDir(target: string, link: string): void {
   symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
@@ -67,6 +70,39 @@ describe('/api/chat', () => {
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
+
+  async function createPluginFixture(args: {
+    pluginId: string;
+    dirName: string;
+    localSkillPath?: string;
+  }): Promise<string> {
+    const root = await fsp.mkdtemp(join(tmpdir(), 'od-plugin-fixture-'));
+    tempDirs.push(root);
+    const fixtureDir = resolve(root, args.dirName);
+    const baseFixtureDir = resolve(
+      process.cwd(),
+      'tests',
+      'fixtures',
+      'plugin-fixtures',
+      'sample-plugin',
+    );
+    await fsp.cp(baseFixtureDir, fixtureDir, { recursive: true });
+    const manifestPath = resolve(fixtureDir, 'open-design.json');
+    const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8')) as {
+      name: string;
+      title: string;
+      od?: { context?: { skills?: Array<{ ref?: string; path?: string }> } };
+    };
+    manifest.name = args.pluginId;
+    manifest.title = args.pluginId;
+    if (args.localSkillPath) {
+      manifest.od ??= {};
+      manifest.od.context ??= {};
+      manifest.od.context.skills = [{ path: args.localSkillPath }];
+    }
+    await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    return fixtureDir;
+  }
 
   beforeAll(async () => {
     if (process.env.OD_DATA_DIR) {
@@ -176,6 +212,853 @@ process.exit(0);
           status: 'failed',
           exitCode: 0,
         });
+      },
+    );
+  });
+
+  it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stderr.write('json-rpc id 4: opencode event stream: read opencode SSE: bufio.Scanner: token too long\\n');
+process.exit(1);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('AGENT_EXECUTION_FAILED');
+        expect(body).toContain('The run failed due to an unknown upstream streaming error. Please retry.');
+        expect(body).toContain('event: stderr');
+        expect(body).toContain('"status":"failed"');
+      },
+    );
+  });
+
+  it('retries transient AMR Link catalog failures before aborting startup', async () => {
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const stateFile = join(tmpdir(), `od-amr-model-retry-${randomUUID()}.json`);
+    try {
+      process.env.VELA_RUNTIME_KEY = 'fake-runtime-key';
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+
+      await withFakeAgent(
+        'vela',
+        `
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const stateFile = ${JSON.stringify(stateFile)};
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  const state = existsSync(stateFile)
+    ? JSON.parse(readFileSync(stateFile, 'utf8'))
+    : { attempts: 0 };
+  state.attempts += 1;
+  writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+  if (state.attempts < 3) {
+    process.stderr.write('Get "https://amr-link.open-design.ai/v1/models": context deadline exceeded\\n');
+    process.exit(1);
+  }
+}
+const child = spawn(process.execPath, [fixture, ...args], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'amr',
+              message: 'hello',
+              model: 'deepseek-v3.2',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+          expect(body).toContain('"type":"text_delta","delta":"vela."');
+          expect(body).not.toContain('model_catalog_unavailable');
+          const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
+          expect(attempts.attempts).toBe(3);
+        },
+      );
+    } finally {
+      rmSync(stateFile, { force: true });
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('does not report plugin authoring as succeeded when the agent only emits planning text without artifacts', async () => {
+    const projectId = `proj-plugin-authoring-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring completion fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const {
+          runId,
+          pluginId,
+          appliedPluginSnapshotId,
+        } = await createResponse.json() as {
+          runId: string;
+          pluginId: string | null;
+          appliedPluginSnapshotId: string | null;
+        };
+        expect(pluginId).toBe('od-plugin-authoring');
+        expect(appliedPluginSnapshotId).toBeTruthy();
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
+        expect(statusBody.status).not.toBe('succeeded');
+
+        const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+        expect(filesResponse.status).toBe(200);
+        const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
+        expect(filesBody.files.some((file) => file.name.startsWith('generated-plugin/'))).toBe(false);
+      },
+    );
+  });
+  it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
+    // claude-opus-4-7 (and a few other instruction-tuned models) start
+    // their reply by echoing the # Instructions block verbatim, which
+    // shows up to users as the system prompt leading the visible
+    // answer. server.ts:9934 closes every Instructions block with a
+    // trailing guard line; this test pins the literal so a future
+    // refactor cannot silently drop it.
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('Do not quote, restate, or echo the # Instructions block above')
+      ? 'has-echo-guard'
+      : 'missing-echo-guard',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-echo-guard');
+        expect(body).not.toContain('missing-echo-guard');
+      },
+    );
+  });
+
+  it('injects @-mention skillIds into the composed system prompt', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — faq-page') ? 'has-composed-skill-header' : 'missing-composed-skill-header',
+    prompt.includes('# FAQ Page Skill') ? 'has-faq-skill-body' : 'missing-faq-skill-body',
+    prompt.includes('category filtering') ? 'has-faq-skill-content' : 'missing-faq-skill-content',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'build an faq page',
+            skillIds: ['faq-page'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-composed-skill-header');
+        expect(body).toContain('has-faq-skill-body');
+        expect(body).toContain('has-faq-skill-content');
+        expect(body).not.toContain('missing-composed-skill-header');
+        expect(body).not.toContain('missing-faq-skill-body');
+        expect(body).not.toContain('missing-faq-skill-content');
+      },
+    );
+  });
+
+  it('stages ad-hoc skill side files into the project cwd', async () => {
+    const projectId = `project-${randomUUID()}`;
+    const stagedRelativePath = `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager'))}/references/checklist.md`;
+    const expectedChecklist = await fsp.readFile(
+      resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager', 'references', 'checklist.md'),
+      'utf8',
+    );
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Ad hoc staged skill project',
+      }),
+    });
+
+    expect(createProjectResponse.ok).toBe(true);
+
+    const fakeAgentScript = `
+const fs = require('node:fs');
+const stagedChecklist = fs.readFileSync(${JSON.stringify(stagedRelativePath)}, 'utf8');
+if (stagedChecklist !== ${JSON.stringify(expectedChecklist)}) {
+  console.error('staged-skill-side-files-mismatch');
+  process.exit(1);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'staged-skill-side-files-before-spawn' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`;
+
+    await withFakeAgent(
+      'opencode',
+      fakeAgentScript,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'draft the release notes',
+            skillIds: ['release-notes-one-pager'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('staged-skill-side-files-before-spawn');
+      },
+    );
+
+    const stagedFileResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/${stagedRelativePath}`,
+    );
+    const stagedFileBody = await stagedFileResponse.text();
+
+    expect(stagedFileResponse.ok).toBe(true);
+    expect(stagedFileBody).toBe(expectedChecklist);
+  });
+
+  it('stages side files for every composed skill into the project cwd', async () => {
+    const projectId = `project-${randomUUID()}`;
+    const stagedPaths = [
+      `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager'))}/references/checklist.md`,
+      `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'swiss-creative-mode-template'))}/references/checklist.md`,
+    ] as const;
+    const expectedBodies = await Promise.all(
+      [
+        resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager', 'references', 'checklist.md'),
+        resolve(process.cwd(), '..', '..', 'skills', 'swiss-creative-mode-template', 'references', 'checklist.md'),
+      ].map((file) => fsp.readFile(file, 'utf8')),
+    );
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Multi staged skill project',
+      }),
+    });
+
+    expect(createProjectResponse.ok).toBe(true);
+
+    const fakeAgentScript = `
+const fs = require('node:fs');
+const stagedBodies = [
+  fs.readFileSync(${JSON.stringify(stagedPaths[0])}, 'utf8'),
+  fs.readFileSync(${JSON.stringify(stagedPaths[1])}, 'utf8'),
+];
+const expectedBodies = ${JSON.stringify(expectedBodies)};
+if (JSON.stringify(stagedBodies) !== JSON.stringify(expectedBodies)) {
+  console.error('multi-staged-skill-side-files-mismatch');
+  process.exit(1);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'multi-staged-skill-side-files-before-spawn' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`;
+
+    await withFakeAgent(
+      'opencode',
+      fakeAgentScript,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'compose multiple skills',
+            skillIds: ['release-notes-one-pager', 'swiss-creative-mode-template'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('multi-staged-skill-side-files-before-spawn');
+      },
+    );
+  });
+
+  it('propagates the composed skill mode for ad-hoc-only deck skills', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-deck-skill-header' : 'missing-deck-skill-header',
+    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'has-deck-framework' : 'missing-deck-framework',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'build an editorial brand deck',
+            skillIds: ['open-design-landing-deck'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-deck-skill-header');
+        expect(body).toContain('has-deck-framework');
+        expect(body).not.toContain('missing-deck-skill-header');
+        expect(body).not.toContain('missing-deck-framework');
+      },
+    );
+  });
+
+  it('preserves a persisted media skill as the primary surface over a composed deck mention', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('# imagegen') ? 'has-base-image-skill-body' : 'missing-base-image-skill-body',
+    prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-composed-deck-skill-header' : 'missing-composed-deck-skill-header',
+    prompt.includes('## Media generation contract (load-bearing — overrides softer wording above)') ? 'has-image-contract' : 'missing-image-contract',
+    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'unexpected-deck-framework' : 'kept-deck-framework-out',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'generate an image while also referencing a deck template',
+            skillId: 'imagegen',
+            skillIds: ['open-design-landing-deck'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-base-image-skill-body');
+        expect(body).toContain('has-composed-deck-skill-header');
+        expect(body).toContain('has-image-contract');
+        expect(body).toContain('kept-deck-framework-out');
+        expect(body).not.toContain('missing-base-image-skill-body');
+        expect(body).not.toContain('missing-composed-deck-skill-header');
+        expect(body).not.toContain('missing-image-contract');
+        expect(body).not.toContain('unexpected-deck-framework');
+      },
+    );
+  });
+
+  it('honors mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        conversationId,
+        message: 'plan an image without using OD media',
+        skillId: 'imagegen',
+        mediaExecution: {
+          mode: 'disabled',
+          allowedSurfaces: ['image'],
+        },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as {
+      runs: Array<{ mediaExecution?: { mode?: string; allowedSurfaces?: string[] } }>;
+    };
+    expect(runsBody.runs).toHaveLength(1);
+    expect(runsBody.runs[0]?.mediaExecution).toMatchObject({
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    });
+  });
+
+  it('rejects invalid mediaExecution on legacy chat requests', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'opencode',
+        conversationId,
+        message: 'generate an image',
+        mediaExecution: { mode: 'provider-router' },
+      }),
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(body).toContain('mediaExecution.mode');
+
+    const runsResponse = await fetch(
+      `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+    );
+    const runsBody = await runsResponse.json() as { runs: unknown[] };
+    expect(runsBody.runs).toEqual([]);
+  });
+
+  it('propagates ad-hoc skill critique policy into the chat resolver', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for user skill critique-policy tests');
+    }
+
+    const skillId = `critique-opt-out-${randomUUID()}`;
+    const skillDir = resolve(process.env.OD_DATA_DIR, 'skills', skillId);
+    const originalCritiqueEnabled = process.env.OD_CRITIQUE_ENABLED;
+
+    await fsp.mkdir(skillDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(skillDir, 'SKILL.md'),
+      `---
+name: ${skillId}
+description: Ad-hoc critique opt-out regression fixture.
+od:
+  critique:
+    policy: opt-out
+---
+
+# Critique opt-out fixture
+
+This skill should suppress critique when selected through skillIds.
+`,
+      'utf8',
+    );
+
+    process.env.OD_CRITIQUE_ENABLED = 'true';
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — ${skillId}') ? 'has-opt-out-skill-header' : 'missing-opt-out-skill-header',
+    prompt.includes('<CRITIQUE_RUN') ? 'unexpected-critique-panel' : 'critique-panel-disabled-by-skill-policy',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              designSystemId: 'default',
+              message: 'draft an opt-out skill artifact',
+              skillIds: [skillId],
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('has-opt-out-skill-header');
+          expect(body).toContain('critique-panel-disabled-by-skill-policy');
+          expect(body).not.toContain('missing-opt-out-skill-header');
+          expect(body).not.toContain('unexpected-critique-panel');
+        },
+      );
+    } finally {
+      if (originalCritiqueEnabled == null) {
+        delete process.env.OD_CRITIQUE_ENABLED;
+      } else {
+        process.env.OD_CRITIQUE_ENABLED = originalCritiqueEnabled;
+      }
+      await fsp.rm(skillDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves plugin-local and composed @-mention skills in plugin-bound runs', async () => {
+    const pluginId = `plugin-local-${randomUUID()}`;
+    const pluginFixtureDir = await createPluginFixture({
+      pluginId,
+      dirName: `plugin-local-${randomUUID()}`,
+      localSkillPath: './SKILL.md',
+    });
+    const installResponse = await fetch(`${baseUrl}/api/plugins/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ source: pluginFixtureDir }),
+    });
+    const installBody = await installResponse.text();
+
+    expect(installResponse.status).toBe(200);
+    expect(installBody).toContain(`"id":"${pluginId}"`);
+
+    const projectId = `project-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin-bound skill composition project',
+        pluginId,
+        pluginInputs: { topic: 'agentic design' },
+      }),
+    });
+    const createProjectBody = await createProjectResponse.json() as {
+      appliedPluginSnapshotId?: string;
+    };
+
+    expect(createProjectResponse.ok).toBe(true);
+    expect(createProjectBody.appliedPluginSnapshotId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('# Sample Plugin') ? 'has-plugin-skill-body' : 'missing-plugin-skill-body',
+    prompt.includes('## Composed skill — faq-page') ? 'has-composed-skill-header' : 'missing-composed-skill-header',
+    prompt.includes('# FAQ Page Skill') ? 'has-composed-skill-body' : 'missing-composed-skill-body',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'build a plugin-backed faq page',
+            appliedPluginSnapshotId: createProjectBody.appliedPluginSnapshotId,
+            skillIds: ['faq-page'],
+          }),
+        });
+        const createRunBody = await createRunResponse.json() as { runId: string };
+
+        expect(createRunResponse.status).toBe(202);
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${createRunBody.runId}/events`);
+        const body = await readSseUntil(eventsResponse, 'event: final');
+
+        expect(body).toContain('has-plugin-skill-body');
+        expect(body).toContain('has-composed-skill-header');
+        expect(body).toContain('has-composed-skill-body');
+        expect(body).not.toContain('missing-plugin-skill-body');
+        expect(body).not.toContain('missing-composed-skill-header');
+        expect(body).not.toContain('missing-composed-skill-body');
+      },
+    );
+  });
+
+  it('stages colliding plugin and composed skill dirs under distinct aliases', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for colliding skill-dir staging tests');
+    }
+
+    const pluginId = `plugin-collision-${randomUUID()}`;
+    const pluginFixtureDir = await createPluginFixture({
+      pluginId,
+      dirName: 'sample-plugin',
+      localSkillPath: './SKILL.md',
+    });
+    const installResponse = await fetch(`${baseUrl}/api/plugins/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ source: pluginFixtureDir }),
+    });
+    const installBody = await installResponse.text();
+
+    expect(installResponse.status).toBe(200);
+    expect(installBody).toContain(`"id":"${pluginId}"`);
+
+    const projectId = `project-${randomUUID()}`;
+    const userSkillDir = resolve(process.env.OD_DATA_DIR, 'skills', 'sample-plugin');
+    const userChecklist = 'user-skill-checklist';
+    const userAlias = skillCwdAliasSegment(userSkillDir);
+
+    await fsp.mkdir(resolve(userSkillDir, 'references'), { recursive: true });
+    await fsp.writeFile(
+      resolve(userSkillDir, 'SKILL.md'),
+      '# Sample-plugin side-file fixture\n\nRead references/checklist.md before drafting.',
+      'utf8',
+    );
+    await fsp.writeFile(resolve(userSkillDir, 'references', 'checklist.md'), userChecklist, 'utf8');
+
+    try {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Colliding skill-dir project',
+          pluginId,
+          pluginInputs: { topic: 'agentic design' },
+        }),
+      });
+      const createProjectBody = await createProjectResponse.json() as {
+        appliedPluginSnapshotId?: string;
+      };
+      const installedPluginResponse = await fetch(`${baseUrl}/api/plugins/${pluginId}`);
+      const installedPluginBody = await installedPluginResponse.json() as { fsPath: string };
+      const pluginAlias = skillCwdAliasSegment(installedPluginBody.fsPath);
+
+      expect(createProjectResponse.ok).toBe(true);
+      expect(installedPluginResponse.ok).toBe(true);
+      expect(createProjectBody.appliedPluginSnapshotId).toBeTruthy();
+      expect(pluginAlias).not.toBe(userAlias);
+
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+const pluginSkill = fs.readFileSync(${JSON.stringify(`.od-skills/${pluginAlias}/SKILL.md`)}, 'utf8');
+const userChecklist = fs.readFileSync(${JSON.stringify(`.od-skills/${userAlias}/references/checklist.md`)}, 'utf8');
+if (!pluginSkill.includes('# Sample Plugin')) {
+  console.error('plugin-skill-stage-missing');
+  process.exit(1);
+}
+if (userChecklist !== ${JSON.stringify(userChecklist)}) {
+  console.error('colliding-skill-stage-mismatch');
+  process.exit(1);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'colliding-skill-dirs-staged' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              message: 'use both plugin and user skill side files',
+              appliedPluginSnapshotId: createProjectBody.appliedPluginSnapshotId,
+              skillIds: ['sample-plugin'],
+            }),
+          });
+          const createRunBody = await createRunResponse.json() as { runId: string };
+
+          expect(createRunResponse.status).toBe(202);
+
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${createRunBody.runId}/events`);
+          const body = await readSseUntil(eventsResponse, 'event: final');
+
+          expect(body).toContain('colliding-skill-dirs-staged');
+        },
+      );
+    } finally {
+      await fsp.rm(userSkillDir, { recursive: true, force: true });
+    }
+  });
+
+  it('canonicalizes aliased skill ids before deduping composed skills', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const hasDuplicateComposedAlias = prompt.includes('## Composed skill — open-design-landing');
+  const checks = [
+    hasDuplicateComposedAlias ? 'duplicate-alias-composed-skill' : 'deduped-alias-composed-skill',
+    prompt.includes('# open-design-landing') ? 'has-base-alias-skill-body' : 'missing-base-alias-skill-body',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'build the Open Design landing page',
+            skillId: 'editorial-collage',
+            skillIds: ['open-design-landing'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('deduped-alias-composed-skill');
+        expect(body).toContain('has-base-alias-skill-body');
+        expect(body).not.toContain('duplicate-alias-composed-skill');
+        expect(body).not.toContain('missing-base-alias-skill-body');
       },
     );
   });
@@ -424,6 +1307,50 @@ process.exit(1);
     );
   });
 
+  it('suppresses Antigravity auth stdout and emits AGENT_AUTH_REQUIRED without an event: stdout delta', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+// Simulate agy chat - printing the OAuth prompt and exiting 0
+process.stdout.write('Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=12345&redirect_uri=antigravity-redirect\\n');
+process.stdout.write('Waiting for authentication (timeout 30s)...\\n');
+process.stdout.write('Error: authentication timed out.\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+        expect(eventsBody).not.toContain('event: stdout');
+        expect(eventsBody).not.toContain('accounts.google.com');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {
     const qoderErrorLine = JSON.stringify({
       type: 'assistant',
@@ -540,7 +1467,8 @@ setInterval(() => {}, 1000);
 
           expect(eventsBody).toContain('event: error');
           expect(eventsBody).toContain('Agent stalled without emitting any new output');
-          expect(eventsBody).toContain('Phase details: spawned agent binary');
+          expect(eventsBody).toContain('Phase details: spawned agent opencode;');
+          expect(eventsBody).not.toContain('spawned agent binary');
           expect(eventsBody).toMatch(/stdout arrived: (yes|no)/);
           expect(statusBody.status).toBe('failed');
         },
@@ -898,6 +1826,43 @@ describe('chat prompt helpers', () => {
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
     expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
+  });
+
+  it('omits the Codex final imagegen override when run media policy blocks execution', () => {
+    const metadata = {
+      kind: 'image',
+      imageModel: 'gpt-image-2',
+      imageAspect: '1:1',
+    };
+    const mediaExecution = {
+      mode: 'disabled',
+      allowedSurfaces: ['image'],
+    };
+    const generatedImagesDir = resolveCodexGeneratedImagesDir(
+      'codex',
+      metadata,
+      { CODEX_HOME: '/tmp/custom-codex-home' },
+      '/home/tester',
+      mediaExecution,
+    );
+    const otherwiseGrantedDir = resolve('/tmp/custom-codex-home/generated_images');
+    const override = resolveGrantedCodexImagegenOverride({
+      agentId: 'codex',
+      metadata,
+      codexGeneratedImagesDir: otherwiseGrantedDir,
+      extraAllowedDirs: [otherwiseGrantedDir],
+      mediaExecution,
+    });
+    const prompt = composeLiveInstructionPrompt({
+      daemonSystemPrompt: 'daemon media policy prompt',
+      runtimeToolPrompt: 'runtime tools',
+      clientSystemPrompt: 'client instructions',
+      finalPromptOverride: override,
+    });
+
+    expect(generatedImagesDir).toBeNull();
+    expect(override).toBeNull();
+    expect(prompt).not.toContain('## Codex built-in imagegen override');
   });
 
   it('defaults enabled research without an explicit query to the current message', () => {

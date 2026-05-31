@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-video-hyperframes",
-  "title": "Hyperframes 视频脚本",
+  "title": "Hyperframes Video",
+  "title_i18n": {
+    "en": "Hyperframes Video",
+    "zh-CN": "Hyperframes 视频脚本",
+    "zh-TW": "Hyperframes 影片",
+    "ja": "Hyperframes ビデオ",
+    "ko": "Hyperframes 비디오",
+    "de": "Hyperframes Video",
+    "fr": "Vidéo Hyperframes",
+    "ru": "Видео Hyperframes",
+    "es": "Video Hyperframes",
+    "pt-BR": "Vídeo Hyperframes",
+    "it": "Video Hyperframes",
+    "vi": "Video Hyperframes",
+    "pl": "Wideo Hyperframes",
+    "id": "Video Hyperframes",
+    "nl": "Hyperframes Video",
+    "ar": "فيديو Hyperframes",
+    "tr": "Hyperframes Video",
+    "uk": "Відео Hyperframes"
+  },
   "version": "0.1.0",
-  "description": "Hyperframes / Remotion 兼容的连续帧动画, 可自动播放",
+  "description": "Hyperframes / Remotion-compatible continuous frame animation with autoplay support.",
+  "description_i18n": {
+    "en": "Hyperframes / Remotion-compatible continuous frame animation with autoplay support.",
+    "zh-CN": "Hyperframes / Remotion 兼容的连续帧动画, 可自动播放",
+    "zh-TW": "支援 Hyperframes / Remotion 的連續幀動畫，具備自動播放功能。",
+    "ja": "Hyperframes / Remotion 対応の連続フレームアニメーションで、自動再生をサポート。",
+    "ko": "Hyperframes / Remotion 호환 연속 프레임 애니메이션 및 자동 재생 지원.",
+    "de": "Hyperframes / Remotion-kompatible kontinuierliche Frame-Animation mit Autoplay-Unterstützung.",
+    "fr": "Animation continue d'images compatible Hyperframes / Remotion avec lecture automatique.",
+    "ru": "Непрерывная покадровая анимация, совместимая с Hyperframes / Remotion, с поддержкой автовоспроизведения.",
+    "es": "Animación continua de fotogramas compatible con Hyperframes / Remotion con reproducción automática.",
+    "pt-BR": "Animação contínua de quadros compatível com Hyperframes / Remotion com reprodução automática.",
+    "it": "Animazione continua a fotogrammi compatibile con Hyperframes / Remotion con supporto per la riproduzione automatica.",
+    "vi": "Hoạt ảnh khung hình liên tục tương thích Hyperframes / Remotion với hỗ trợ tự động phát.",
+    "pl": "Ciągła animacja klatek kompatybilna z Hyperframes / Remotion z obsługą autoodtwarzania.",
+    "id": "Animasi frame berkelanjutan kompatibel Hyperframes / Remotion dengan dukungan autoplay.",
+    "nl": "Hyperframes / Remotion-compatibele continue frame-animatie met autoplay-ondersteuning.",
+    "ar": "رسوم متحركة متواصلة للإطارات متوافقة مع Hyperframes / Remotion مع دعم التشغيل التلقائي.",
+    "tr": "Hyperframes / Remotion uyumlu sürekli kare animasyonu ve otomatik oynatma desteği.",
+    "uk": "Безперервна покадрова анімація, сумісна з Hyperframes / Remotion, з підтримкою автовідтворення."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -38,11 +78,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Hyperframes 视频脚本」模板把我的内容做成一段「Hyperframes / Remotion 兼容的连续帧动画, 可自动播放」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Hyperframes Video template to turn my content into a Hyperframes / Remotion-compatible continuous frame animation with autoplay support. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Hyperframes 视频脚本」模板把我的内容做成一段「Hyperframes / Remotion 兼容的连续帧动画, 可自动播放」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Hyperframes 视频脚本"
+          "title": "Hyperframes Video",
+          "title_i18n": {
+            "en": "Hyperframes Video",
+            "zh-CN": "Hyperframes 视频脚本"
+          }
         }
       ]
     },

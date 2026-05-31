@@ -99,6 +99,7 @@ function renderChatPane({
   messages,
   streaming = false,
   onAssistantFeedback = vi.fn(),
+  hasActiveDesignSystem = false,
 }: {
   messages: ChatMessage[];
   streaming?: boolean;
@@ -106,16 +107,19 @@ function renderChatPane({
     assistantMessage: ChatMessage,
     change: ChatMessageFeedbackChange,
   ) => void;
+  hasActiveDesignSystem?: boolean;
 }) {
   return {
     onAssistantFeedback,
     ...render(
       <ChatPane
+        projectKindForTracking="prototype"
         messages={messages}
         streaming={streaming}
         error={null}
         projectId="project-1"
         projectFiles={[]}
+        hasActiveDesignSystem={hasActiveDesignSystem}
         onEnsureProject={async () => 'project-1'}
         onSend={() => {}}
         onStop={() => {}}
@@ -141,12 +145,12 @@ describe('chat assistant feedback', () => {
     vi.restoreAllMocks();
   });
 
-  it('collects feedback only after an assistant turn produces an artifact', () => {
+  it('collects feedback after any successfully completed assistant turn', () => {
     renderChatPane({
       messages: [completedAssistant()],
     });
 
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
   });
 
   it('collects positive and negative feedback on completed artifact results', () => {
@@ -291,6 +295,36 @@ describe('chat assistant feedback', () => {
       }),
     );
     expect(screen.queryByText('Tell us why')).toBeNull();
+  });
+
+  it('adds design-system feedback reasons only when a design system is active', () => {
+    const { unmount } = renderChatPane({
+      messages: [completedArtifactAssistant()],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
+    expect(screen.queryByLabelText('Followed the design system')).toBeNull();
+    unmount();
+
+    const { onAssistantFeedback } = renderChatPane({
+      messages: [completedArtifactAssistant()],
+      hasActiveDesignSystem: true,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
+    fireEvent.click(screen.getByLabelText('Followed the design system'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(onAssistantFeedback).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'assistant-1' }),
+      expect.objectContaining({
+        rating: 'positive',
+        reasonCodes: ['followed_design_system'],
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
+    expect(screen.getByLabelText('Did not follow the design system')).toBeTruthy();
   });
 
   it('clears custom reason when Other is deselected', () => {

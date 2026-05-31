@@ -5,6 +5,8 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import { I18nProvider } from '../../src/i18n';
+import type { Locale } from '../../src/i18n/types';
 
 const COMMUNITY_PLUGIN = {
   id: 'community-deck',
@@ -115,8 +117,11 @@ let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
 let servers = [MCP_SERVER];
 
-function renderComposer(overrides: Partial<ComponentProps<typeof ChatComposer>> = {}) {
-  return render(
+function renderComposer(
+  overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
+  options: { locale?: Locale } = {},
+) {
+  const tree = (
     <ChatComposer
       projectId="project-1"
       projectFiles={[]}
@@ -127,7 +132,19 @@ function renderComposer(overrides: Partial<ComponentProps<typeof ChatComposer>> 
       onOpenMcpSettings={vi.fn()}
       skills={skills}
       {...overrides}
-    />,
+    />
+  );
+
+  if (options.locale) {
+    return render(
+      <I18nProvider initial={options.locale}>
+        {tree}
+      </I18nProvider>,
+    );
+  }
+
+  return render(
+    tree,
   );
 }
 
@@ -194,6 +211,33 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
     expect(screen.getByText('Search plugins, skills, MCP servers, connectors, and Design Files.')).toBeTruthy();
+  });
+
+  it('localizes @ panel tabs and empty states in Chinese mode', async () => {
+    plugins = [];
+    skills = [];
+    servers = [];
+    renderComposer({}, { locale: 'zh-CN' });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@', selectionStart: 1 },
+    });
+
+    expect(screen.getByRole('tab', { name: '全部' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '插件' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '技能' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '连接器' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '设计文件' })).toBeTruthy();
+    expect(screen.getByText('搜索插件、技能、MCP 服务器、连接器和设计文件。')).toBeTruthy();
+
+    fireEvent.change(input, {
+      target: { value: '@missing', selectionStart: 8 },
+    });
+
+    expect(screen.getByText('没有找到“missing”的结果。')).toBeTruthy();
+    expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
   it('selects an MCP server from @ search and keeps the inline token visible', async () => {
@@ -284,6 +328,138 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByTestId('chat-composer-mention-overlay').textContent).toContain('@My Export');
   });
 
+  it('removes the inline design file token when its staged chip is removed', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: 'Use @landing', selectionStart: 12 },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    expect(input.value).toBe('Use @designs/landing.html ');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('Use ');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
+  it('preserves surrounding draft formatting when removing a design file token', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    const draft = 'Plan:\n\n@landing\n\nKeep spacing';
+
+    fireEvent.change(input, {
+      target: { value: draft, selectionStart: 'Plan:\n\n@landing'.length },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    expect(input.value).toBe('Plan:\n\n@designs/landing.html \n\nKeep spacing');
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('Plan:\n\n\n\nKeep spacing');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
+  it('removes a design file token when punctuation follows it', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: 'Use @landing', selectionStart: 12 },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    fireEvent.change(input, {
+      target: {
+        value: 'Use @designs/landing.html, please',
+        selectionStart: 'Use @designs/landing.html, please'.length,
+      },
+    });
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('Use , please');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
+  it('removes a quoted design file token when its chip is removed', async () => {
+    renderComposer({
+      projectFiles: [
+        {
+          path: 'designs/landing.html',
+          name: 'landing.html',
+          kind: 'html',
+          mime: 'text/html',
+          mtime: 1,
+          size: 128,
+        },
+      ],
+    });
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@landing', selectionStart: 8 },
+    });
+
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    fireEvent.change(input, {
+      target: {
+        value: '"@designs/landing.html"',
+        selectionStart: '"@designs/landing.html"'.length,
+      },
+    });
+
+    fireEvent.click(screen.getByLabelText('Remove landing.html'));
+
+    expect(input.value).toBe('""');
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+  });
+
   it('lets the tools panel switch between Official and My plugins', async () => {
     renderComposer();
     fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
@@ -299,5 +475,35 @@ describe('ChatComposer context pickers', () => {
       target: { value: 'private' },
     });
     expect(screen.getByText('Private export workflow')).toBeTruthy();
+  });
+
+  it('clears absolute anchors when the pet popover switches to fixed positioning', async () => {
+    renderComposer({
+      petConfig: {
+        adopted: false,
+        enabled: false,
+        petId: 'custom',
+        custom: {
+          name: 'Buddy',
+          glyph: '🐾',
+          accent: '#7c3aed',
+          greeting: 'hi',
+        },
+      },
+      onAdoptPet: vi.fn(),
+      onTogglePet: vi.fn(),
+      onOpenPetSettings: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pets — wake, tuck, or pick one' }));
+
+    const menu = screen.getByText('Show pet').closest('.composer-pet-menu') as HTMLElement | null;
+    expect(menu).not.toBeNull();
+
+    await waitFor(() => {
+      expect(menu?.style.position).toBe('fixed');
+      expect(menu?.style.bottom).toBe('auto');
+      expect(menu?.style.right).toBe('auto');
+    });
   });
 });

@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind } from '../../src/types';
+
+// Stub localStorage so the component's view-state persistence writes to an
+// in-memory store. Cleared in beforeEach so no test bleeds state into the next.
+const lsStore = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => lsStore.get(key) ?? null,
+  setItem: (key: string, value: string) => { lsStore.set(key, value); },
+  removeItem: (key: string) => { lsStore.delete(key); },
+  clear: () => { lsStore.clear(); },
+});
 
 function extForKind(kind: ProjectFileKind): string {
   if (kind === 'html') return 'html';
@@ -80,6 +90,10 @@ function getSelects(container: HTMLElement) {
 }
 
 describe('DesignFilesPanel grouping', () => {
+  beforeEach(() => {
+    lsStore.clear();
+  });
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -297,6 +311,14 @@ describe('DesignFilesPanel grouping', () => {
 });
 
 describe('DesignFilesPanel large-list regression', () => {
+  beforeEach(() => {
+    lsStore.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
   it('renders only the default page size (30) rows with 500 files', () => {
     const files = generateFiles(500);
     const { container } = renderPanel(files);
@@ -492,5 +514,122 @@ describe('DesignFilesPanel large-list regression', () => {
     renderPanel(files);
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+describe('DesignFilesPanel directory navigation', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('collapses nested files into a single folder row at root with correct descendant count', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'assets/icons/star.svg', kind: 'image' }),
+    ]);
+
+    const dirRows = document.querySelectorAll('.df-dir-row');
+    expect(dirRows.length).toBe(1);
+    expect(dirRows[0]!.textContent).toContain('assets');
+    expect(dirRows[0]!.textContent).toContain('2');
+  });
+
+  it('clicking a folder row navigates into it and shows only basenames and nested dirs', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'assets/icons/star.svg', kind: 'image' }),
+    ]);
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+
+    expect(document.querySelector('.df-breadcrumbs')).toBeTruthy();
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    const fileRow = screen.getByTestId('design-file-row-assets/logo.png');
+    expect(fileRow.querySelector('.df-row-name')?.textContent).toBe('logo.png');
+    expect(fileRow.querySelector('.df-row-name')?.textContent).not.toContain('assets/');
+
+    const dirRows = document.querySelectorAll('.df-dir-row');
+    expect(dirRows.length).toBe(1);
+    expect(dirRows[0]!.textContent).toContain('icons');
+  });
+
+  it('clicking the root breadcrumb navigates back to root', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumbs')).toBeTruthy();
+
+    fireEvent.click(document.querySelector('.df-breadcrumb-btn')!);
+
+    expect(document.querySelector('.df-breadcrumbs')).toBeNull();
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+    expect(document.querySelectorAll('.df-dir-row').length).toBe(1);
+  });
+
+  it('clears selection and resets page when navigating into or out of a directory', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    const topRow = screen.getByTestId('design-file-row-top.html');
+    fireEvent.click(topRow.querySelector('.df-row-check')!);
+    expect(topRow.classList.contains('selected')).toBe(true);
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelectorAll('.df-file-row.selected').length).toBe(0);
+
+    fireEvent.click(document.querySelector('.df-breadcrumb-btn')!);
+    expect(document.querySelectorAll('.df-file-row.selected').length).toBe(0);
+  });
+
+  it('resets currentDir automatically when all files in the current subdirectory are removed', () => {
+    function makePanel(files: ProjectFile[]) {
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={files}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    const { rerender } = render(
+      makePanel([
+        file({ name: 'assets/logo.png', kind: 'image' }),
+        file({ name: 'top.html', kind: 'html' }),
+      ]),
+    );
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    rerender(makePanel([file({ name: 'top.html', kind: 'html' })]));
+
+    expect(document.querySelector('.df-breadcrumbs')).toBeNull();
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+  });
+
+  it('does not show the select-all header as checked when the page contains only directory rows', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+    ]);
+
+    const headerCheck = document.querySelector('.df-th-check .df-row-check');
+    expect(headerCheck?.textContent).toBe('☐');
   });
 });

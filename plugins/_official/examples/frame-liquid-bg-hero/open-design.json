@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-liquid-bg-hero",
-  "title": "流体背景 Hero 帧",
+  "title": "Liquid Background Hero",
+  "title_i18n": {
+    "en": "Liquid Background Hero",
+    "zh-CN": "流体背景 Hero 帧",
+    "zh-TW": "流體背景主視覺",
+    "ja": "リキッドバックグラウンドヒーロー",
+    "ko": "리퀴드 배경 히어로",
+    "de": "Liquid-Background-Hero",
+    "fr": "Hero à fond liquide",
+    "ru": "Жидкий фон-герой",
+    "es": "Hero con fondo líquido",
+    "pt-BR": "Hero com fundo líquido",
+    "it": "Hero con sfondo liquido",
+    "vi": "Hero nền chất lỏng",
+    "pl": "Hero z płynnym tłem",
+    "id": "Hero Latar Belakang Cair",
+    "nl": "Vloeibare achtergrond-hero",
+    "ar": "خلفية سائلة للقسم البطل",
+    "tr": "Sıvı Arka Planlı Hero",
+    "uk": "Рідкий фон-герой"
+  },
   "version": "0.1.0",
-  "description": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报",
+  "description": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
+  "description_i18n": {
+    "en": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
+    "zh-CN": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报",
+    "zh-TW": "WebGL 風格的流體位移背景，帶引用文字疊加層，適用於影片開場、著陸頁主視覺或海報。",
+    "ja": "WebGL スタイルの流体ディスプレイスメント背景に引用文オーバーレイを配置。動画イントロ、ランディングヒーロー、ポスターに最適。",
+    "ko": "WebGL 스타일의 유체 디스플레이스먼트 배경에 인용문 오버레이를 더한 디자인. 영상 인트로, 랜딩 히어로, 포스터에 적합합니다.",
+    "de": "WebGL-artiger Fluid-Displacement-Hintergrund mit Zitat-Overlay, geeignet für Video-Intros, Landing-Heros oder Poster.",
+    "fr": "Fond fluide avec déplacement type WebGL et superposition de citation, adapté aux intros vidéo, bannières d'accueil ou affiches.",
+    "ru": "Фон с плавным смещением в стиле WebGL и наложением цитаты, подходит для видео-интро, главных баннеров или постеров.",
+    "es": "Fondo fluido con desplazamiento tipo WebGL y superposición de cita, ideal para intros de video, héroes de landing o pósters.",
+    "pt-BR": "Fundo fluido com deslocamento estilo WebGL e sobreposição de citação, ideal para intros de vídeo, heroes de landing page ou pôsteres.",
+    "it": "Sfondo fluido con spostamento in stile WebGL e sovrapposizione di citazione, adatto per intro video, hero di landing page o poster.",
+    "vi": "Nền chuyển động chất lỏng kiểu WebGL với lớp phủ trích dẫn, phù hợp cho intro video, hero trang đích hoặc poster.",
+    "pl": "Płynne tło z przemieszczeniem w stylu WebGL i nakładką cytatu, odpowiednie do intro wideo, hero landing page lub plakatów.",
+    "id": "Latar belakang perpindahan fluida bergaya WebGL dengan overlay kutipan, cocok untuk intro video, hero landing page, atau poster.",
+    "nl": "WebGL-achtige vloeibare verplaatsingsachtergrond met citaatoverlay, geschikt voor video-intro's, landing-hero's of posters.",
+    "ar": "خلفية انتقال سائل بأسلوب WebGL مع طبقة اقتباس، مناسبة لمقدمات الفيديو أو الأقسام البطلة أو الملصقات.",
+    "tr": "WebGL tarzı akışkan yer değiştirme arka planı ve alıntı katmanı, video girişleri, açılış hero'ları veya posterler için uygundur.",
+    "uk": "Фон з плавним зміщенням у стилі WebGL та накладенням цитати, підходить для відео-інтро, головних банерів або постерів."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -40,11 +80,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Liquid Background Hero template to turn my content into a WebGL-style fluid displacement background with a quote overlay for a video intro, landing hero, or poster. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "流体背景 Hero 帧"
+          "title": "Liquid Background Hero",
+          "title_i18n": {
+            "en": "Liquid Background Hero",
+            "zh-CN": "流体背景 Hero 帧"
+          }
         }
       ]
     },

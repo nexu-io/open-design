@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-vfx-text-cursor",
-  "title": "VFX 文字光标",
+  "title": "VFX Text Cursor",
+  "title_i18n": {
+    "en": "VFX Text Cursor",
+    "zh-CN": "VFX 文字光标",
+    "zh-TW": "VFX 文字游標",
+    "ja": "VFX テキストカーソル",
+    "ko": "VFX 텍스트 커서",
+    "de": "VFX-Textcursor",
+    "fr": "Curseur de texte VFX",
+    "ru": "VFX текстовый курсор",
+    "es": "Cursor de texto VFX",
+    "pt-BR": "Cursor de texto VFX",
+    "it": "Cursore di testo VFX",
+    "vi": "Con trỏ văn bản VFX",
+    "pl": "Kursor tekstowy VFX",
+    "id": "Kursor Teks VFX",
+    "nl": "VFX-tekstcursor",
+    "ar": "مؤشر نص VFX",
+    "tr": "VFX Metin İmleci",
+    "uk": "VFX текстовий курсор"
+  },
   "version": "0.1.0",
-  "description": "光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句",
+  "description": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
+  "description_i18n": {
+    "en": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
+    "zh-CN": "光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句",
+    "zh-TW": "為影片開場逐字顯示引文提供游標光跡、色差光線和方向光暈效果。",
+    "ja": "動画イントロでの単語ごとの引用表示に、カーソルライトトレイル、色収差光線、指向性フレアを追加します。",
+    "ko": "비디오 인트로에서 단어별 인용구 표시를 위한 커서 라이트 트레일, 색수차 광선 및 방향성 플레어 효과를 제공합니다。",
+    "de": "Cursor-Lichtspur, chromatische Strahlen und gerichtete Flares für Wort-für-Wort-Zitat-Einblendungen in Video-Intros.",
+    "fr": "Traînée lumineuse de curseur, rayons chromatiques et halos directionnels pour des révélations de citations mot par mot dans les intros vidéo.",
+    "ru": "Световой след курсора, хроматические лучи и направленные блики для пословного появления цитат в видео-заставках.",
+    "es": "Estela de luz del cursor, rayos cromáticos y destellos direccionales para revelaciones de citas palabra por palabra en intros de video.",
+    "pt-BR": "Rastro de luz do cursor, raios cromáticos e flares direcionais para revelações de citações palavra por palavra em intros de vídeo.",
+    "it": "Scia luminosa del cursore, raggi cromatici e bagliori direzionali per rivelazioni di citazioni parola per parola nelle intro video.",
+    "vi": "Vệt sáng con trỏ, tia sắc sai và hiệu ứng bùng sáng định hướng cho việc hiển thị trích dẫn từng từ trong video giới thiệu.",
+    "pl": "Świetlny ślad kursora, promienie chromatyczne i kierunkowe flary do stopniowego ujawniania cytatów słowo po słowie w intrach wideo.",
+    "id": "Jejak cahaya kursor, sinar kromatik, dan flare terarah untuk pengungkapan kutipan kata per kata di intro video.",
+    "nl": "Cursorlichtspoor, chromatische stralen en directionele flares voor woord-voor-woord citaatonthullingen in video-intro's.",
+    "ar": "أثر ضوئي للمؤشر وأشعة لونية وتوهجات اتجاهية لإظهار الاقتباسات كلمة بكلمة في مقدمات الفيديو。",
+    "tr": "Video girişlerinde kelime kelime alıntı gösterimleri için imleç ışık izi, kromatik ışınlar ve yönlü parıltılar.",
+    "uk": "Світловий слід курсора, хроматичні промені та спрямовані спалахи для пословного відображення цитат у відео-заставках."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -41,11 +81,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「VFX 文字光标」模板把我的内容做成一段「光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the VFX Text Cursor template to turn my content into a video-intro quote reveal with cursor light trails, chromatic rays, and directional flares. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「VFX 文字光标」模板把我的内容做成一段「光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "VFX 文字光标"
+          "title": "VFX Text Cursor",
+          "title_i18n": {
+            "en": "VFX Text Cursor",
+            "zh-CN": "VFX 文字光标"
+          }
         }
       ]
     },

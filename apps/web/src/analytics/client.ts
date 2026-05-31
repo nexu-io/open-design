@@ -11,6 +11,10 @@ import {
   type AnalyticsConfigureGlobals,
 } from '@open-design/contracts/analytics';
 import { scrubBeforeSend } from './scrub';
+import {
+  clearExceptionTrackingContext,
+  setExceptionTrackingContext,
+} from './error-tracking';
 
 interface AnalyticsContext {
   anonymousId: string;
@@ -85,6 +89,50 @@ export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
   }
 }
 
+// Fetches `/api/analytics/config` once and wires up the exception-tracking
+// module's context — independent of consent state. The error tracker
+// installs its `window.error` / `unhandledrejection` listeners at module
+// load (see `error-tracking.ts`), but cannot dispatch buffered events
+// until it has the PostHog `phc_` key + host + distinct_id. This bootstrap
+// step provides those.
+//
+// Runs in parallel with — and unrelated to — `getAnalyticsClient` above.
+// When the user has consented, both paths fetch the same endpoint once
+// each; the duplicate fetch is cheap and avoids cross-coupling the
+// (consent-gated) analytics init with the (always-on) error tracker.
+let exceptionBootstrapPromise: Promise<void> | null = null;
+export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<void> {
+  if (exceptionBootstrapPromise) return exceptionBootstrapPromise;
+  exceptionBootstrapPromise = (async () => {
+    try {
+      const res = await fetch('/api/analytics/config');
+      if (!res.ok) {
+        clearExceptionTrackingContext();
+        return;
+      }
+      const cfg = (await res.json()) as AnalyticsConfigResponse;
+      if (!cfg.key || !cfg.host) {
+        clearExceptionTrackingContext();
+        return;
+      }
+      const distinctId =
+        (typeof cfg.installationId === 'string' && cfg.installationId) ||
+        context.anonymousId;
+      setExceptionTrackingContext({
+        apiKey: cfg.key,
+        host: cfg.host,
+        distinctId,
+        appVersion: context.appVersion,
+        sessionId: context.sessionId,
+      });
+    } catch {
+      // Network failure / endpoint unavailable — leave the buffer in
+      // place so a future retry could still flush, but don't crash boot.
+    }
+  })();
+  return exceptionBootstrapPromise;
+}
+
 export async function getAnalyticsClient(
   context: AnalyticsContext,
 ): Promise<PostHog | null> {
@@ -109,7 +157,9 @@ export async function getAnalyticsClient(
       resolvedDeviceId = distinctId;
       const mod = await import('posthog-js');
       const posthog = mod.default;
-      posthog.init(cfg.key, {
+      const cfgKey = cfg.key;
+      const cfgHost = cfg.host;
+      posthog.init(cfgKey, {
         api_host: cfg.host,
         // Identify by installationId when present so daemon-side captures
         // (which also key off installationId via the analytics context
@@ -140,7 +190,12 @@ export async function getAnalyticsClient(
           web_vitals: true,
           network_timing: true,
         },
-        capture_exceptions: true,
+        // Exception capture is owned by `apps/web/src/analytics/error-tracking.ts`,
+        // which runs unconditionally — outside this consent gate, before
+        // posthog-js loads, and via a direct ingest fetch. Letting posthog-js
+        // also autocapture exceptions would only produce duplicates server-side
+        // (the $insert_id dedupe runs but it's still wasted ingest cost).
+        capture_exceptions: false,
 
         // --- Privacy defenses -----------------------------------------
         // 1. scrub.ts runs on every outgoing event and strips $el_text
@@ -179,6 +234,18 @@ export async function getAnalyticsClient(
             ...(configureGlobals as unknown as Record<string, unknown>),
           };
           instance.register(lastRegisterPayload);
+          // Re-bridge the error-tracking context once posthog-js is fully
+          // initialized. `bootstrapExceptionTracking` may have already
+          // wired this up at app boot via its own fetch; this duplicate
+          // assignment is harmless (same key/host) but ensures the most
+          // up-to-date appVersion / sessionId metadata is attached.
+          setExceptionTrackingContext({
+            apiKey: cfgKey,
+            host: cfgHost,
+            distinctId,
+            appVersion: context.appVersion,
+            sessionId: context.sessionId,
+          });
         },
       });
       client = posthog;

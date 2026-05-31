@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { access, cp, lstat, mkdir, readdir, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";
@@ -12,8 +12,11 @@ const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
   { directory: "packages/platform", name: "@open-design/platform" },
+  { directory: "packages/download", name: "@open-design/download" },
+  { directory: "packages/host", name: "@open-design/host" },
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -26,8 +29,11 @@ const BUILD_COMMANDS = [
   { args: ["--filter", "@open-design/sidecar-proto", "build"] },
   { args: ["--filter", "@open-design/sidecar", "build"] },
   { args: ["--filter", "@open-design/platform", "build"] },
+  { args: ["--filter", "@open-design/download", "build"] },
+  { args: ["--filter", "@open-design/host", "build"] },
   { args: ["--filter", "@open-design/agui-adapter", "build"] },
   { args: ["--filter", "@open-design/plugin-runtime", "build"] },
+  { args: ["--filter", "@open-design/diagnostics", "build"] },
   { args: ["--filter", "@open-design/daemon", "build"] },
   { args: ["--filter", "@open-design/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
   { args: ["--filter", "@open-design/web", "build:sidecar"] },
@@ -80,7 +86,7 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
     packageManager: await readPackageManager(config.workspaceRoot),
     platform: config.platform,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 5,
+    schemaVersion: 6,
     webOutputMode: config.webOutputMode,
   });
 }
@@ -101,10 +107,16 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/sidecar/dist/index.d.ts",
     "packages/platform/dist/index.mjs",
     "packages/platform/dist/index.d.ts",
+    "packages/download/dist/index.mjs",
+    "packages/download/dist/index.d.ts",
+    "packages/host/dist/index.mjs",
+    "packages/host/dist/index.d.ts",
     "packages/agui-adapter/dist/index.mjs",
     "packages/agui-adapter/dist/index.d.ts",
     "packages/plugin-runtime/dist/index.mjs",
     "packages/plugin-runtime/dist/index.d.ts",
+    "packages/diagnostics/dist/index.mjs",
+    "packages/diagnostics/dist/index.d.ts",
     "apps/daemon/dist/cli.js",
     "apps/daemon/dist/cli.d.ts",
     "apps/daemon/dist/sidecar/index.js",
@@ -125,8 +137,11 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
     "packages/sidecar-proto/dist",
     "packages/sidecar/dist",
     "packages/platform/dist",
+    "packages/download/dist",
+    "packages/host/dist",
     "packages/agui-adapter/dist",
     "packages/plugin-runtime/dist",
+    "packages/diagnostics/dist",
     "apps/daemon/dist",
     "apps/web/dist",
     "apps/desktop/dist",
@@ -143,11 +158,93 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
   }));
 }
 
+async function stripBrokenSymlinks(rootPath: string): Promise<void> {
+  // Recursively walk `rootPath` and delete symlinks whose target does
+  // not resolve. Next standalone's nft trace occasionally leaves
+  // dangling entries (e.g. .next/standalone/node_modules/.pnpm/node_modules/<pkg>
+  // pointing at a `.pnpm/<pkg>@<version>` directory pnpm never created
+  // because the runtime resolution picked a different version). The
+  // `cp { dereference: true }` call below would `stat()` through these
+  // links and abort the whole packaged pipeline with ENOENT.
+  let entries;
+  try {
+    entries = await readdir(rootPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const childPath = join(rootPath, entry.name);
+    if (entry.isSymbolicLink()) {
+      try {
+        await stat(childPath);
+      } catch {
+        await unlink(childPath).catch(() => undefined);
+      }
+    } else if (entry.isDirectory()) {
+      await stripBrokenSymlinks(childPath);
+    }
+  }
+}
+
+const WEB_STANDALONE_ARTIFACT = "apps/web/.next/standalone";
+const WEB_STANDALONE_APP_NODE_MODULES = "apps/web/node_modules";
+// Peer deps the web-standalone after-pack audit looks up through
+// `createRequire(server.js).resolve(<pkg>/package.json)`. Next 16
+// standalone build under pnpm workspaces does not hoist them into
+// `<standalone>/apps/web/node_modules`, so the require walk falls out
+// of the standalone tree and the audit aborts the packaged build.
+const STANDALONE_HOISTED_PEER_DEPS = ["react", "react-dom", "styled-jsx"];
+
+async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void> {
+  const appNodeModules = join(standaloneRoot, WEB_STANDALONE_APP_NODE_MODULES);
+  const pnpmRoot = join(standaloneRoot, "node_modules", ".pnpm");
+  let pnpmEntries: string[];
+  try {
+    pnpmEntries = await readdir(pnpmRoot);
+  } catch {
+    return;
+  }
+  await mkdir(appNodeModules, { recursive: true });
+  for (const pkg of STANDALONE_HOISTED_PEER_DEPS) {
+    const linkPath = join(appNodeModules, pkg);
+    // `lstat` does not follow symlinks: this lets us distinguish a
+    // stale dangling link (which `access`/`pathExists` would falsely
+    // report as missing, and then `symlink()` would later reject with
+    // EEXIST) from a fresh slot. If Next genuinely hoisted a real
+    // directory, leave it alone.
+    const existing = await lstat(linkPath).catch(() => null);
+    if (existing && existing.isDirectory() && !existing.isSymbolicLink()) continue;
+    // pnpm dirs look like `react@18.3.1` or
+    // `react-dom@18.3.1_react@18.3.1` — pick the bare version, not a
+    // peer-resolved sibling. The leading `${pkg}@` requirement
+    // distinguishes `react` from `react-dom`.
+    const match = pnpmEntries.find((entry) => entry.startsWith(`${pkg}@`));
+    if (!match) continue;
+    const target = join(pnpmRoot, match, "node_modules", pkg);
+    if (!(await pathExists(target))) continue;
+    const relativeTarget = relative(dirname(linkPath), target);
+    // Idempotent re-run: drop any pre-existing entry (stale symlink
+    // from a previous build with different react/react-dom versions)
+    // before recreating, so repeated invocations don't EEXIST.
+    if (existing) await unlink(linkPath).catch(() => undefined);
+    await symlink(relativeTarget, linkPath);
+  }
+}
+
 async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryRoot: string): Promise<void> {
   for (const artifact of workspaceBuildArtifacts(config)) {
+    const sourcePath = join(config.workspaceRoot, artifact.workspacePath);
+    // Strip dangling symlinks first: that clears any leftover from a
+    // previous build whose target moved (e.g. a renamed `.pnpm/<pkg>@<ver>`
+    // after a dependency bump), so the subsequent hoist step starts
+    // from a clean slot and can safely (re-)create its symlinks.
+    await stripBrokenSymlinks(sourcePath);
+    if (artifact.workspacePath === WEB_STANDALONE_ARTIFACT) {
+      await hoistStandaloneNextPeerDeps(sourcePath);
+    }
     const targetPath = join(entryRoot, artifact.cachePath);
     await mkdir(dirname(targetPath), { recursive: true });
-    await cp(join(config.workspaceRoot, artifact.workspacePath), targetPath, { dereference: true, recursive: true });
+    await cp(sourcePath, targetPath, { dereference: true, recursive: true });
   }
 }
 

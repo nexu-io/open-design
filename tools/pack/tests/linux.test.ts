@@ -61,6 +61,7 @@ function makeConfig(): ToolPackConfig {
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
+    requireVelaCli: false,
     roots: {
       output: {
         appBuilderRoot: "/work/.tmp/tools-pack/out/linux/namespaces/default/builder",
@@ -129,6 +130,36 @@ describe("buildDockerArgs", () => {
       { uid: 1000, gid: 1000 },
     );
     expect(args).toContain("OPEN_DESIGN_TELEMETRY_RELAY_URL=https://telemetry.open-design.ai/api/langfuse");
+  });
+
+  it("passes the AMR profile into containerized builds when configured", () => {
+    const args = buildDockerArgs(
+      {
+        ...makeConfig(),
+        amrProfile: "test",
+      },
+      { uid: 1000, gid: 1000 },
+    );
+    expect(args).toContain("OPEN_DESIGN_AMR_PROFILE=test");
+  });
+
+  it("bind-mounts the host Vela binary directory and rewrites the env path into the container", () => {
+    const previous = process.env.OPEN_DESIGN_VELA_CLI_BIN;
+    process.env.OPEN_DESIGN_VELA_CLI_BIN = "/host/bin/vela";
+    try {
+      const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+      // The container only mounts /project, /tools-pack, and cache/home by
+      // default — a host-path env value like `/host/bin/vela` would resolve
+      // to a non-existent path inside. The directory must be bind-mounted
+      // and the env rewritten to the container-side path so the resource
+      // copier can actually read the binary.
+      expect(args).toContain("/host/bin:/opt/vela-cli:ro");
+      expect(args).toContain("OPEN_DESIGN_VELA_CLI_BIN=/opt/vela-cli/vela");
+      expect(args).not.toContain("OPEN_DESIGN_VELA_CLI_BIN=/host/bin/vela");
+    } finally {
+      if (previous === undefined) delete process.env.OPEN_DESIGN_VELA_CLI_BIN;
+      else process.env.OPEN_DESIGN_VELA_CLI_BIN = previous;
+    }
   });
 
   it("runs the built tools-pack CLI through node inside the container without generated package-bin shims", () => {
@@ -227,6 +258,18 @@ describe("buildDockerArgs", () => {
     const args = buildDockerArgs({ ...makeConfig(), portable: true }, { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
     expect(last).toMatch(/--portable/);
+  });
+
+  it("forwards --require-vela-cli to the inner containerized build when strict packaging is requested", () => {
+    const args = buildDockerArgs({ ...makeConfig(), requireVelaCli: true }, { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).toMatch(/--require-vela-cli/);
+  });
+
+  it("omits --require-vela-cli from containerized builds by default", () => {
+    const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
+    const last = args[args.length - 1];
+    expect(last).not.toMatch(/--require-vela-cli/);
   });
 
   it("omits --portable when config.portable is false", () => {

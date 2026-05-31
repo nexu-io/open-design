@@ -9,6 +9,7 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
+  workspacePaths,
   makeWrapper,
   python3,
   gnumake,
@@ -39,15 +40,13 @@ let
   pname = "open-design-daemon";
   version = (lib.importJSON ../package.json).version;
 
-  # Vendored pnpm store. The hash MUST be pinned on first build:
-  # `nix build .#daemon` will fail with the expected hash printed; copy
-  # that into `pnpmDepsHash` below. Bump it whenever pnpm-lock.yaml
-  # changes.
-  pnpmDepsHash = "sha256-BqnA3aBPHiy+o04atLF6RCZGJKA24qneuqPzV0WH2G8=";
-  # pnpmDepsHash = lib.fakeHash;
+  pnpmDepsHash = (import ./pnpm-deps.nix).daemonHash;
+  pnpmWorkspaceFilters = map (workspacePath: "./${workspacePath}") workspacePaths;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;
+
+    pnpmWorkspaces = pnpmWorkspaceFilters;
 
     nativeBuildInputs = [
       nodejs
@@ -65,6 +64,7 @@ in
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
+      pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };
 
@@ -133,17 +133,7 @@ in
         exit 1
       fi
 
-      for target in \
-        packages/contracts \
-        packages/registry-protocol \
-        packages/agui-adapter \
-        packages/plugin-runtime \
-        packages/sidecar-proto \
-        packages/sidecar \
-        packages/platform \
-        packages/diagnostics \
-        apps/daemon
-      do
+      for target in ${lib.escapeShellArgs workspacePaths}; do
         pnpm -C "$target" run --if-present build
       done
       runHook postBuild
@@ -157,6 +147,18 @@ in
       # resolve sibling packages by relative paths, so we cannot prune to
       # just apps/daemon.
       cp -r . $out/lib/open-design/
+
+      # Root devDependencies expose tool workspaces via pnpm symlinks, but the
+      # daemon derivation intentionally filters tools/ out of src because they
+      # are not needed at runtime. Prune the dangling symlinks from the copied
+      # node_modules tree so Nix fixup does not fail on broken links.
+      rm -f \
+        $out/lib/open-design/node_modules/@open-design/tools-dev \
+        $out/lib/open-design/node_modules/@open-design/tools-pack \
+        $out/lib/open-design/node_modules/@open-design/tools-serve \
+        $out/lib/open-design/node_modules/.bin/tools-dev \
+        $out/lib/open-design/node_modules/.bin/tools-pack \
+        $out/lib/open-design/node_modules/.bin/tools-serve
 
       chmod +x $out/lib/open-design/apps/daemon/dist/cli.js
 

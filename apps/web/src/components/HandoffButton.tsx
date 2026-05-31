@@ -11,6 +11,7 @@ import type {
   HostEditorsResponse,
 } from '@open-design/contracts';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
+import { useT } from '../i18n';
 import { Icon } from './Icon';
 import { EditorIcon } from './EditorIcon';
 
@@ -42,6 +43,7 @@ function writePreferred(id: HostEditorId): void {
 }
 
 export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
+  const t = useT();
   const [editors, setEditors] = useState<HostEditor[]>([]);
   const [platform, setPlatform] = useState<HostEditorsResponse['platform']>('unknown');
   const [loaded, setLoaded] = useState(false);
@@ -91,6 +93,9 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
   const preferred = readPreferred();
   const primary =
     available.find((e) => e.id === preferred) ?? available[0] ?? null;
+  const primaryTitle = primary
+    ? t('handoff.openInTarget', { target: primary.label })
+    : t('handoff.action');
 
   async function launch(editor: HostEditor) {
     if (!editor.available) {
@@ -121,26 +126,53 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
     }
   }
 
-  if (!loaded || (available.length === 0 && unavailable.length === 0)) {
+  if (!loaded) {
     return null;
   }
 
-  // No detected editors at all — render a Finder/Explorer/File-Manager
-  // single-button fallback so the surface is never blank.
+  // No available editors — render a Finder/Explorer/File-Manager single-button
+  // fallback so the surface is never blank, including the true zero-editor
+  // response where the daemon reports `editors: []`.
   if (available.length === 0) {
     const fallbackLabel = platform === 'win32' ? 'Explorer' : platform === 'linux' ? 'File Manager' : 'Finder';
     const fallbackId: HostEditorId =
       platform === 'win32' ? 'explorer' : platform === 'linux' ? 'file-manager' : 'finder';
+    // Wrap the solo button so a daemon spawn failure can surface an
+    // inline error next to it — without this, ProjectView's
+    // `<HandoffButton projectId={…} />` (no reveal callback) turns a
+    // rejected `openProjectInEditor` into a silent no-op.
     return (
-      <button
-        type="button"
-        className="handoff-trigger handoff-trigger--solo"
-        title={`No editors found on $PATH — opens in ${fallbackLabel}`}
-        onClick={() => onRequestRevealInFinder?.()}
-      >
-        <EditorIcon editorId={fallbackId} size={20} />
-        <span className="handoff-trigger-label">{fallbackLabel}</span>
-      </button>
+      <div className="handoff-wrap handoff-wrap--solo" data-testid="handoff-wrap">
+        <button
+          type="button"
+          className="handoff-trigger handoff-trigger--solo"
+          title={t('handoff.fallbackTitle', { target: fallbackLabel })}
+          disabled={busy === fallbackId}
+          onClick={() => {
+            // The fallback opens the project folder in the OS file manager.
+            // finder / explorer / file-manager are real entries in the daemon's
+            // open-in catalogue (open / explorer / xdg-open), so this performs a
+            // genuine reveal rather than a no-op; the renderer reveal bridge is a
+            // secondary fallback if the daemon spawn fails.
+            setError(null);
+            setBusy(fallbackId);
+            void openProjectInEditor(projectId, fallbackId)
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+                onRequestRevealInFinder?.();
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          <EditorIcon editorId={fallbackId} size={20} />
+          <span className="handoff-trigger-label">{fallbackLabel}</span>
+        </button>
+        {error ? (
+          <div className="handoff-menu-error" role="alert" data-testid="handoff-fallback-error">
+            {error}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
@@ -159,7 +191,8 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
           type="button"
           className="handoff-trigger"
           data-testid="handoff-trigger"
-          title={primary ? `交付给 ${primary.label}` : '交付'}
+          title={primaryTitle}
+          aria-label={primaryTitle}
           onClick={() => {
             if (primary && busy !== primary.id) {
               void launch(primary);
@@ -172,21 +205,21 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
           {primary ? (
             <>
               <EditorIcon editorId={primary.id} size={20} />
-              <span className="handoff-trigger-label">
-                交付给 {primary.label}
+              <span className="handoff-trigger-label sr-only">
+                {primaryTitle}
               </span>
             </>
           ) : (
             <>
               <EditorIcon editorId="finder" size={20} />
-              <span className="handoff-trigger-label">交付</span>
+              <span className="handoff-trigger-label sr-only">{primaryTitle}</span>
             </>
           )}
         </button>
         <button
           type="button"
           className="handoff-caret"
-          aria-label="Choose hand-off target"
+          aria-label={t('handoff.chooseTargetAria')}
           data-testid="handoff-caret"
           onClick={() => setOpen((v) => !v)}
           disabled={busy !== null}
@@ -196,6 +229,7 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
       </div>
       {open ? (
         <div className="handoff-menu" role="menu" data-testid="handoff-menu">
+          <div className="handoff-menu-title">{t('handoff.menuTitle')}</div>
           {available.map((editor) => (
             <button
               key={editor.id}
@@ -216,7 +250,7 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
           {unavailable.length > 0 ? (
             <>
               <div className="handoff-menu-divider" />
-              <div className="handoff-menu-section">Not installed</div>
+              <div className="handoff-menu-section">{t('handoff.notInstalled')}</div>
               {unavailable.map((editor) => (
                 <button
                   key={editor.id}
@@ -226,7 +260,7 @@ export function HandoffButton({ projectId, onRequestRevealInFinder }: Props) {
                   data-testid={`handoff-menu-item-${editor.id}`}
                   onClick={() => void launch(editor)}
                   disabled={busy === editor.id}
-                  title={`${editor.label} — not detected on $PATH`}
+                  title={t('handoff.notDetectedTitle', { target: editor.label })}
                 >
                   <EditorIcon editorId={editor.id} size={20} />
                   <span>{editor.label}</span>

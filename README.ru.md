@@ -1,15 +1,15 @@
-# Open Design
+# Open Design — официальная open-source альтернатива [Claude Design][cd]
+
+> **Open Design — открытая, локально-ориентированная альтернатива [Claude Design][cd].** Пригодна для web-деплоя, с BYOK на каждом уровне: **16 CLI coding-агентов** автоматически обнаруживаются в вашем `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) и превращаются в движок генерации дизайна, управляемый **31 комбинируемым навыком** и **72 дизайн-системами уровня бренда**. Нет CLI? OpenAI-совместимый BYOK-прокси даёт тот же цикл без локального запуска агента.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` уже здесь. Старый мир дизайна заканчивается здесь.
 >
-> Open-source, agent-native альтернатива Claude Design / Figma — 40k звёзд за две недели довели нас до этой точки. **Дальше — только с тобой.**
+> Open-source альтернатива Claude Design / Figma — 40k звёзд за две недели довели нас до этой точки. **Дальше — только с тобой.**
 >
 > **Быстрая итерация на `main`** — 0.8.0 — следующая фаза Open Design. Кидай PR, бросай безумную идею, заводи баг — что приносишь ты, таким и становится это движение.
 >
 > → [**Прочитать анонс · скачать установщик · присоединиться к движению**](https://github.com/nexu-io/open-design/discussions/1727) · устанавливается параллельно с твоей текущей 0.7.
-
-> **Открытая альтернатива [Claude Design][cd].** Локально-ориентированная, пригодная для web-деплоя, с BYOK на каждом уровне: **16 CLI coding-агентов** автоматически обнаруживаются в вашем `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) и превращаются в движок генерации дизайна, управляемый **31 комбинируемым навыком** и **72 дизайн-системами уровня бренда**. Нет CLI? OpenAI-совместимый BYOK-прокси даёт тот же цикл без локального запуска агента.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — редакционная обложка: дизайн вместе с агентом на вашем ноутбуке" width="100%" />
@@ -729,7 +729,7 @@ Issues, PR, новые skills и новые design systems приветству�
 Спасибо всем, кто помогает двигать Open Design вперёд — кодом, документацией, обратной связью, новыми skills, новыми design systems или просто точным issue. Вклад любого реального масштаба здесь важен, а стена ниже — самый простой способ сказать это вслух.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Contributors Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-30" alt="Contributors Open Design" />
 </a>
 
 Если вы только что отправили свой первый PR — добро пожаловать. Метка [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) — хорошая точка входа.
@@ -746,9 +746,9 @@ SVG выше ежедневно пересобирается workflow [`.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
-    <img alt="История звёзд Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-30" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-30" />
+    <img alt="История звёзд Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-30" />
   </picture>
 </a>
 

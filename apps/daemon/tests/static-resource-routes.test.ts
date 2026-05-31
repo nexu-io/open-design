@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { isLocalSameOrigin } from '../src/origin-validation.js';
+import { listDesignSystems } from '../src/design-systems.js';
 import { registerStaticResourceRoutes } from '../src/static-resource-routes.js';
 
 describe('static resource mutation routes', () => {
@@ -130,5 +131,117 @@ describe('static resource mutation routes', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'BAD_REQUEST' });
     expect(catalogReadCount).toBe(0);
+  });
+});
+
+describe('design system import catalog lookup', () => {
+  let server: http.Server;
+  let baseUrl: string;
+  let tempRoot: string;
+  let sourceRoot: string;
+  let userDesignSystemsDir: string;
+
+  beforeAll(
+    () =>
+      new Promise<void>((resolve) => {
+        tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'od-static-import-'));
+        sourceRoot = path.join(tempRoot, 'source-app');
+        userDesignSystemsDir = path.join(tempRoot, 'user-design-systems');
+        fs.mkdirSync(path.join(sourceRoot, 'src', 'styles'), { recursive: true });
+        fs.writeFileSync(
+          path.join(sourceRoot, 'package.json'),
+          JSON.stringify({ name: 'demo-app', description: 'Demo import source.' }),
+        );
+        fs.writeFileSync(
+          path.join(sourceRoot, 'README.md'),
+          '# Demo App\n\nA simple import fixture.\n',
+        );
+        fs.writeFileSync(
+          path.join(sourceRoot, 'src', 'styles', 'tokens.css'),
+          ':root { --color-primary: #3366ff; }',
+        );
+
+        const app = express();
+        app.use(express.json({ limit: '4mb' }));
+        registerStaticResourceRoutes(app, {
+          http: {
+            createSseResponse: () => undefined,
+            isLocalSameOrigin,
+            requireLocalDaemonRequest: (_req: unknown, _res: unknown, next: () => void) => next(),
+            resolvedPortRef: {
+              get current() {
+                const address = server.address();
+                return typeof address === 'object' && address ? address.port : 0;
+              },
+            },
+            sendApiError: (res: express.Response, status: number, code: string, message: string) =>
+              res.status(status).json({ error: message, code }),
+            sendLiveArtifactRouteError: () => undefined,
+            sendMulterError: () => undefined,
+          },
+          paths: {
+            ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
+            BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
+            DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
+            DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
+            OD_BIN: path.join(tempRoot, 'od'),
+            PROJECT_ROOT: tempRoot,
+            PROJECTS_DIR: path.join(tempRoot, 'projects'),
+            PROMPT_TEMPLATES_DIR: path.join(tempRoot, 'prompt-templates'),
+            RUNTIME_DATA_DIR: path.join(tempRoot, 'data'),
+            RUNTIME_DATA_DIR_CANONICAL: path.join(tempRoot, 'data'),
+            SKILLS_DIR: path.join(tempRoot, 'skills'),
+            USER_DESIGN_SYSTEMS_DIR: userDesignSystemsDir,
+            USER_DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'user-design-templates'),
+            USER_SKILLS_DIR: path.join(tempRoot, 'user-skills'),
+          },
+          resources: {
+            listAllDesignSystems: async () =>
+              listDesignSystems(userDesignSystemsDir, {
+                idPrefix: 'user:',
+                source: 'user',
+                isEditable: true,
+                defaultStatus: 'draft',
+              }),
+            listAllSkills: async () => [],
+            listAllDesignTemplates: async () => [],
+            listAllSkillLikeEntries: async () => [],
+            mimeFor: () => 'application/octet-stream',
+          },
+        });
+
+        server = app.listen(0, '127.0.0.1', () => {
+          const addr = server.address() as { port: number };
+          baseUrl = `http://127.0.0.1:${addr.port}`;
+          resolve();
+        });
+      }),
+  );
+
+  afterAll(
+    () =>
+      new Promise<void>((resolve) => {
+        server.close(() => {
+          fs.rmSync(tempRoot, { recursive: true, force: true });
+          resolve();
+        });
+      }),
+  );
+
+  it('returns the imported user design system with its user: catalog id', async () => {
+    const res = await fetch(`${baseUrl}/api/design-systems/import/local`, {
+      method: 'POST',
+      headers: {
+        Origin: baseUrl,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ baseDir: sourceRoot }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { designSystem: { id: string; title: string } };
+    expect(body.designSystem.id).toBe('user:demo-app');
+    expect(body.designSystem.title).toBe('demo app');
+    expect(fs.existsSync(path.join(userDesignSystemsDir, 'demo-app', 'DESIGN.md'))).toBe(true);
   });
 });

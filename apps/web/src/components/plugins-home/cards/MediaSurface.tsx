@@ -6,7 +6,7 @@
 // home view. Until then the poster image is the only thing the
 // browser fetches — keeps a 50-tile gallery cheap.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { MediaPreviewSpec } from '../preview';
 import { Icon } from '../../Icon';
 
@@ -18,8 +18,20 @@ interface Props {
 
 export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   const [hovering, setHovering] = useState(false);
+  // Track per-URL poster load failure so a 404 / decode error / dead
+  // host swaps in the typographic fallback instead of leaving the
+  // browser's default broken-image glyph on the card. Reset whenever
+  // the poster URL itself changes — the previous failure must not
+  // poison a freshly-assigned URL (filter rotations, daemon
+  // repopulating a preview after an offline flip). #2955.
+  const [posterLoadFailed, setPosterLoadFailed] = useState(false);
+  useEffect(() => {
+    setPosterLoadFailed(false);
+  }, [preview.poster]);
   const showVideo =
     inView && hovering && preview.mediaType === 'video' && Boolean(preview.videoUrl);
+  const hasPoster = Boolean(preview.poster);
+  const useFallback = !hasPoster || posterLoadFailed;
 
   return (
     <div
@@ -27,7 +39,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {inView && preview.poster ? (
+      {inView && preview.poster && !posterLoadFailed ? (
         <img
           className="plugins-home__media-img"
           src={preview.poster}
@@ -35,9 +47,15 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
+          onError={() => setPosterLoadFailed(true)}
         />
+      ) : useFallback ? (
+        <MediaFallback pluginTitle={pluginTitle} mediaType={preview.mediaType} />
       ) : (
-        <div className="plugins-home__media-skeleton" aria-hidden />
+        <div
+          className={`plugins-home__media-skeleton${inView ? ' is-active' : ''}`}
+          aria-hidden
+        />
       )}
       {showVideo ? (
         <video
@@ -50,11 +68,26 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           preload="none"
         />
       ) : null}
-      {preview.mediaType === 'video' && !preview.imageOnly ? (
-        <span className="plugins-home__media-badge" aria-hidden>
-          <Icon name="play" size={12} />
-        </span>
-      ) : null}
+    </div>
+  );
+}
+
+function MediaFallback({
+  mediaType,
+  pluginTitle,
+}: {
+  mediaType: MediaPreviewSpec['mediaType'];
+  pluginTitle: string;
+}) {
+  const trimmed = pluginTitle.trim();
+  const glyph = String.fromCodePoint(trimmed.codePointAt(0) ?? 0x2022).toUpperCase();
+  const icon = mediaType === 'video' ? 'play' : mediaType === 'audio' ? 'mic' : 'image';
+  return (
+    <div className="plugins-home__media-fallback" aria-hidden>
+      <span className="plugins-home__media-fallback-glyph">{glyph}</span>
+      <span className="plugins-home__media-fallback-icon">
+        <Icon name={icon} size={15} />
+      </span>
     </div>
   );
 }

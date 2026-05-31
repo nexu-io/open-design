@@ -12,7 +12,7 @@
     "description": "Official Open Design plugin registry seed. The generated public catalog is served from open-design.ai/marketplace.",
     "version": "0.1.0",
     "generatedFrom": "plugins/_official",
-    "bundledPreinstallCount": 400
+    "bundledPreinstallCount": 401
   },
   "plugins": [
     {
@@ -3592,7 +3592,7 @@
     },
     {
       "name": "open-design/example-article-magazine",
-      "title": "杂志文章",
+      "title": "Magazine Article",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/article-magazine",
       "publisher": {
@@ -3619,7 +3619,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/article-magazine",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Magazine Article",
+        "zh-CN": "杂志文章"
+      },
+      "description_i18n": {
+        "en": "Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay.",
+        "zh-CN": "Huashu / huashu-md-html 风格杂志文章版式, 将 Markdown 或笔记转成精排长文 HTML。"
+      }
     },
     {
       "name": "open-design/example-audio-jingle",
@@ -3689,7 +3697,7 @@
     },
     {
       "name": "open-design/example-card-twitter",
-      "title": "Twitter 分享卡",
+      "title": "Twitter Share Card",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/card-twitter",
       "publisher": {
@@ -3700,7 +3708,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "推特金句 / 数据卡, 适合配推文",
+      "description": "Twitter quote or data card designed to pair with a post.",
       "tags": [
         "example",
         "first-party",
@@ -3716,11 +3724,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/card-twitter",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Twitter Share Card",
+        "zh-CN": "Twitter 分享卡"
+      },
+      "description_i18n": {
+        "en": "Twitter quote or data card designed to pair with a post.",
+        "zh-CN": "推特金句 / 数据卡, 适合配推文"
+      }
     },
     {
       "name": "open-design/example-card-xiaohongshu",
-      "title": "小红书图文卡片",
+      "title": "Xiaohongshu Card",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/card-xiaohongshu",
       "publisher": {
@@ -3731,7 +3747,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "小红书风格知识卡片, 多张联排可滑动浏览",
+      "description": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
       "tags": [
         "example",
         "first-party",
@@ -3746,7 +3762,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/card-xiaohongshu",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Xiaohongshu Card",
+        "zh-CN": "小红书图文卡片"
+      },
+      "description_i18n": {
+        "en": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
+        "zh-CN": "小红书风格知识卡片, 多张联排可滑动浏览"
+      }
     },
     {
       "name": "open-design/example-clinical-case-report",
@@ -3853,7 +3877,7 @@
     },
     {
       "name": "open-design/example-data-report",
-      "title": "数据可视化报告",
+      "title": "Data Visualization Report",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/data-report",
       "publisher": {
@@ -3864,7 +3888,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页",
+      "description": "Turns CSV, Excel, or JSON data into a polished visual report page.",
       "tags": [
         "example",
         "first-party",
@@ -3880,7 +3904,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/data-report",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Data Visualization Report",
+        "zh-CN": "数据可视化报告"
+      },
+      "description_i18n": {
+        "en": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+        "zh-CN": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页"
+      }
     },
     {
       "name": "open-design/example-dating-web",
@@ -3952,7 +3984,7 @@
     },
     {
       "name": "open-design/example-deck-guizang-editorial",
-      "title": "归藏编辑墨水 Deck",
+      "title": "Guizang Editorial E-Ink Deck",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/deck-guizang-editorial",
       "publisher": {
@@ -3963,7 +3995,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)",
+      "description": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
       "tags": [
         "example",
         "first-party",
@@ -3979,11 +4011,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/deck-guizang-editorial",
       "license": "MIT",
       "mode": "deck",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Guizang Editorial E-Ink Deck",
+        "zh-CN": "归藏编辑墨水 Deck"
+      },
+      "description_i18n": {
+        "en": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+        "zh-CN": "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)"
+      }
     },
     {
       "name": "open-design/example-deck-open-slide-canvas",
-      "title": "1920 画布自由 Deck",
+      "title": "Open-Slide 1920 Canvas Deck",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/deck-open-slide-canvas",
       "publisher": {
@@ -3994,7 +4034,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板",
+      "description": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
       "tags": [
         "example",
         "first-party",
@@ -4010,11 +4050,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/deck-open-slide-canvas",
       "license": "MIT",
       "mode": "deck",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Open-Slide 1920 Canvas Deck",
+        "zh-CN": "1920 画布自由 Deck"
+      },
+      "description_i18n": {
+        "en": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
+        "zh-CN": "锁死 1920×1080 画布, React 组件级自由组合, 不绑模板"
+      }
     },
     {
       "name": "open-design/example-deck-swiss-international",
-      "title": "瑞士国际主义 Deck",
+      "title": "Swiss International Deck",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/deck-swiss-international",
       "publisher": {
@@ -4025,7 +4073,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)",
+      "description": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
       "tags": [
         "example",
         "first-party",
@@ -4042,7 +4090,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/deck-swiss-international",
       "license": "MIT",
       "mode": "deck",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Swiss International Deck",
+        "zh-CN": "瑞士国际主义 Deck"
+      },
+      "description_i18n": {
+        "en": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
+        "zh-CN": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)"
+      }
     },
     {
       "name": "open-design/example-design-brief",
@@ -4113,7 +4169,7 @@
     },
     {
       "name": "open-design/example-doc-kami-parchment",
-      "title": "Kami 羊皮纸文档",
+      "title": "Kami Parchment Document",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/doc-kami-parchment",
       "publisher": {
@@ -4124,7 +4180,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印",
+      "description": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
       "tags": [
         "example",
         "first-party",
@@ -4143,7 +4199,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/doc-kami-parchment",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Kami Parchment Document",
+        "zh-CN": "Kami 羊皮纸文档"
+      },
+      "description_i18n": {
+        "en": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
+        "zh-CN": "暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印"
+      }
     },
     {
       "name": "open-design/example-docs-page",
@@ -4313,7 +4377,7 @@
     },
     {
       "name": "open-design/example-frame-data-chart-nyt",
-      "title": "NYT 风数据图表帧",
+      "title": "NYT-Style Data Chart Frame",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-data-chart-nyt",
       "publisher": {
@@ -4324,7 +4388,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)",
+      "description": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
       "tags": [
         "example",
         "first-party",
@@ -4338,11 +4402,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-data-chart-nyt",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "NYT-Style Data Chart Frame",
+        "zh-CN": "NYT 风数据图表帧"
+      },
+      "description_i18n": {
+        "en": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
+        "zh-CN": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)"
+      }
     },
     {
       "name": "open-design/example-frame-flowchart-sticky",
-      "title": "便利贴流程图帧",
+      "title": "Sticky Flowchart Frame",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-flowchart-sticky",
       "publisher": {
@@ -4353,7 +4425,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm",
+      "description": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
       "tags": [
         "example",
         "first-party",
@@ -4368,11 +4440,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-flowchart-sticky",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Sticky Flowchart Frame",
+        "zh-CN": "便利贴流程图帧"
+      },
+      "description_i18n": {
+        "en": "SVG curve connectors, sticky-note nodes, and cursor interaction with a whiteboard-brainstorm feel.",
+        "zh-CN": "SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm"
+      }
     },
     {
       "name": "open-design/example-frame-glitch-title",
-      "title": "故障艺术标题帧",
+      "title": "Glitch Title Frame",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-glitch-title",
       "publisher": {
@@ -4383,7 +4463,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero",
+      "description": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
       "tags": [
         "example",
         "first-party",
@@ -4398,11 +4478,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-glitch-title",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Glitch Title Frame",
+        "zh-CN": "故障艺术标题帧"
+      },
+      "description_i18n": {
+        "en": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
+        "zh-CN": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero"
+      }
     },
     {
       "name": "open-design/example-frame-light-leak-cinema",
-      "title": "胶片漏光电影帧",
+      "title": "Light-Leak Cinematic Frame",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-light-leak-cinema",
       "publisher": {
@@ -4413,7 +4501,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡",
+      "description": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
       "tags": [
         "example",
         "first-party",
@@ -4428,11 +4516,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-light-leak-cinema",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Light-Leak Cinematic Frame",
+        "zh-CN": "胶片漏光电影帧"
+      },
+      "description_i18n": {
+        "en": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
+        "zh-CN": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡"
+      }
     },
     {
       "name": "open-design/example-frame-liquid-bg-hero",
-      "title": "流体背景 Hero 帧",
+      "title": "Liquid Background Hero",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-liquid-bg-hero",
       "publisher": {
@@ -4443,7 +4539,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报",
+      "description": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
       "tags": [
         "example",
         "first-party",
@@ -4458,11 +4554,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-liquid-bg-hero",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Liquid Background Hero",
+        "zh-CN": "流体背景 Hero 帧"
+      },
+      "description_i18n": {
+        "en": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
+        "zh-CN": "WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报"
+      }
     },
     {
       "name": "open-design/example-frame-logo-outro",
-      "title": "品牌 Logo 收尾帧",
+      "title": "Logo Outro Frame",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-logo-outro",
       "publisher": {
@@ -4473,7 +4577,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕",
+      "description": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
       "tags": [
         "example",
         "first-party",
@@ -4487,11 +4591,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-logo-outro",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Logo Outro Frame",
+        "zh-CN": "品牌 Logo 收尾帧"
+      },
+      "description_i18n": {
+        "en": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+        "zh-CN": "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕"
+      }
     },
     {
       "name": "open-design/example-frame-macos-notification",
-      "title": "macOS 通知横幅",
+      "title": "macOS Notification Banner",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/frame-macos-notification",
       "publisher": {
@@ -4502,7 +4614,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告",
+      "description": "Realistic macOS notification banner with app icon, title, and body, suited to video overlays or product teasers.",
       "tags": [
         "example",
         "first-party",
@@ -4516,7 +4628,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-macos-notification",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "macOS Notification Banner",
+        "zh-CN": "macOS 通知横幅"
+      },
+      "description_i18n": {
+        "en": "Realistic macOS notification banner with app icon, title, and body, suited to video overlays or product teasers.",
+        "zh-CN": "拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告"
+      }
     },
     {
       "name": "open-design/example-gamified-app",
@@ -6535,6 +6655,40 @@
       "taskKind": "new-generation"
     },
     {
+      "name": "open-design/example-codex-interactive-capability-map",
+      "title": "Codex Interactive Capability Map",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/codex-interactive-capability-map",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write"
+      ],
+      "description": "Turn a long-form article, thread, memo, or product narrative into a Codex-style clickable capability map with a workflow loop, use-case matrix, and responsive detail panel.",
+      "tags": [
+        "example",
+        "first-party",
+        "prototype",
+        "knowledge",
+        "web",
+        "desktop",
+        "codex",
+        "article",
+        "thread",
+        "knowledge-map",
+        "interactive",
+        "capability-map",
+        "explainer"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/codex-interactive-capability-map",
+      "license": "MIT",
+      "mode": "prototype",
+      "taskKind": "new-generation"
+    },
+    {
       "name": "open-design/example-invoice",
       "title": "Invoice",
       "version": "0.1.0",
@@ -6905,7 +7059,7 @@
     },
     {
       "name": "open-design/example-mockup-device-3d",
-      "title": "iPhone × MacBook 立体展架",
+      "title": "Device 3D Showcase",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/mockup-device-3d",
       "publisher": {
@@ -6916,7 +7070,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图",
+      "description": "Static iPhone and MacBook 3D-style showcase with real HTML embedded on screens, glass-lens refraction, and 360-degree turntable composition.",
       "tags": [
         "example",
         "first-party",
@@ -6933,7 +7087,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/mockup-device-3d",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Device 3D Showcase",
+        "zh-CN": "iPhone × MacBook 立体展架"
+      },
+      "description_i18n": {
+        "en": "Static iPhone and MacBook 3D-style showcase with real HTML embedded on screens, glass-lens refraction, and 360-degree turntable composition.",
+        "zh-CN": "iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图"
+      }
     },
     {
       "name": "open-design/example-motion-frames",
@@ -7231,7 +7393,7 @@
     },
     {
       "name": "open-design/example-poster-hero",
-      "title": "营销海报",
+      "title": "Marketing Poster",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/poster-hero",
       "publisher": {
@@ -7242,7 +7404,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "竖版海报 / 朋友圈分享图, 强视觉冲击",
+      "description": "Vertical poster or Moments-style share image with strong visual impact.",
       "tags": [
         "example",
         "first-party",
@@ -7256,11 +7418,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/poster-hero",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Marketing Poster",
+        "zh-CN": "营销海报"
+      },
+      "description_i18n": {
+        "en": "Vertical poster or Moments-style share image with strong visual impact.",
+        "zh-CN": "竖版海报 / 朋友圈分享图, 强视觉冲击"
+      }
     },
     {
       "name": "open-design/example-ppt-keynote",
-      "title": "Keynote 风格 PPT",
+      "title": "Keynote-style Slides",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/ppt-keynote",
       "publisher": {
@@ -7271,7 +7441,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换",
+      "description": "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation.",
       "tags": [
         "example",
         "first-party",
@@ -7285,7 +7455,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/ppt-keynote",
       "license": "MIT",
       "mode": "deck",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Keynote-style Slides",
+        "zh-CN": "Keynote 风格 PPT"
+      },
+      "description_i18n": {
+        "en": "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation.",
+        "zh-CN": "苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换"
+      }
     },
     {
       "name": "open-design/example-pptx-html-fidelity-audit",
@@ -7390,7 +7568,7 @@
     },
     {
       "name": "open-design/example-resume-modern",
-      "title": "极简简历",
+      "title": "Modern Resume",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/resume-modern",
       "publisher": {
@@ -7401,7 +7579,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "现代极简简历, A4 单页, 适合打印或导出 PDF",
+      "description": "Modern minimal resume, single A4 page, ready for print or PDF export.",
       "tags": [
         "example",
         "first-party",
@@ -7416,7 +7594,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/resume-modern",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Modern Resume",
+        "zh-CN": "极简简历"
+      },
+      "description_i18n": {
+        "en": "Modern minimal resume, single A4 page, ready for print or PDF export.",
+        "zh-CN": "现代极简简历, A4 单页, 适合打印或导出 PDF"
+      }
     },
     {
       "name": "open-design/example-saas-landing",
@@ -7585,7 +7771,7 @@
     },
     {
       "name": "open-design/example-social-reddit-card",
-      "title": "Reddit 帖子卡",
+      "title": "Reddit Post Card",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/social-reddit-card",
       "publisher": {
@@ -7596,7 +7782,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享",
+      "description": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
       "tags": [
         "example",
         "first-party",
@@ -7613,11 +7799,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-reddit-card",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Reddit Post Card",
+        "zh-CN": "Reddit 帖子卡"
+      },
+      "description_i18n": {
+        "en": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
+        "zh-CN": "拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享"
+      }
     },
     {
       "name": "open-design/example-social-spotify-card",
-      "title": "Spotify 正在播放卡",
+      "title": "Spotify Now-Playing Card",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/social-spotify-card",
       "publisher": {
@@ -7628,7 +7822,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页",
+      "description": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
       "tags": [
         "example",
         "first-party",
@@ -7645,11 +7839,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-spotify-card",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Spotify Now-Playing Card",
+        "zh-CN": "Spotify 正在播放卡"
+      },
+      "description_i18n": {
+        "en": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
+        "zh-CN": "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页"
+      }
     },
     {
       "name": "open-design/example-social-x-post-card",
-      "title": "X (Twitter) 帖子卡",
+      "title": "X / Twitter Post Card",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/social-x-post-card",
       "publisher": {
@@ -7660,7 +7862,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享",
+      "description": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
       "tags": [
         "example",
         "first-party",
@@ -7677,7 +7879,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-x-post-card",
       "license": "MIT",
       "mode": "prototype",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "X / Twitter Post Card",
+        "zh-CN": "X (Twitter) 帖子卡"
+      },
+      "description_i18n": {
+        "en": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
+        "zh-CN": "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享"
+      }
     },
     {
       "name": "open-design/example-sprite-animation",
@@ -7816,7 +8026,7 @@
     },
     {
       "name": "open-design/example-vfx-text-cursor",
-      "title": "VFX 文字光标",
+      "title": "VFX Text Cursor",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/vfx-text-cursor",
       "publisher": {
@@ -7827,7 +8037,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句",
+      "description": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
       "tags": [
         "example",
         "first-party",
@@ -7842,11 +8052,19 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/vfx-text-cursor",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "VFX Text Cursor",
+        "zh-CN": "VFX 文字光标"
+      },
+      "description_i18n": {
+        "en": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
+        "zh-CN": "光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句"
+      }
     },
     {
       "name": "open-design/example-video-hyperframes",
-      "title": "Hyperframes 视频脚本",
+      "title": "Hyperframes Video",
       "version": "0.1.0",
       "source": "github:nexu-io/open-design@main/plugins/_official/examples/video-hyperframes",
       "publisher": {
@@ -7857,7 +8075,7 @@
         "prompt:inject",
         "fs:write"
       ],
-      "description": "Hyperframes / Remotion 兼容的连续帧动画, 可自动播放",
+      "description": "Hyperframes / Remotion-compatible continuous frame animation with autoplay support.",
       "tags": [
         "example",
         "first-party",
@@ -7869,7 +8087,15 @@
       "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/video-hyperframes",
       "license": "MIT",
       "mode": "video",
-      "taskKind": "new-generation"
+      "taskKind": "new-generation",
+      "title_i18n": {
+        "en": "Hyperframes Video",
+        "zh-CN": "Hyperframes 视频脚本"
+      },
+      "description_i18n": {
+        "en": "Hyperframes / Remotion-compatible continuous frame animation with autoplay support.",
+        "zh-CN": "Hyperframes / Remotion 兼容的连续帧动画, 可自动播放"
+      }
     },
     {
       "name": "open-design/example-video-shortform",

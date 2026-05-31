@@ -36,7 +36,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # Web-Paket bei Bedarf bauen
 ```
 
-Node `~24` und pnpm `10.33.x` sind erforderlich. `nvm` / `fnm` sind optional; nutzen Sie `nvm install 24 && nvm use 24` oder `fnm install 24 && fnm use 24`, wenn Sie Node so verwalten. macOS, Linux und WSL2 sind die primären Pfade. Windows nativ sollte funktionieren, ist aber kein primäres Ziel.
+Node `~24` und pnpm `10.33.x` sind erforderlich. `nvm` / `fnm` sind optional; nutzen Sie `nvm install 24 && nvm use 24` oder `fnm install 24 && fnm use 24`, wenn Sie Node so verwalten. macOS, Linux und WSL2 sind die primären Pfade. Windows nativ wird unterstützt; siehe [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) für die häufigsten Setup-Stolpersteine.
 
 Sie brauchen keine Agent-CLI im `PATH`, um OD selbst zu entwickeln. Der daemon meldet dann "no agents found" und fällt auf den **Anthropic API · BYOK** Pfad zurück, der oft die schnellste Dev-Schleife ist.
 
@@ -217,6 +217,7 @@ Außerdem:
 
 - **Ein Anliegen pro PR.**
 - **Titel ist imperativ + Scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
+- **Nutzen Sie das PR-Template.** Füllen Sie jeden Abschnitt von [`.github/pull_request_template.md`](.github/pull_request_template.md) aus — Why, What users will see, Surface area, Screenshots (bei UI), Bug fix verification (bei Bugfix), Validation. Leere Abschnitte ergeben einen "please fill in"-Kommentar.
 - **Body erklärt das Warum.** Der Diff zeigt oft das Was, aber selten den Grund.
 - **Issue referenzieren**, falls vorhanden. Bei nicht-trivialen PRs ohne Issue bitte zuerst eines öffnen.
 - **Während Review nicht squashen.** Fixups pushen; wir squashen beim Merge.

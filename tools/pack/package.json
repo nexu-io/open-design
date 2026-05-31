@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.7.0",
+  "version": "0.8.1",
   "private": true,
   "type": "module",
   "bin": {
@@ -13,18 +13,21 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "@electron/notarize": "3.1.1",
     "cac": "6.7.14",
     "electron-builder": "26.8.1"
+  },
+  "optionalDependencies": {
+    "@powerformer/vela-cli": "0.0.4"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "tsx": "4.22.2",
+    "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },

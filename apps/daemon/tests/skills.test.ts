@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { rmSync } from 'node:fs';
 
-import { SKILLS_CWD_ALIAS } from '../src/cwd-aliases.js';
+import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from '../src/cwd-aliases.js';
 import { readFileSync } from 'node:fs';
 import {
   deleteUserSkill,
@@ -75,6 +75,53 @@ function writeSkill(
 }
 
 describe('listSkills', () => {
+  it('surfaces optional localized display metadata from SKILL.md frontmatter', async () => {
+    const root = fresh();
+    try {
+      const dir = path.join(root, 'localized');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'SKILL.md'),
+        [
+          '---',
+          'name: localized',
+          'zh_name: "本地化技能"',
+          'en_name: "Localized Skill"',
+          'description: "English fallback description."',
+          'zh_description: "中文描述。"',
+          'en_description: "English localized description."',
+          'od:',
+          '  example_prompt: "English fallback prompt."',
+          '  example_prompt_i18n:',
+          '    zh-CN: "中文 prompt。"',
+          '---',
+          '',
+          '# Localized skill body',
+          '',
+        ].join('\n'),
+      );
+
+      const skills = await listSkills(root);
+      expect(skills[0]).toMatchObject({
+        id: 'localized',
+        displayName: {
+          en: 'Localized Skill',
+          'zh-CN': '本地化技能',
+        },
+        descriptionI18n: {
+          en: 'English localized description.',
+          'zh-CN': '中文描述。',
+        },
+        examplePrompt: 'English fallback prompt.',
+        examplePromptI18n: {
+          'zh-CN': '中文 prompt。',
+        },
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('includes the built-in live-artifact skill catalog entry', async () => {
     const skills = await listSkills(designTemplatesRoot);
     const skill = skills.find((entry: { id: string }) => entry.id === 'live-artifact');
@@ -87,14 +134,15 @@ describe('listSkills', () => {
       previewType: 'html',
     });
     expect(skill.triggers.length).toBeGreaterThan(0);
+    const liveArtifactAlias = `${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(liveArtifactRoot)}`;
     expect(skill.body).toContain(`> **Skill root (absolute fallback):** \`${liveArtifactRoot}\``);
-    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/live-artifact/`);
+    expect(skill.body).toContain(`${liveArtifactAlias}/`);
     expect(skill.body).toContain('references/artifact-schema.md');
     expect(skill.body).toContain('references/connector-policy.md');
     expect(skill.body).toContain('references/refresh-contract.md');
-    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/live-artifact/references/artifact-schema.md`);
-    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/live-artifact/assets/template.html`);
-    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/live-artifact/references/layouts.md`);
+    expect(skill.body).toContain(`${liveArtifactAlias}/references/artifact-schema.md`);
+    expect(skill.body).not.toContain(`${liveArtifactAlias}/assets/template.html`);
+    expect(skill.body).not.toContain(`${liveArtifactAlias}/references/layouts.md`);
     expect(skill.body).toContain('"$OD_NODE_BIN" "$OD_BIN" tools live-artifacts create --input artifact.json');
     expect(skill.body).toContain('do not ask “where should the data come from?” before checking daemon connector tools');
     expect(skill.body).toContain('notion.notion_search');
@@ -201,12 +249,14 @@ describe('listSkills preamble', () => {
     const skill = skills[0];
     if (!skill) throw new Error('demo-skill not found');
 
+    const demoAlias = `${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(path.join(root, 'demo-skill'))}`;
+
     // The cwd-relative alias path is the primary one — that's what makes
     // the agent stay inside its working directory when reading skill
     // side files (issue #430).
-    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/demo-skill/`);
+    expect(skill.body).toContain(`${demoAlias}/`);
     expect(skill.body).toContain(
-      `${SKILLS_CWD_ALIAS}/demo-skill/assets/template.html`,
+      `${demoAlias}/assets/template.html`,
     );
 
     // The absolute fallback is required for two cases the relative path
@@ -233,8 +283,10 @@ describe('listSkills preamble', () => {
     const skill = skills[0];
     if (!skill) throw new Error('orbit-style skill not found');
 
-    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/`);
-    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/orbit-style/example.html`);
+    const orbitAlias = `${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(path.join(root, 'orbit-style'))}`;
+
+    expect(skill.body).toContain(`${orbitAlias}/`);
+    expect(skill.body).toContain(`${orbitAlias}/example.html`);
     expect(skill.body).toContain('Known side files in this skill: `example.html`.');
   });
 
@@ -250,12 +302,15 @@ describe('listSkills preamble', () => {
     const skill = skills[0];
     if (!skill) throw new Error('magazine-web-ppt skill not found');
 
+    const folderAlias = `${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(path.join(root, 'guizang-ppt'))}`;
+    const frontmatterAlias = `${SKILLS_CWD_ALIAS}/${skillCwdAliasSegment(path.join(root, 'magazine-web-ppt'))}`;
+
     // `id`/`name` reflect the frontmatter value (used elsewhere as a stable
     // public id), but the on-disk alias path must use the actual folder
     // name — that is what the daemon-staged junction maps to.
     expect(skill.id).toBe('magazine-web-ppt');
-    expect(skill.body).toContain(`${SKILLS_CWD_ALIAS}/guizang-ppt/`);
-    expect(skill.body).not.toContain(`${SKILLS_CWD_ALIAS}/magazine-web-ppt/`);
+    expect(skill.body).toContain(`${folderAlias}/`);
+    expect(skill.body).not.toContain(`${frontmatterAlias}/`);
   });
 
   it('does not emit a preamble for skills without side files', async () => {

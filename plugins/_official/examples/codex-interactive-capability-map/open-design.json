@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-codex-interactive-capability-map",
+  "title": "Codex Interactive Capability Map",
+  "title_i18n": {
+    "zh-CN": "Codex 交互式能力地图",
+    "zh-TW": "Codex 互動式能力地圖",
+    "ja": "Codex インタラクティブ機能マップ",
+    "ko": "Codex 인터랙티브 기능 맵",
+    "de": "Codex Interactive Capability Map",
+    "fr": "Carte de capacités interactive Codex",
+    "ru": "Интерактивная карта возможностей Codex",
+    "es": "Mapa de capacidades interactivo Codex",
+    "pt-BR": "Mapa de capacidades interativo Codex",
+    "it": "Mappa delle capacità interattiva Codex",
+    "vi": "Bản đồ năng lực tương tác Codex",
+    "pl": "Interaktywna mapa możliwości Codex",
+    "id": "Peta kemampuan interaktif Codex",
+    "nl": "Codex interactieve capaciteitenkaart",
+    "ar": "خريطة القدرات التفاعلية Codex",
+    "tr": "Codex etkileşimli yetenek haritası",
+    "uk": "Інтерактивна карта можливостей Codex",
+    "en": "Codex Interactive Capability Map"
+  },
+  "version": "0.1.0",
+  "description": "Turn a long-form article, thread, memo, or product narrative into a Codex-style clickable capability map with a workflow loop, use-case matrix, and responsive detail panel.",
+  "description_i18n": {
+    "zh-CN": "将长文、帖子、备忘录或产品说明转换为 Codex 风格的可点击能力地图，包含工作流循环、用例矩阵和响应式详情面板。",
+    "zh-TW": "將長文、討論串、備忘錄或產品說明轉換為 Codex 風格的可點擊能力地圖，包含工作流程循環、使用案例矩陣和響應式詳情面板。",
+    "ja": "長文記事、スレッド、メモ、製品説明を、ワークフローループ、ユースケースマトリックス、レスポンシブ詳細パネル付きの Codex スタイルのクリック可能な機能マップに変換します。",
+    "ko": "긴 글, 스레드, 메모 또는 제품 설명을 워크플로 루프, 사용 사례 매트릭스, 반응형 상세 패널이 포함된 Codex 스타일의 클릭 가능한 기능 맵으로 변환합니다.",
+    "de": "Verwandeln Sie lange Artikel, Threads, Memos oder Produktbeschreibungen in eine interaktive Codex-Fähigkeitskarte mit Workflow-Schleife, Use-Case-Matrix und responsivem Detailpanel.",
+    "fr": "Transformez un article long, un fil de discussion, un mémo ou une description de produit en carte de capacités interactive style Codex avec boucle de workflow, matrice de cas d'usage et panneau de détails responsive.",
+    "ru": "Преобразуйте длинную статью, тред, заметку или описание продукта в интерактивную карту возможностей в стиле Codex с циклом workflow, матрицей сценариев использования и адаптивной панелью деталей.",
+    "es": "Convierte un artículo extenso, hilo, memo o narrativa de producto en un mapa de capacidades clickeable estilo Codex con bucle de flujo de trabajo, matriz de casos de uso y panel de detalles responsive.",
+    "pt-BR": "Transforme um artigo longo, thread, memorando ou narrativa de produto em um mapa de capacidades clicável estilo Codex com loop de workflow, matriz de casos de uso e painel de detalhes responsivo.",
+    "it": "Trasforma un articolo lungo, thread, memo o descrizione di prodotto in una mappa delle capacità interattiva stile Codex con ciclo di workflow, matrice di casi d'uso e pannello dettagli responsive.",
+    "vi": "Chuyển đổi bài viết dài, chuỗi thảo luận, bản ghi nhớ hoặc mô tả sản phẩm thành bản đồ năng lực có thể nhấp theo phong cách Codex với vòng lặp workflow, ma trận use-case và bảng chi tiết responsive.",
+    "pl": "Przekształć długi artykuł, wątek, notatkę lub opis produktu w klikalną mapę możliwości w stylu Codex z pętlą workflow, macierzą przypadków użycia i responsywnym panelem szczegółów.",
+    "id": "Ubah artikel panjang, thread, memo, atau deskripsi produk menjadi peta kemampuan yang dapat diklik bergaya Codex dengan loop workflow, matriks use-case, dan panel detail responsif.",
+    "nl": "Zet een lang artikel, thread, memo of productbeschrijving om in een klikbare capaciteitenkaart in Codex-stijl met workflow-loop, use-case-matrix en responsief detailpaneel.",
+    "ar": "حوّل مقالًا طويلًا أو سلسلة أو مذكرة أو وصف منتج إلى خريطة قدرات تفاعلية بأسلوب Codex مع حلقة workflow ومصفوفة حالات استخدام ولوحة تفاصيل responsive.",
+    "tr": "Uzun bir makaleyi, thread'i, notu veya ürün açıklamasını workflow döngüsü, kullanım senaryosu matrisi ve responsive detay paneline sahip Codex tarzı tıklanabilir yetenek haritasına dönüştürün.",
+    "uk": "Перетворіть довгу статтю, тред, нотатку або опис продукту в інтерактивну карту можливостей у стилі Codex з циклом workflow, матрицею сценаріїв використання та адаптивною панеллю деталей.",
+    "en": "Turn a long-form article, thread, memo, or product narrative into a Codex-style clickable capability map with a workflow loop, use-case matrix, and responsive detail panel."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/codex-interactive-capability-map",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "knowledge",
+    "web",
+    "desktop",
+    "codex",
+    "article",
+    "thread",
+    "knowledge-map",
+    "interactive",
+    "capability-map",
+    "explainer"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "knowledge",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Turn this long-form article or thread into a Codex-style interactive capability map. Extract the core concepts, organize them into a workflow loop and use-case matrix, then build a polished single-file HTML prototype with clickable cards and a detail panel.",
+        "zh-CN": "把这篇长文、帖子或产品说明转成一个 Codex 风格的交互式能力地图：提炼核心概念，组织成流程环和用例矩阵，并生成一个带点击卡片与详情面板的单文件 HTML 原型。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Codex Interactive Capability Map"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

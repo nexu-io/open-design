@@ -20,6 +20,7 @@ import {
 import {
   applyConsent,
   applyIdentity,
+  bootstrapExceptionTracking,
   capture,
   getAnalyticsClient,
   getResolvedAnonymousId,
@@ -137,6 +138,17 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
   const [resolvedAnonId, setResolvedAnonId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
+    // Bridge the always-on error tracker to /api/analytics/config so any
+    // exceptions buffered since module load (see client-app.tsx) can flush
+    // to PostHog. This runs regardless of the user's analytics consent
+    // toggle — error reports are intentionally not gated by it.
+    void bootstrapExceptionTracking({
+      anonymousId: identity.anonymousId,
+      sessionId: identity.sessionId,
+      clientType: identity.clientType,
+      locale,
+      appVersion,
+    });
     void getAnalyticsClient({
       anonymousId: identity.anonymousId,
       sessionId: identity.sessionId,

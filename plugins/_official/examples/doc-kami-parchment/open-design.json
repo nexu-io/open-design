@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-doc-kami-parchment",
-  "title": "Kami 羊皮纸文档",
+  "title": "Kami Parchment Document",
+  "title_i18n": {
+    "en": "Kami Parchment Document",
+    "zh-CN": "Kami 羊皮纸文档",
+    "zh-TW": "Kami 羊皮紙文件",
+    "ja": "Kami パーチメントドキュメント",
+    "ko": "Kami 양피지 문서",
+    "de": "Kami Pergament-Dokument",
+    "fr": "Document parchemin Kami",
+    "ru": "Документ Kami пергамент",
+    "es": "Documento pergamino Kami",
+    "pt-BR": "Documento pergaminho Kami",
+    "it": "Documento pergamena Kami",
+    "vi": "Tài liệu giấy da Kami",
+    "pl": "Dokument pergaminowy Kami",
+    "id": "Dokumen perkamen Kami",
+    "nl": "Kami perkamentdocument",
+    "ar": "مستند الرق Kami",
+    "tr": "Kami parşömen belgesi",
+    "uk": "Пергаментний документ Kami"
+  },
   "version": "0.1.0",
-  "description": "暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印",
+  "description": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
+  "description_i18n": {
+    "en": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
+    "zh-CN": "暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印",
+    "zh-TW": "溫暖的羊皮紙畫布 (#f5f4ed)，單色墨藍色強調 (#1B365D)，一種襯線字型系列，編輯級排版。",
+    "ja": "温かみのある羊皮紙キャンバス (#f5f4ed)、モノクロームインクブルーアクセント (#1B365D)、1つのセリフ書体ファミリー、編集グレードのタイポグラフィ。",
+    "ko": "따뜻한 양피지 캔버스 (#f5f4ed), 단색 잉크 블루 액센트 (#1B365D), 하나의 세리프 패밀리, 편집급 타이포그래피.",
+    "de": "Warme Pergament-Leinwand (#f5f4ed), monochromer Tintenblau-Akzent (#1B365D), eine Serifenschrift und Typografie in redaktioneller Qualität.",
+    "fr": "Toile parchemin chaleureuse (#f5f4ed), accent bleu encre monochrome (#1B365D), une famille de police serif et typographie de qualité éditoriale.",
+    "ru": "Теплый пергаментный холст (#f5f4ed), монохромный чернильно-синий акцент (#1B365D), одно семейство шрифтов с засечками и типографика редакционного уровня.",
+    "es": "Lienzo de pergamino cálido (#f5f4ed), acento monocromo azul tinta (#1B365D), una familia serif y tipografía de grado editorial.",
+    "pt-BR": "Tela de pergaminho quente (#f5f4ed), destaque monocromático azul-tinta (#1B365D), uma família serifada e tipografia de nível editorial.",
+    "it": "Tela pergamena calda (#f5f4ed), accento monocromatico blu inchiostro (#1B365D), una famiglia serif e tipografia di livello editoriale.",
+    "vi": "Canvas giấy da ấm áp (#f5f4ed), điểm nhấn xanh mực đơn sắc (#1B365D), một họ font serif và kiểu chữ cấp biên tập.",
+    "pl": "Ciepłe pergaminowe płótno (#f5f4ed), monochromatyczny akcent atramentowej błękici (#1B365D), jedna rodzina szeryfowa i typografia klasy edytorskiej.",
+    "id": "Kanvas perkamen hangat (#f5f4ed), aksen biru tinta monokrom (#1B365D), satu keluarga font serif, dan tipografi tingkat editorial.",
+    "nl": "Warm perkamenten canvas (#f5f4ed), monochroom inktblauw accent (#1B365D), één schreefloos lettertype en typografie van redactionele kwaliteit.",
+    "ar": "لوحة رق دافئة (#f5f4ed)، لون أزرق حبر أحادي اللون (#1B365D)، عائلة خط serif واحدة، وطباعة بمستوى تحريري.",
+    "tr": "Sıcak parşömen tuvali (#f5f4ed), monokrom mürekkep mavisi vurgusu (#1B365D), bir serif yazı tipi ailesi ve editoryal seviye tipografi.",
+    "uk": "Теплий пергаментний холст (#f5f4ed), монохромний чорнильно-синій акцент (#1B365D), одна родина шрифтів із зарубками та типографіка редакційного рівня."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -46,11 +86,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Kami 羊皮纸文档」模板把我的内容做成一份「暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Kami Parchment Document template to turn my content into a warm parchment document with monochrome ink-blue accents, one serif family, and editorial-grade typography. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Kami 羊皮纸文档」模板把我的内容做成一份「暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Kami 羊皮纸文档"
+          "title": "Kami Parchment Document",
+          "title_i18n": {
+            "en": "Kami Parchment Document",
+            "zh-CN": "Kami 羊皮纸文档"
+          }
         }
       ]
     },

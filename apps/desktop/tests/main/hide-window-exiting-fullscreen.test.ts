@@ -8,10 +8,12 @@
 // a structural mock — the bug shape is pure logic (sequence of calls), so
 // no real Electron window is required.
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
+  attachNonDarwinMainWindowCloseShutdown,
   hideWindowExitingFullscreen,
+  type MainWindowCloseSurface,
   type WindowFullscreenSurface,
 } from '../../src/main/runtime.js';
 
@@ -139,5 +141,49 @@ describe('hideWindowExitingFullscreen', () => {
       'setFullScreen(false)',
       'hide',
     ]);
+  });
+});
+
+describe('attachNonDarwinMainWindowCloseShutdown', () => {
+  function createMockCloseWindow(): {
+    emitClosed: () => void;
+    window: MainWindowCloseSurface;
+  } {
+    let closedListener: (() => void) | null = null;
+    return {
+      emitClosed: () => closedListener?.(),
+      window: {
+        on: (event, listener) => {
+          if (event === 'closed') closedListener = listener;
+          return undefined;
+        },
+      },
+    };
+  }
+
+  test('requests application shutdown when the main window is closed', () => {
+    const { emitClosed, window } = createMockCloseWindow();
+    const requestQuit = vi.fn();
+
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => false,
+      requestQuit,
+    });
+    emitClosed();
+
+    expect(requestQuit).toHaveBeenCalledTimes(1);
+  });
+
+  test('ignores close events triggered by the explicit shutdown path', () => {
+    const { emitClosed, window } = createMockCloseWindow();
+    const requestQuit = vi.fn();
+
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => true,
+      requestQuit,
+    });
+    emitClosed();
+
+    expect(requestQuit).not.toHaveBeenCalled();
   });
 });

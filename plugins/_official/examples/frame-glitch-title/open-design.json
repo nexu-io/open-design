@@ -2,9 +2,49 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-glitch-title",
-  "title": "故障艺术标题帧",
+  "title": "Glitch Title Frame",
+  "title_i18n": {
+    "en": "Glitch Title Frame",
+    "zh-CN": "故障艺术标题帧",
+    "zh-TW": "故障標題框架",
+    "ja": "グリッチタイトルフレーム",
+    "ko": "글리치 타이틀 프레임",
+    "de": "Glitch-Titelrahmen",
+    "fr": "Cadre de titre glitch",
+    "ru": "Глитч-рамка для заголовка",
+    "es": "Marco de título glitch",
+    "pt-BR": "Moldura de título glitch",
+    "it": "Cornice titolo glitch",
+    "vi": "Khung tiêu đề glitch",
+    "pl": "Ramka tytułowa glitch",
+    "id": "Bingkai judul glitch",
+    "nl": "Glitch titelframe",
+    "ar": "إطار عنوان التشويش",
+    "tr": "Glitch başlık çerçevesi",
+    "uk": "Рамка заголовка з глітчем"
+  },
   "version": "0.1.0",
-  "description": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero",
+  "description": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
+  "description_i18n": {
+    "en": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
+    "zh-CN": "数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero",
+    "zh-TW": "數位故障、色差偏移和資料損毀風格的標題框架，適用於影片轉場或賽博龐克主題。",
+    "ja": "ビデオトランジションやサイバーパンクヒーロー向けのデジタルグリッチ、色収差、データ破損エフェクトのタイトルフレーム。",
+    "ko": "비디오 전환 또는 사이버펑크 히어로를 위한 디지털 글리치, 색수차 오프셋 및 데이터 손상 타이틀 프레임.",
+    "de": "Digitaler Glitch, chromatische Verschiebung und Datenkorruptions-Titelrahmen für Videoübergänge oder Cyberpunk-Helden.",
+    "fr": "Cadre de titre avec effet glitch numérique, décalage chromatique et corruption de données pour transitions vidéo ou héros cyberpunk.",
+    "ru": "Цифровой глитч, хроматический сдвиг и эффект повреждения данных для видеопереходов или киберпанк-героев.",
+    "es": "Marco de título con glitch digital, desplazamiento cromático y corrupción de datos para transiciones de video o héroes cyberpunk.",
+    "pt-BR": "Moldura de título com glitch digital, deslocamento cromático e corrupção de dados para transições de vídeo ou heróis cyberpunk.",
+    "it": "Cornice per titoli con glitch digitale, offset cromatico e corruzione dati per transizioni video o eroi cyberpunk.",
+    "vi": "Khung tiêu đề hiệu ứng glitch kỹ thuật số, lệch sắc và hỏng dữ liệu cho chuyển cảnh video hoặc chủ đề cyberpunk.",
+    "pl": "Cyfrowy glitch, przesunięcie chromatyczne i uszkodzenie danych w ramce tytułowej do przejść wideo lub bohaterów cyberpunk.",
+    "id": "Bingkai judul dengan efek glitch digital, offset kromatik, dan korupsi data untuk transisi video atau tema cyberpunk.",
+    "nl": "Digitale glitch, chromatische verschuiving en datacorruptie titelframe voor videotransities of cyberpunk-helden.",
+    "ar": "إطار عنوان بتأثير التشويش الرقمي والإزاحة اللونية وتلف البيانات لانتقالات الفيديو أو أبطال السايبربانك.",
+    "tr": "Video geçişleri veya cyberpunk kahramanlar için dijital glitch, kromatik kayma ve veri bozulması başlık çerçevesi.",
+    "uk": "Цифровий глітч, хроматичний зсув і ефект пошкодження даних для відеопереходів або кіберпанк-героїв."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -41,11 +81,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「故障艺术标题帧」模板把我的内容做成一段「数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Glitch Title Frame template to turn my content into a digital-glitch, chromatic-offset, data-corruption title frame for a video transition or cyberpunk hero. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「故障艺术标题帧」模板把我的内容做成一段「数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "故障艺术标题帧"
+          "title": "Glitch Title Frame",
+          "title_i18n": {
+            "en": "Glitch Title Frame",
+            "zh-CN": "故障艺术标题帧"
+          }
         }
       ]
     },

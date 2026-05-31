@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt } from '../../src/prompts/system.js';
+import { composeSystemPrompt, resolveExclusiveSurface } from '../../src/prompts/system.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +81,64 @@ describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () =>
 });
 
 describe('composeSystemPrompt', () => {
+  it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).toContain('# UI locale override');
+    expect(prompt).toContain('`zh-CN` (Simplified Chinese)');
+    expect(prompt).toContain('快速简报 — 30 秒');
+    expect(prompt).toContain('目标用户');
+    expect(prompt).toContain('视觉调性');
+    expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
+  });
+
+  it('preserves canonical default task-type options under locale overrides', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).toContain(
+      'keep the `taskType` option labels as the canonical routing choices',
+    );
+    for (const option of [
+      'Prototype',
+      'Live artifact',
+      'Slide deck',
+      'Image',
+      'Video',
+      'HyperFrames',
+      'Audio',
+      'Other',
+    ]) {
+      expect(prompt).toContain(`"${option}"`);
+    }
+    expect(prompt).not.toContain('option labels as `原型`');
+    expect(prompt).not.toContain('`实时作品`');
+  });
+
+  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-TW' });
+
+    expect(prompt).toContain('# UI locale override');
+    expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
+    expect(prompt).toContain(
+      'keep the `taskType` option labels as the canonical routing choices',
+    );
+    for (const option of [
+      'Prototype',
+      'Live artifact',
+      'Slide deck',
+      'Image',
+      'Video',
+      'HyperFrames',
+      'Audio',
+      'Other',
+    ]) {
+      expect(prompt).toContain(`"${option}"`);
+    }
+    expect(prompt).not.toContain('快速简报 — 30 秒');
+    expect(prompt).not.toContain('option labels as `原型`');
+    expect(prompt).not.toContain('`实时作品`');
+  });
+
   it('treats an active design system as the visual direction', () => {
     const prompt = composeSystemPrompt({
       designSystemTitle: 'ComfyUI',
@@ -180,12 +238,51 @@ describe('composeSystemPrompt', () => {
       metadata: {
         kind: 'deck',
         speakerNotes: true,
+        slideCount: '10-15 pages',
       } as any,
     });
 
     expect(prompt).toContain('- **kind**: deck');
+    expect(prompt).toContain('- **slideCount**: 10-15 pages');
     expect(prompt).not.toContain('**responsive web contract**');
     expect(prompt).not.toContain('**platformTargets**');
+  });
+
+  it('tells artifact generation to summarize instead of dumping raw HTML source into chat', () => {
+    const prompt = composeSystemPrompt({
+      metadata: { kind: 'prototype', fidelity: 'production' } as any,
+    });
+
+    expect(prompt).toContain('Do not dump the full raw HTML source back into chat');
+    expect(prompt).toContain('the assistant message should only summarize the result');
+  });
+
+  it('uses the primary skill surface when composed skill modes conflict', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      skillModes: ['deck', 'image'],
+    });
+
+    expect(prompt).toContain('## Media generation contract');
+    expect(prompt).not.toContain('# Slide deck — fixed framework');
+  });
+
+  it('lets metadata.kind win over conflicting composed skill modes', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      skillModes: ['deck', 'image'],
+      metadata: { kind: 'deck' } as any,
+    });
+
+    expect(prompt).toContain('# Slide deck — fixed framework');
+    expect(prompt).not.toContain('## Media generation contract');
+  });
+
+  it('resolves a non-media primary surface ahead of composed media mentions', () => {
+    expect(resolveExclusiveSurface({
+      skillMode: 'deck',
+      skillModes: ['deck', 'image'],
+    })).toBe('deck');
   });
 
   describe('artifact handoff no-emit clauses (#1143)', () => {
@@ -291,6 +388,19 @@ describe('composeSystemPrompt', () => {
       });
       expect(prompt).toContain('- `github`\n');
       expect(prompt).not.toContain('- `github` (github)');
+    });
+
+    it('keeps external MCP tools visible when OD-owned media execution is disabled', () => {
+      const prompt = composeSystemPrompt({
+        connectedExternalMcp: [{ id: 'external-media', label: 'External media' }],
+        metadata: { kind: 'image' },
+        mediaExecution: { mode: 'disabled' },
+      });
+
+      expect(prompt).toContain('## External MCP servers — already authenticated');
+      expect(prompt).toContain('`external-media`');
+      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).not.toContain('## Media generation contract');
     });
   });
 

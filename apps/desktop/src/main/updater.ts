@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
 import {
   access,
+  chmod,
   lstat,
   mkdir,
   readdir,
@@ -13,9 +15,15 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import {
+  MANAGED_DOWNLOAD_ERROR_CODES,
+  ManagedDownloadError,
+  downloadCopyAndClear,
+  type ManagedDownloadChecksum,
+  type ManagedDownloadProgress,
+} from "@open-design/download";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -32,6 +40,13 @@ import {
   type DesktopUpdateState,
   type SidecarSource,
 } from "@open-design/sidecar-proto";
+
+import {
+  markInstallerObservationOpenFailed,
+  writePendingInstallerObservation,
+  type InstallerObservationArtifactType,
+  type InstallerObservationHandle,
+} from "./installer-observations.js";
 
 export const DESKTOP_UPDATE_ENV = Object.freeze({
   ARCH: "OD_UPDATE_ARCH",
@@ -57,7 +72,9 @@ const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
 const RELEASES_DIR = "releases";
 const STAGING_DIR = "staging";
+const DOWNLOADS_DIR = "downloads";
 const BACK_DIR = ".back";
+const HELPERS_DIR = "helpers";
 const UPDATE_ROOT_VERSION = 1;
 const STORE_METADATA_VERSION = 1;
 const BETA_POLL_INTERVAL_MS = 15 * 60 * 1000;
@@ -65,6 +82,10 @@ const STABLE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_POLL_INITIAL_DELAY_MS = 5000;
 const DEFAULT_POLL_BACKOFF_INITIAL_MS = 60 * 1000;
 const DEFAULT_POLL_BACKOFF_MAX_MS = 30 * 60 * 1000;
+const MAC_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
+const WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
+const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 3;
+const DESKTOP_UPDATE_CHANNEL_VALUES = new Set<string>(Object.values(DESKTOP_UPDATE_CHANNELS));
 
 export type DesktopUpdaterConfigInput = {
   appVersion?: string | null;
@@ -72,7 +93,9 @@ export type DesktopUpdaterConfigInput = {
   currentVersion?: string | null;
   downloadRoot?: string | null;
   env?: NodeJS.ProcessEnv;
+  installerObservationRoot?: string | null;
   mode?: DesktopUpdateMode;
+  namespace?: string | null;
   platform?: string;
   runtimeBase?: string | null;
   source: SidecarSource;
@@ -91,8 +114,10 @@ export type DesktopUpdaterConfig = {
   currentVersion: string;
   downloadRoot: string;
   enabled: boolean;
+  installerObservationRoot?: string;
   metadataUrl: string;
   mode: DesktopUpdateMode;
+  namespace?: string;
   openDryRun: boolean;
   platform: string;
   source: SidecarSource;
@@ -100,12 +125,28 @@ export type DesktopUpdaterConfig = {
 
 export type DesktopUpdaterDeps = {
   fetch?: typeof globalThis.fetch;
+  launchInstallerAfterQuit?: (input: DeferredInstallerLaunchInput) => Promise<string>;
   logger?: DesktopUpdaterLogger;
   now?: () => Date;
   openPath?: (path: string) => Promise<string>;
+  processPid?: number;
+  spawnDetached?: SpawnInstallerHelper;
 };
 
 type DesktopUpdaterLogger = Pick<Console, "error" | "warn">;
+type DetachedProcess = { unref(): void };
+type SpawnInstallerHelper = (
+  command: string,
+  args: string[],
+  options: { detached?: true; stdio: "ignore"; windowsHide: true },
+) => DetachedProcess;
+
+export type DeferredInstallerLaunchInput = {
+  appPid: number;
+  installerPath: string;
+  root: string;
+  timeoutMs: number;
+};
 
 type UpdateCandidate = {
   arch: string;
@@ -157,6 +198,8 @@ type LoadedRelease = {
   ref: UpdateReleaseRef;
 };
 
+type ResolvedChecksumSnapshot = DesktopUpdateChecksumSnapshot & { value: string };
+
 type OwnedRoot =
   | { metadataPath: string; ok: true; realRoot: string }
   | { error: DesktopUpdateErrorSnapshot; ok: false };
@@ -198,8 +241,12 @@ function normalizeMode(value: string | undefined, fallback: DesktopUpdateMode): 
 
 function normalizeChannel(value: string | undefined, fallback: DesktopUpdateChannel): DesktopUpdateChannel {
   if (value == null || value.length === 0) return fallback;
-  if (value === DESKTOP_UPDATE_CHANNELS.STABLE || value === DESKTOP_UPDATE_CHANNELS.BETA) return value;
+  if (isDesktopUpdateChannel(value)) return value;
   throw new Error(`unsupported desktop update channel: ${value}`);
+}
+
+function isDesktopUpdateChannel(value: unknown): value is DesktopUpdateChannel {
+  return typeof value === "string" && DESKTOP_UPDATE_CHANNEL_VALUES.has(value);
 }
 
 function defaultMetadataUrl(channel: DesktopUpdateChannel): string {
@@ -212,6 +259,19 @@ function normalizeDownloadRoot(value: string): string {
   return resolve(value);
 }
 
+function normalizeOptionalRoot(value: string | null | undefined, label: string): string | undefined {
+  if (value == null || value.length === 0) return undefined;
+  if (value.includes("\0")) throw new Error(`${label} must not contain null bytes`);
+  if (!isAbsolute(value)) throw new Error(`${label} must be absolute: ${value}`);
+  return resolve(value);
+}
+
+function normalizeOptionalNonEmpty(value: string | null | undefined): string | undefined {
+  if (value == null) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
 function durationEnv(value: string | undefined, fallback: number, name: string): number {
   if (value == null || value.length === 0) return fallback;
   const parsed = Number(value);
@@ -220,7 +280,7 @@ function durationEnv(value: string | undefined, fallback: number, name: string):
 }
 
 function defaultPollIntervalMs(channel: DesktopUpdateChannel): number {
-  return channel === DESKTOP_UPDATE_CHANNELS.BETA ? BETA_POLL_INTERVAL_MS : STABLE_POLL_INTERVAL_MS;
+  return channel === DESKTOP_UPDATE_CHANNELS.STABLE ? STABLE_POLL_INTERVAL_MS : BETA_POLL_INTERVAL_MS;
 }
 
 export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): DesktopUpdaterConfig {
@@ -240,6 +300,8 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     input.appVersion ??
     "0.0.0";
   const channel = normalizeChannel(env[DESKTOP_UPDATE_ENV.CHANNEL], defaultChannelForVersion(currentVersion));
+  const installerObservationRoot = normalizeOptionalRoot(input.installerObservationRoot, "installer observation root");
+  const namespace = normalizeOptionalNonEmpty(input.namespace);
 
   return {
     arch: env[DESKTOP_UPDATE_ENV.ARCH] ?? input.arch ?? process.arch,
@@ -270,8 +332,10 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     currentVersion,
     downloadRoot,
     enabled,
+    ...(installerObservationRoot == null ? {} : { installerObservationRoot }),
     metadataUrl: env[DESKTOP_UPDATE_ENV.METADATA_URL] ?? defaultMetadataUrl(channel),
     mode,
+    ...(namespace == null ? {} : { namespace }),
     openDryRun: isTruthyEnv(env[DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]) ?? false,
     platform: env[DESKTOP_UPDATE_ENV.PLATFORM] ?? input.platform ?? process.platform,
     source: input.source,
@@ -414,9 +478,11 @@ function logStoreError(logger: DesktopUpdaterLogger, error: DesktopUpdateErrorSn
 function isAllowedRootEntry(name: string): boolean {
   return name === OWNERSHIP_SENTINEL ||
     name === STORE_METADATA_FILE ||
+    name === DOWNLOADS_DIR ||
     name === RELEASES_DIR ||
     name === STAGING_DIR ||
-    name === BACK_DIR;
+    name === BACK_DIR ||
+    name === HELPERS_DIR;
 }
 
 function isUpdateStoreMetadata(value: unknown): value is UpdateStoreMetadata {
@@ -447,6 +513,10 @@ function isChecksumSnapshot(value: unknown): value is DesktopUpdateChecksumSnaps
   return true;
 }
 
+function isResolvedChecksumSnapshot(value: unknown): value is ResolvedChecksumSnapshot {
+  return isChecksumSnapshot(value) && typeof value.value === "string" && value.value.length > 0;
+}
+
 function isUpdateReleaseRef(value: unknown): value is UpdateReleaseRef {
   if (!isRecord(value)) return false;
   return stringField(value, "arch") != null &&
@@ -454,7 +524,7 @@ function isUpdateReleaseRef(value: unknown): value is UpdateReleaseRef {
     stringField(value, "artifactPath") != null &&
     isChecksumSnapshot(value.checksum) &&
     stringField(value, "checksumPath") != null &&
-    (value.channel === DESKTOP_UPDATE_CHANNELS.STABLE || value.channel === DESKTOP_UPDATE_CHANNELS.BETA) &&
+    isDesktopUpdateChannel(value.channel) &&
     stringField(value, "downloadedAt") != null &&
     stringField(value, "key") != null &&
     isRecord(value.metadata) &&
@@ -467,7 +537,7 @@ function isIncomingRef(value: unknown): value is IncomingRef {
   if (!isRecord(value)) return false;
   return stringField(value, "arch") != null &&
     isArtifactSnapshot(value.artifact) &&
-    (value.channel === DESKTOP_UPDATE_CHANNELS.STABLE || value.channel === DESKTOP_UPDATE_CHANNELS.BETA) &&
+    isDesktopUpdateChannel(value.channel) &&
     stringField(value, "cycleId") != null &&
     isRecord(value.metadata) &&
     stringField(value, "platformKey") != null &&
@@ -534,7 +604,7 @@ async function ensureOwnedUpdateRoot(
       return { ok: false, error };
     }
 
-    for (const dirName of [RELEASES_DIR, STAGING_DIR, BACK_DIR]) {
+    for (const dirName of [RELEASES_DIR, STAGING_DIR, DOWNLOADS_DIR, BACK_DIR, HELPERS_DIR]) {
       const path = join(realRoot, dirName);
       let entry;
       try {
@@ -614,9 +684,10 @@ function hasCountedPrerelease(version: string): boolean {
 }
 
 function defaultChannelForVersion(version: string): DesktopUpdateChannel {
-  return /(?:^|[-.])beta(?:[-.]|$)/i.test(version) || hasCountedPrerelease(version)
-    ? DESKTOP_UPDATE_CHANNELS.BETA
-    : DESKTOP_UPDATE_CHANNELS.STABLE;
+  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return DESKTOP_UPDATE_CHANNELS.BETA;
+  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(version)) return DESKTOP_UPDATE_CHANNELS.PREVIEW;
+  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(version)) return DESKTOP_UPDATE_CHANNELS.NIGHTLY;
+  return hasCountedPrerelease(version) ? DESKTOP_UPDATE_CHANNELS.BETA : DESKTOP_UPDATE_CHANNELS.STABLE;
 }
 
 function compareIdentifier(a: string, b: string): number {
@@ -652,12 +723,13 @@ export function compareVersions(a: string, b: string): number {
 
 function metadataChannel(metadata: Record<string, unknown>): DesktopUpdateChannel | null {
   const channel = stringField(metadata, "channel");
-  if (channel === DESKTOP_UPDATE_CHANNELS.STABLE || channel === DESKTOP_UPDATE_CHANNELS.BETA) return channel;
-  return null;
+  return isDesktopUpdateChannel(channel) ? channel : null;
 }
 
 function releaseVersionForChannel(metadata: Record<string, unknown>, channel: DesktopUpdateChannel): string | null {
   if (channel === DESKTOP_UPDATE_CHANNELS.BETA) return stringField(metadata, "betaVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.NIGHTLY) return stringField(metadata, "nightlyVersion") ?? stringField(metadata, "releaseVersion");
+  if (channel === DESKTOP_UPDATE_CHANNELS.PREVIEW) return stringField(metadata, "previewVersion") ?? stringField(metadata, "releaseVersion");
   return stringField(metadata, "releaseVersion") ?? stringField(metadata, "stableVersion");
 }
 
@@ -694,6 +766,11 @@ function selectedPackageLauncherArtifact(config: DesktopUpdaterConfig): {
       platformKey: selectedWinPlatformKey(config.arch),
     };
   }
+  return null;
+}
+
+function installerObservationArtifactType(value: string | undefined): InstallerObservationArtifactType | null {
+  if (value === "dmg" || value === "installer") return value;
   return null;
 }
 
@@ -846,34 +923,49 @@ async function hashFile(path: string, algorithm: "sha256" | "sha512"): Promise<s
   return hash.digest("hex");
 }
 
-async function downloadToFile(
-  fetchImpl: typeof globalThis.fetch,
-  url: string,
-  path: string,
-  onProgress: (progress: DesktopUpdateProgressSnapshot) => void,
-): Promise<void> {
-  const response = await fetchImpl(url);
-  if (!response.ok) throw new Error(`artifact request returned HTTP ${response.status}`);
-  if (response.body == null) throw new Error("artifact response did not include a body");
-  await mkdir(dirname(path), { recursive: true });
-  const totalRaw = response.headers.get("content-length");
-  const parsedTotalBytes = totalRaw == null ? undefined : Number(totalRaw);
-  const totalBytes = parsedTotalBytes != null && Number.isFinite(parsedTotalBytes) && parsedTotalBytes > 0
-    ? parsedTotalBytes
-    : undefined;
-  let receivedBytes = 0;
-  const meter = new Transform({
-    transform(chunk: Buffer, _encoding, callback) {
-      receivedBytes += chunk.byteLength;
-      onProgress({ receivedBytes, ...(totalBytes == null ? {} : { totalBytes }) });
-      callback(null, chunk);
-    },
-  });
-  await pipeline(
-    Readable.fromWeb(response.body as never),
-    meter,
-    createWriteStream(path, { flags: "wx" }),
-  );
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRetryableArtifactDownloadError(error: unknown): boolean {
+  const message = errorMessage(error);
+  return /\b(?:terminated|aborted|ECONNRESET|ETIMEDOUT|EPIPE|UND_ERR_SOCKET|fetch failed)\b/i.test(message);
+}
+
+function userFacingDownloadErrorMessage(error: unknown): string {
+  if (error instanceof ManagedDownloadError && error.code === MANAGED_DOWNLOAD_ERROR_CODES.NETWORK_EXHAUSTED) {
+    return `The network connection ended while downloading the update. Please try again.`;
+  }
+  const message = errorMessage(error);
+  if (isRetryableArtifactDownloadError(error)) {
+    return `The network connection ended while downloading the update. Please try again.`;
+  }
+  return message;
+}
+
+function managedChecksum(checksum: DesktopUpdateChecksumSnapshot): ManagedDownloadChecksum {
+  if (checksum.value == null) throw new Error("artifact checksum is missing");
+  return {
+    algorithm: checksum.algorithm,
+    value: checksum.value,
+  };
+}
+
+function updateProgressFromManaged(progress: ManagedDownloadProgress): DesktopUpdateProgressSnapshot {
+  return {
+    receivedBytes: progress.receivedBytes,
+    ...(progress.totalBytes == null ? {} : { totalBytes: progress.totalBytes }),
+  };
+}
+
+function desktopDownloadError(error: unknown): DesktopUpdateErrorSnapshot {
+  if (error instanceof ManagedDownloadError && error.code === MANAGED_DOWNLOAD_ERROR_CODES.CHECKSUM_MISMATCH) {
+    return createError("checksum-mismatch", "downloaded update checksum did not match release metadata", error.details);
+  }
+  if (error instanceof ManagedDownloadError && error.code === MANAGED_DOWNLOAD_ERROR_CODES.TARGET_LOCKED) {
+    return createError("download-target-locked", "another update download is already using this target");
+  }
+  return createError("download-failed", userFacingDownloadErrorMessage(error));
 }
 
 async function ensureOwnedSubdir(root: string, name: string): Promise<string> {
@@ -890,6 +982,214 @@ async function ensureOwnedSubdir(root: string, name: string): Promise<string> {
   const realDir = await realpath(dir);
   if (!containsPath(root, realDir)) throw new Error(`update subdirectory realpath escaped update root: ${realDir}`);
   return realDir;
+}
+
+function macDeferredInstallerScript(): string {
+  return `#!/bin/sh
+set -eu
+target_pid="$1"
+installer_path="$2"
+timeout_seconds="$3"
+cleanup() {
+  rm -f "$0"
+}
+trap cleanup EXIT
+deadline=$(($(date +%s) + timeout_seconds))
+while kill -0 "$target_pid" 2>/dev/null; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    exit 1
+  fi
+  sleep 1
+done
+open "$installer_path" >/dev/null 2>&1 &
+exit 0
+`;
+}
+
+function windowsDeferredInstallerScript(): string {
+  return `param(
+  [Parameter(Mandatory = $true)]
+  [int]$TargetPid,
+
+  [Parameter(Mandatory = $true)]
+  [string]$InstallerPath,
+
+  [Parameter(Mandatory = $true)]
+  [int]$TimeoutMs,
+
+  [Parameter(Mandatory = $true)]
+  [string]$LogPath
+)
+
+$ErrorActionPreference = "Stop"
+
+function Write-HelperLog {
+  param([string]$Message)
+  try {
+    Add-Content -LiteralPath $LogPath -Value ("{0:o} {1}" -f (Get-Date), $Message)
+  } catch {
+  }
+}
+
+try {
+  Write-HelperLog ("armed for pid={0} installer={1}" -f $TargetPid, $InstallerPath)
+  $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+  while ($null -ne (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue)) {
+    if ((Get-Date) -ge $deadline) {
+      throw ("timed out waiting for pid={0}" -f $TargetPid)
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  Write-HelperLog ("observed pid={0} exit; opening installer" -f $TargetPid)
+  Start-Process -FilePath $InstallerPath -WorkingDirectory (Split-Path -Parent $InstallerPath)
+  Write-HelperLog "installer launch requested"
+} catch {
+  Write-HelperLog ("failed: {0}" -f $_.Exception.Message)
+  exit 1
+} finally {
+  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+}
+`;
+}
+
+function windowsDeferredInstallerLauncherScript(): string {
+  return `param(
+  [Parameter(Mandatory = $true)]
+  [string]$PowerShellPath,
+
+  [Parameter(Mandatory = $true)]
+  [string]$HelperPath,
+
+  [Parameter(Mandatory = $true)]
+  [int]$TargetPid,
+
+  [Parameter(Mandatory = $true)]
+  [string]$InstallerPath,
+
+  [Parameter(Mandatory = $true)]
+  [int]$TimeoutMs,
+
+  [Parameter(Mandatory = $true)]
+  [string]$LogPath
+)
+
+$ErrorActionPreference = "Stop"
+
+function Quote-WindowsPowerShellArgument {
+  param([string]$Value)
+  return '"' + ($Value -replace '"', '\\"') + '"'
+}
+
+function Write-LauncherLog {
+  param([string]$Message)
+  try {
+    Add-Content -LiteralPath $LogPath -Value ("{0:o} {1}" -f (Get-Date), $Message)
+  } catch {
+  }
+}
+
+try {
+  Write-LauncherLog ("launching helper={0}" -f $HelperPath)
+  $arguments = @(
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    (Quote-WindowsPowerShellArgument $HelperPath),
+    "-TargetPid",
+    $TargetPid.ToString(),
+    "-InstallerPath",
+    (Quote-WindowsPowerShellArgument $InstallerPath),
+    "-TimeoutMs",
+    $TimeoutMs.ToString(),
+    "-LogPath",
+    (Quote-WindowsPowerShellArgument $LogPath)
+  ) -join " "
+  Start-Process -FilePath $PowerShellPath -WindowStyle Hidden -ArgumentList $arguments
+  Write-LauncherLog "helper launch requested"
+} catch {
+  Write-LauncherLog ("launcher failed: {0}" -f $_.Exception.Message)
+  exit 1
+} finally {
+  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+}
+`;
+}
+
+function windowsPowerShellCommand(env: NodeJS.ProcessEnv = process.env): string {
+  const systemRoot = env.SystemRoot ?? env.SYSTEMROOT ?? "C:\\Windows";
+  return join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
+
+async function launchMacInstallerAfterQuit(
+  input: DeferredInstallerLaunchInput,
+  deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
+): Promise<string> {
+  try {
+    const helpersRoot = await ensureOwnedSubdir(input.root, HELPERS_DIR);
+    const suffix = `${deps.now().getTime().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const scriptPath = join(helpersRoot, `open-installer-after-quit-${suffix}.sh`);
+    await writeFile(scriptPath, macDeferredInstallerScript(), { encoding: "utf8", mode: 0o700 });
+    await chmod(scriptPath, 0o700);
+    const timeoutSeconds = Math.max(1, Math.ceil(input.timeoutMs / 1000)).toString();
+    const child = deps.spawnDetached(
+      "/bin/sh",
+      [scriptPath, input.appPid.toString(), input.installerPath, timeoutSeconds],
+      { detached: true, stdio: "ignore", windowsHide: true },
+    );
+    child.unref();
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function launchWindowsInstallerAfterQuit(
+  input: DeferredInstallerLaunchInput,
+  deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
+): Promise<string> {
+  try {
+    const helpersRoot = await ensureOwnedSubdir(input.root, HELPERS_DIR);
+    const suffix = `${deps.now().getTime().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const scriptPath = join(helpersRoot, `open-installer-after-quit-${suffix}.ps1`);
+    const launcherPath = join(helpersRoot, `open-installer-after-quit-${suffix}.launcher.ps1`);
+    const logPath = join(helpersRoot, `open-installer-after-quit-${suffix}.log`);
+    const powerShellPath = windowsPowerShellCommand();
+    await writeFile(scriptPath, windowsDeferredInstallerScript(), { encoding: "utf8" });
+    await writeFile(launcherPath, windowsDeferredInstallerLauncherScript(), { encoding: "utf8" });
+    const child = deps.spawnDetached(
+      powerShellPath,
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        launcherPath,
+        "-PowerShellPath",
+        powerShellPath,
+        "-HelperPath",
+        scriptPath,
+        "-TargetPid",
+        input.appPid.toString(),
+        "-InstallerPath",
+        input.installerPath,
+        "-TimeoutMs",
+        input.timeoutMs.toString(),
+        "-LogPath",
+        logPath,
+      ],
+      { stdio: "ignore", windowsHide: true },
+    );
+    child.unref();
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 async function cleanupBackDirectory(root: string, logger: DesktopUpdaterLogger): Promise<void> {
@@ -956,6 +1256,37 @@ async function writeStoreMetadata(root: OwnedRoot & { ok: true }, metadata: Upda
   await writeJson(root.metadataPath, metadata);
 }
 
+async function clearInterruptedIncomingDownload(
+  root: OwnedRoot & { ok: true },
+  metadata: UpdateStoreMetadata,
+  logger: DesktopUpdaterLogger,
+): Promise<UpdateStoreMetadata> {
+  const incoming = metadata.incoming;
+  if (incoming == null) return metadata;
+  const stagingRoot = resolve(root.realRoot, STAGING_DIR);
+  const stagingDir = resolve(stagingRoot, incoming.cycleId);
+  if (containsPath(stagingRoot, stagingDir)) {
+    await rm(stagingDir, { force: true, recursive: true }).catch((error: unknown) => {
+      logger.warn("[open-design updater] failed to clean interrupted update staging directory", error);
+    });
+  } else {
+    logger.warn("[open-design updater] skipped escaped interrupted update staging directory", {
+      cycleId: incoming.cycleId,
+      stagingDir,
+    });
+  }
+  const next = {
+    ...metadata,
+    incoming: undefined,
+  };
+  await writeStoreMetadata(root, next);
+  logger.warn("[open-design updater] cleared interrupted update download", {
+    cycleId: incoming.cycleId,
+    version: incoming.version,
+  });
+  return next;
+}
+
 function releaseSnapshot(active: LoadedRelease): DesktopUpdateStatusSnapshot["active"] {
   const ref = active.ref;
   return {
@@ -1018,6 +1349,60 @@ async function loadActiveRelease(
   return { ok: true, active: { path: artifactPath, ref: active } };
 }
 
+function checksumMatchesCandidate(checksum: ResolvedChecksumSnapshot, candidate: UpdateCandidate): boolean {
+  if (checksum.algorithm !== candidate.checksum.algorithm) return false;
+  if (candidate.checksum.url != null && checksum.url !== candidate.checksum.url) return false;
+  if (candidate.checksum.value != null && checksum.value.toLowerCase() !== candidate.checksum.value.toLowerCase()) return false;
+  return true;
+}
+
+async function loadVerifiedReleaseForCandidate(
+  root: OwnedRoot & { ok: true },
+  candidate: UpdateCandidate,
+): Promise<LoadedRelease | null> {
+  const releasesRoot = resolve(root.realRoot, RELEASES_DIR);
+  const entries = await readdir(releasesRoot, { withFileTypes: true }).catch(() => []);
+  const outputName = artifactFileName(candidate);
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const releaseDir = resolve(releasesRoot, entry.name);
+    if (!containsPath(root.realRoot, releaseDir)) continue;
+
+    const checksum = await readJson<unknown>(join(releaseDir, "checksum.json"));
+    if (!isResolvedChecksumSnapshot(checksum) || !checksumMatchesCandidate(checksum, candidate)) continue;
+    if (entry.name !== releaseKey(candidate, checksum)) continue;
+
+    const metadata = await readJson<unknown>(join(releaseDir, "metadata.json"));
+    if (!isRecord(metadata)) continue;
+
+    const artifactPath = resolve(releaseDir, outputName);
+    if (!containsPath(root.realRoot, artifactPath)) continue;
+    const artifactStat = await stat(artifactPath).catch(() => null);
+    if (artifactStat == null || !artifactStat.isFile()) continue;
+    const digest = await hashFile(artifactPath, checksum.algorithm).catch(() => null);
+    if (digest?.toLowerCase() !== checksum.value.toLowerCase()) continue;
+
+    const ref: UpdateReleaseRef = {
+      arch: candidate.arch,
+      artifact: candidate.artifact,
+      artifactPath: relative(root.realRoot, artifactPath),
+      checksum,
+      checksumPath: relative(root.realRoot, join(releaseDir, "checksum.json")),
+      channel: candidate.channel,
+      downloadedAt: artifactStat.mtime.toISOString(),
+      key: entry.name,
+      metadata,
+      metadataPath: relative(root.realRoot, join(releaseDir, "metadata.json")),
+      platformKey: candidate.platformKey,
+      version: candidate.version,
+    };
+    return { path: artifactPath, ref };
+  }
+
+  return null;
+}
+
 export function createDesktopUpdater(
   configInput: DesktopUpdaterConfigInput,
   deps: DesktopUpdaterDeps = {},
@@ -1027,6 +1412,13 @@ export function createDesktopUpdater(
   const logger = deps.logger ?? console;
   const now = deps.now ?? (() => new Date());
   const openPath = deps.openPath ?? (async () => "openPath is not available");
+  const processPid = deps.processPid ?? process.pid;
+  const spawnDetached: SpawnInstallerHelper = deps.spawnDetached ?? ((command, args, options) => spawn(command, args, options));
+  const launchInstallerAfterQuit = deps.launchInstallerAfterQuit ?? ((input) => (
+    config.platform === "win32"
+      ? launchWindowsInstallerAfterQuit(input, { now, spawnDetached })
+      : launchMacInstallerAfterQuit(input, { now, spawnDetached })
+  ));
   const listeners = new Set<() => void>();
   let candidate: UpdateCandidate | null = null;
   let activeRelease: LoadedRelease | null = null;
@@ -1123,19 +1515,32 @@ export function createDesktopUpdater(
   async function restoreStoreState(): Promise<DesktopUpdateStatusSnapshot | null> {
     const opened = await openStore();
     if (!opened.ok) return opened.status;
-    if (opened.metadata.incoming != null) {
-      const storeError = storeShapeError(opened.root.realRoot, "update store has an interrupted incoming transaction", {
-        incoming: opened.metadata.incoming,
-      });
-      logStoreError(logger, storeError);
-      return setState(DESKTOP_UPDATE_STATES.ERROR, storeError);
-    }
-    const loadedActive = await loadActiveRelease(opened.root, opened.metadata, config, logger);
+    const restoredMetadata = await clearInterruptedIncomingDownload(opened.root, opened.metadata, logger);
+    const loadedActive = await loadActiveRelease(opened.root, restoredMetadata, config, logger);
     if (!loadedActive.ok) return setState(DESKTOP_UPDATE_STATES.ERROR, loadedActive.error);
     activeRelease = loadedActive.active;
-    installFrozen = opened.metadata.installFrozen === true;
-    installResult = opened.metadata.installResult;
-    lastCheckedAt = opened.metadata.lastCheckedAt;
+    // If the app now runs at or beyond the stored active release, the
+    // external installer succeeded and its one-shot UI state is stale.
+    const clearedAppliedRelease =
+      activeRelease == null &&
+      (
+        restoredMetadata.active != null ||
+        restoredMetadata.installFrozen === true ||
+        restoredMetadata.installResult != null
+      );
+    if (clearedAppliedRelease) {
+      await writeStoreMetadata(opened.root, {
+        ...restoredMetadata,
+        active: undefined,
+        incoming: undefined,
+        installFrozen: undefined,
+        installResult: undefined,
+        version: STORE_METADATA_VERSION,
+      });
+    }
+    installFrozen = clearedAppliedRelease ? false : restoredMetadata.installFrozen === true;
+    installResult = clearedAppliedRelease ? undefined : restoredMetadata.installResult;
+    lastCheckedAt = restoredMetadata.lastCheckedAt;
     metadata = activeRelease?.ref.metadata ?? null;
     candidate = null;
     incomingRelease = null;
@@ -1189,6 +1594,29 @@ export function createDesktopUpdater(
         candidate = selected.candidate;
         metadata = selected.candidate.metadata;
         return setState(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      }
+      const openedForAdoption = await openStore();
+      if (openedForAdoption.ok) {
+        const adoptedRelease = await loadVerifiedReleaseForCandidate(openedForAdoption.root, selected.candidate);
+        if (adoptedRelease != null) {
+          candidate = selected.candidate;
+          activeRelease = adoptedRelease;
+          metadata = adoptedRelease.ref.metadata;
+          installFrozen = false;
+          installResult = undefined;
+          incomingRelease = null;
+          progress = undefined;
+          await writeStoreMetadata(openedForAdoption.root, {
+            ...openedForAdoption.metadata,
+            active: adoptedRelease.ref,
+            incoming: undefined,
+            installFrozen: false,
+            installResult: undefined,
+            lastCheckedAt,
+            version: STORE_METADATA_VERSION,
+          });
+          return setState(DESKTOP_UPDATE_STATES.DOWNLOADED);
+        }
       }
       candidate = selected.candidate;
       const available = activeRelease == null
@@ -1251,6 +1679,7 @@ export function createDesktopUpdater(
     };
     try {
       const stagingRoot = await ensureOwnedSubdir(opened.root.realRoot, STAGING_DIR);
+      const downloadsRoot = await ensureOwnedSubdir(opened.root.realRoot, DOWNLOADS_DIR);
       const releasesRoot = await ensureOwnedSubdir(opened.root.realRoot, RELEASES_DIR);
       stagingDir = join(stagingRoot, cycleId);
       if (!containsPath(opened.root.realRoot, stagingDir)) {
@@ -1262,9 +1691,21 @@ export function createDesktopUpdater(
         return await failDownload(createError("download-path-escaped", "resolved update download path escaped update root"));
       }
       const resolvedChecksum = await resolveChecksum(fetchImpl, nextCandidate.checksum);
-      await downloadToFile(fetchImpl, nextCandidate.artifact.url, tmpPath, (nextProgress) => {
-        progress = nextProgress;
-        emit();
+      await downloadCopyAndClear({
+        basePath: downloadsRoot,
+        bucket: "package-launcher",
+        fetch: fetchImpl,
+        fileName: outputName,
+        maxAttempts: ARTIFACT_DOWNLOAD_MAX_ATTEMPTS,
+        onProgress: (nextProgress) => {
+          progress = updateProgressFromManaged(nextProgress);
+          emit();
+        },
+        outputPath: tmpPath,
+        payload: {
+          checksum: managedChecksum(resolvedChecksum),
+          url: nextCandidate.artifact.url,
+        },
       });
       const digest = await hashFile(tmpPath, resolvedChecksum.algorithm);
       if (resolvedChecksum.value == null || digest.toLowerCase() !== resolvedChecksum.value.toLowerCase()) {
@@ -1321,17 +1762,63 @@ export function createDesktopUpdater(
       incomingRelease = null;
       progress = undefined;
       await writeMetadataPatch((current) => ({ ...current, incoming: undefined }));
-      return setState(
-        DESKTOP_UPDATE_STATES.ERROR,
-        createError("download-failed", downloadError instanceof Error ? downloadError.message : String(downloadError)),
-      );
+      return setState(DESKTOP_UPDATE_STATES.ERROR, desktopDownloadError(downloadError));
     }
+  }
+
+  async function writeInstallObservation(attemptedAt: string): Promise<InstallerObservationHandle | null> {
+    if (config.openDryRun) return null;
+    if (config.installerObservationRoot == null || config.namespace == null) return null;
+    if (activeRelease == null) return null;
+    const artifactType = installerObservationArtifactType(activeRelease.ref.artifact.type);
+    if (artifactType == null) return null;
+    try {
+      return await writePendingInstallerObservation({
+        arch: activeRelease.ref.arch,
+        artifactType,
+        attemptedAt,
+        channel: activeRelease.ref.channel,
+        fromVersion: config.currentVersion,
+        namespace: config.namespace,
+        platform: config.platform,
+        root: config.installerObservationRoot,
+        toVersion: activeRelease.ref.version,
+      });
+    } catch (observationError) {
+      logger.warn("[open-design updater] failed to write installer observation", observationError);
+      return null;
+    }
+  }
+
+  async function markInstallObservationOpenFailed(
+    observation: InstallerObservationHandle | null,
+    failedAt: string,
+  ): Promise<void> {
+    if (observation == null) return;
+    try {
+      await markInstallerObservationOpenFailed(observation, failedAt);
+    } catch (observationError) {
+      logger.warn("[open-design updater] failed to update installer observation", observationError);
+    }
+  }
+
+  async function requestInstallerOpen(resolvedDownload: string, updateRoot: string): Promise<string> {
+    if (config.platform !== "darwin" && config.platform !== "win32") return await openPath(resolvedDownload);
+    return await launchInstallerAfterQuit({
+      appPid: processPid,
+      installerPath: resolvedDownload,
+      root: updateRoot,
+      timeoutMs: config.platform === "win32" ? WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS : MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
+    });
   }
 
   async function installUpdate(): Promise<DesktopUpdateStatusSnapshot> {
     const unsupported = unsupportedStatus();
     if (unsupported != null) return unsupported;
-    if (installFrozen && installResult != null) return snapshot();
+    if (installResult != null) {
+      installFrozen = true;
+      return snapshot();
+    }
     if (activeRelease == null) {
       const restored = await restoreStoreState();
       if (restored == null || activeRelease == null) {
@@ -1367,11 +1854,14 @@ export function createDesktopUpdater(
         }),
       );
     }
+    let observation: InstallerObservationHandle | null = null;
     try {
       const openedAt = now().toISOString();
+      observation = await writeInstallObservation(openedAt);
       if (!config.openDryRun) {
-        const openError = await openPath(resolvedDownload);
+        const openError = await requestInstallerOpen(resolvedDownload, opened.root.realRoot);
         if (openError.length > 0) {
+          await markInstallObservationOpenFailed(observation, now().toISOString());
           return setState(DESKTOP_UPDATE_STATES.ERROR, createError("open-installer-failed", openError));
         }
       }
@@ -1392,6 +1882,7 @@ export function createDesktopUpdater(
       });
       return setState(DESKTOP_UPDATE_STATES.DOWNLOADED);
     } catch (installError) {
+      await markInstallObservationOpenFailed(observation, now().toISOString());
       return setState(
         DESKTOP_UPDATE_STATES.ERROR,
         createError("open-installer-failed", installError instanceof Error ? installError.message : String(installError)),

@@ -1,15 +1,15 @@
-# Open Design
+# Open Design — [Claude Design][cd] の公式オープンソース代替
+
+> **Open Design は [Claude Design][cd] のオープンソース、ローカルファーストな代替です。** Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` が公開されました。デザインの旧時代は、ここで終わります。
 >
-> オープンソースで agent-native な Claude Design / Figma の代替 —— 2 週間で 40k stars、ここまで来ました。**残りの道のりは、あなたと一緒に進みたい。**
+> Claude Design / Figma のオープンソース代替 —— 2 週間で 40k stars、ここまで来ました。**残りの道のりは、あなたと一緒に進みたい。**
 >
 > **`main` で高速イテレーション中** — 0.8.0 は Open Design の次のフェーズです。PR を投げ、突飛なアイデアを放り込み、バグを報告してください —— あなたが持ち込んだものが、このムーブメントの次の姿になります。
 >
 > → [**告知を読む · インストーラーを入手 · このムーブメントに参加**](https://github.com/nexu-io/open-design/discussions/1727) · 現在の 0.7 と並行してインストールできます。
-
-> **[Claude Design][cd] のオープンソース代替。** ローカルファースト、Vercel デプロイ可能、あらゆるレイヤーで BYOK（Bring Your Own Key） — `PATH` 上で自動検出される **16 種類の coding-agent CLI**（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）がデザインエンジンとなり、**31 個の組み合わせ可能な Skill** と **72 種のブランドグレード Design System** で駆動されます。CLI が未インストールでも、OpenAI 互換の BYOK プロキシ `/api/proxy/stream` で同じループを spawn なしで実行できます。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — ノートパソコン上のエージェントとデザインする" width="100%" />
@@ -723,7 +723,7 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 コード、ドキュメント、フィードバック、新 Skill、新 Design System、あるいは鋭い Issue — あらゆる形で Open Design を前進させてくださったすべての方に感謝します。すべての実質的なコントリビューションは大切であり、以下のウォールは最もシンプルな感謝の表明です。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Open Design コントリビューター" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-30" alt="Open Design コントリビューター" />
 </a>
 
 初めての PR を送った方 — ようこそ。[`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ラベルがエントリポイントです。
@@ -740,9 +740,9 @@ Issue、PR、新 Skill、新 Design System を歓迎します。最も効果の�
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-30" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-30" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-30" />
   </picture>
 </a>
 

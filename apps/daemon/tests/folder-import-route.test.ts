@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -45,6 +45,17 @@ describe('POST /api/import/folder', () => {
     });
   }
 
+  async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
+    const previous = process.env.OD_SANDBOX_MODE;
+    process.env.OD_SANDBOX_MODE = '1';
+    try {
+      return await run();
+    } finally {
+      if (previous == null) delete process.env.OD_SANDBOX_MODE;
+      else process.env.OD_SANDBOX_MODE = previous;
+    }
+  }
+
   it('creates a project rooted at the submitted folder', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -60,6 +71,143 @@ describe('POST /api/import/folder', () => {
     expect(body.project.metadata?.importedFrom).toBe('folder');
     expect(body.conversationId).toBeTruthy();
     expect(body.entryFile).toBe('index.html');
+  });
+
+  it('rejects folder imports in sandbox mode', async () => {
+    await withSandboxMode(async () => {
+      const folder = makeFolder();
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      const resp = await importFolder({ baseDir: folder });
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/OD_SANDBOX_MODE/i);
+    });
+  });
+
+  it('rejects sandbox runs for imported folders before creating a run', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: project.id,
+          message: 'Inspect the imported project.',
+        }),
+      });
+      expect(runResp.status).toBe(400);
+      const body = (await runResp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+    });
+  });
+
+  it('rejects sandbox chat runs for imported folders before creating a run', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const chatResp = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'claude',
+          projectId: project.id,
+          message: 'Inspect the imported project.',
+        }),
+      });
+      expect(chatResp.status).toBe(400);
+      const body = (await chatResp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+
+      const runsResp = await fetch(`${baseUrl}/api/runs?projectId=${encodeURIComponent(project.id)}`);
+      expect(runsResp.status).toBe(200);
+      const runsBody = (await runsResp.json()) as { runs: unknown[] };
+      expect(runsBody.runs).toHaveLength(0);
+    });
+  });
+
+  it('opens imported-folder projects through host editor routes in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    const binDir = makeFolder();
+    const cursorBin = path.join(
+      binDir,
+      process.platform === 'win32' ? 'cursor.cmd' : 'cursor',
+    );
+    await writeFile(
+      cursorBin,
+      process.platform === 'win32' ? '@echo off\r\nexit /b 0\r\n' : '#!/bin/sh\nexit 0\n',
+    );
+    await chmod(cursorBin, 0o755);
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
+    try {
+      await withSandboxMode(async () => {
+        const resp = await fetch(`${baseUrl}/api/projects/${project.id}/open-in`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ editorId: 'cursor' }),
+        });
+        expect(resp.status).toBe(200);
+        const body = (await resp.json()) as { path?: string };
+        expect(body.path).toBe(await realpath(folder));
+      });
+    } finally {
+      if (previousPath == null) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
+
+  it('still opens an imported-folder project record in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const resp = await fetch(`${baseUrl}/api/projects/${project.id}`);
+      expect(resp.status).toBe(200);
+      const body = (await resp.json()) as {
+        project?: { id?: string; metadata?: { baseDir?: string } };
+      };
+      expect(body.project?.id).toBe(project.id);
+      expect(body.project?.metadata?.baseDir).toBeTruthy();
+    });
+  });
+
+  it('rejects imported-folder project file listing in sandbox mode', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withSandboxMode(async () => {
+      const resp = await fetch(`${baseUrl}/api/projects/${project.id}/files`);
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error?: { message?: string } };
+      expect(body.error?.message).toMatch(/imported-folder projects.*OD_SANDBOX_MODE/i);
+    });
   });
 
   it('auto-detects the entry file when present', async () => {
@@ -228,6 +376,46 @@ describe('POST /api/import/folder', () => {
       project: { metadata: { baseDir?: string } };
     };
     expect(after.project.metadata.baseDir).toBe(originalBaseDir);
+  });
+
+  it('writes generated artifact files into metadata.baseDir instead of the daemon projects dir', async () => {
+    const real = makeFolder();
+    await writeFile(path.join(real, 'index.html'), '<!doctype html>');
+    const importResp = await importFolder({ baseDir: real });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as {
+      project: { id: string; metadata: { baseDir: string } };
+    };
+
+    const saveResp = await fetch(`${baseUrl}/api/projects/${project.id}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        artifact: true,
+        artifactManifest: {
+          exports: ['html'],
+          kind: 'html',
+          renderer: 'html',
+          title: 'Generated',
+        },
+        content: '<!doctype html><h1>Generated</h1>',
+        name: 'generated.html',
+      }),
+    });
+
+    expect(saveResp.status).toBe(200);
+    expect(await readFile(path.join(project.metadata.baseDir, 'generated.html'), 'utf8')).toContain(
+      'Generated',
+    );
+    expect(
+      await readFile(path.join(project.metadata.baseDir, 'generated.html.artifact.json'), 'utf8'),
+    ).toContain('"entry": "generated.html"');
+
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    await expect(stat(path.join(dataDir, 'projects', project.id, 'generated.html'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('refuses raw reads through a descendant symlink that escapes the folder', async () => {

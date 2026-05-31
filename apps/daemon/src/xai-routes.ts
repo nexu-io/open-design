@@ -26,6 +26,7 @@
 
 import type { Express } from 'express';
 
+import { proxyDispatcherRequestInit } from './connectionTest.js';
 import { mediaConfigDir, resolveProviderConfig } from './media-config.js';
 import { PendingAuthCache } from './mcp-oauth.js';
 import { beginXAIAuth, completeXAIAuth } from './xai-oauth.js';
@@ -43,6 +44,12 @@ import {
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterXaiRoutesDeps extends RouteDeps<'http' | 'paths'> {}
+
+function fetchWithRequestInit(
+  requestInit: Pick<RequestInit, 'dispatcher'>,
+): typeof fetch {
+  return (input, init) => fetch(input, { ...init, ...requestInit });
+}
 
 export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef } = ctx.http;
@@ -76,11 +83,13 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
       console.warn(`[xai-oauth] callback failed: ${outcome.error}`);
       return;
     }
+    const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
       const tokenResp = await completeXAIAuth({
         pending: pendingAuth,
         state: outcome.state,
         code: outcome.code,
+        fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
       });
       const stored: StoredXAIToken = {
         accessToken: tokenResp.access_token,
@@ -97,6 +106,8 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[xai-oauth] token exchange failed:', msg);
+    } finally {
+      await proxyDispatcher.close();
     }
   };
 
@@ -149,11 +160,13 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
         .status(400)
         .json({ error: 'state and code are required' });
     }
+    const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
       const tokenResp = await completeXAIAuth({
         pending: pendingAuth,
         state,
         code,
+        fetchImpl: fetchWithRequestInit(proxyDispatcher.requestInit),
       });
       const stored: StoredXAIToken = {
         accessToken: tokenResp.access_token,
@@ -178,6 +191,8 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[xai-oauth] manual complete failed:', msg);
       res.status(400).json({ error: msg });
+    } finally {
+      await proxyDispatcher.close();
     }
   });
 
@@ -296,6 +311,8 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
     };
 
     let resp: Response;
+    let text: string;
+    const proxyDispatcher = proxyDispatcherRequestInit(process.env);
     try {
       resp = await fetch(`${baseUrl}/responses`, {
         method: 'POST',
@@ -304,13 +321,16 @@ export function registerXaiRoutes(app: Express, ctx: RegisterXaiRoutesDeps) {
           'content-type': 'application/json',
         },
         body: JSON.stringify(requestBody),
+        ...proxyDispatcher.requestInit,
       });
+      text = await resp.text();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return res.status(502).json({ error: `xAI request failed: ${msg}` });
+    } finally {
+      await proxyDispatcher.close();
     }
 
-    const text = await resp.text();
     if (!resp.ok) {
       return res
         .status(502)

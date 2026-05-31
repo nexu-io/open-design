@@ -15,10 +15,13 @@ import type {
 	LiveArtifactSummary,
 	Project,
 	ProjectDisplayStatus,
+	ProjectFile,
 	SkillSummary,
 } from "../types";
 import { Icon } from "./Icon";
+import { isDesignSystemProject, isPublishedDesignSystemProject } from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
+import { Toast } from "./Toast";
 
 type SubTab = "recent" | "yours";
 type ViewMode = "grid" | "kanban";
@@ -63,8 +66,9 @@ interface Props {
 	designSystems: DesignSystemSummary[];
 	onOpen: (id: string) => void;
 	onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
-	onDelete: (id: string) => void;
+	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 	onRename?: (id: string, name: string) => void;
+	onNewProject?: () => void;
 }
 
 export function DesignsTab({
@@ -75,6 +79,7 @@ export function DesignsTab({
 	onOpenLiveArtifact,
 	onDelete,
 	onRename,
+	onNewProject,
 }: Props) {
 	const t = useT();
 	const analytics = useAnalytics();
@@ -94,11 +99,13 @@ export function DesignsTab({
 		Record<string, LiveArtifactSummary[]>
 	>({});
 	const [coverByProject, setCoverByProject] = useState<
-		Record<string, { kind: "html" | "image" | "video"; name: string } | null>
+		Record<string, { kind: "html" | "image" | "video" | "logo"; name: string } | null>
 	>({});
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const deleteToastIdRef = useRef(0);
+	const [deleteToast, setDeleteToast] = useState<{ id: number; message: string } | null>(null);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
 	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
 	const [renameInput, setRenameInput] = useState("");
@@ -151,8 +158,24 @@ export function DesignsTab({
 		}
 		void Promise.all(
 			projects.map(async (project) => {
-				if (project.metadata?.entryFile) return [project.id, null] as const;
-				const files = await fetchProjectFiles(project.id);
+				const designSystemProject = isDesignSystemProject(project);
+				if (project.metadata?.entryFile && !designSystemProject) return [project.id, null] as const;
+				let files: Awaited<ReturnType<typeof fetchProjectFiles>>;
+				try {
+					files = await fetchProjectFiles(project.id);
+				} catch {
+					return [project.id, null] as const;
+				}
+				if (designSystemProject) {
+					const logo = findDesignSystemLogoFile(files);
+					if (logo) {
+						return [
+							project.id,
+							{ kind: "logo" as const, name: logo.path ?? logo.name },
+						] as const;
+					}
+					return [project.id, null] as const;
+				}
 				const html =
 					files.find((f) => (f.path ?? f.name) === "index.html") ??
 					files
@@ -339,9 +362,28 @@ export function DesignsTab({
 			title: t("designs.deleteTitle"),
 			message: t("designs.deleteSelectedConfirm", { n: ids.length }),
 			confirmLabel: t("designs.deleteSelected"),
-			onConfirm: () => {
-				ids.forEach((id) => onDelete(id));
+			onConfirm: async () => {
+				const results = await Promise.all(
+					ids.map(async (id) => {
+						try {
+							const result = await onDelete(id);
+							return result !== false;
+						} catch {
+							return false;
+						}
+					}),
+				);
+				const deleted = results.filter(Boolean).length;
+				const failed = results.length - deleted;
 				exitSelectMode();
+				const message =
+					failed > 0
+						? t("designs.deleteSelectedPartial", { deleted, failed })
+						: t("designs.deleteSelectedSuccess", { n: deleted });
+				setDeleteToast({
+					id: (deleteToastIdRef.current += 1),
+					message,
+				});
 			},
 		});
 	};
@@ -370,7 +412,7 @@ export function DesignsTab({
 		<div
 			className={`tab-panel${view === "kanban" ? " design-kanban-view" : ""}`}
 		>
-			<div className="tab-panel-toolbar">
+			<div className="tab-panel-toolbar designs-toolbar">
 				<div className="toolbar-left">
 					<div
 						className="subtab-pill"
@@ -510,9 +552,31 @@ export function DesignsTab({
 			</div>
 			{filtered.length === 0 ? (
 				<div className="tab-empty">
-					{projects.length === 0
-						? t("designs.emptyNoProjects")
-						: t("designs.emptyNoMatch")}
+					{projects.length === 0 ? (
+						<div className="designs-empty-state">
+							<h2 className="designs-empty-title">
+								{t("designs.emptyNoProjects")}
+							</h2>
+							{onNewProject ? (
+								<button
+									type="button"
+									className="primary designs-empty-cta"
+									onClick={() => {
+										trackProjectsListControlsClick(analytics.track, {
+											page_name: "projects",
+											area: "list_controls",
+											element: "create_project",
+										});
+										onNewProject();
+									}}
+								>
+									<span>{t("entry.navNewProject")}</span>
+								</button>
+							) : null}
+						</div>
+					) : (
+						t("designs.emptyNoMatch")
+					)}
 				</div>
 			) : view === "grid" ? (
 				<div className="design-grid">
@@ -582,9 +646,7 @@ export function DesignsTab({
 												t,
 											)}
 											{" · "}
-											{sub === "recent"
-												? relativeTime(item.updatedAt, t)
-												: relativeTime(item.createdAt, t)}
+											{relativeTime(item.updatedAt, t)}
 										</div>
 									</div>
 								</div>
@@ -595,10 +657,12 @@ export function DesignsTab({
 						const status = p.status?.value ?? "not_started";
 						const cover = projectCover(p, coverByProject[p.id] ?? null);
 						const isSelected = selected.has(p.id);
+						const designSystemProject = isDesignSystemProject(p);
+						const publishedDesignSystem = isPublishedDesignSystemProject(p, designSystems);
 						return (
 							<div
 								key={p.id}
-								className={`design-card${isSelected ? " is-selected" : ""}${selectMode ? " select-mode" : ""}`}
+								className={`design-card${isSelected ? " is-selected" : ""}${selectMode ? " select-mode" : ""}${designSystemProject ? " is-design-system-project" : ""}`}
 								role="button"
 								tabIndex={0}
 								onClick={() => {
@@ -717,7 +781,7 @@ export function DesignsTab({
 									style={cover.style}
 									aria-hidden
 								>
-									{cover.kind === "image" && cover.src ? (
+									{(cover.kind === "image" || cover.kind === "logo") && cover.src ? (
 										<img className="thumb-media" src={cover.src} alt="" loading="lazy" />
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
@@ -740,28 +804,36 @@ export function DesignsTab({
 									) : null}
 								</div>
 								<div className="design-card-meta-block">
-									<ProjectTag category={projectCategory(p)} />
+									<div className="design-card-tag-row">
+										{designSystemProject ? (
+											<DesignSystemProjectTag />
+										) : (
+											<ProjectTag category={projectCategory(p)} />
+										)}
+									</div>
 									<div className="design-card-name" title={p.name}>
 										{p.name}
 									</div>
 									<div className="design-card-meta">
-										{ds ? (
-											<span className="ds">{ds}</span>
-										) : (
-											<span>{t("designs.cardFreeform")}</span>
-										)}
-										{skill ? ` · ${skill}` : ""}
-										{" · "}
-										<span
-											className={`design-card-status design-card-status-${status}`}
-										>
-											{statusLabel(status, t)}
+										<span className="design-card-meta-main">
+											{ds ? (
+												<span className="ds">{ds}</span>
+											) : (
+												<span>{t("designs.cardFreeform")}</span>
+											)}
+											{skill ? ` · ${skill}` : ""}
+											{" · "}
+											<span
+												className={`design-card-status design-card-status-${publishedDesignSystem ? "published" : status}`}
+											>
+												{publishedDesignSystem ? t("designs.status.published") : statusLabel(status, t)}
+											</span>
 										</span>
-										{sub === "recent"
-											? ` · ${relativeTime(p.updatedAt, t)}`
-											: sub === "yours"
-												? ` · ${relativeTime(p.createdAt, t)}`
-												: ""}
+										{sub === "recent" || sub === "yours" ? (
+											<span className="design-card-meta-time">
+												{relativeTime(p.updatedAt, t)}
+											</span>
+										) : null}
 									</div>
 								</div>
 							</div>
@@ -793,10 +865,11 @@ export function DesignsTab({
 										colProjects.map(({ project: p }) => {
 											const skill = skillName(p.skillId);
 											const ds = dsName(p.designSystemId);
+											const designSystemProject = isDesignSystemProject(p);
 											return (
 												<div
 													key={p.id}
-													className={`design-kanban-card status-${status}`}
+													className={`design-kanban-card status-${status}${designSystemProject ? " is-design-system-project" : ""}`}
 													role="button"
 													tabIndex={0}
 													onClick={() => onOpen(p.id)}
@@ -826,6 +899,11 @@ export function DesignsTab({
 													>
 														{p.name}
 													</div>
+													{designSystemProject ? (
+														<div className="design-card-tag-row">
+															<DesignSystemProjectTag />
+														</div>
+													) : null}
 													<div className="design-kanban-card-meta">
 														{ds ? (
 															<span className="ds">{ds}</span>
@@ -833,11 +911,9 @@ export function DesignsTab({
 															<span>{t("designs.cardFreeform")}</span>
 														)}
 														{skill ? ` · ${skill}` : ""}
-														{sub === "recent"
+														{sub === "recent" || sub === "yours"
 															? ` · ${relativeTime(p.updatedAt, t)}`
-															: sub === "yours"
-																? ` · ${relativeTime(p.createdAt, t)}`
-																: ""}
+															: ""}
 													</div>
 												</div>
 											);
@@ -923,6 +999,13 @@ export function DesignsTab({
 					</div>
 				</div>
 			) : null}
+			{deleteToast ? (
+				<Toast
+					key={deleteToast.id}
+					message={deleteToast.message}
+					onDismiss={() => setDeleteToast(null)}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -987,11 +1070,12 @@ function isOrbitProject(project: Project): boolean {
   return metadata?.kind === 'orbit';
 }
 
+
 function projectCover(
 	project: Project,
-	override: { kind: "html" | "image" | "video"; name: string } | null,
+	override: { kind: "html" | "image" | "video" | "logo"; name: string } | null,
 ): {
-	kind: "image" | "video" | "html" | "fallback";
+	kind: "image" | "video" | "html" | "logo" | "fallback";
 	src?: string;
 	style: CSSProperties;
 	initial: string;
@@ -1052,5 +1136,25 @@ function ProjectTag({ category }: { category: ProjectCategory }) {
 					: t("designs.tagPrototype");
 	return (
 		<span className={`design-card-tag tag-${category}`}>{label}</span>
+	);
+}
+
+function DesignSystemProjectTag() {
+	return (
+		<span className="design-card-tag tag-design-system">Design System</span>
+	);
+}
+
+function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
+	const logoCandidates = files
+		.filter((file) => file.type !== "dir")
+		.filter((file) => {
+			const name = file.path ?? file.name;
+			return file.kind === "image" || /\.(svg|png|jpe?g|webp|gif)$/iu.test(name);
+		});
+	return (
+		logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === "assets/logo.svg") ??
+		logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
+		null
 	);
 }

@@ -19,6 +19,12 @@ describe("desktop preload host boundary", () => {
     expect(source).toContain("exportDiagnostics");
     expect(source).toContain("satisfies OpenDesignHostBridge");
     expect(source).toContain("updater");
+    // OS locale forwarded from main via webPreferences.additionalArguments
+    // is mirrored onto __od__.client.osLocale. Pin the literal prefix
+    // here so it can't drift away from `applyOsLocaleSwitch`/runtime's
+    // additionalArguments without the test going red.
+    expect(source).toContain("'--od-os-locale='");
+    expect(source).toContain("osLocale");
     expect(source).toContain("invokeUpdater('install'");
     expect(source).toContain("od:update:quit");
     expect(source).toContain("od:update:status-changed");
@@ -26,5 +32,13 @@ describe("desktop preload host boundary", () => {
     expect(source).not.toContain("exposeInMainWorld('electronAPI'");
     expect(source).not.toContain('exposeInMainWorld("__odDesktop"');
     expect(source).not.toContain("exposeInMainWorld('__odDesktop'");
+  });
+
+  it("mirrors the host import contract by accepting a null entryFile", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../../src/main/preload.cts"), "utf8");
+
+    expect(source).toContain("response.entryFile === null");
+    expect(source).toContain("entryFile === undefined");
   });
 });

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -118,7 +119,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -279,21 +280,20 @@ async function expectProjectFilesToIncludeSuffixes(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
-  if (await preview.isVisible().catch(() => false)) return;
+  if (await preview.isVisible()) return;
 
-  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace('.', '\\.'), 'i') });
-  if (await fileTab.isVisible().catch(() => false)) {
+  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace(/\./g, '\\.'), 'i') });
+  if (await fileTab.isVisible()) {
     await fileTab.click();
     return;
   }
 
-  await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
+  await page.getByRole('button', { name: new RegExp(fileName.replace(/\./g, '\\.')) }).click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {

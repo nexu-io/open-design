@@ -17,6 +17,7 @@ import { streamMessageGoogle } from './google-compatible';
 import { streamMessageOllama } from './ollama-compatible';
 import { isOpenAICompatible, streamMessageOpenAI } from './openai-compatible';
 import { streamMessageSenseAudio } from './senseaudio-compatible';
+import { usesAnthropicProxy } from '../utils/apiProtocol';
 
 // Re-export for convenience
 export { isOpenAICompatible } from './openai-compatible';
@@ -66,8 +67,8 @@ export async function streamMessage(
     return streamMessageOpenAI(cfg, system, history, signal, handlers);
   }
 
-  if (cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com') {
-    return streamMessageAnthropicProxy(cfg, system, history, signal, handlers);
+  if (usesAnthropicProxy(cfg)) {
+    return streamMessageAnthropicProxy(cfg, system, history, signal, handlers, context);
   }
 
   if (!cfg.apiKey) {

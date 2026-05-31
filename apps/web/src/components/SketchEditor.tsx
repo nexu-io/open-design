@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
+import { Icon } from './Icon';
+import { readDefaultSketchToolColor } from './sketch-colors';
 import type { SketchItem } from './sketch-model';
+
+const SAVED_VISIBLE_MS = 2000;
 
 export type Tool = 'select' | 'pen' | 'text' | 'rect' | 'arrow' | 'eraser';
 
@@ -12,7 +16,7 @@ interface Props {
   hasPreservedRawItems?: boolean;
   onItemsChange: (items: SketchItem[]) => void;
   onClear?: () => void;
-  onSave: () => Promise<void> | void;
+  onSave: () => Promise<boolean | void> | boolean | void;
   onCancel?: () => void;
   saving?: boolean;
   dirty?: boolean;
@@ -34,10 +38,24 @@ export function SketchEditor({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [tool, setTool] = useState<Tool>('pen');
-  const [color, setColor] = useState('#1c1b1a');
+  const [color, setColor] = useState(() => readDefaultSketchToolColor());
   const [size, setSize] = useState(2);
   const drawingRef = useRef<SketchItem | null>(null);
   const [, force] = useState(0);
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => clearTimeout(savedTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (dirty) {
+      clearTimeout(savedTimerRef.current);
+      setShowSaved(false);
+    }
+  }, [dirty]);
+
   // Text-tool modal. Replaces window.prompt() because Electron 28+
   // disables that API by default and silently returns null, making
   // the text tool a no-op in the desktop app. Same root cause as
@@ -188,6 +206,18 @@ export function SketchEditor({
     textAnchorRef.current = null;
   }
 
+  const handleSave = useCallback(async () => {
+    const ok = await onSave();
+    if (ok === false) {
+      clearTimeout(savedTimerRef.current);
+      setShowSaved(false);
+      return;
+    }
+    setShowSaved(true);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setShowSaved(false), SAVED_VISIBLE_MS);
+  }, [onSave]);
+
   return (
     <div className="sketch-editor">
       <div className="sketch-toolbar">
@@ -233,10 +263,11 @@ export function SketchEditor({
         ) : null}
         <button
           className="primary"
-          onClick={() => void onSave()}
+          onClick={handleSave}
           disabled={saving || !canSave}
+          aria-label={saving ? t('sketch.saving') : showSaved ? t('sketch.saved') : t('common.save')}
         >
-          {saving ? t('sketch.saving') : t('common.save')}
+          {saving ? t('sketch.saving') : showSaved ? <Icon name="check" size={14} /> : t('common.save')}
         </button>
       </div>
       <div className="sketch-canvas-wrap" ref={wrapRef}>

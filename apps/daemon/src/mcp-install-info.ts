@@ -28,6 +28,13 @@ export interface BuildMcpInstallPayloadInputs {
    *  caller wants propagated into the snippet. The caller decides
    *  what's worth propagating; this builder just merges. */
   sidecarEnv: Record<string, string>;
+  /** Browser-facing Open Design studio base URL (e.g.
+   *  `http://127.0.0.1:65321`). Used by MCP clients to build deep
+   *  links to `/projects/.../conversations/.../files/...` so the
+   *  outer agent can suggest a URL that shows both the file preview
+   *  and the chat history for the run. Null when the daemon was
+   *  launched without a known web port (CLI-only / headless). */
+  webBaseUrl?: string | null;
 }
 
 export interface McpInstallPayload {
@@ -35,6 +42,10 @@ export interface McpInstallPayload {
   args: string[];
   env: Record<string, string>;
   daemonUrl: string;
+  /** Browser-facing studio base URL the daemon is paired with, when
+   *  known. MCP clients use this plus run/project context to build a
+   *  studio deep link the outer agent can hand back to the user. */
+  webBaseUrl: string | null;
   platform: NodeJS.Platform;
   cliExists: boolean;
   nodeExists: boolean;
@@ -85,6 +96,10 @@ export function buildMcpInstallPayload(
     args,
     env,
     daemonUrl: `http://127.0.0.1:${inputs.port}`,
+    webBaseUrl:
+      typeof inputs.webBaseUrl === 'string' && inputs.webBaseUrl.length > 0
+        ? inputs.webBaseUrl
+        : null,
     // Surface platform so the install panel can localize path hints
     // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
     // (Cmd vs Ctrl).

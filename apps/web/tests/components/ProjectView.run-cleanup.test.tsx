@@ -7,7 +7,9 @@ import {
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
+  resolveRetryTarget,
   resolveSucceededRunStatus,
+  selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
 } from '../../src/components/ProjectView';
 import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
@@ -64,11 +66,27 @@ function artifactProjectFile(name: string, mtime: number): ProjectFile {
   };
 }
 
+function projectFile(
+  name: string,
+  kind: ProjectFile['kind'],
+  mtime: number,
+  artifactManifest?: ProjectFile['artifactManifest'],
+): ProjectFile {
+  return {
+    artifactManifest,
+    kind,
+    mime: kind === 'html' ? 'text/html' : 'application/octet-stream',
+    mtime,
+    name,
+    size: 100,
+  };
+}
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
     setLocale: () => undefined,
-    t: (key: string) => key,
+    t: (value: string) => value,
   }),
   useT: () => ((value: string) => value),
 }));
@@ -164,6 +182,70 @@ describe('terminal replay artifact recovery', () => {
       .toBeNull();
     expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
       .toBe(current);
+  });
+});
+
+describe('selectPrimaryProjectFile', () => {
+  it('prefers explicit primary manifests over newer renderable files', () => {
+    const newer = projectFile('preview.html', 'html', 2_000);
+    const primary = projectFile('index.html', 'html', 1_000, {
+      entry: 'index.html',
+      exports: ['html'],
+      kind: 'html',
+      primary: true,
+      renderer: 'html',
+      title: 'Index',
+      version: 1,
+    });
+
+    expect(selectPrimaryProjectFile([newer, primary])).toBe(primary);
+  });
+
+  it('ignores sidecar manifest files when choosing a fallback', () => {
+    const sidecar = projectFile('index.html.artifact.json', 'text', 2_000);
+    const html = projectFile('index.html', 'html', 1_000);
+
+    expect(selectPrimaryProjectFile([sidecar, html])).toBe(html);
+  });
+});
+
+describe('retry target resolution', () => {
+  const userMessage: ChatMessage = {
+    id: 'user-1',
+    role: 'user',
+    content: 'Create a login page',
+    createdAt: 1,
+  };
+  const failedAssistant: ChatMessage = {
+    id: 'assistant-1',
+    role: 'assistant',
+    content: 'Generation failed',
+    createdAt: 2,
+    runStatus: 'failed',
+  };
+
+  it('returns the prior transcript and original user turn for the last failed assistant', () => {
+    const systemContext: ChatMessage = {
+      id: 'assistant-0',
+      role: 'assistant',
+      content: 'Earlier result',
+      createdAt: 0,
+      runStatus: 'succeeded',
+    };
+
+    expect(resolveRetryTarget([systemContext, userMessage, failedAssistant], failedAssistant.id)).toEqual({
+      failedAssistant,
+      userMsg: userMessage,
+      priorMessages: [systemContext],
+    });
+  });
+
+  it('rejects non-terminal, non-last, or non-user-preceded retry targets', () => {
+    expect(resolveRetryTarget([userMessage, { ...failedAssistant, runStatus: 'running' }], failedAssistant.id))
+      .toBeNull();
+    expect(resolveRetryTarget([userMessage, failedAssistant, { ...userMessage, id: 'user-2' }], failedAssistant.id))
+      .toBeNull();
+    expect(resolveRetryTarget([failedAssistant], failedAssistant.id)).toBeNull();
   });
 });
 
@@ -991,6 +1073,75 @@ describe('ProjectView daemon cleanup', () => {
         !call[2]?.runId,
     );
     expect(phantomSave).toBeUndefined();
+  });
+
+  it('persists a daemon assistant row as failed after an AMR auth error returns post-run creation', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.onRunCreated?.('run-auth-expired');
+      options.handlers.onError(
+        new Error('Your authentication token has expired. Please sign in again.'),
+      );
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-auth-expired', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('retry auth', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const failedAssistantSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-auth-expired' &&
+          call[1] === 'conv-1' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-auth-expired' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.events?.some(
+            (event: { kind?: string; label?: string; detail?: string }) =>
+              event.kind === 'status' &&
+              event.label === 'error' &&
+              event.detail === 'Your authentication token has expired. Please sign in again.',
+          ),
+      );
+      expect(failedAssistantSave).toBeTruthy();
+    });
   });
 
   it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {

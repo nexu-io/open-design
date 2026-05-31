@@ -24,7 +24,7 @@ test('captures the home plugin catalog surface', async ({ page }) => {
 
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   await expect(page.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-chip-featured')).toBeVisible();
+  await expect(page.getByTestId('plugins-home-chip-saved')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });
@@ -33,9 +33,8 @@ test('captures the home plugin filtered surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await page.getByTestId('plugins-home-pill-category-import').click();
-  await expect(page.locator('[data-plugin-id="visual-figma-importer"]')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-clear')).toBeVisible();
+  await page.getByTestId('plugins-home-pill-category-deck').click();
+  await expect(page.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-filter');
 });
@@ -44,7 +43,8 @@ test('captures the home plugin detail surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  const card = page.locator('[data-plugin-id="visual-deck-writer"]').first();
+  await page.getByTestId('plugins-home-pill-category-deck').click();
+  const card = page.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
   await expect(card).toBeVisible();
   await card.hover();
   await page.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
@@ -111,6 +111,7 @@ test('captures the design systems page surface', async ({ page }) => {
   await page.getByTestId('entry-nav-design-systems').click();
   await expect(page).toHaveURL(/\/design-systems$/);
   await expect(page.getByTestId('design-systems-tab')).toBeVisible();
+  await page.getByRole('tab', { name: 'Official presets' }).click();
   await expect(page.getByTestId('design-system-card-agentic')).toBeVisible();
   await expect(page.getByTestId('design-system-card-airbnb')).toBeVisible();
   await waitForVisualFonts(page);
@@ -185,10 +186,10 @@ test('captures the topbar execution switcher surface', async ({ page }) => {
 test('captures the avatar menu surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
 
   const menu = await openAvatarMenu(page);
-  await menu.getByTestId('entry-avatar-language').click();
-  await expect(menu.getByRole('group', { name: /Language/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /^Settings\b/i })).toBeVisible();
 
   await captureVisual(page, 'visual-avatar-menu');
 });
@@ -196,9 +197,10 @@ test('captures the avatar menu surface', async ({ page }) => {
 test('captures the settings execution surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
 
   const menu = await openAvatarMenu(page);
-  await menu.getByRole('button', { name: /^Settings$/i }).click();
+  await menu.getByRole('button', { name: /^Settings\b/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('tab', { name: /Local CLI/i })).toBeVisible();
@@ -211,9 +213,10 @@ test('captures the settings execution surface', async ({ page }) => {
 test('captures the settings BYOK surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
 
   const menu = await openAvatarMenu(page);
-  await menu.getByRole('button', { name: /^Settings$/i }).click();
+  await menu.getByRole('button', { name: /^Settings\b/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('tab', { name: 'BYOK' }).click();
@@ -225,8 +228,14 @@ test('captures the settings BYOK surface', async ({ page }) => {
 });
 
 async function openAvatarMenu(page: Parameters<typeof configureVisualPage>[0]) {
-  await page.locator('.avatar-menu .settings-icon-btn').click();
-  const menu = page.locator('.avatar-popover[role="menu"]');
+  await page.locator('.avatar-menu .avatar-agent-trigger').click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
   return menu;
+}
+
+async function gotoVisualWorkspace(page: Parameters<typeof configureVisualPage>[0]) {
+  await page.getByTestId('recent-projects-strip').locator('[data-project-id]').first().click();
+  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
 }

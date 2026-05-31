@@ -225,8 +225,13 @@ Rules of authorship:
   "specVersion": "1.0.0",
   "name": "make-a-deck",
   "title": "Make a deck",
+  "title_i18n": { "en": "Make a deck", "zh-CN": "制作 Deck" },
   "version": "1.0.0",
   "description": "Generate a 12-slide investor deck from a one-line brief.",
+  "description_i18n": {
+    "en": "Generate a 12-slide investor deck from a one-line brief.",
+    "zh-CN": "根据一句 brief 生成 12 页投资人 deck。"
+  },
   "author":   { "name": "Open Design", "url": "https://open-design.ai" },
   "license":  "MIT",
   "homepage": "https://github.com/open-design/plugins/make-a-deck",
@@ -349,6 +354,7 @@ Rules of authorship:
 - `compat.*` — relative paths to inherited files. The loader concatenates their content into the OD prompt stack assembled by [`composeSystemPrompt()`](../apps/daemon/src/prompts/system.ts).
 - `specVersion` — the Open Design plugin spec version used to interpret the manifest. This is distinct from plugin `version` and is frozen into apply snapshots for replay.
 - `version` — the plugin package version. Bump it whenever behavior, metadata, pipeline, inputs, or bundled assets change in a way users may need to audit.
+- `title_i18n` / `description_i18n` — optional localized display metadata. Keep `title` and `description` as English fallbacks; UI surfaces resolve requested locale, base language, English, then the first available value.
 - `od.kind` — registry classification (`skill` / `scenario` / `atom` / `bundle`).
 - `od.taskKind` — one of the four product scenarios (`new-generation` / `code-migration` / `figma-migration` / `tune-collab`, see §1 "Four product scenarios"). Drives marketplace filters, default input templates, and the recommended pipeline starting point.
 - `od.preview` — drives the marketplace card and detail page. `entry` is served sandboxed via the daemon (the existing `/api/skills/:id/example` plumbing extended to plugins).

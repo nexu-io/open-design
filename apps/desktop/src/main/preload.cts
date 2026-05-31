@@ -5,6 +5,7 @@ import type {
   OpenDesignHostActionResult,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
+  OpenDesignHostProjectReplaceWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterStatusListener,
   OpenDesignHostUpdaterStatusSnapshot,
@@ -13,6 +14,28 @@ import type {
 const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
 const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 1;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
+
+// Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
+// runtime's `additionalArguments`. Duplicated literal on purpose: the
+// preload bundle must not pull in `@open-design/desktop/main` (it
+// transitively requires non-electron node modules that the sandboxed
+// preload can't load).
+const OS_LOCALE_ARG_PREFIX = '--od-os-locale=';
+
+function readOsLocaleFromArgv(): string | undefined {
+  for (const arg of process.argv) {
+    if (typeof arg === 'string' && arg.startsWith(OS_LOCALE_ARG_PREFIX)) {
+      const value = arg.slice(OS_LOCALE_ARG_PREFIX.length);
+      if (value.length === 0) return undefined;
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
 
 type PrintPdfOptions = {
   deck?: boolean;
@@ -42,6 +65,32 @@ function importFailure(reason: string): OpenDesignHostProjectImportResult {
   return failure(reason);
 }
 
+function replaceWorkingDirFailure(reason: string): OpenDesignHostProjectReplaceWorkingDirResult {
+  return failure(reason);
+}
+
+function normalizeProjectReplaceWorkingDirResult(input: unknown): OpenDesignHostProjectReplaceWorkingDirResult {
+  if (!isRecord(input)) return failure('desktop working-dir replace returned an invalid response', input);
+  if (input.ok !== true) {
+    if (input.canceled === true) return { canceled: true, ok: false };
+    return failure(
+      typeof input.reason === 'string' && input.reason.length > 0 ? input.reason : 'unknown failure',
+      input.details,
+    );
+  }
+
+  const response = input.response;
+  if (!isRecord(response)) return failure('daemon working-dir response was not an object', response);
+  const baseDir = typeof response.baseDir === 'string' ? response.baseDir : null;
+  const entryFile =
+    typeof response.entryFile === 'string' ? response.entryFile : null;
+  if (baseDir == null) {
+    return failure('daemon working-dir response did not include baseDir', response);
+  }
+
+  return { baseDir, entryFile, ok: true };
+}
+
 function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImportResult {
   if (!isRecord(input)) return failure('desktop import returned an invalid response', input);
   if (input.ok !== true) {
@@ -58,8 +107,11 @@ function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImpo
   const rawProjectId = isRecord(project) ? project.id : null;
   const projectId = typeof rawProjectId === 'string' ? rawProjectId : null;
   const conversationId = typeof response.conversationId === 'string' ? response.conversationId : null;
-  const entryFile = typeof response.entryFile === 'string' ? response.entryFile : null;
-  if (projectId == null || conversationId == null || entryFile == null) {
+  const entryFile =
+    typeof response.entryFile === 'string' || response.entryFile === null
+      ? response.entryFile
+      : undefined;
+  if (projectId == null || conversationId == null || entryFile === undefined) {
     return failure('daemon import response did not include host project identifiers', response);
   }
 
@@ -100,6 +152,10 @@ const project = {
     ipcRenderer.invoke('dialog:pick-and-import', init ?? null)
       .then(normalizeProjectImportResult)
       .catch((error: unknown) => importFailure(reasonFromError(error))),
+  pickAndReplaceWorkingDir: (projectId: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult> =>
+    ipcRenderer.invoke('dialog:pick-and-replace-working-dir', { projectId })
+      .then(normalizeProjectReplaceWorkingDirResult)
+      .catch((error: unknown) => replaceWorkingDirFailure(reasonFromError(error))),
 };
 
 const shell = {
@@ -166,11 +222,14 @@ const updater = {
   },
 };
 
+const osLocale = readOsLocaleFromArgv();
+
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
   client: {
     type: 'desktop',
     platform: process.platform,
+    ...(osLocale !== undefined ? { osLocale } : {}),
   },
   shell,
   project,

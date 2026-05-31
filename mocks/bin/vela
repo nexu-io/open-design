@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# vela mock CLI — dispatches by first argv:
+#   vela login    → write ~/.amr/config.json (fake credentials)
+#   vela models   → print public model catalog
+#   vela agent run --runtime opencode → ACP JSON-RPC server (default)
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec node "$HERE/../mock-agent.mjs" --as vela "$@"
