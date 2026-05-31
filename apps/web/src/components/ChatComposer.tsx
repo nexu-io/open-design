@@ -2658,6 +2658,11 @@ function ToolsPluginsPanel({
               <button
                 type="button"
                 className="composer-tools-row-main"
+                // Match the @-mention popover: prevent the textarea from
+                // losing focus before the click handler runs so
+                // selectionStart isn't reset to 0 and the inserted token
+                // lands at the user's actual cursor position (#3195).
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={async () => {
                   setPendingId(p.id);
                   try {
@@ -2749,6 +2754,10 @@ function ToolsMcpPanel({
               type="button"
               role="menuitem"
               className="composer-tools-row"
+              // Match the @-mention popover: prevent the textarea from
+              // losing focus before the click handler runs so
+              // selectionStart isn't reset to 0 (#3195).
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => onInsert(s.id)}
               title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
             >
@@ -2839,6 +2848,10 @@ function ToolsSkillsPanel({
                 type="button"
                 role="menuitem"
                 className={`composer-tools-row${active ? ' active' : ''}`}
+                // Match the @-mention popover: prevent the textarea from
+                // losing focus before the click handler runs so
+                // selectionStart isn't reset to 0 (#3195).
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={async () => {
                   setPendingId(skill.id);
                   try {
