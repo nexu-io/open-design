@@ -598,17 +598,44 @@
 /* ============================================================
    Composer — consolidated Tools popover
    ------------------------------------------------------------
-   The leading @ glyph now opens a single tabbed popover
-   containing MCP / Import / Pet quick actions plus a shortcut
-   to the full Settings dialog. Replaces three standalone row
-   buttons that were overflowing in narrow chats.
+   The @ glyph opens the unified mention picker. The sliders icon
+   opens the tabbed resources popover for Plugins / Skills / MCP /
+   Import quick actions. Keeping the two entry points distinct
+   prevents the mention picker and resources menu from drifting.
    ============================================================ */
 .composer-tools-wrap {
   position: relative;
   display: inline-flex;
+  gap: 4px;
 }
+.composer-mention-trigger,
 .composer-tools-trigger {
   position: relative;
+}
+.composer-row .icon-btn.composer-tools-trigger {
+  width: auto;
+  min-width: 94px;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
+}
+.composer-row .icon-btn.composer-tools-trigger:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+.composer-tools-label {
+  display: inline-block;
+  flex: 0 0 auto;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
 }
 .composer-tools-at {
   display: inline-flex;
@@ -624,32 +651,58 @@
   color: currentColor;
   transform: translateY(-0.5px);
 }
+.composer-mention-trigger.active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
 .composer-tools-trigger.active {
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--text) 9%, var(--bg-subtle));
+  border-color: var(--border);
   color: var(--text);
 }
 .composer-tools-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   left: 0;
-  width: 320px;
+  width: 360px;
   max-width: calc(100vw - 32px);
   z-index: 30;
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--bg-panel));
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: 0 18px 52px rgb(0 0 0 / 34%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.composer-tools-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-soft);
+}
+.composer-tools-menu-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 .composer-tools-tabs {
   display: flex;
   align-items: stretch;
   gap: 4px;
-  padding: 4px;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg-subtle);
+  padding: 6px 6px 4px;
+  border-bottom: none;
+  background: transparent;
 }
 .composer-tools-tab {
   flex: 1;
@@ -695,7 +748,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px;
+  padding: 4px 8px 8px;
   max-height: 360px;
   overflow-y: auto;
 }
@@ -769,7 +822,7 @@
 .composer-tools-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
 }
 .composer-tools-section-label {
   padding: 4px 6px 2px;
@@ -782,9 +835,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  background: transparent;
-  border: 1px solid transparent;
+  padding: 7px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   color: var(--text);
   cursor: pointer;
@@ -793,7 +846,8 @@
   width: 100%;
 }
 .composer-tools-row:hover {
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
+  border-color: var(--border);
   color: var(--text);
 }
 .composer-tools-row.active {
@@ -877,6 +931,23 @@
   font-size: 10.5px;
   color: var(--text-faint);
   margin-left: auto;
+}
+.composer-tools-action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 42px;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
 }
 .composer-tools-row-action {
   border-top: 1px solid var(--border-soft);

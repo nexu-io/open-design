@@ -1886,8 +1886,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: transparent;
-  border: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: not-allowed;
@@ -1896,7 +1896,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   width: 100%;
 }
 .composer-import-item:hover {
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
+  border-color: var(--border);
   color: var(--text);
 }
 .composer-import-item-enabled {
@@ -1904,7 +1905,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text);
 }
 .composer-import-item-enabled:hover {
-  background: var(--bg-subtle);
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
+  border-color: var(--border);
   color: var(--text);
 }
 .composer-import-item-label { flex: 1; }
