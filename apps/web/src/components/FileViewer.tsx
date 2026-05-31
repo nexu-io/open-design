@@ -2353,8 +2353,8 @@ export function CommentSidePanel({
               <button
                 type="button"
                 className="icon-btn"
-                title={t('chat.cliSettingsTitle')}
-                aria-label={t('chat.cliSettingsAria')}
+                title={t('chat.mentionButtonTitle')}
+                aria-label={t('chat.mentionButtonAria')}
                 disabled
               >
                 <span className="composer-tools-at" aria-hidden>

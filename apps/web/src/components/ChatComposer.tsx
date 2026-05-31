@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from 'react-dom';
-import { useI18n, useT } from '../i18n';
-import type { Dict } from '../i18n/types';
+import { useI18n } from '../i18n';
+import type { Dict, Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
   localizeSkillName,
@@ -37,7 +37,7 @@ import type {
   RunContextSelection,
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
@@ -60,6 +60,67 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import' | 'pet';
 
 type MentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'files';
+
+interface MentionState {
+  q: string;
+  cursor: number;
+}
+
+type MentionOption =
+  | {
+      kind: 'plugin';
+      key: string;
+      label: string;
+      description: string;
+      meta: string;
+      title: string;
+      icon: IconName;
+      record: InstalledPluginRecord;
+    }
+  | {
+      kind: 'skill';
+      key: string;
+      label: string;
+      description: string;
+      meta: string;
+      title: string;
+      icon: IconName;
+      skill: SkillSummary;
+    }
+  | {
+      kind: 'mcp';
+      key: string;
+      label: string;
+      description: string;
+      meta: string;
+      title: string;
+      icon: IconName;
+      server: McpServerConfig;
+    }
+  | {
+      kind: 'connector';
+      key: string;
+      label: string;
+      description: string;
+      meta: string;
+      title: string;
+      icon: IconName;
+      connector: ConnectorDetail;
+    }
+  | {
+      kind: 'file';
+      key: string;
+      label: string;
+      meta: string | null;
+      icon: IconName;
+      path: string;
+    };
+
+interface MentionSection {
+  id: MentionTab;
+  label: string;
+  options: MentionOption[];
+}
 
 const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'user',
@@ -245,7 +306,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     },
     ref
   ) {
-    const t = useT();
+    const { locale, t } = useI18n();
     const analytics = useAnalytics();
     const [draft, setDraft] = useState(
       () => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "",
@@ -280,10 +341,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [stagedMcpServers, setStagedMcpServers] = useState<McpServerConfig[]>([]);
     const [stagedConnectors, setStagedConnectors] = useState<ConnectorDetail[]>([]);
     const [dragActive, setDragActive] = useState(false);
-    const [mention, setMention] = useState<{
-      q: string;
-      cursor: number;
-    } | null>(null);
+    const [mention, setMention] = useState<MentionState | null>(null);
+    const [mentionTab, setMentionTab] = useState<MentionTab>('all');
+    const [mentionIndex, setMentionIndex] = useState(0);
     const [composerScrollTop, setComposerScrollTop] = useState(0);
     // Slash-command popover state — when the draft starts with `/` and
     // the cursor is still inside that token (no space committed yet),
@@ -861,6 +921,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           setStagedConnectors([]);
           setUploadError(null);
           setMention(null);
+          setMentionIndex(0);
           setSlash(null);
           seededRef.current = true;
           requestAnimationFrame(() => {
@@ -918,6 +979,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStagedConnectors([]);
       setUploadError(null);
       setMention(null);
+      setMentionIndex(0);
       setSlash(null);
       // Drop tracked plugin-mention insertions when the draft is wiped
       // — otherwise a later chip clear would prune user-authored text
@@ -1311,9 +1373,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // Detect a fresh @ at start or after whitespace; capture the typed
       // query up to the cursor.
       const before = value.slice(0, cursor);
-      const m = /(^|\s)@([^\s@]*)$/.exec(before);
-      if (m) setMention({ q: m[2] ?? "", cursor });
-      else setMention(null);
+      const nextMention = detectMentionAtCursor(value, cursor);
+      if (nextMention) {
+        if (!mention) setMentionTab('all');
+        setMentionIndex(0);
+        setToolsOpen(false);
+      } else {
+        setMentionIndex(0);
+      }
+      setMention(nextMention);
       // Slash-command popover — open as soon as the draft starts with
       // `/` (and the cursor is still inside the bare command token, no
       // space yet). Closes once the user commits a space or moves past
@@ -1327,6 +1395,47 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    function openMentionPickerFromButton() {
+      const ta = textareaRef.current;
+      const currentDraft = ta?.value ?? draft;
+      const selectionStart = ta?.selectionStart ?? currentDraft.length;
+      const selectionEnd = ta?.selectionEnd ?? selectionStart;
+      const existingMention =
+        selectionStart === selectionEnd
+          ? detectMentionAtCursor(currentDraft, selectionStart)
+          : null;
+
+      setToolsOpen(false);
+      setSlash(null);
+
+      if (existingMention) {
+        if (!mention) setMentionTab('all');
+        setMentionIndex(0);
+        setMention(existingMention);
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+        return;
+      }
+
+      const before = currentDraft.slice(0, selectionStart);
+      const after = currentDraft.slice(selectionEnd);
+      const insert = before.length === 0 || /\s$/.test(before) ? '@' : ' @';
+      const next = before + insert + after;
+      const cursor = before.length + insert.length;
+      updateDraft(next);
+      setMentionTab('all');
+      setMentionIndex(0);
+      setMention(detectMentionAtCursor(next, cursor));
+
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(cursor, cursor);
+      });
+    }
+
     function insertMention(filePath: string) {
       if (!mention) return;
       const ta = textareaRef.current;
@@ -1338,6 +1447,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const next = replaced + after;
       updateDraft(next);
       setMention(null);
+      setMentionIndex(0);
       if (!staged.some((s) => s.path === filePath)) {
         setStaged((s) => [
           ...s,
@@ -1515,6 +1625,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const next = replaced + after;
       updateDraft(next);
       setMention(null);
+      setMentionIndex(0);
       // The inserted text was appended onto `replaced`, so its first
       // char (the `@`) sits at `replaced.length - text.length`.
       const insertStart = replaced.length - text.length;
@@ -1604,61 +1715,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // context is still applied behind the scenes when available.
     const mentionQuery = mention ? mention.q.toLowerCase() : '';
     const filteredFiles = mention
-      ? projectFiles
-          .filter((f) => f.type === undefined || f.type === "file")
-          .filter((f) => {
-            const key = f.path ?? f.name;
-            return key.toLowerCase().includes(mentionQuery);
-          })
-          .slice(0, 12)
+      ? rankMentionItems(
+          projectFiles.filter((f) => f.type === undefined || f.type === "file"),
+          mentionQuery,
+          projectFileMentionScore,
+        ).slice(0, 12)
       : [];
     const filteredPlugins = mention
-      ? pluginsForComposer
-          .filter((p) => {
-            if (!mentionQuery) return true;
-            return (
-              p.title.toLowerCase().includes(mentionQuery) ||
-              p.id.toLowerCase().includes(mentionQuery) ||
-              (p.manifest?.description ?? '').toLowerCase().includes(mentionQuery) ||
-              (p.manifest?.tags ?? []).join(' ').toLowerCase().includes(mentionQuery)
-            );
-          })
-          .slice(0, 8)
+      ? rankMentionItems(pluginsForComposer, mentionQuery, pluginMentionScore).slice(0, 8)
       : [];
     const filteredMcpServers = mention
-      ? enabledMcpServers
-          .filter((s) => {
-            if (!mentionQuery) return true;
-            return [
-              s.id,
-              s.label ?? '',
-              s.transport,
-              s.url ?? '',
-              s.command ?? '',
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(mentionQuery);
-          })
-          .slice(0, 8)
+      ? rankMentionItems(enabledMcpServers, mentionQuery, mcpServerMentionScore).slice(0, 8)
       : [];
     const filteredConnectors = mention
-      ? connectors
-          .filter((connector) => {
-            if (!mentionQuery) return true;
-            return [
-              connector.id,
-              connector.name,
-              connector.provider,
-              connector.category,
-              connector.description ?? '',
-              connector.accountLabel ?? '',
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(mentionQuery);
-          })
-          .slice(0, 8)
+      ? rankMentionItems(connectors, mentionQuery, connectorMentionScore).slice(0, 8)
       : [];
     // Already-staged skills drop out of the suggestion list (carried over
     // from main) so the @-popover keeps moving forward as the user picks.
@@ -1666,9 +1736,61 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const filteredSkills = mention
       ? skills
           .filter((s) => !stagedSkillIds.has(s.id))
-          .filter((s) => skillMatchesQuery(s, mentionQuery))
-          .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery))
+          .map((skill, index) => ({
+            index,
+            score: skillMentionScore(skill, mentionQuery),
+            skill,
+          }))
+          .filter((entry): entry is { index: number; score: number; skill: SkillSummary } => (
+            entry.score !== null
+          ))
+          .sort((a, b) => a.score - b.score || a.index - b.index)
+          .map((entry) => entry.skill)
       : [];
+    const mentionSections = mention
+      ? buildMentionSections({
+          connectors: filteredConnectors,
+          currentSkillId,
+          files: filteredFiles,
+          locale,
+          mcpServers: filteredMcpServers,
+          plugins: filteredPlugins,
+          skills: filteredSkills,
+          t,
+          tab: mentionTab,
+        })
+      : [];
+    const mentionOptions = flattenMentionOptions(mentionSections);
+    const activeMentionIndex =
+      mentionOptions.length > 0 ? Math.min(mentionIndex, mentionOptions.length - 1) : -1;
+    const activeMentionOption =
+      activeMentionIndex >= 0 ? mentionOptions[activeMentionIndex] ?? null : null;
+
+    function pickMentionOption(option: MentionOption): void {
+      switch (option.kind) {
+        case 'plugin':
+          void insertPluginMention(option.record);
+          return;
+        case 'skill':
+          void insertSkillMention(option.skill);
+          return;
+        case 'mcp':
+          insertMcpMention(option.server);
+          return;
+        case 'connector':
+          insertConnectorMention(option.connector);
+          return;
+        case 'file':
+          insertMention(option.path);
+          return;
+      }
+    }
+
+    function selectMentionTab(tab: MentionTab): void {
+      setMentionTab(tab);
+      setMentionIndex(0);
+    }
+
     const hasComposerPayload =
       draft.trim().length > 0 || staged.length > 0 || currentCommentAttachments().length > 0;
     const showStopButton = streaming && !hasComposerPayload;
@@ -1905,6 +2027,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 value={draft}
                 placeholder={t('chat.composerPlaceholder')}
                 spellCheck={false}
+                aria-controls={mention ? 'chat-composer-mention-results' : undefined}
+                aria-expanded={mention ? true : undefined}
+                aria-activedescendant={
+                  mention && activeMentionIndex >= 0
+                    ? mentionOptionDomId(activeMentionIndex)
+                    : undefined
+                }
+                aria-autocomplete="list"
                 onChange={handleChange}
                 onPaste={handlePaste}
                 onScroll={(event) => {
@@ -1943,9 +2073,36 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       return;
                     }
                   }
-                  if (mention && e.key === "Escape") {
-                    setMention(null);
-                    return;
+                  if (mention) {
+                    const optionCount = mentionOptions.length;
+                    if (optionCount > 0) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setMentionIndex((activeMentionIndex + 1) % optionCount);
+                        return;
+                      }
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setMentionIndex(
+                          (activeMentionIndex - 1 + optionCount) % optionCount,
+                        );
+                        return;
+                      }
+                      if (
+                        e.key === 'Tab' ||
+                        (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey)
+                      ) {
+                        e.preventDefault();
+                        if (activeMentionOption) pickMentionOption(activeMentionOption);
+                        return;
+                      }
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setMention(null);
+                      setMentionIndex(0);
+                      return;
+                    }
                   }
                   if (
                     e.key === 'Enter' &&
@@ -1961,18 +2118,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             </div>
             {mention ? (
               <MentionPopover
-                files={filteredFiles}
-                plugins={filteredPlugins}
-                skills={filteredSkills}
-                mcpServers={filteredMcpServers}
-                connectors={filteredConnectors}
+                activeIndex={activeMentionIndex}
+                sections={mentionSections}
                 query={mention.q}
-                currentSkillId={currentSkillId}
-                onPickFile={insertMention}
-                onPickPlugin={(record) => void insertPluginMention(record)}
-                onPickSkill={(skill) => void insertSkillMention(skill)}
-                onPickMcp={insertMcpMention}
-                onPickConnector={insertConnectorMention}
+                tab={mentionTab}
+                onActiveIndexChange={setMentionIndex}
+                onPickOption={pickMentionOption}
+                onTabChange={selectMentionTab}
               />
             ) : null}
             {slash && filteredSlash.length > 0 ? (
@@ -2000,6 +2152,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             />
             <div className="composer-tools-wrap">
               <button
+                type="button"
+                className={`icon-btn composer-mention-trigger${mention ? ' active' : ''}`}
+                onClick={openMentionPickerFromButton}
+                title={t('chat.mentionButtonTitle')}
+                aria-label={t('chat.mentionButtonAria')}
+                aria-haspopup="listbox"
+                aria-expanded={Boolean(mention)}
+                aria-controls={mention ? 'chat-composer-mention-results' : undefined}
+              >
+                <span className="composer-tools-at" aria-hidden>
+                  @
+                </span>
+              </button>
+              <button
                 ref={toolsTriggerRef}
                 type="button"
                 className={`icon-btn composer-tools-trigger${toolsOpen ? ' active' : ''}`}
@@ -2007,6 +2173,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   setToolsOpen((v) => {
                     const next = !v;
                     if (next) {
+                      setMention(null);
+                      setMentionIndex(0);
+                      setSlash(null);
                       // P0 ui_click resources_popover_trigger — only emit on
                       // the open transition so accidental double-clicks
                       // don't pair an open + close into a "double tap" the
@@ -2020,14 +2189,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     return next;
                   });
                 }}
-                title={t('chat.cliSettingsTitle')}
+                title={t('chat.resourcesMenuTitle')}
                 aria-haspopup="menu"
                 aria-expanded={toolsOpen}
-                aria-label={t('chat.cliSettingsAria')}
+                aria-label={t('chat.resourcesMenuAria')}
               >
-                <span className="composer-tools-at" aria-hidden>
-                  @
-                </span>
+                <Icon name="blocks" size={14} />
+                <span className="composer-tools-label">{t('chat.resourcesMenuTitle')}</span>
               </button>
               {toolsOpen ? (
                 <div
@@ -2035,6 +2203,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   className="composer-tools-menu"
                   role="menu"
                 >
+                  <div className="composer-tools-menu-head">
+                    <span className="composer-tools-menu-title">
+                      <Icon name="blocks" size={13} />
+                      <span>{t('chat.resourcesMenuTitle')}</span>
+                    </span>
+                  </div>
                   <div className="composer-tools-tabs" role="tablist">
                     {availableTabs.map((tab) => (
                       <button
@@ -2738,7 +2912,9 @@ function ToolsPluginsPanel({
                 </span>
                 {pendingId === p.id ? (
                   <span className="composer-tools-row-pending">Applying…</span>
-                ) : null}
+                ) : (
+                  <span className="composer-tools-action-pill">Apply</span>
+                )}
               </button>
               <button
                 type="button"
@@ -2812,12 +2988,13 @@ function ToolsMcpPanel({
               title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
             >
               <Icon name="link" size={12} />
-              <span className="composer-tools-row-body">
-                <strong>{s.label || s.id}</strong>
-                <span className="composer-tools-row-meta">{s.transport}</span>
-              </span>
-            </button>
-          ))}
+                <span className="composer-tools-row-body">
+                  <strong>{s.label || s.id}</strong>
+                  <span className="composer-tools-row-meta">{s.transport}</span>
+                </span>
+                <span className="composer-tools-action-pill">Insert</span>
+              </button>
+            ))}
         </div>
       )}
       {visibleTemplates.length > 0 ? (
@@ -2840,6 +3017,7 @@ function ToolsMcpPanel({
                   {tpl.category ? ` · ${tpl.category}` : ''}
                 </span>
               </span>
+              <span className="composer-tools-action-pill">Manage</span>
             </button>
           ))}
         </div>
@@ -2923,7 +3101,9 @@ function ToolsSkillsPanel({
                 </span>
                 {pendingId === skill.id ? (
                   <span className="composer-tools-row-pending">Applying…</span>
-                ) : null}
+                ) : (
+                  <span className="composer-tools-action-pill">Use</span>
+                )}
               </button>
             );
           })}
@@ -2934,44 +3114,129 @@ function ToolsSkillsPanel({
 }
 
 function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    plugin.title,
-    plugin.id,
-    plugin.sourceKind,
-    plugin.source,
-    plugin.manifest?.description ?? '',
-    ...(plugin.manifest?.tags ?? []),
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
+  return pluginMentionScore(plugin, query) !== null;
 }
 
 function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [
-    skill.id,
-    skill.name,
-    skill.description,
-    skill.mode,
-    skill.surface ?? '',
-    ...skill.triggers,
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(q);
+  return skillMentionScore(skill, query) !== null;
 }
 
-function skillMentionRank(skill: SkillSummary, query: string): number {
-  const q = query.trim().toLowerCase();
-  if (!q) return 1;
-  const id = skill.id.toLowerCase();
-  const name = skill.name.toLowerCase();
-  if (id.startsWith(q) || name.startsWith(q)) return 0;
-  return 1;
+function rankMentionItems<T>(
+  items: T[],
+  query: string,
+  scoreItem: (item: T, query: string) => number | null,
+): T[] {
+  const q = normalizeMentionQuery(query);
+  if (!q) return items;
+  return items
+    .map((item, index) => ({ index, item, score: scoreItem(item, q) }))
+    .filter((entry): entry is { index: number; item: T; score: number } => (
+      entry.score !== null
+    ))
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map((entry) => entry.item);
+}
+
+function pluginMentionScore(plugin: InstalledPluginRecord, query: string): number | null {
+  return bestMentionTextScore(query, [
+    { value: plugin.title, base: 0 },
+    { value: plugin.manifest?.name, base: 0 },
+    { value: plugin.id, base: 0 },
+    { value: plugin.manifest?.tags?.join(' '), base: 4 },
+    { value: plugin.sourceKind, base: 6 },
+    { value: plugin.manifest?.description, base: 8 },
+    { value: plugin.source, base: 10 },
+  ]);
+}
+
+function skillMentionScore(skill: SkillSummary, query: string): number | null {
+  return bestMentionTextScore(query, [
+    { value: skill.name, base: 0 },
+    { value: skill.id, base: 0 },
+    { value: skill.triggers.join(' '), base: 3 },
+    { value: skill.mode, base: 5 },
+    { value: skill.surface, base: 5 },
+    { value: skill.description, base: 8 },
+  ]);
+}
+
+function projectFileMentionScore(file: ProjectFile, query: string): number | null {
+  const path = file.path ?? file.name;
+  const name = path.split('/').pop() || path;
+  return bestMentionTextScore(query, [
+    { value: name, base: 0 },
+    { value: path, base: 2 },
+    { value: file.kind, base: 6 },
+    { value: file.mime, base: 8 },
+  ]);
+}
+
+function mcpServerMentionScore(server: McpServerConfig, query: string): number | null {
+  return bestMentionTextScore(query, [
+    { value: server.label, base: 0 },
+    { value: server.id, base: 0 },
+    { value: server.transport, base: 4 },
+    { value: server.url, base: 6 },
+    { value: server.command, base: 6 },
+  ]);
+}
+
+function connectorMentionScore(connector: ConnectorDetail, query: string): number | null {
+  return bestMentionTextScore(query, [
+    { value: connector.name, base: 0 },
+    { value: connector.id, base: 0 },
+    { value: connector.provider, base: 1 },
+    { value: connector.category, base: 4 },
+    { value: connector.accountLabel, base: 4 },
+    { value: connector.description, base: 8 },
+  ]);
+}
+
+function bestMentionTextScore(
+  query: string,
+  fields: Array<{ value: string | null | undefined; base: number }>,
+): number | null {
+  const q = normalizeMentionQuery(query);
+  if (!q) return 0;
+  const scores: number[] = [];
+  for (const field of fields) {
+    const score = mentionTextScore(field.value, q, field.base);
+    if (score !== null) scores.push(score);
+  }
+  return scores.length > 0 ? Math.min(...scores) : null;
+}
+
+function mentionTextScore(
+  value: string | null | undefined,
+  query: string,
+  base: number,
+): number | null {
+  const text = normalizeMentionQuery(value);
+  if (!text) return null;
+  if (text === query) return base;
+  if (text.startsWith(query)) return base + 1;
+  if (hasMentionTokenPrefix(text, query)) return base + 2;
+  if (text.includes(query)) return base + 4;
+  return null;
+}
+
+function normalizeMentionQuery(value: string | null | undefined): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function hasMentionTokenPrefix(text: string, query: string): boolean {
+  let index = text.indexOf(query);
+  while (index !== -1) {
+    if (index === 0 || !isMentionTokenChar(text[index - 1] ?? '')) {
+      return true;
+    }
+    index = text.indexOf(query, index + 1);
+  }
+  return false;
+}
+
+function isMentionTokenChar(char: string): boolean {
+  return /[a-z0-9]/.test(char);
 }
 
 function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {
@@ -3096,7 +3361,11 @@ function ImportItem({
         <Icon name={icon} size={14} />
       </span>
       <span className="composer-import-item-label">{label}</span>
-      {!enabled && <span className="composer-import-item-soon">{t('chat.importSoon')}</span>}
+      {enabled ? (
+        <span className="composer-tools-action-pill">Link</span>
+      ) : (
+        <span className="composer-import-item-soon">{t('chat.importSoon')}</span>
+      )}
     </button>
   );
 }
@@ -3162,36 +3431,150 @@ function SlashPopover({
   );
 }
 
-function MentionPopover({
-  files,
+function mentionOptionDomId(index: number): string {
+  return `chat-composer-mention-option-${index}`;
+}
+
+function buildMentionSections({
   connectors,
+  currentSkillId,
+  files,
+  locale,
+  mcpServers,
   plugins,
   skills,
-  mcpServers,
-  query,
-  currentSkillId,
-  onPickFile,
-  onPickPlugin,
-  onPickSkill,
-  onPickMcp,
-  onPickConnector,
+  t,
+  tab,
 }: {
-  files: ProjectFile[];
   connectors: ConnectorDetail[];
+  currentSkillId: string | null;
+  files: ProjectFile[];
+  locale: Locale;
+  mcpServers: McpServerConfig[];
   plugins: InstalledPluginRecord[];
   skills: SkillSummary[];
-  mcpServers: McpServerConfig[];
+  t: TranslateFn;
+  tab: MentionTab;
+}): MentionSection[] {
+  const sections: MentionSection[] = [];
+  if ((tab === 'all' || tab === 'plugins') && plugins.length > 0) {
+    sections.push({
+      id: 'plugins',
+      label: t('chat.mentionSectionPlugins'),
+      options: plugins.map((record) => ({
+        kind: 'plugin',
+        key: `plugin-${record.id}`,
+        label: record.title,
+        description: record.manifest?.description ?? record.id,
+        meta: pluginSourceLabel(record, t),
+        title: record.manifest?.description ?? record.title,
+        icon: 'sparkles',
+        record,
+      })),
+    });
+  }
+  if ((tab === 'all' || tab === 'skills') && skills.length > 0) {
+    sections.push({
+      id: 'skills',
+      label: t('chat.mentionSectionSkills'),
+      options: skills.map((skill) => {
+        const active = skill.id === currentSkillId;
+        return {
+          kind: 'skill',
+          key: `skill-${skill.id}`,
+          label: localizeSkillName(locale, skill),
+          description: localizeSkillDescription(locale, skill) || skill.id,
+          meta: active ? t('chat.mentionActiveSkill') : skill.mode,
+          title: localizeSkillDescription(locale, skill),
+          icon: active ? 'check' : 'file',
+          skill,
+        };
+      }),
+    });
+  }
+  if ((tab === 'all' || tab === 'mcp') && mcpServers.length > 0) {
+    sections.push({
+      id: 'mcp',
+      label: t('chat.mentionSectionMcp'),
+      options: mcpServers.map((server) => ({
+        kind: 'mcp',
+        key: `mcp-${server.id}`,
+        label: server.label || server.id,
+        description: server.url || server.command || server.id,
+        meta: server.transport,
+        title: t('chat.mentionUseMcpTitle', { name: server.label || server.id }),
+        icon: 'link',
+        server,
+      })),
+    });
+  }
+  if ((tab === 'all' || tab === 'connectors') && connectors.length > 0) {
+    sections.push({
+      id: 'connectors',
+      label: t('chat.mentionSectionConnectors'),
+      options: connectors.map((connector) => ({
+        kind: 'connector',
+        key: `connector-${connector.id}`,
+        label: connector.name,
+        description: connector.description || connector.provider || connector.id,
+        meta: connector.accountLabel ?? connector.provider,
+        title: t('chat.mentionUseConnectorTitle', { name: connector.name }),
+        icon: 'link',
+        connector,
+      })),
+    });
+  }
+  if ((tab === 'all' || tab === 'files') && files.length > 0) {
+    sections.push({
+      id: 'files',
+      label: t('chat.mentionSectionFiles'),
+      options: files.map((file) => {
+        const path = file.path ?? file.name;
+        return {
+          kind: 'file',
+          key: `file-${path}`,
+          label: path,
+          meta: file.size != null ? prettySize(file.size) : null,
+          icon: 'file',
+          path,
+        };
+      }),
+    });
+  }
+  return sections;
+}
+
+function flattenMentionOptions(sections: MentionSection[]): MentionOption[] {
+  const options: MentionOption[] = [];
+  for (const section of sections) {
+    options.push(...section.options);
+  }
+  return options;
+}
+
+function countMentionOptions(sections: MentionSection[]): number {
+  return sections.reduce((sum, section) => sum + section.options.length, 0);
+}
+
+function MentionPopover({
+  activeIndex,
+  sections,
+  query,
+  tab,
+  onActiveIndexChange,
+  onPickOption,
+  onTabChange,
+}: {
+  activeIndex: number;
+  sections: MentionSection[];
   query: string;
-  currentSkillId: string | null;
-  onPickFile: (path: string) => void;
-  onPickPlugin: (record: InstalledPluginRecord) => void;
-  onPickSkill: (skill: SkillSummary) => void;
-  onPickMcp: (server: McpServerConfig) => void;
-  onPickConnector: (connector: ConnectorDetail) => void;
+  tab: MentionTab;
+  onActiveIndexChange: (index: number) => void;
+  onPickOption: (option: MentionOption) => void;
+  onTabChange: (tab: MentionTab) => void;
 }) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
-  const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
     { id: 'all', label: t('chat.mentionTabAll') },
     { id: 'plugins', label: t('chat.mentionTabPlugins') },
@@ -3200,20 +3583,27 @@ function MentionPopover({
     { id: 'connectors', label: t('chat.mentionTabConnectors') },
     { id: 'files', label: t('chat.mentionTabFiles') },
   ];
-  const showPlugins = tab === 'all' || tab === 'plugins';
-  const showSkills = tab === 'all' || tab === 'skills';
-  const showMcp = tab === 'all' || tab === 'mcp';
-  const showConnectors = tab === 'all' || tab === 'connectors';
-  const showFiles = tab === 'all' || tab === 'files';
-  const hasVisibleResults =
-    (showPlugins && plugins.length > 0) ||
-    (showSkills && skills.length > 0) ||
-    (showMcp && mcpServers.length > 0) ||
-    (showConnectors && connectors.length > 0) ||
-    (showFiles && files.length > 0);
-  useEffect(() => {
-    if (ref.current) ref.current.scrollTop = 0;
-  }, [connectors, files, plugins, skills, mcpServers, tab]);
+  const optionCount = countMentionOptions(sections);
+  const hasVisibleResults = optionCount > 0;
+  useEffect(
+    function resetMentionScrollPosition() {
+      if (ref.current) ref.current.scrollTop = 0;
+    },
+    [optionCount, query, tab],
+  );
+  useEffect(
+    function scrollActiveMentionOption() {
+      if (activeIndex < 0) return;
+      const node = ref.current?.querySelector<HTMLElement>(
+        `[data-mention-option-index="${activeIndex}"]`,
+      );
+      if (typeof node?.scrollIntoView === 'function') {
+        node.scrollIntoView({ block: 'nearest' });
+      }
+    },
+    [activeIndex, optionCount],
+  );
+  let optionIndex = 0;
   return (
     <div className="mention-popover" data-testid="mention-popover">
       <div className="mention-tabs" role="tablist" aria-label={t('chat.mentionTabsAria')}>
@@ -3225,13 +3615,19 @@ function MentionPopover({
             aria-selected={tab === item.id}
             className={`mention-tab${tab === item.id ? ' active' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setTab(item.id)}
+            onClick={() => onTabChange(item.id)}
           >
             {item.label}
           </button>
         ))}
       </div>
-      <div className="mention-results" ref={ref}>
+      <div
+        id="chat-composer-mention-results"
+        className="mention-results"
+        ref={ref}
+        role="listbox"
+        aria-label={t('chat.mentionTabsAria')}
+      >
         {!hasVisibleResults ? (
           <div className="mention-empty">
             {query ? (
@@ -3241,128 +3637,53 @@ function MentionPopover({
             )}
           </div>
         ) : null}
-        {showPlugins && plugins.length > 0 ? (
-        <>
-          <div className="mention-section-label">{t('chat.mentionSectionPlugins')}</div>
-          {plugins.map((p) => (
-            <button
-              key={`plugin-${p.id}`}
-              className="mention-item mention-item--plugin"
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onPickPlugin(p)}
-              title={p.manifest?.description ?? p.title}
-            >
-              <Icon name="sparkles" size={12} />
-              <span className="mention-item-body">
-                <strong>{p.title}</strong>
-                <span className="mention-meta mention-meta--desc">
-                  {p.manifest?.description ?? p.id}
-                </span>
-              </span>
-              <span className="mention-meta">{pluginSourceLabel(p, t)}</span>
-            </button>
-          ))}
-        </>
-      ) : null}
-        {showSkills && skills.length > 0 ? (
-          <>
-            <div className="mention-section-label">{t('chat.mentionSectionSkills')}</div>
-            {skills.map((skill) => {
-              const active = skill.id === currentSkillId;
+        {sections.map((section) => (
+          <div key={section.id} className="mention-section">
+            <div className="mention-section-label">{section.label}</div>
+            {section.options.map((option) => {
+              const index = optionIndex;
+              optionIndex += 1;
+              const active = index === activeIndex;
               return (
                 <button
-                  key={`skill-${skill.id}`}
-                  className="mention-item"
+                  key={option.key}
+                  id={mentionOptionDomId(index)}
+                  className={`mention-item${option.kind === 'plugin' ? ' mention-item--plugin' : ''}${active ? ' is-active' : ''}`}
                   type="button"
+                  role="option"
+                  aria-selected={active}
+                  tabIndex={-1}
+                  data-mention-option-index={index}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onPickSkill(skill)}
-                  title={localizeSkillDescription(locale, skill)}
+                  onMouseEnter={() => onActiveIndexChange(index)}
+                  onFocus={() => onActiveIndexChange(index)}
+                  onClick={() => onPickOption(option)}
+                  title={option.kind === 'file' ? option.label : option.title}
                 >
-                  <Icon name={active ? 'check' : 'file'} size={12} />
-                  <span className="mention-item-body">
-                    <strong>{localizeSkillName(locale, skill)}</strong>
-                    <span className="mention-meta mention-meta--desc">
-                      {localizeSkillDescription(locale, skill) || skill.id}
-                    </span>
-                  </span>
-                  <span className="mention-meta">{active ? t('chat.mentionActiveSkill') : skill.mode}</span>
+                  <Icon name={option.icon} size={12} />
+                  {option.kind === 'file' ? (
+                    <>
+                      <code>{option.label}</code>
+                      {option.meta ? (
+                        <span className="mention-meta">{option.meta}</span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <span className="mention-item-body">
+                        <strong>{option.label}</strong>
+                        <span className="mention-meta mention-meta--desc">
+                          {option.description}
+                        </span>
+                      </span>
+                      <span className="mention-meta">{option.meta}</span>
+                    </>
+                  )}
                 </button>
               );
             })}
-          </>
-        ) : null}
-        {showMcp && mcpServers.length > 0 ? (
-          <>
-            <div className="mention-section-label">{t('chat.mentionSectionMcp')}</div>
-            {mcpServers.map((server) => (
-              <button
-                key={`mcp-${server.id}`}
-                className="mention-item"
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onPickMcp(server)}
-                title={t('chat.mentionUseMcpTitle', { name: server.label || server.id })}
-              >
-                <Icon name="link" size={12} />
-                <span className="mention-item-body">
-                  <strong>{server.label || server.id}</strong>
-                  <span className="mention-meta mention-meta--desc">
-                    {server.url || server.command || server.id}
-                  </span>
-                </span>
-                <span className="mention-meta">{server.transport}</span>
-              </button>
-            ))}
-          </>
-        ) : null}
-        {showConnectors && connectors.length > 0 ? (
-          <>
-            <div className="mention-section-label">{t('chat.mentionSectionConnectors')}</div>
-            {connectors.map((connector) => (
-              <button
-                key={`connector-${connector.id}`}
-                className="mention-item"
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onPickConnector(connector)}
-                title={t('chat.mentionUseConnectorTitle', { name: connector.name })}
-              >
-                <Icon name="link" size={12} />
-                <span className="mention-item-body">
-                  <strong>{connector.name}</strong>
-                  <span className="mention-meta mention-meta--desc">
-                    {connector.description || connector.provider || connector.id}
-                  </span>
-                </span>
-                <span className="mention-meta">{connector.accountLabel ?? connector.provider}</span>
-              </button>
-            ))}
-          </>
-        ) : null}
-        {showFiles && files.length > 0 ? (
-        <>
-          <div className="mention-section-label">{t('chat.mentionSectionFiles')}</div>
-          {files.map((f) => {
-            const key = f.path ?? f.name;
-            return (
-              <button
-                key={`file-${key}`}
-                className="mention-item"
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onPickFile(key)}
-              >
-                <Icon name="file" size={12} />
-                <code>{key}</code>
-                {f.size != null ? (
-                  <span className="mention-meta">{prettySize(f.size)}</span>
-                ) : null}
-              </button>
-            );
-          })}
-        </>
-      ) : null}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -3370,6 +3691,12 @@ function MentionPopover({
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function detectMentionAtCursor(value: string, cursor: number): MentionState | null {
+  const before = value.slice(0, cursor);
+  const match = /(^|\s)@([^\s@]*)$/.exec(before);
+  return match ? { q: match[2] ?? '', cursor } : null;
 }
 
 function stripInlineMentionToken(text: string, label: string): string {
