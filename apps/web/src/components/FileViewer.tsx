@@ -110,6 +110,7 @@ import {
   DEFAULT_DEPLOY_PROVIDER_ID,
   NETLIFY_PROVIDER_ID,
   RENDER_PROVIDER_ID,
+  RAILWAY_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
@@ -341,22 +342,44 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
 ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider' | 'fileViewer.netlifyProvider' | 'fileViewer.renderProvider';
+  labelKey:
+    | 'fileViewer.vercelProvider'
+    | 'fileViewer.cloudflarePagesProvider'
+    | 'fileViewer.netlifyProvider'
+    | 'fileViewer.renderProvider'
+    | 'fileViewer.railwayProvider';
   tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink' | 'fileViewer.netlifyTokenGetLink' | 'fileViewer.renderTokenGetLink';
+  tokenLinkKey:
+    | 'fileViewer.vercelTokenGetLink'
+    | 'fileViewer.cloudflareApiTokenGetLink'
+    | 'fileViewer.netlifyTokenGetLink'
+    | 'fileViewer.renderTokenGetLink'
+    | 'fileViewer.railwayTokenGetLink';
   tokenPlaceholderKey:
     | 'fileViewer.vercelTokenPlaceholder'
     | 'fileViewer.cloudflareApiTokenPlaceholder'
     | 'fileViewer.netlifyTokenPlaceholder'
-    | 'fileViewer.renderTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint' | 'fileViewer.netlifyTokenReuseHint' | 'fileViewer.renderTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired' | 'fileViewer.netlifyTokenRequired' | 'fileViewer.renderTokenRequired';
+    | 'fileViewer.renderTokenPlaceholder'
+    | 'fileViewer.railwayTokenPlaceholder';
+  tokenReuseHintKey:
+    | 'fileViewer.vercelTokenReuseHint'
+    | 'fileViewer.cloudflareApiTokenReuseHint'
+    | 'fileViewer.netlifyTokenReuseHint'
+    | 'fileViewer.renderTokenReuseHint'
+    | 'fileViewer.railwayTokenReuseHint';
+  tokenRequiredKey:
+    | 'fileViewer.vercelTokenRequired'
+    | 'fileViewer.cloudflareApiTokenRequired'
+    | 'fileViewer.netlifyTokenRequired'
+    | 'fileViewer.renderTokenRequired'
+    | 'fileViewer.railwayTokenRequired';
   previewHintKey?: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint' | 'fileViewer.netlifyPreviewOnly';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
     | 'fileViewer.cloudflareApiToken'
     | 'fileViewer.netlifyToken'
-    | 'fileViewer.renderToken';
+    | 'fileViewer.renderToken'
+    | 'fileViewer.railwayToken';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -780,6 +803,16 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenReuseHintKey: 'fileViewer.renderTokenReuseHint',
     tokenRequiredKey: 'fileViewer.renderTokenRequired',
     tokenLabelKey: 'fileViewer.renderToken',
+  },
+  {
+    id: RAILWAY_PROVIDER_ID,
+    labelKey: 'fileViewer.railwayProvider',
+    tokenLink: 'https://railway.com/account/tokens',
+    tokenLinkKey: 'fileViewer.railwayTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.railwayTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.railwayTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.railwayTokenRequired',
+    tokenLabelKey: 'fileViewer.railwayToken',
   },
 ];
 
@@ -7561,7 +7594,8 @@ function HtmlViewer({
       | 'vercel'
       | 'cloudflare_pages'
       | 'netlify'
-      | 'render',
+      | 'render'
+      | 'railway',
     fn: () => Promise<unknown> | unknown,
     context?: HtmlVersionExportContext | null,
   ) => {
@@ -7959,6 +7993,8 @@ function HtmlViewer({
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [renderGithubToken, setRenderGithubToken] = useState('');
+  const [showDeployToken, setShowDeployToken] = useState(false);
+  const [showGithubToken, setShowGithubToken] = useState(false);
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
   const [cloudflareAccountId, setCloudflareAccountId] = useState('');
@@ -9265,7 +9301,7 @@ function HtmlViewer({
         cloudflarePages: cloudflareConfigHintsFromForm(),
       };
     }
-    if (providerId === RENDER_PROVIDER_ID) {
+    if (providerId === NETLIFY_PROVIDER_ID || providerId === RENDER_PROVIDER_ID || providerId === RAILWAY_PROVIDER_ID) {
       return {
         providerId,
         token,
@@ -13784,15 +13820,17 @@ function HtmlViewer({
   async function openDeployModal(
     nextProviderId: WebDeployProviderId = deployProviderId,
     intent: 'deploy' | 'social-share' = 'deploy',
+    options?: { fallbackToExisting?: boolean },
   ) {
     setDeployMenuOpen(false);
+    setShareMenuOpen(false);
     setDeployModalOpen(true);
     setDeployModalIntent(intent);
     setDeployError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
-    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+    await loadDeployProvider(nextProviderId, options);
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
@@ -13818,17 +13856,20 @@ function HtmlViewer({
           throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
         }
       }
-      if (deployProviderId === RENDER_PROVIDER_ID) {
+      if (deployProviderId === NETLIFY_PROVIDER_ID || deployProviderId === RENDER_PROVIDER_ID || deployProviderId === RAILWAY_PROVIDER_ID) {
+        const isRender = deployProviderId === RENDER_PROVIDER_ID;
+        const isNetlify = deployProviderId === NETLIFY_PROVIDER_ID;
+        const requiredTokenKey = isRender ? 'fileViewer.renderTokenRequired' : isNetlify ? 'fileViewer.netlifyTokenRequired' : 'fileViewer.railwayTokenRequired';
         if (isDeploying) {
           if (!deployToken.trim()) {
-            throw new Error(t('fileViewer.renderTokenRequired'));
+            throw new Error(t(requiredTokenKey));
           }
           if (!renderGithubToken.trim()) {
             throw new Error(t('fileViewer.githubPatTokenRequired'));
           }
         } else {
           if (!deployToken.trim() && !renderGithubToken.trim()) {
-            throw new Error(t('fileViewer.renderTokenRequired'));
+            throw new Error(t(requiredTokenKey));
           }
         }
       }
@@ -13901,39 +13942,21 @@ function HtmlViewer({
       });
     };
     try {
-      const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
       const typedToken = deployToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
       savedNewToken = Boolean(hasNewToken);
-      const typedGithubToken = renderGithubToken.trim();
-      const hasNewGithubToken = deployProviderId === RENDER_PROVIDER_ID && typedGithubToken && typedGithubToken !== deployConfig?.githubTokenMask;
-      const cloudflareHints = cloudflareConfigHintsFromForm();
-      const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
-        cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
-        cloudflareHints?.lastZoneName !== deployConfig?.cloudflarePages?.lastZoneName ||
-        cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
-      );
-      const needsConfigSave =
-        hasNewToken ||
-        hasNewGithubToken ||
-        teamId.trim() !== (deployConfig?.teamId || '') ||
-        teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
-        cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
-        cloudflareHintsChanged ||
-        !deployConfig?.configured;
-      if (needsConfigSave) {
-        const nextConfig = await saveDeployConfig({ isDeploying: true });
-        if (!nextConfig) {
-          // saveDeployConfig bailed (missing/invalid token, e.g. user clicked
-          // Deploy without entering a key) — count as a failed deploy attempt.
-          fireDeployResult('failed', 'CONFIG_REQUIRED');
-          return;
-        }
-        if (!nextConfig?.configured) {
-          const option = getDeployProviderOption(deployProviderId);
-          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
-        }
+
+      // Save the latest credentials unconditionally so they are always used for this deploy!
+      const nextConfig = await saveDeployConfig({ isDeploying: true });
+      if (!nextConfig) {
+        fireDeployResult('failed', 'CONFIG_REQUIRED');
+        return;
       }
+      if (!nextConfig?.configured) {
+        const option = getDeployProviderOption(deployProviderId);
+        throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
+      }
+      const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
       setDeployPhase('preparing-link');
       const next = await deployProjectFile(
         projectId,
@@ -17719,17 +17742,35 @@ function HtmlViewer({
                   {t(deployProvider.tokenLinkKey)}
                 </a>
               </div>
-              <div className="deploy-token-input-row">
+              <div className="deploy-token-input-row" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   ref={deployTokenInputRef}
                   id="deploy-token"
-                  type="password"
+                  type={showDeployToken ? 'text' : 'password'}
                   value={deployToken}
                   placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
                   onChange={(e) => setDeployToken(e.target.value)}
+                  style={{ width: '100%', paddingRight: '36px' }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowDeployToken(!showDeployToken)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--color-fg-muted)',
+                  }}
+                >
+                  <Icon name={showDeployToken ? 'eye-off' : 'eye'} size={16} />
+                </button>
               </div>
-              {deployProviderId === RENDER_PROVIDER_ID ? (
+              {deployProviderId === NETLIFY_PROVIDER_ID || deployProviderId === RENDER_PROVIDER_ID || deployProviderId === RAILWAY_PROVIDER_ID ? (
                 <div className="deploy-field-grid single-field" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
                   <div className="field-label-row">
                     <label htmlFor="github-pat-token">{t('fileViewer.githubPatToken')}</label>
@@ -17746,13 +17787,33 @@ function HtmlViewer({
                       </a>
                     </div>
                   </div>
-                  <input
-                    id="github-pat-token"
-                    type="password"
-                    value={renderGithubToken}
-                    placeholder={t('fileViewer.githubPatTokenPlaceholder')}
-                    onChange={(e) => setRenderGithubToken(e.target.value)}
-                  />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      id="github-pat-token"
+                      type={showGithubToken ? 'text' : 'password'}
+                      value={renderGithubToken}
+                      placeholder={t('fileViewer.githubPatTokenPlaceholder')}
+                      onChange={(e) => setRenderGithubToken(e.target.value)}
+                      style={{ width: '100%', paddingRight: '36px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGithubToken(!showGithubToken)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--color-fg-muted)',
+                      }}
+                    >
+                      <Icon name={showGithubToken ? 'eye-off' : 'eye'} size={16} />
+                    </button>
+                  </div>
                 </div>
               ) : null}
               <div className="deploy-config-actions">

@@ -217,7 +217,8 @@ export type TrackingExportFormat =
   | 'vercel'
   | 'cloudflare_pages'
   | 'netlify'
-  | 'render';
+  | 'render'
+  | 'railway';
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';

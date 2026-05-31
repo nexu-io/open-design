@@ -19,6 +19,8 @@ import {
   DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
   deploymentUrlCandidates,
   deployToCloudflarePages,
+  deployToNetlify,
+  deployToRailway,
   deployConfigPath,
   extractCssReferences,
   extractHtmlReferences,
@@ -26,18 +28,27 @@ import {
   injectDeployHookScript,
   isVercelProtectedResponse,
   listCloudflarePagesZones,
+  NETLIFY_PROVIDER_ID,
   normalizeDeployHookScriptUrl,
   prepareDeployPreflight,
   publicDeployConfig,
+  RAILWAY_PROVIDER_ID,
+  readNetlifyConfig,
+  readRailwayConfig,
   readVercelConfig,
   resolveReferencedPath,
   rewriteCssReferences,
   rewriteEntryHtmlReferences,
   SAVED_CLOUDFLARE_TOKEN_MASK,
+  SAVED_GITHUB_TOKEN_MASK,
+  SAVED_NETLIFY_TOKEN_MASK,
+  SAVED_RAILWAY_TOKEN_MASK,
   SAVED_TOKEN_MASK,
   VERCEL_PROVIDER_ID,
   waitForReachableDeploymentUrl,
   writeCloudflarePagesConfig,
+  writeNetlifyConfig,
+  writeRailwayConfig,
   writeVercelConfig,
 } from '../src/deploy.js';
 import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
@@ -114,6 +125,57 @@ describe('deploy config', () => {
       teamSlug: '',
       target: 'preview',
     });
+  });
+
+  it('preserves saved Netlify and Railway secrets when masks or partial updates are submitted', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-secret-preserve-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const netlifySaved = await writeNetlifyConfig({ token: 'netlify-token-secret', githubToken: 'netlify-github-secret' });
+      expect(netlifySaved).toMatchObject({
+        providerId: NETLIFY_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_NETLIFY_TOKEN_MASK,
+        githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
+      });
+
+      await writeNetlifyConfig({});
+      expect(await readNetlifyConfig()).toEqual({ token: 'netlify-token-secret', githubToken: 'netlify-github-secret' });
+
+      await writeNetlifyConfig({ token: SAVED_NETLIFY_TOKEN_MASK });
+      expect(JSON.parse(await readFile(deployConfigPath(NETLIFY_PROVIDER_ID), 'utf8'))).toEqual({
+        token: 'netlify-token-secret',
+        githubToken: 'netlify-github-secret',
+      });
+
+      const railwaySaved = await writeRailwayConfig({
+        token: 'railway-token-secret',
+        githubToken: 'github-token-secret',
+      });
+      expect(railwaySaved).toMatchObject({
+        providerId: RAILWAY_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_RAILWAY_TOKEN_MASK,
+        githubTokenMask: SAVED_GITHUB_TOKEN_MASK,
+      });
+
+      await writeRailwayConfig({ token: SAVED_RAILWAY_TOKEN_MASK });
+      expect(await readRailwayConfig()).toEqual({
+        token: 'railway-token-secret',
+        githubToken: 'github-token-secret',
+      });
+
+      await writeRailwayConfig({ githubToken: SAVED_GITHUB_TOKEN_MASK });
+      expect(JSON.parse(await readFile(deployConfigPath(RAILWAY_PROVIDER_ID), 'utf8'))).toEqual({
+        token: 'railway-token-secret',
+        githubToken: 'github-token-secret',
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
   });
 
   it('stores Cloudflare Pages credentials separately from vercel.json', async () => {
@@ -222,6 +284,253 @@ describe('deploy config', () => {
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe('netlify and railway deploys', () => {
+  it('polls Netlify deploy readiness and returns the live site URL first', async () => {
+    const requestedUrls: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      requestedUrls.push(`${method} ${url}`);
+
+      // GitHub user
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // GitHub repo check (exists)
+      if (url === 'https://api.github.com/repos/testuser/od-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ name: 'od-p1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // GitHub file upload
+      if (url.startsWith('https://api.github.com/repos/testuser/od-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/sites?name=od-p1') && method === 'GET') {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/sites') && method === 'POST') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'deploy-1',
+          deploy_id: 'deploy-1',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/deploys/deploy-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'deploy-1',
+          state: 'ready',
+          deploy_ssl_url: 'https://deploy--example.netlify.app',
+          ssl_url: 'https://example.netlify.app',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://example.netlify.app' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToNetlify({
+      config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+      projectId: 'p1',
+      projectsRoot: '/tmp/test-projects',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      providerId: NETLIFY_PROVIDER_ID,
+      url: 'https://example.netlify.app',
+      deploymentId: 'deploy-1',
+      status: 'ready',
+    });
+    expect(requestedUrls).toContain('GET https://api.netlify.com/api/v1/deploys/deploy-1');
+  });
+
+  it('creates a Railway project, service, deployment, and service domain from the UI-backed file set', async () => {
+    const graphQlCalls: Array<{ query: string; variables: Record<string, unknown> }> = [];
+    const uploadedPaths: string[] = [];
+    const files = [
+      {
+        file: 'index.html',
+        data: Buffer.from('<!doctype html><h1>Hello Railway</h1>'),
+        contentType: 'text/html',
+      },
+    ];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-p1/contents/') && method === 'GET') {
+        return new Response(JSON.stringify({ message: 'not found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-p1/contents/') && method === 'PUT') {
+        const pathName = decodeURIComponent(url.split('/contents/')[1] ?? '');
+        uploadedPaths.push(pathName);
+        return new Response(JSON.stringify({ content: { path: pathName } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://backboard.railway.com/graphql/v2' && method === 'POST') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        graphQlCalls.push(body);
+        const query = String(body.query ?? '');
+        if (query.includes('query projects')) {
+          return new Response(JSON.stringify({ data: { projects: { edges: [] } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('mutation projectCreate')) {
+          return new Response(JSON.stringify({ data: { projectCreate: { id: 'railway-project-1', name: 'od-p1' } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query environments')) {
+          return new Response(JSON.stringify({
+            data: {
+              environments: {
+                edges: [{ node: { id: 'environment-1', name: 'production' } }],
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query project(')) {
+          return new Response(JSON.stringify({ data: { project: { services: { edges: [] } } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('mutation serviceCreate')) {
+          return new Response(JSON.stringify({ data: { serviceCreate: { id: 'service-1', name: 'od-p1' } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('mutation serviceInstanceDeploy')) {
+          return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query domains')) {
+          return new Response(JSON.stringify({ data: { domains: { serviceDomains: [] } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('mutation serviceDomainCreate')) {
+          return new Response(JSON.stringify({
+            data: {
+              serviceDomainCreate: {
+                id: 'domain-1',
+                domain: 'od-p1.up.railway.app',
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+      }
+      if (url === 'https://od-p1.up.railway.app' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToRailway({
+      config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+      projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
+      files,
+    });
+
+    expect(result).toMatchObject({
+      providerId: RAILWAY_PROVIDER_ID,
+      url: 'https://od-p1.up.railway.app',
+      deploymentId: 'service-1',
+      status: 'ready',
+      providerMetadata: {
+        railwayProjectId: 'railway-project-1',
+        environmentId: 'environment-1',
+        serviceId: 'service-1',
+        serviceUrl: 'https://od-p1.up.railway.app',
+      },
+    });
+    expect(uploadedPaths).toEqual(['index.html', 'Staticfile']);
+    expect(files.find((file) => file.file === 'Staticfile')?.data).toBe('root: .\nindex_fallback: true\n');
+    expect(graphQlCalls.some((call) => call.query.includes('mutation projectCreate'))).toBe(true);
+    expect(graphQlCalls.some((call) => call.query.includes('mutation serviceCreate'))).toBe(true);
+    expect(graphQlCalls.some((call) => call.query.includes('mutation serviceInstanceDeploy'))).toBe(true);
+    expect(graphQlCalls.some((call) => call.query.includes('mutation serviceDomainCreate'))).toBe(true);
   });
 });
 
