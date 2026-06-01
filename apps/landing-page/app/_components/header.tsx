@@ -323,9 +323,11 @@ export function Header({
             href={REPO_RELEASES}
             aria-label={headerCopy.downloadAria}
             title={headerCopy.downloadTitle}
+            data-download-cta
             {...ext}
           >
             {headerCopy.download}
+            <span className='download-arch' data-download-arch hidden />
           </a>
           <a
             className='nav-cta'

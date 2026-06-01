@@ -832,6 +832,13 @@ body::before {
   border-color: rgba(21, 20, 15, 0.2);
 }
 .btn-ghost:hover { background: rgba(21, 20, 15, 0.04); }
+/* Platform suffix appended to download CTAs, e.g. 下载桌面端（Apple Silicon）.
+   Injected + unhidden by the enhancer scripts once the OS is detected. */
+.download-arch {
+  margin-left: 0.3em;
+  opacity: 0.62;
+  font-weight: 500;
+}
 .btn .arrow {
   width: 16px; height: 16px;
   display: inline-flex;
