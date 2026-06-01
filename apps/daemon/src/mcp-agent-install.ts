@@ -154,8 +154,9 @@ export function planAgentInstall(
         bin: 'claude',
         addArgv: [
           'mcp', 'add', '--scope', 'user',
+          serverName,
           ...envFlags(spec.env, '-e'),
-          serverName, '--', spec.command, ...spec.args,
+          '--', spec.command, ...spec.args,
         ],
         removeArgv: ['mcp', 'remove', '--scope', 'user', serverName],
         getArgv: ['mcp', 'get', serverName],

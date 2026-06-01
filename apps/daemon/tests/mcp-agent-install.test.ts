@@ -40,8 +40,9 @@ describe('CLI-driven agents', () => {
     expect(plan.bin).toBe('claude');
     expect(plan.addArgv).toEqual([
       'mcp', 'add', '--scope', 'user',
+      'open-design',
       '-e', 'OD_DATA_DIR=/home/u/.open-design',
-      'open-design', '--',
+      '--',
       SPEC.command, ...SPEC.args,
     ]);
     expect(plan.removeArgv).toEqual(['mcp', 'remove', '--scope', 'user', 'open-design']);
