@@ -25,6 +25,7 @@
 # Environment overrides (Path 2):
 #   OD_HOME        Checkout + runtime dir   (default: $HOME/.open-design)
 #   OD_REPO        Git clone source         (default: nexu-io/open-design)
+#   OD_REF         Git branch/tag to clone  (default: repo's default branch)
 #   OD_BIN_DIR     Where `od` is linked     (default: $HOME/.local/bin)
 #   OD_DAEMON_URL  Daemon base URL          (default: http://127.0.0.1:7456)
 #
@@ -36,6 +37,7 @@ AGENTS="claude codex cursor copilot openclaw antigravity gemini pi vibe hermes c
 
 OD_HOME="${OD_HOME:-$HOME/.open-design}"
 OD_REPO="${OD_REPO:-https://github.com/nexu-io/open-design.git}"
+OD_REF="${OD_REF:-}"
 OD_BIN_DIR="${OD_BIN_DIR:-$HOME/.local/bin}"
 DAEMON_URL="${OD_DAEMON_URL:-http://127.0.0.1:7456}"
 HEALTH_TIMEOUT=60
@@ -157,6 +159,9 @@ deploy_from_source() {
   if [ -d "$OD_HOME/.git" ]; then
     ok "Updating existing checkout at $OD_HOME"
     git -C "$OD_HOME" pull --ff-only || note "git pull failed; using existing checkout"
+  elif [ -n "$OD_REF" ]; then
+    ok "Cloning $OD_REPO ($OD_REF)"
+    git clone --depth 1 --branch "$OD_REF" "$OD_REPO" "$OD_HOME"
   else
     ok "Cloning $OD_REPO"
     git clone --depth 1 "$OD_REPO" "$OD_HOME"
