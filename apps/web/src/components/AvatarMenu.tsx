@@ -6,6 +6,7 @@ import { RemixIcon } from './RemixIcon';
 import { renderModelOptions } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { isMacPlatform } from '../utils/platform';
 
 interface Props {
   config: AppConfig;
@@ -336,9 +337,25 @@ export function AvatarMenu({
             </>
           ) : null}
 
+          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
+
+          <button
+            type="button"
+            className="avatar-item"
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+          >
+            <span className="avatar-item-icon" aria-hidden>
+              <RemixIcon name="settings-line" size={15} />
+            </span>
+            <span>{t('avatar.settings')}</span>
+            <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
+          </button>
+
           {onBack ? (
             <>
-              <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
               <button
                 type="button"
                 className="avatar-item"
