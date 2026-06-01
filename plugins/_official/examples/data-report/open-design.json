@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-data-report",
   "title": "Data Visualization Report",
+  "title_i18n": {
+    "en": "Data Visualization Report",
+    "zh-CN": "数据可视化报告",
+    "zh-TW": "資料視覺化報告",
+    "ja": "データビジュアライゼーションレポート",
+    "ko": "데이터 시각화 보고서",
+    "de": "Datenvisualisierungsbericht",
+    "fr": "Rapport de Visualisation de Données",
+    "ru": "Отчет визуализации данных",
+    "es": "Informe de Visualización de Datos",
+    "pt-BR": "Relatório de Visualização de Dados",
+    "it": "Report di Visualizzazione Dati",
+    "vi": "Báo Cáo Trực Quan Hóa Dữ Liệu",
+    "pl": "Raport Wizualizacji Danych",
+    "id": "Laporan Visualisasi Data",
+    "nl": "Datavisualisatierapport",
+    "ar": "تقرير تصور البيانات",
+    "tr": "Veri Görselleştirme Raporu",
+    "uk": "Звіт візуалізації даних"
+  },
   "version": "0.1.0",
   "description": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+  "description_i18n": {
+    "en": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+    "zh-CN": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页",
+    "zh-TW": "將 CSV、Excel 或 JSON 資料轉換為精美的視覺化報告頁面。",
+    "ja": "CSV、Excel、または JSON データを洗練されたビジュアルレポートページに変換します。",
+    "ko": "CSV, Excel 또는 JSON 데이터를 세련된 시각적 보고서 페이지로 변환합니다.",
+    "de": "Verwandelt CSV-, Excel- oder JSON-Daten in eine ansprechende visuelle Berichtsseite.",
+    "fr": "Transforme les données CSV, Excel ou JSON en une page de rapport visuel soigné.",
+    "ru": "Преобразует данные CSV, Excel или JSON в наглядную страницу отчета.",
+    "es": "Convierte datos CSV, Excel o JSON en una página de informe visual refinada.",
+    "pt-BR": "Transforma dados CSV, Excel ou JSON em uma página de relatório visual refinada.",
+    "it": "Trasforma dati CSV, Excel o JSON in una pagina di report visivo raffinato.",
+    "vi": "Chuyển đổi dữ liệu CSV, Excel hoặc JSON thành trang báo cáo trực quan chuyên nghiệp.",
+    "pl": "Przekształca dane CSV, Excel lub JSON w dopracowaną wizualną stronę raportu.",
+    "id": "Mengubah data CSV, Excel, atau JSON menjadi halaman laporan visual yang rapi.",
+    "nl": "Zet CSV-, Excel- of JSON-gegevens om in een gepolijste visuele rapportpagina.",
+    "ar": "يحول بيانات CSV أو Excel أو JSON إلى صفحة تقرير مرئي احترافي.",
+    "tr": "CSV, Excel veya JSON verilerini şık bir görsel rapor sayfasına dönüştürür.",
+    "uk": "Перетворює дані CSV, Excel або JSON на відшліфовану сторінку візуального звіту."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -82,13 +122,5 @@
       "prompt:inject",
       "fs:write"
     ]
-  },
-  "title_i18n": {
-    "en": "Data Visualization Report",
-    "zh-CN": "数据可视化报告"
-  },
-  "description_i18n": {
-    "en": "Turns CSV, Excel, or JSON data into a polished visual report page.",
-    "zh-CN": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页"
   }
 }

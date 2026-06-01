@@ -10,7 +10,7 @@
 */
 @font-face {
   font-family: "remixicon";
-  src: url("./remixicon.woff2") format("woff2");
+  src: url("/remixicon.woff2") format("woff2");
   font-display: swap;
 }
 

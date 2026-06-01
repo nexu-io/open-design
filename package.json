@@ -1,13 +1,13 @@
 {
   "name": "open-design",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
   "license": "Apache-2.0",
   "bin": {
-    "od": "./apps/daemon/dist/cli.js"
+    "od": "./apps/daemon/bin/od.mjs"
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
@@ -15,7 +15,7 @@
     "tools-pack": "pnpm exec tools-pack",
     "tools-serve": "pnpm exec tools-serve",
     "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
-    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/approve-fork-pr-workflows.test.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/approve-fork-pr-workflows.test.ts scripts/postinstall.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
@@ -25,6 +25,7 @@
     "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@open-design/daemon": "workspace:*",
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
     "@open-design/tools-serve": "workspace:*",

@@ -1,0 +1,285 @@
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 100%;
+  padding: 48px 32px;
+  text-align: center;
+  background: var(--bg);
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  color: var(--accent);
+}
+
+/* A gentle breathing halo so the card reads as "alive" while we wait,
+   even between discrete progress events. */
+.mark[data-active='true'] {
+  animation: markBreathe 2.4s ease-in-out infinite;
+}
+
+.stage[data-phase='failed'] .mark {
+  border-color: color-mix(in srgb, var(--red) 32%, var(--border));
+  background: color-mix(in srgb, var(--red) 8%, var(--bg-panel));
+  color: var(--red);
+}
+
+.stage[data-phase='stopped'] .mark {
+  border-color: var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+@keyframes markBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lead {
+  margin: 0;
+  max-width: 420px;
+  min-height: 21px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* Live activity snippet: subtly de-emphasised + animated so streaming
+   updates feel continuous rather than abrupt. */
+.lead[data-live='true'] {
+  color: var(--text-faint);
+  animation: leadFade 240ms ease-out;
+}
+
+@keyframes leadFade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Dynamic sub-status for the long "generating" step: the concrete task
+   plus a count, refreshed as the agent advances so the middle phase keeps
+   moving without splitting into more (less reliable) discrete steps. */
+.substatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  font-size: 12px;
+  color: var(--text-faint);
+  animation: leadFade 240ms ease-out;
+}
+
+.substatusLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.substatusCount {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  /* Steps are revealed one at a time as the agent reaches them, so each
+     pill slides + fades in on mount to make the progression visible. */
+  animation: stepReveal 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes stepReveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Keep all three steps a single neutral gray family — the icon (dot / check /
+   ✕) carries the state, the color does not. Avoids a multi-color row. */
+.step[data-status='running'] {
+  color: var(--text);
+}
+
+.step[data-status='succeeded'] {
+  color: var(--text);
+}
+
+.step[data-status='failed'] {
+  color: var(--text-muted);
+}
+
+.stepIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.stepDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.stepDot[data-running='true'] {
+  opacity: 1;
+  animation: stepPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes stepPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark[data-active='true'],
+  .stepDot[data-running='true'],
+  .lead[data-live='true'],
+  .step,
+  .substatus {
+    animation: none;
+  }
+}
+
+.actions {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* "Switch to AMR" promotion card under the failure actions. Constrain the
+   width so it reads as part of the centered status card. */
+.guidance {
+  margin-top: 12px;
+  width: 100%;
+  max-width: 360px;
+  text-align: start;
+}
+
+/* Primary contextual recovery (authorize / recharge / terminal). */
+.action {
+  min-height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.action:hover {
+  opacity: 0.92;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Retry: primary when it stands alone (generic failure), secondary/ghost when
+   it sits next to a contextual action. */
+.retry {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1), opacity 140ms ease;
+}
+
+/* When retry is the only button, promote it to the accent style. */
+.actions > .retry:only-child {
+  border: none;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.retry:hover {
+  background: var(--surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+.actions > .retry:only-child:hover {
+  background: var(--accent);
+  opacity: 0.92;
+}
+
+.retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

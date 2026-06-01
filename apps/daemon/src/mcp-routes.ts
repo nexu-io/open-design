@@ -1,7 +1,8 @@
 import type { Express } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
-import { buildMcpInstallPayload } from './mcp-install-info.js';
+import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
+import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
@@ -24,20 +25,15 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const INSTALL_INFO_TTL_MS = 5000;
   let installInfoCache: { t: number; payload: object } | null = null;
 
-  app.get('/api/mcp/install-info', (req, res) => {
-    if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const now = Date.now();
-    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
-      return res.json(installInfoCache.payload);
-    }
-    // process.execPath is the absolute path to the Node-compatible
-    // runtime that is running the daemon RIGHT NOW. In packaged builds
-    // this may be Electron running with ELECTRON_RUN_AS_NODE=1 rather
-    // than a separate bundled Node binary; the helper surfaces that env
-    // requirement with the command so IDE-spawned MCP clients can
-    // reproduce the same mode from a minimal OS launcher environment.
+  // Resolve the install snippet for the current daemon. Shared by the
+  // public GET /api/mcp/install-info endpoint (renders TOML/JSON for
+  // the user to copy) and POST /api/mcp/install/codex (which feeds the
+  // exact same fields into `codex mcp add` so the one-click install
+  // configures Codex with byte-for-byte the same command as the copy
+  // snippet would). Keeping this in one place is the whole point of
+  // the factoring — divergence here would mean Codex behaves
+  // differently depending on which install path the user took.
+  function computeInstallPayload(): McpInstallPayload {
     const cliPath = OD_BIN;
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
@@ -53,9 +49,25 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (isSidecarMode) {
       sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
     }
-    const payload = buildMcpInstallPayload({
+    // tools-dev / packaged launchers export OD_WEB_PORT so the daemon
+    // knows where the browser-facing Open Design studio is running.
+    // CLI-only / headless launches set neither and webBaseUrl falls
+    // through as null — MCP clients then just omit the studio deep
+    // link from their responses.
+    const webPortRaw = process.env.OD_WEB_PORT;
+    const webPortNum = webPortRaw ? Number(webPortRaw) : Number.NaN;
+    const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
+      ? `http://127.0.0.1:${webPortNum}`
+      : null;
+    return buildMcpInstallPayload({
       cliPath,
       cliExists: fs.existsSync(cliPath),
+      // process.execPath is the absolute path to the Node-compatible
+      // runtime running the daemon RIGHT NOW. In packaged builds this
+      // may be Electron with ELECTRON_RUN_AS_NODE=1 rather than a
+      // separate bundled Node binary; the helper surfaces that env
+      // requirement on the command so IDE-spawned MCP clients can
+      // reproduce the same mode from a minimal OS launcher env.
       execPath: process.execPath,
       nodeExists: fs.existsSync(process.execPath),
       port: getResolvedPort(),
@@ -64,9 +76,72 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       electronAsNode: process.env.ELECTRON_RUN_AS_NODE === '1',
       isSidecarMode,
       sidecarEnv,
+      webBaseUrl,
     });
+  }
+
+  app.get('/api/mcp/install-info', (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const now = Date.now();
+    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
+      return res.json(installInfoCache.payload);
+    }
+    const payload = computeInstallPayload();
     installInfoCache = { t: now, payload };
     res.json(payload);
+  });
+
+  // Codex one-click install. Codex CLI exposes `codex mcp add/remove/get`,
+  // so we shell out to it rather than rewriting ~/.codex/config.toml
+  // ourselves — that way we inherit Codex's merge / validation rules
+  // and only need to track its argv. See apps/daemon/src/codex-cli.ts.
+  const CODEX_MCP_NAME = 'open-design';
+
+  app.get('/api/mcp/install/codex/status', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const status = await probeCodexInstall(CODEX_MCP_NAME);
+      res.json(status);
+    } catch (err) {
+      sendApiError(res, 500, 'CODEX_PROBE_FAILED', err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  app.post('/api/mcp/install/codex', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const payload = computeInstallPayload();
+    if (!payload.cliExists || !payload.nodeExists) {
+      return sendApiError(res, 500, 'INSTALL_INFO_INCOMPLETE', payload.buildHint ?? 'install payload not ready');
+    }
+    try {
+      await installCodexMcp({
+        name: CODEX_MCP_NAME,
+        command: payload.command,
+        args: payload.args,
+        env: payload.env,
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      sendApiError(res, 500, 'CODEX_INSTALL_FAILED', err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  app.delete('/api/mcp/install/codex', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      await uninstallCodexMcp(CODEX_MCP_NAME);
+      res.json({ ok: true });
+    } catch (err) {
+      sendApiError(res, 500, 'CODEX_UNINSTALL_FAILED', err instanceof Error ? err.message : String(err));
+    }
   });
 
   // External MCP server configuration. Open Design connects to these as a

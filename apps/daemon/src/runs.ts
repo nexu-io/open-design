@@ -1,5 +1,12 @@
 // @ts-nocheck
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { normalizeMediaExecutionPolicyForRun } from './media-policy.js';
+import {
+  normalizeRunToolBundleForRun,
+  summarizeRunToolBundle,
+} from './run-tool-bundle.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -22,13 +29,21 @@ export function createChatRunService({
   maxEvents = 2_000,
   ttlMs = 30 * 60 * 1000,
   shutdownGraceMs = 3_000,
+  // Absolute directory under which per-run event JSONL logs are written
+  // (one file per run at <runsLogDir>/<runId>/events.jsonl). When null,
+  // event persistence is disabled and statusBody.eventsLogPath = null —
+  // legacy behavior. The path is surfaced through MCP get_run so an
+  // external coding agent can `tail` the file in its own shell during
+  // a long OD generation, instead of polling blindly and giving up.
+  runsLogDir = null,
 }) {
   const runs = new Map();
 
   const create = (meta = {}) => {
     const now = Date.now();
+    const id = randomUUID();
     const run = {
-      id: randomUUID(),
+      id,
       projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
       conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
@@ -45,6 +60,8 @@ export function createChatRunService({
           : null,
       pluginId:
         typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
+      mediaExecution: normalizeMediaExecutionPolicyForRun(meta.mediaExecution),
+      toolBundle: normalizeRunToolBundleForRun(meta.toolBundle),
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -59,6 +76,8 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
+      eventsLogStream: null,
     };
     runs.set(run.id, run);
     return run;
@@ -72,6 +91,28 @@ export function createChatRunService({
     }, ttlMs).unref?.();
   };
 
+  // Lazily open the per-run event log on first emit. The directory may
+  // not exist yet; mkdir is recursive so it's safe to call repeatedly.
+  // Disk failures are best-effort — if we can't write, the run still
+  // proceeds (SSE clients keep getting events from memory).
+  const ensureLogStream = (run) => {
+    if (!run.eventsLogPath) return null;
+    if (run.eventsLogStream) return run.eventsLogStream;
+    try {
+      fs.mkdirSync(path.dirname(run.eventsLogPath), { recursive: true });
+      run.eventsLogStream = fs.createWriteStream(run.eventsLogPath, { flags: 'a' });
+      // Don't crash the daemon on a stream-level error; just stop
+      // trying to use this stream so subsequent emits silently skip.
+      run.eventsLogStream.on('error', () => {
+        try { run.eventsLogStream?.destroy(); } catch { /* ignore */ }
+        run.eventsLogStream = null;
+      });
+      return run.eventsLogStream;
+    } catch {
+      return null;
+    }
+  };
+
   const emit = (run, event, data) => {
     if (event === 'error') {
       const details = extractErrorDetails(data);
@@ -83,6 +124,15 @@ export function createChatRunService({
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
+    const stream = ensureLogStream(run);
+    if (stream) {
+      try {
+        stream.write(JSON.stringify(record) + '\n');
+      } catch {
+        // Stream-level write errors are caught by the on('error') above;
+        // swallowing here keeps the SSE fan-out below from being skipped.
+      }
+    }
     for (const sse of run.clients) sse.send(event, data, id);
     return record;
   };
@@ -102,6 +152,9 @@ export function createChatRunService({
     signal: run.signal,
     error: run.error ?? null,
     errorCode: run.errorCode ?? null,
+    eventsLogPath: run.eventsLogPath ?? null,
+    mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
+    toolBundle: summarizeRunToolBundle(run.toolBundle),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
@@ -115,6 +168,10 @@ export function createChatRunService({
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
+    // Close the event log stream now that no more events will be
+    // emitted for this run. The file stays on disk for tail/grep.
+    try { run.eventsLogStream?.end(); } catch { /* ignore */ }
+    run.eventsLogStream = null;
     scheduleCleanup(run);
   };
 
@@ -244,6 +301,29 @@ export function createChatRunService({
     return new Promise((resolve) => run.waiters.add(resolve));
   };
 
+  // Drop a run from the in-memory registry without emitting any terminal
+  // event. Used by callers that prepared a run optimistically (created the
+  // record before some external precondition was checked) and need to undo
+  // the create without surfacing the run via `/api/runs`. Only valid before
+  // the run reaches a terminal status — terminal runs use scheduleCleanup
+  // and would already have notified any subscribers.
+  const drop = (run) => {
+    if (!run) return;
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    runs.delete(run.id);
+    for (const sse of run.clients) {
+      try { sse.end(); } catch { /* best-effort detach */ }
+    }
+    run.clients.clear();
+    // Resolve any pending waiters with a synthetic "canceled" status so
+    // they unblock instead of hanging forever — the run is being dropped
+    // because nothing will ever start.
+    run.status = 'canceled';
+    run.updatedAt = Date.now();
+    for (const waiter of run.waiters) waiter(statusBody(run));
+    run.waiters.clear();
+  };
+
   return {
     create,
     start,
@@ -256,6 +336,7 @@ export function createChatRunService({
     emit,
     finish,
     fail,
+    drop,
     statusBody,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);

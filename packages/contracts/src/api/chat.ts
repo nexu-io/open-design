@@ -8,6 +8,8 @@ import type {
 } from './comments';
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
+import type { MediaExecutionPolicy } from './media.js';
+import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
@@ -39,6 +41,18 @@ export interface ChatRequest {
   locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  /**
+   * Run-scoped media execution policy. Omitted means current Open Design
+   * behavior: media generation is enabled and OD may execute its configured
+   * local providers.
+   */
+  mediaExecution?: MediaExecutionPolicy;
+  /**
+   * Run-scoped tool bundle supplied by an orchestrator such as Muginn.
+   * These servers are made available only to the spawned agent for this run
+   * and are never written into the persistent Settings MCP registry.
+   */
+  toolBundle?: RunScopedToolBundle;
   /**
    * Optional analytics context for the v2 run_created / run_finished
    * events. The daemon never trusts these for behavior — they only
@@ -103,11 +117,54 @@ export interface ChatAnalyticsHints {
   designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
 }
 
+export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
+  /**
+   * Omitted means enabled for this run. The daemon normalizes run-scoped
+   * inputs through the same sanitizer as persisted MCP config, but callers
+   * should not need to send persisted-settings boilerplate for disposable
+   * tool bundles.
+   */
+  enabled?: boolean;
+}
+
+export interface RunScopedToolBundle {
+  mcpServers?: RunScopedMcpServerConfig[];
+}
+
+export interface RunScopedToolBundleSummary {
+  mcpServers: Array<{
+    id: string;
+    label?: string;
+    templateId?: string;
+    transport: McpTransport;
+    enabled: boolean;
+    authMode?: McpAuthMode;
+  }>;
+}
+
 export interface ChatRunCreateRequest extends ChatRequest {
   projectId: string;
   conversationId: string;
   assistantMessageId: string;
   clientRequestId: string;
+}
+
+/**
+ * Minimal POST /api/runs shape accepted from MCP / SDK callers that do not
+ * manage conversation state client-side. Only `projectId` is required;
+ * `message` and `agentId` are optional — the daemon resolves `agentId` from
+ * the saved app-config when it is omitted.
+ */
+export interface McpRunCreateRequest {
+  projectId: string;
+  message?: string;
+  agentId?: string;
+  skillId?: string;
+  pluginId?: string;
+  model?: string;
+  pluginInputs?: Record<string, unknown>;
+  mediaExecution?: MediaExecutionPolicy;
+  toolBundle?: RunScopedToolBundle;
 }
 
 export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
@@ -166,8 +223,14 @@ export interface ChatRunFeedbackResponse {
 
 export interface ChatRunCreateResponse {
   runId: string;
-  appliedPluginSnapshotId?: string;
-  pluginId?: string;
+  // Daemon-resolved conversation/message ids — populated for MCP /
+  // SDK callers that POST /api/runs with only projectId. The web flow
+  // normally sends these in already; daemon falls back to the
+  // project's default conversation otherwise.
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  appliedPluginSnapshotId?: string | null;
+  pluginId?: string | null;
 }
 
 export interface ChatRunStatusResponse {
@@ -185,6 +248,14 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  /** Absolute path to the per-run JSONL event log the daemon mirrors
+   *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
+   *  daemon was launched without event persistence configured. */
+  eventsLogPath?: string | null;
+  /** Present on daemon run status responses that know the effective run policy. */
+  mediaExecution?: MediaExecutionPolicy;
+  /** Run-scoped tool bundle summary with secrets and command details redacted. */
+  toolBundle?: RunScopedToolBundleSummary;
 }
 
 export interface ChatRunListResponse {
@@ -224,7 +295,10 @@ export interface ChatCommentAttachment {
 }
 
 export type PersistedAgentEvent =
-  | { kind: 'status'; label: string; detail?: string }
+  // `code` carries the structured API error code for `label: 'error'`
+  // status events (e.g. AGENT_AUTH_REQUIRED, RATE_LIMITED). Clients use it to
+  // decide error-specific affordances such as the hosted-AMR nudge.
+  | { kind: 'status'; label: string; detail?: string; code?: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; text: string }
   | {
@@ -247,6 +321,14 @@ export type PersistedAgentEvent =
     }
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      kind: 'plugin_candidate';
+      candidateId: string;
+      title: string;
+      description?: string;
+      confidence?: number;
+      draftPath?: string | null;
+    }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
   | { kind: 'raw'; line: string };
 

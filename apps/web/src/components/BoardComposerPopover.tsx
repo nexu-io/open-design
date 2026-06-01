@@ -1,8 +1,10 @@
 import type { CSSProperties } from 'react';
+import { useRef } from 'react';
 
 import type { PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
 import type { PreviewComment, PreviewCommentMember } from '../types';
+import { isImeComposing } from '../utils/imeComposing';
 
 import { Icon } from './Icon';
 
@@ -43,6 +45,8 @@ function compactFontFamily(value: string | undefined): string | null {
 }
 
 type AnnotationStyleRow = { label: string; value: string; swatch?: string };
+type PopoverBounds = { width: number; height: number };
+type PopoverOffset = { x: number; y: number };
 
 function annotationStyleRows(target: PreviewCommentSnapshot): AnnotationStyleRow[] {
   const rows: AnnotationStyleRow[] = [];
@@ -73,15 +77,95 @@ function clampPopoverCoordinate(value: number, min: number): number {
   return Math.max(min, Math.round(value));
 }
 
-function popoverAnchorStyle(target: PreviewCommentSnapshot, scale: number): CSSProperties {
+function clampPopoverRange(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function popoverAnchorStyle(
+  target: PreviewCommentSnapshot,
+  scale: number,
+  bounds?: PopoverBounds,
+  offset: PopoverOffset = { x: 0, y: 0 },
+  expanded = true,
+): CSSProperties {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const anchor = target.hoverPoint ?? {
     x: target.position.x + Math.min(target.position.width, 24),
     y: target.position.y + Math.min(target.position.height, 24),
   };
+  const pad = 14;
+  const overlapOffset = 8;
+  const width = 320;
+  const estimatedHeight = expanded ? 252 : 112;
+  const anchorX = offset.x + anchor.x * safeScale;
+  const anchorY = offset.y + anchor.y * safeScale;
+  const preferredLeft = clampPopoverCoordinate(anchorX + pad, pad);
+  const preferredTop = clampPopoverCoordinate(anchorY + pad, pad);
+  if (bounds?.width && bounds.width > 0) {
+    const position = target.position;
+    const rect = {
+      left: offset.x + position.x * safeScale,
+      top: offset.y + position.y * safeScale,
+      width: Math.max(1, position.width * safeScale),
+      height: Math.max(1, position.height * safeScale),
+    };
+    const rectRight = rect.left + rect.width;
+    const rectBottom = rect.top + rect.height;
+    const viewportWidth = bounds.width;
+    const viewportHeight = bounds.height || Number.POSITIVE_INFINITY;
+    const maxLeft = Math.max(pad, viewportWidth - width - pad);
+    const maxTop = Number.isFinite(viewportHeight)
+      ? Math.max(pad, viewportHeight - estimatedHeight - pad)
+      : preferredTop;
+    const spaces = [
+      { side: 'top' as const, space: rect.top - pad, fits: rect.top - pad >= estimatedHeight },
+      { side: 'bottom' as const, space: viewportHeight - rectBottom - pad, fits: viewportHeight - rectBottom - pad >= estimatedHeight },
+      { side: 'left' as const, space: rect.left - pad, fits: rect.left - pad >= width },
+      { side: 'right' as const, space: viewportWidth - rectRight - pad, fits: viewportWidth - rectRight - pad >= width },
+    ];
+    const sorted = spaces
+      .filter((item) => Number.isFinite(item.space))
+      .sort((a, b) => Number(b.fits) - Number(a.fits) || b.space - a.space);
+    const side = sorted[0]?.side ?? 'bottom';
+    const centerLeft = rect.left + rect.width / 2 - width / 2;
+    const centerTop = rect.top + rect.height / 2 - estimatedHeight / 2;
+    if (side === 'top' && sorted[0]?.fits) {
+      return {
+        left: clampPopoverRange(centerLeft, pad, maxLeft),
+        top: clampPopoverRange(rect.top - estimatedHeight - pad, pad, maxTop),
+      };
+    }
+    if (side === 'bottom' && sorted[0]?.fits) {
+      return {
+        left: clampPopoverRange(centerLeft, pad, maxLeft),
+        top: clampPopoverRange(rectBottom + pad, pad, maxTop),
+      };
+    }
+    if (side === 'left' && sorted[0]?.fits) {
+      return {
+        left: clampPopoverRange(rect.left - width - pad, pad, maxLeft),
+        top: clampPopoverRange(centerTop, pad, maxTop),
+      };
+    }
+    if (side === 'right' && sorted[0]?.fits) {
+      return {
+        left: clampPopoverRange(rectRight + pad, pad, maxLeft),
+        top: clampPopoverRange(centerTop, pad, maxTop),
+      };
+    }
+    return {
+      left: clampPopoverRange(
+        anchorX + pad + width <= viewportWidth - pad ? anchorX + pad : anchorX - width - pad,
+        pad,
+        maxLeft,
+      ),
+      top: clampPopoverRange(anchorY + overlapOffset, pad, maxTop),
+    };
+  }
   return {
-    left: clampPopoverCoordinate(anchor.x * safeScale + 14, 14),
-    top: clampPopoverCoordinate(anchor.y * safeScale + 14, 14),
+    left: preferredLeft,
+    top: preferredTop,
   };
 }
 
@@ -109,13 +193,25 @@ export function AnnotationStyleSummary({
   );
 }
 
+function annotationHoverAnchorStyle(target: PreviewCommentSnapshot, scale: number): CSSProperties {
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const anchor = target.hoverPoint ?? {
+    x: target.position.x + Math.min(target.position.width, 24),
+    y: target.position.y + Math.min(target.position.height, 24),
+  };
+  return {
+    left: clampPopoverCoordinate(anchor.x * safeScale + 14, 14),
+    top: clampPopoverCoordinate(anchor.y * safeScale + 14, 14),
+  };
+}
+
 export function AnnotationHoverPopover({ target, scale }: { target: PreviewCommentSnapshot; scale: number }) {
   return (
     <div
       className="comment-popover annotation-hover-popover"
       data-testid="annotation-hover-popover"
       role="tooltip"
-      style={popoverAnchorStyle(target, scale)}
+      style={annotationHoverAnchorStyle(target, scale)}
     >
       <AnnotationStyleSummary target={target} testId="annotation-hover-style-summary" />
     </div>
@@ -135,10 +231,16 @@ export function BoardComposerPopover({
   onSendBatch,
   onRemoveMember,
   onHoverMember,
+  onDeleteComment,
   sending,
+  queueOnSend = false,
+  sendDisabled = false,
   t,
   scale = 1,
+  bounds,
+  offset,
   docked = false,
+  commenting = true,
 }: {
   target: PreviewCommentSnapshot;
   existing: PreviewComment | null;
@@ -152,13 +254,27 @@ export function BoardComposerPopover({
   onSendBatch: () => void | Promise<void>;
   onRemoveMember: (elementId: string) => void;
   onHoverMember?: (elementId: string | null) => void;
+  onDeleteComment?: (commentId: string) => void | Promise<void>;
   sending: boolean;
+  queueOnSend?: boolean;
+  sendDisabled?: boolean;
   t: TranslateFn;
   scale?: number;
+  bounds?: PopoverBounds;
+  offset?: PopoverOffset;
   docked?: boolean;
+  commenting?: boolean;
 }) {
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
+  const hasCommentChange = !existing || draft.trim() !== existing.note.trim();
   const podMembers = target.podMembers ?? [];
+  const composingRef = useRef(false);
+  const submitDisabled = pendingCount === 0 || sending || sendDisabled;
+  const primaryLabel = sending
+    ? t('chat.comments.sending')
+    : queueOnSend
+      ? t('chat.annotationQueue')
+      : t('chat.comments.sendToChat');
   return (
     <div
       className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
@@ -166,7 +282,7 @@ export function BoardComposerPopover({
       role="dialog"
       aria-modal="false"
       aria-label="Annotation"
-      style={docked ? undefined : popoverAnchorStyle(target, scale)}
+      style={docked ? undefined : popoverAnchorStyle(target, scale, bounds, offset, commenting)}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -174,6 +290,9 @@ export function BoardComposerPopover({
         }
       }}
     >
+      <section className="comment-popover-section comment-popover-section-params">
+        <AnnotationStyleSummary target={target} testId="comment-popover-style-summary" />
+      </section>
       {podMembers.length > 0 ? (
         <div className="board-pod-summary">
           <strong>{t('chat.comments.capturedItems', { n: target.memberCount || podMembers.length })}</strong>
@@ -208,71 +327,106 @@ export function BoardComposerPopover({
           </div>
         </div>
       ) : null}
-      {notes.length > 0 ? (
-        <div className="board-note-list">
-          {notes.map((note, index) => (
-            <div key={`${target.elementId}-${index}`} className="board-note-item">
-              <span>{note}</span>
-              <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
-                {t('chat.comments.remove')}
+      {commenting ? (
+        <section className="comment-popover-section comment-popover-section-compose">
+          {notes.length > 0 ? (
+            <div className="board-note-list">
+              {notes.map((note, index) => (
+                <div key={`${target.elementId}-${index}`} className="board-note-item">
+                  <span>{note}</span>
+                  <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
+                    {t('chat.comments.remove')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <textarea
+            data-testid="comment-popover-input"
+            value={draft}
+            autoFocus
+            aria-label={t('chat.comments.placeholder')}
+            placeholder={t('chat.comments.placeholder')}
+            onChange={(event) => onDraft(event.target.value)}
+            onCompositionStart={() => {
+              composingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+            }}
+            onKeyDown={(event) => {
+              if (isImeComposing(event, composingRef.current)) return;
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.altKey &&
+                (event.metaKey || event.ctrlKey)
+              ) {
+                event.preventDefault();
+                if (submitDisabled) return;
+                void onSendBatch();
+              }
+            }}
+          />
+          <div className="comment-popover-actions">
+            <div className="comment-popover-actions-start">
+              {existing && onDeleteComment ? (
+                <button
+                  type="button"
+                  className="comment-popover-close comment-popover-delete"
+                  onClick={() => void onDeleteComment(existing.id)}
+                  title={t('common.delete')}
+                  aria-label={t('common.delete')}
+                >
+                  <Icon name="trash" size={13} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="comment-popover-close"
+                  onClick={onClose}
+                  title={t('common.close')}
+                  aria-label={t('common.close')}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              )}
+            </div>
+            <div className="comment-popover-actions-end">
+              {target.selectionKind === 'pod' ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  data-testid="comment-popover-add-note"
+                  disabled={!draft.trim()}
+                  onClick={onAddDraft}
+                >
+                  {t('chat.comments.addNote')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="ghost"
+                  data-testid="comment-popover-save"
+                  disabled={!draft.trim() || !hasCommentChange}
+                  onClick={() => void onSaveComment()}
+                >
+                  {t('chat.comments.comment')}
+                </button>
+              )}
+              <button
+                type="button"
+                className="primary"
+                data-testid="comment-add-send"
+                disabled={submitDisabled}
+                onClick={() => void onSendBatch()}
+              >
+                {primaryLabel}
               </button>
             </div>
-          ))}
-        </div>
+          </div>
+        </section>
       ) : null}
-      <textarea
-        data-testid="comment-popover-input"
-        value={draft}
-        autoFocus
-        aria-label={t('chat.comments.placeholder')}
-        placeholder={t('chat.comments.placeholder')}
-        onChange={(event) => onDraft(event.target.value)}
-      />
-      <div className="comment-popover-actions">
-        <div className="comment-popover-actions-start">
-          <button
-            type="button"
-            className="comment-popover-close"
-            onClick={onClose}
-            title={t('common.close')}
-            aria-label={t('common.close')}
-          >
-            <Icon name="close" size={12} />
-          </button>
-        </div>
-        <div className="comment-popover-actions-end">
-          {target.selectionKind === 'pod' ? (
-            <button
-              type="button"
-              className="ghost"
-              data-testid="comment-popover-add-note"
-              disabled={!draft.trim()}
-              onClick={onAddDraft}
-            >
-              {t('chat.comments.addNote')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="ghost"
-              data-testid="comment-popover-save"
-              disabled={!draft.trim()}
-              onClick={() => void onSaveComment()}
-            >
-              {t('chat.comments.comment')}
-            </button>
-          )}
-          <button
-            type="button"
-            className="primary"
-            data-testid="comment-add-send"
-            disabled={pendingCount === 0 || sending}
-            onClick={() => void onSendBatch()}
-          >
-            {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

@@ -1993,6 +1993,257 @@ test('a successful retry after a failed send restores the workspace to a fresh a
   await expect(page.getByText('retry prompt that succeeds')).toBeVisible();
 });
 
+test('retrying a failed run does not duplicate the original user message', async ({ page }) => {
+  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
+  if (!entry) throw new Error('prototype-basic scenario missing');
+
+  await routeMockAgents(page);
+
+  let runCount = 0;
+  await page.route('**/api/runs', async (route) => {
+    runCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `retry-run-${runCount}` }),
+    });
+  });
+
+  let eventCount = 0;
+  await page.route('**/api/runs/*/events', async (route) => {
+    eventCount += 1;
+    const body =
+      eventCount === 1
+        ? [
+            'event: start',
+            'data: {"bin":"mock-agent"}',
+            '',
+            'event: error',
+            'data: {"message":"connection refused"}',
+            '',
+            '',
+          ].join('\n')
+        : [
+            'event: start',
+            'data: {"bin":"mock-agent"}',
+            '',
+            'event: stdout',
+            `data: ${JSON.stringify({
+              chunk:
+                '<artifact identifier="retry-dedup-artifact" type="text/html" title="Retry Dedup Artifact"><!doctype html><html><body><main><h1>Retry Dedup Artifact</h1></main></body></html></artifact>',
+            })}`,
+            '',
+            'event: end',
+            'data: {"code":0,"status":"succeeded"}',
+            '',
+            '',
+          ].join('\n');
+
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  await gotoEntryHome(page);
+  await createProject(page, entry);
+  await expectWorkspaceReady(page);
+
+  const prompt = 'retry dedup prompt';
+  await sendPrompt(page, prompt);
+  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(page.locator('.chat-error-retry')).toBeVisible();
+  await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
+
+  await Promise.all([
+    page.waitForResponse((resp) => /\/api\/runs$/.test(new URL(resp.url()).pathname) && resp.request().method() === 'POST'),
+    page.locator('.chat-error-retry').click(),
+  ]);
+
+  await expect(page.getByRole('tab', { name: /retry-dedup-artifact\.html/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Retry Dedup Artifact' }),
+  ).toBeVisible();
+  await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
+});
+
+test('chat file links open project files in the workspace and keep trailing punctuation out of hrefs', async ({ page }) => {
+  await routeMockAgents(page);
+
+  let runCount = 0;
+  await page.route('**/api/runs', async (route) => {
+    runCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `link-run-${runCount}` }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: stdout',
+      `data: ${JSON.stringify({
+        chunk:
+          'Open [details.html](details.html). Also see https://example.com/release-notes。 for external notes.',
+      })}`,
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+
+  const projectId = await createEmptyProject(page, 'Chat file links stay in workspace');
+  await expectWorkspaceReady(page);
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'details.html',
+    '<!doctype html><html><body><main><h1>Linked Details</h1></main></body></html>',
+  );
+
+  await sendPrompt(page, 'send chat links');
+  const localLink = page.getByRole('link', { name: 'details.html' }).last();
+  await expect(localLink).toBeVisible();
+  const externalLink = page.getByRole('link', { name: 'https://example.com/release-notes' }).last();
+  await expect(externalLink).toHaveAttribute('href', 'https://example.com/release-notes');
+
+  await localLink.click();
+  await expect(page.getByRole('tab', { name: /details\.html/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Linked Details' }),
+  ).toBeVisible();
+});
+
+test('sending another prompt while a run is active queues it and starts it after the first run finishes', async ({ page }) => {
+  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
+  if (!entry) throw new Error('prototype-basic scenario missing');
+
+  await routeMockAgents(page);
+
+  let runCount = 0;
+  let releaseFirstRun!: () => void;
+  const firstRunReleased = new Promise<void>((resolve) => {
+    releaseFirstRun = resolve;
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    runCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `queued-run-${runCount}` }),
+    });
+  });
+
+  let eventCount = 0;
+  await page.route('**/api/runs/*/events', async (route) => {
+    eventCount += 1;
+    if (eventCount === 1) {
+      await firstRunReleased;
+      const firstBody = [
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stdout',
+        `data: ${JSON.stringify({
+          chunk:
+            '<artifact identifier="first-queued-artifact" type="text/html" title="First Queued Artifact"><!doctype html><html><body><main><h1>First Queued Artifact</h1></main></body></html></artifact>',
+        })}`,
+        '',
+        'event: end',
+        'data: {"code":0,"status":"succeeded"}',
+        '',
+        '',
+      ].join('\n');
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+        },
+        body: firstBody,
+      });
+      return;
+    }
+
+    const secondBody = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: stdout',
+      `data: ${JSON.stringify({
+        chunk:
+          '<artifact identifier="second-queued-artifact" type="text/html" title="Second Queued Artifact"><!doctype html><html><body><main><h1>Second Queued Artifact</h1></main></body></html></artifact>',
+      })}`,
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body: secondBody,
+    });
+  });
+
+  await gotoEntryHome(page);
+  await createProject(page, entry);
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'first queued prompt');
+  await expect.poll(() => runCount).toBe(1);
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.click();
+  await input.fill('second queued prompt');
+  await page.getByTestId('chat-send').click();
+
+  const queuedStrip = page.getByTestId('chat-queued-send-strip');
+  await expect(queuedStrip).toBeVisible();
+  await expect(queuedStrip).toContainText('second queued prompt');
+  expect(runCount).toBe(1);
+
+  const release: () => void = releaseFirstRun ?? (() => { throw new Error('first run release handle missing'); });
+  release();
+
+  await expect.poll(() => runCount).toBe(2);
+  await expect(queuedStrip).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /second-queued-artifact\.html/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Second Queued Artifact' }),
+  ).toBeVisible();
+});
+
 async function routeMockAgents(page: Page) {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({

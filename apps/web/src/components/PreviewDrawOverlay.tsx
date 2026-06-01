@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 
 import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
+import { useT } from '../i18n';
 import type { PreviewVisualMarkKind } from '../types';
 import { requestPreviewSnapshot } from '../runtime/exports';
 import { isImeComposing } from '../utils/imeComposing';
 
 interface Point { x: number; y: number }
 interface Stroke { points: Point[] }
+interface NormalizedRect { x: number; y: number; width: number; height: number }
+type MarkTool = 'box' | 'pen';
 interface CaptureTarget {
   filePath?: string;
   elementId?: string;
@@ -28,6 +31,7 @@ export interface AnnotationEventDetail {
   markKind?: PreviewVisualMarkKind;
   bounds?: { x: number; y: number; width: number; height: number };
   target?: CaptureTarget | null;
+  ack?: (result: { ok: boolean; message?: string }) => void;
 }
 
 interface Props {
@@ -55,17 +59,26 @@ export function PreviewDrawOverlay({
   sendDisabled = false,
   sendDisabledReason,
 }: Props) {
+  const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [note, setNote] = useState('');
+  const [markTool, setMarkTool] = useState<MarkTool>('box');
   const strokesRef = useRef<Stroke[]>([]);
   const undoneStrokesRef = useRef<Stroke[]>([]);
   const drawingRef = useRef<Stroke | null>(null);
+  const selectionBoxRef = useRef<NormalizedRect | null>(null);
+  const boxDraftRef = useRef<{ start: Point; current: Point } | null>(null);
   const composingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
+  const [hasBox, setHasBox] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
   const [pendingAction, setPendingAction] = useState<'queue' | 'send' | null>(null);
+  const [captureWarning, setCaptureWarning] = useState<{
+    action: 'queue' | 'send';
+    message: string;
+  } | null>(null);
   const sending = pendingAction !== null;
 
   const redraw = useCallback(() => {
@@ -76,19 +89,23 @@ export function PreviewDrawOverlay({
     if (!ctx) return;
     ctx.clearRect(0, 0, cvs.width, cvs.height);
     ctx.strokeStyle = STROKE_COLOR;
-    ctx.lineWidth = STROKE_WIDTH;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.lineWidth = STROKE_WIDTH * dpr;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const dpr = window.devicePixelRatio || 1;
     const all = drawingRef.current ? [...strokesRef.current, drawingRef.current] : strokesRef.current;
+    const box = boxDraftRef.current
+      ? normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current)
+      : selectionBoxRef.current;
+    if (box) drawNormalizedBox(ctx, box, cvs.width, cvs.height);
     for (const s of all) {
       const first = s.points[0];
       if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(first.x * dpr, first.y * dpr);
+      ctx.moveTo(first.x * cvs.width, first.y * cvs.height);
       for (let i = 1; i < s.points.length; i++) {
         const p = s.points[i]!;
-        ctx.lineTo(p.x * dpr, p.y * dpr);
+        ctx.lineTo(p.x * cvs.width, p.y * cvs.height);
       }
       ctx.stroke();
     }
@@ -112,7 +129,7 @@ export function PreviewDrawOverlay({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [redraw, active, hasInk]);
+  }, [redraw, active, hasInk, hasBox]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -132,6 +149,7 @@ export function PreviewDrawOverlay({
 
   function syncHistoryState() {
     setHasInk(strokesRef.current.length > 0);
+    setHasBox(Boolean(selectionBoxRef.current));
     setUndoCount(strokesRef.current.length);
     setRedoCount(undoneStrokesRef.current.length);
   }
@@ -139,7 +157,12 @@ export function PreviewDrawOverlay({
   function pointFromEvent(e: PointerEvent): Point {
     const cvs = canvasRef.current!;
     const rect = cvs.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+    const y = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+    return {
+      x: Math.min(1, Math.max(0, x)),
+      y: Math.min(1, Math.max(0, y)),
+    };
   }
 
   function activePreviewIframe(): HTMLIFrameElement | null {
@@ -149,19 +172,89 @@ export function PreviewDrawOverlay({
     ) ?? null;
   }
 
+  // The snapshot bridge only lives in the srcDoc transport iframe. For URL-load
+  // previews (e.g. decks) that iframe is mounted but hidden (data-od-active is on
+  // the bridgeless URL iframe), so snapshotting the *active* frame times out and
+  // capture fails. Prefer the srcDoc-render-mode frame; capture mode keeps it on
+  // full content, so it carries the bridge.
+  function snapshotHostIframe(): HTMLIFrameElement | null {
+    return (
+      wrapRef.current?.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]') ??
+      activePreviewIframe()
+    );
+  }
+
+  function canTryDirectFrameScroll(iframe: HTMLIFrameElement): boolean {
+    const sandbox = iframe.getAttribute('sandbox');
+    return sandbox === null || /\ballow-same-origin\b/.test(sandbox);
+  }
+
+  function postFrameScrollBy(win: Window, left: number, top: number): boolean {
+    try {
+      win.postMessage({ type: 'od:preview-scroll-by', left, top }, '*');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function scrollPreviewIframeBy(iframe: HTMLIFrameElement, left: number, top: number): boolean {
+    const win = iframe.contentWindow;
+    if (!win) return false;
+
+    if (canTryDirectFrameScroll(iframe)) {
+      try {
+        const scrollBy = win.scrollBy;
+        if (typeof scrollBy === 'function') {
+          win.scrollBy({ left, top, behavior: 'auto' });
+          return true;
+        }
+      } catch {
+        // Sandboxed / cross-origin frames throw on Window property reads.
+        // Fall through to the postMessage bridge injected into srcDoc previews.
+      }
+    }
+
+    return postFrameScrollBy(win, left, top);
+  }
+
   function onPointerDown(e: PointerEvent) {
     if (!active || sending) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    drawingRef.current = { points: [pointFromEvent(e)] };
+    const point = pointFromEvent(e);
+    if (markTool === 'box') {
+      boxDraftRef.current = { start: point, current: point };
+      selectionBoxRef.current = null;
+      syncHistoryState();
+      redraw();
+      return;
+    }
+    drawingRef.current = { points: [point] };
     redraw();
   }
   function onPointerMove(e: PointerEvent) {
-    if (!active || sending || !drawingRef.current) return;
+    if (!active || sending) return;
+    if (boxDraftRef.current) {
+      boxDraftRef.current.current = pointFromEvent(e);
+      redraw();
+      return;
+    }
+    if (!drawingRef.current) return;
     drawingRef.current.points.push(pointFromEvent(e));
     redraw();
   }
-  function onPointerUp() {
-    if (!active || sending || !drawingRef.current) return;
+  function onPointerUp(e: PointerEvent) {
+    if (!active || sending) return;
+    if (boxDraftRef.current) {
+      boxDraftRef.current.current = pointFromEvent(e);
+      const next = normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current);
+      boxDraftRef.current = null;
+      selectionBoxRef.current = next.width >= 0.006 && next.height >= 0.006 ? next : null;
+      syncHistoryState();
+      redraw();
+      return;
+    }
+    if (!drawingRef.current) return;
     if (drawingRef.current.points.length > 1) {
       strokesRef.current.push(drawingRef.current);
       undoneStrokesRef.current = [];
@@ -174,22 +267,31 @@ export function PreviewDrawOverlay({
   function onCanvasWheel(e: WheelEvent<HTMLCanvasElement>) {
     if (!active || sending) return;
     const iframe = activePreviewIframe();
-    const win = iframe?.contentWindow;
-    if (!win || typeof win.scrollBy !== 'function') return;
-    e.preventDefault();
-    win.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: 'auto' });
+    if (!iframe) return;
+    if (scrollPreviewIframeBy(iframe, e.deltaX, e.deltaY)) {
+      e.preventDefault();
+    }
   }
 
   function clearInk() {
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
+    selectionBoxRef.current = null;
+    boxDraftRef.current = null;
     syncHistoryState();
     redraw();
   }
 
   function undoStroke() {
     if (sending) return;
+    if (selectionBoxRef.current || boxDraftRef.current) {
+      selectionBoxRef.current = null;
+      boxDraftRef.current = null;
+      syncHistoryState();
+      redraw();
+      return;
+    }
     const stroke = strokesRef.current.pop();
     if (!stroke) return;
     undoneStrokesRef.current.push(stroke);
@@ -217,15 +319,31 @@ export function PreviewDrawOverlay({
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
+    selectionBoxRef.current = null;
+    boxDraftRef.current = null;
     syncHistoryState();
     redraw();
   }, [active, redraw]);
 
+  function boxBounds(): { x: number; y: number; width: number; height: number } | null {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const box = selectionBoxRef.current;
+    if (!rect || rect.width <= 0 || rect.height <= 0 || !box) return null;
+    return {
+      x: box.x * rect.width,
+      y: box.y * rect.height,
+      width: Math.max(1, box.width * rect.width),
+      height: Math.max(1, box.height * rect.height),
+    };
+  }
+
   function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
     const points = strokesRef.current.flatMap((stroke) => stroke.points);
     if (points.length === 0) return null;
-    const xs = points.map((point) => point.x);
-    const ys = points.map((point) => point.y);
+    const xs = points.map((point) => point.x * rect.width);
+    const ys = points.map((point) => point.y * rect.height);
     const minX = Math.min(...xs);
     const minY = Math.min(...ys);
     const maxX = Math.max(...xs);
@@ -240,30 +358,39 @@ export function PreviewDrawOverlay({
   }
 
   function annotationBounds(): { x: number; y: number; width: number; height: number } | undefined {
+    const box = boxBounds();
     const stroke = strokeBounds();
     const target = captureTarget?.position ?? null;
-    if (!stroke && !target) return undefined;
-    if (!stroke) return target ?? undefined;
-    if (!target) return stroke;
-    const left = Math.min(stroke.x, target.x);
-    const top = Math.min(stroke.y, target.y);
-    const right = Math.max(stroke.x + stroke.width, target.x + target.width);
-    const bottom = Math.max(stroke.y + stroke.height, target.y + target.height);
+    const bounds = [box, stroke, target].filter((item): item is { x: number; y: number; width: number; height: number } => Boolean(item));
+    if (bounds.length === 0) return undefined;
+    if (bounds.length === 1) return bounds[0];
+    const left = Math.min(...bounds.map((item) => item.x));
+    const top = Math.min(...bounds.map((item) => item.y));
+    const right = Math.max(...bounds.map((item) => item.x + item.width));
+    const bottom = Math.max(...bounds.map((item) => item.y + item.height));
     return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
   }
 
   function markKind(): PreviewVisualMarkKind | undefined {
     const hasTarget = Boolean(captureTarget);
-    if (hasTarget && hasInk) return 'click+stroke';
+    const hasVisualMark = hasInk || hasBox;
+    if (hasTarget && hasVisualMark) return 'click+stroke';
     if (hasTarget) return 'click';
-    if (hasInk) return 'stroke';
+    if (hasVisualMark) return 'stroke';
     return undefined;
   }
 
   async function requestSnapshot(): Promise<{ dataUrl: string; w: number; h: number } | null> {
-    const iframe = activePreviewIframe();
+    const iframe = snapshotHostIframe();
     if (!iframe) return null;
-    return requestPreviewSnapshot(iframe);
+    // Capture mode may still be swapping the srcDoc frame to full content when
+    // the user submits, so retry with growing timeouts before giving up.
+    const timeouts = [1500, 3000, 6000];
+    for (const timeout of timeouts) {
+      const snapshot = await requestPreviewSnapshot(iframe, timeout);
+      if (snapshot) return snapshot;
+    }
+    return null;
   }
 
   function drawCaptureTarget(
@@ -327,6 +454,7 @@ export function PreviewDrawOverlay({
     const sx = snap.w / Math.max(1, rect.width);
     const sy = snap.h / Math.max(1, rect.height);
     drawCaptureTarget(ctx, sx, sy, captureTarget);
+    if (selectionBoxRef.current) drawNormalizedBox(ctx, selectionBoxRef.current, snap.w, snap.h);
     ctx.strokeStyle = STROKE_COLOR;
     ctx.lineWidth = STROKE_WIDTH * Math.max(sx, sy);
     ctx.lineCap = 'round';
@@ -335,10 +463,10 @@ export function PreviewDrawOverlay({
       const first = s.points[0];
       if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(first.x * sx, first.y * sy);
+      ctx.moveTo(first.x * snap.w, first.y * snap.h);
       for (let i = 1; i < s.points.length; i++) {
         const p = s.points[i]!;
-        ctx.lineTo(p.x * sx, p.y * sy);
+        ctx.lineTo(p.x * snap.w, p.y * snap.h);
       }
       ctx.stroke();
     }
@@ -347,9 +475,13 @@ export function PreviewDrawOverlay({
 
   async function send(action: 'queue' | 'send') {
     const hasTarget = Boolean(captureTarget);
-    const shouldCapture = hasInk || hasTarget || captureViewport;
+    const shouldCapture = hasInk || hasBox || hasTarget || captureViewport;
     const canSubmit = shouldCapture || Boolean(note.trim());
     if (sending || !canSubmit) return;
+    // While a task is running the primary Send is disabled (use Queue instead).
+    // The note/attachment is not lost: Queue still stages it for the next turn.
+    if (action === 'send' && sendDisabled) return;
+    setCaptureWarning(null);
     setPendingAction(action);
     try {
       let file: File | null = null;
@@ -358,39 +490,49 @@ export function PreviewDrawOverlay({
         const snap = await requestSnapshot();
         if (snap) blob = await compositeWithBackground(snap);
         if (!blob) {
-          const cvs = canvasRef.current;
-          if (cvs) {
-            const copy = document.createElement('canvas');
-            copy.width = cvs.width;
-            copy.height = cvs.height;
-            const ctx = copy.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(cvs, 0, 0);
-              const dpr = window.devicePixelRatio || 1;
-              drawCaptureTarget(ctx, dpr, dpr, captureTarget);
-              blob = await new Promise<Blob | null>((resolve) => copy.toBlob((b) => resolve(b), 'image/png'));
-            } else {
-              blob = await new Promise<Blob | null>((resolve) => cvs.toBlob((b) => resolve(b), 'image/png'));
-            }
-          }
+          setCaptureWarning({
+            action,
+            message: captureViewport && !hasInk && !hasBox && !hasTarget
+              ? t('chat.annotationPreviewMissing')
+              : t('chat.annotationPreviewMissingInk'),
+          });
+          return;
         }
-        if (blob) {
-          const ts = new Date().toISOString().replace(/[:.]/g, '-');
-          file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
-        }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
       }
       const kind = markKind();
-      const detail: AnnotationEventDetail = {
-        file,
-        note: note.trim(),
-        action,
-        filePath: captureTarget?.filePath || filePath,
-        markKind: kind,
-        bounds: kind ? annotationBounds() : undefined,
-        target: captureTarget,
-      };
-      window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
+        let settled = false;
+        const finish = (next: { ok: boolean; message?: string }) => {
+          if (settled) return;
+          settled = true;
+          resolve(next);
+        };
+        window.setTimeout(() => {
+          finish({ ok: false, message: t('chat.annotationTimeout') });
+        }, 60000);
+        const detail: AnnotationEventDetail = {
+          file,
+          note: note.trim(),
+          action,
+          filePath: captureTarget?.filePath || filePath,
+          markKind: kind,
+          bounds: kind ? annotationBounds() : undefined,
+          target: captureTarget,
+          ack: finish,
+        };
+        window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+      });
+      if (!result.ok) {
+        setCaptureWarning({
+          action,
+          message: result.message || t('chat.annotationFailed'),
+        });
+        return;
+      }
       clearInk();
+      setCaptureWarning(null);
       setNote('');
     } finally {
       setPendingAction(null);
@@ -398,10 +540,10 @@ export function PreviewDrawOverlay({
   }
 
   const overlayPointer = active ? 'auto' : 'none';
-  const showCanvas = active || hasInk;
-  const canSubmit = hasInk || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
-  const canSend = canSubmit;
-  const canUndo = undoCount > 0 && !sending;
+  const showCanvas = active || hasInk || hasBox;
+  const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim());
+  const canSend = canSubmit && !sendDisabled;
+  const canUndo = (undoCount > 0 || hasBox) && !sending;
   const canRedo = redoCount > 0 && !sending;
 
   return (
@@ -432,33 +574,98 @@ export function PreviewDrawOverlay({
         />
       ) : null}
       {active ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 16,
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 8px',
-            background: 'rgba(20,20,20,0.92)',
-            color: '#fff',
-            borderRadius: 999,
-            boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 10,
-            pointerEvents: 'auto',
-            fontSize: 13,
-          }}
-        >
+        <>
+          <style>{tooltipStyle}</style>
+          {captureWarning ? (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 82,
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                maxWidth: 'min(420px, calc(100% - 32px))',
+                padding: '8px 12px',
+                borderRadius: 999,
+                background: 'rgba(20,20,20,0.92)',
+                color: '#fff',
+                boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+                backdropFilter: 'blur(8px)',
+                zIndex: 11,
+                pointerEvents: 'none',
+                fontSize: 13,
+                lineHeight: 1.35,
+              }}
+            >
+              <span>{captureWarning.message}</span>
+            </div>
+          ) : null}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 16,
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 8px',
+              background: 'rgba(20,20,20,0.92)',
+              color: '#fff',
+              borderRadius: 999,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 10,
+              pointerEvents: 'auto',
+              fontSize: 13,
+            }}
+          >
+          <button
+            type="button"
+            onClick={closeOverlay}
+            disabled={sending}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            style={closeButtonStyle}
+          >
+            <Icon name="close" size={13} />
+          </button>
+          <div style={subToolGroupStyle} aria-label={t('fileViewer.markTool')}>
+            <button
+              type="button"
+              onClick={() => setMarkTool('box')}
+              disabled={sending}
+              aria-label={t('fileViewer.boxSelect')}
+              title={t('fileViewer.boxSelect')}
+              data-tooltip={t('fileViewer.boxSelect')}
+              className="preview-draw-subtool-action"
+              style={subToolButtonStyle(markTool === 'box')}
+            >
+              <RemixIcon name="checkbox-blank-line" size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMarkTool('pen')}
+              disabled={sending}
+              aria-label={t('sketch.toolPen')}
+              title={t('sketch.toolPen')}
+              data-tooltip={t('sketch.toolPen')}
+              className="preview-draw-subtool-action"
+              style={subToolButtonStyle(markTool === 'pen')}
+            >
+              <RemixIcon name="pencil-line" size={14} />
+            </button>
+          </div>
           <button
             type="button"
             onClick={undoStroke}
             disabled={!canUndo}
             style={historyButtonStyle(canUndo)}
-            aria-label="Undo"
-            title="Undo"
+            aria-label={t('manualEdit.undo')}
+            title={t('manualEdit.undo')}
           >
             <RemixIcon name="arrow-go-back-line" size={14} />
           </button>
@@ -467,8 +674,8 @@ export function PreviewDrawOverlay({
             onClick={redoStroke}
             disabled={!canRedo}
             style={historyButtonStyle(canRedo)}
-            aria-label="Redo"
-            title="Redo"
+            aria-label={t('manualEdit.redo')}
+            title={t('manualEdit.redo')}
           >
             <RemixIcon name="arrow-go-forward-line" size={14} />
           </button>
@@ -477,7 +684,7 @@ export function PreviewDrawOverlay({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={sending}
-            placeholder="Add a note for this annotation"
+            placeholder={t('chat.annotationNotePlaceholder')}
             style={{
               background: 'rgba(218, 97, 56, 0.18)',
               border: '1px solid rgba(248, 150, 104, 0.82)',
@@ -505,84 +712,156 @@ export function PreviewDrawOverlay({
             type="button"
             onClick={() => void send('queue')}
             disabled={sending || !canSubmit}
+            aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+            title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+            data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+            className="preview-draw-icon-action"
             style={{
-              ...ghostStyle,
+              ...drawActionButtonStyle(false),
               opacity: canSubmit ? 1 : 0.4,
               cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
             }}
           >
             {pendingAction === 'queue' ? (
-              <>
-                <Icon name="spinner" size={12} />
-                <span>Queueing...</span>
-              </>
+              <Icon name="spinner" size={14} />
             ) : (
-              'Queue'
+              <RemixIcon name="list-check-2" size={15} />
             )}
           </button>
           <button
             type="button"
             onClick={() => void send('send')}
             disabled={sending || !canSend}
-            title={sendDisabled ? sendDisabledReason : undefined}
+            aria-label={pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+            title={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+            data-tooltip={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
+            className="preview-draw-icon-action"
             style={{
-              ...pillStyle(true),
+              ...drawActionButtonStyle(true),
               opacity: canSend ? 1 : 0.4,
               cursor: sending ? 'wait' : (canSend ? 'pointer' : 'not-allowed'),
             }}
           >
             {pendingAction === 'send' ? (
-              <>
-                <Icon name="spinner" size={12} />
-                <span>Sending...</span>
-              </>
+              <Icon name="spinner" size={14} />
             ) : (
-              'Send'
+              <Icon name="send" size={14} />
             )}
           </button>
-          <button
-            type="button"
-            onClick={closeOverlay}
-            disabled={sending}
-            aria-label="Close draw toolbar"
-            title="Close"
-            style={iconButtonStyle}
-          >
-            <Icon name="close" size={13} />
-          </button>
-        </div>
+          </div>
+        </>
       ) : null}
     </div>
   );
 }
 
-function pillStyle(active: boolean): CSSProperties {
+const tooltipStyle = `
+  .preview-draw-icon-action,
+  .preview-draw-subtool-action {
+    position: relative;
+  }
+  .preview-draw-icon-action::after,
+  .preview-draw-subtool-action::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    z-index: 12;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(2px);
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: rgba(20,20,20,0.94);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.2;
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .preview-draw-icon-action:hover::after,
+  .preview-draw-icon-action:focus-visible::after,
+  .preview-draw-subtool-action:hover::after,
+  .preview-draw-subtool-action:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+`;
+
+function normalizedRectFromPoints(a: Point, b: Point): NormalizedRect {
+  const left = Math.min(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const right = Math.max(a.x, b.x);
+  const bottom = Math.max(a.y, b.y);
+  return {
+    x: left,
+    y: top,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  };
+}
+
+function drawNormalizedBox(ctx: CanvasRenderingContext2D, box: NormalizedRect, width: number, height: number) {
+  const left = box.x * width;
+  const top = box.y * height;
+  const boxWidth = Math.max(1, box.width * width);
+  const boxHeight = Math.max(1, box.height * height);
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 59, 48, 0.10)';
+  ctx.strokeStyle = STROKE_COLOR;
+  ctx.lineWidth = Math.max(2, Math.round(Math.min(width, height) * 0.002));
+  ctx.setLineDash([10, 6]);
+  ctx.fillRect(left, top, boxWidth, boxHeight);
+  ctx.strokeRect(left, top, boxWidth, boxHeight);
+  ctx.restore();
+}
+
+const subToolGroupStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: 3,
+  borderRadius: 999,
+  background: 'rgba(255,255,255,0.08)',
+};
+
+function subToolButtonStyle(active: boolean): CSSProperties {
   return {
     border: 'none',
     borderRadius: 999,
-    padding: '4px 12px',
+    width: 34,
+    height: 30,
+    padding: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: active ? 'rgba(255,255,255,0.18)' : 'transparent',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: active ? 650 : 500,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+}
+
+function drawActionButtonStyle(primary: boolean): CSSProperties {
+  return {
+    border: primary ? 'none' : '1px solid rgba(255,255,255,0.2)',
+    borderRadius: 999,
+    width: 36,
+    height: 36,
+    padding: 0,
     fontSize: 13,
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 6,
-    background: active ? 'var(--accent)' : 'transparent',
-    color: active ? '#fff' : 'inherit',
+    justifyContent: 'center',
+    flex: '0 0 auto',
+    whiteSpace: 'nowrap',
+    background: primary ? 'var(--accent)' : 'transparent',
+    color: primary ? '#fff' : 'inherit',
   };
 }
-
-const ghostStyle: CSSProperties = {
-  border: '1px solid rgba(255,255,255,0.2)',
-  borderRadius: 999,
-  padding: '3px 10px',
-  fontSize: 12,
-  cursor: 'pointer',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  background: 'transparent',
-  color: 'inherit',
-};
 
 function historyButtonStyle(enabled: boolean): CSSProperties {
   return {
@@ -604,4 +883,10 @@ const iconButtonStyle: CSSProperties = {
   justifyContent: 'center',
   background: 'rgba(255,255,255,0.06)',
   color: 'inherit',
+};
+
+const closeButtonStyle: CSSProperties = {
+  ...iconButtonStyle,
+  border: 'none',
+  background: 'transparent',
 };

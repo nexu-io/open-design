@@ -58,6 +58,13 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     );
   });
 
+  it('forbids pairing a tailored discovery form with the default Quick brief in one turn', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('Emit exactly ONE `<question-form>` in this turn.');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'that tailored form replaces the default "Quick brief — 30 seconds" form; never output both.',
+    );
+  });
+
   it('teaches RULE 2 to accept the task-type answer marker alongside discovery', () => {
     // RULE 2's first sentence enumerates the answer markers it routes on. The
     // single-shot brief means `[form answers — task-type]` must be a valid

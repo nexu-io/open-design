@@ -37,6 +37,32 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
+  it('renders snapshot SVGs through data URLs so canvas export stays origin-clean', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function encodedSvgDataUrl()');
+    expect(srcdoc).toContain('img.src = encodedSvgDataUrl();');
+    expect(srcdoc).not.toContain('createObjectURL');
+    expect(srcdoc).not.toContain('snapshot too large');
+  });
+
+  it('crops snapshots with an XHTML wrapper instead of moving foreignObject offscreen', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function scrollOffset()');
+    expect(srcdoc).toContain('left:\' + (-scroll.x) + \'px;top:\' + (-scroll.y) + \'px;');
+    expect(srcdoc).toContain('<foreignObject x="0" y="0"');
+    expect(srcdoc).not.toContain('<foreignObject x="\' + (-window.scrollX || 0)');
+  });
+
+  it('removes external stylesheet dependencies from snapshot clones before rasterizing', () => {
+    const srcdoc = buildSrcdoc('<link rel="stylesheet" href="https://fonts.example/app.css"><style>@import "https://fonts.example/css"; @font-face { font-family: Remote; src: url(remote.woff2); } main { color: red; }</style><main>Hero</main>');
+
+    expect(srcdoc).toContain('link[rel~="stylesheet"], link[rel~="preload"], link[rel~="preconnect"]');
+    expect(srcdoc).toContain('.replace(/@import[^;]+;/gi,');
+    expect(srcdoc).toContain('.replace(/@font-face\\s*\\{[^}]*\\}/gi,');
+  });
+
   it('can guard preview iframes against load-time focus stealing', () => {
     // This test would fail if injectPreviewFocusGuard were removed from
     // buildSrcdoc — the guard script would be absent, and the assertions
@@ -62,7 +88,8 @@ describe('buildSrcdoc', () => {
 
     const canSetActive = srcdoc.match(/function canSetActive\(list\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
 
-    expect(canSetActive).toContain('findActiveByClass(list) >= 0');
+    expect(canSetActive).toContain('var active = findActiveByClass(list);');
+    expect(canSetActive).toContain('hasComputedHiddenSibling(list, active)');
     expect(canSetActive).toContain("list[i].style.display === 'none'");
     expect(canSetActive).toContain("list[i].style.visibility === 'hidden'");
     expect(canSetActive).toContain("list[i].hasAttribute('hidden')");
@@ -92,6 +119,8 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('schedulePostPreviewScroll');
     expect(srcdoc).toContain("type: 'od:preview-scroll'");
     expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-by'");
+    expect(srcdoc).toContain('previewScrollBy(data.left, data.top)');
     expect(srcdoc).toContain('data-od-selection-bridge-style');
     expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
     expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');

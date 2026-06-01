@@ -2,11 +2,19 @@ import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { wellKnownUserToolchainBins } from '@open-design/platform';
+import { resolveSandboxRuntimeConfigFromEnv } from '../sandbox-mode.js';
 import { expandHomePath } from './paths.js';
 import type { RuntimeAgentDef } from './types.js';
 
+const RUNTIME_PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
+
 const AGENT_BIN_ENV_KEYS = new Map<string, string>([
+  ['amr', 'VELA_BIN'],
   ['aider', 'AIDER_BIN'],
   ['claude', 'CLAUDE_BIN'],
   ['codex', 'CODEX_BIN'],
@@ -23,6 +31,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['pi', 'PI_BIN'],
   ['qoder', 'QODER_BIN'],
   ['qwen', 'QWEN_BIN'],
+  ['reasonix', 'REASONIX_BIN'],
   ['trae-cli', 'TRAE_CLI_BIN'],
   ['vibe', 'VIBE_BIN'],
 ]);
@@ -33,7 +42,12 @@ let cachedToolchainDirs: string[] | null = null;
 let cachedToolchainDirsAt = 0;
 
 function userToolchainDirs() {
-  const homeOverride = process.env.OD_AGENT_HOME;
+  const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
+    process.env,
+    RUNTIME_PROJECT_ROOT,
+  );
+  const homeOverride =
+    sandboxRuntime?.roots.agentHomeDir ?? process.env.OD_AGENT_HOME;
   const home = homeOverride || homedir();
   const now = Date.now();
   if (
@@ -101,18 +115,7 @@ function looksExecutableOnWindows(filePath: string): boolean {
   return executableExts.includes(ext);
 }
 
-// Resolve the first available binary for an agent definition. Tries
-// `def.bin` first, then walks `def.fallbackBins` in order. Used for
-// agents whose forks ship under a different binary name but speak the
-// exact same CLI (Claude Code → OpenClaude, issue #235). Returns null
-// when no candidate is on PATH.
-function configuredExecutableOverride(
-  def: RuntimeAgentDef,
-  configuredEnv: Record<string, string> = {},
-): string | null {
-  const envKey = AGENT_BIN_ENV_KEYS.get(def?.id);
-  if (!envKey) return null;
-  const raw = configuredEnv?.[envKey];
+function executableFilePath(raw: string | undefined): string | null {
   if (typeof raw !== 'string' || raw.trim().length === 0) return null;
   const expanded = expandHomePath(raw.trim());
   if (!path.isAbsolute(expanded)) return null;
@@ -124,6 +127,104 @@ function configuredExecutableOverride(
       accessSync(expanded, constants.X_OK);
     }
     return expanded;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve the first available binary for an agent definition. Tries
+// `def.bin` first, then walks `def.fallbackBins` in order. Used for
+// agents whose forks ship under a different binary name but speak the
+// exact same CLI (Claude Code → OpenClaude, issue #235). Returns null
+// when no candidate is on PATH.
+function configuredExecutableOverride(
+  def: RuntimeAgentDef,
+  configuredEnv: Record<string, string> = {},
+): string | null {
+  const envKey = AGENT_BIN_ENV_KEYS.get(def?.id);
+  if (!envKey) return null;
+  return executableFilePath(configuredEnv?.[envKey]);
+}
+
+export function resolveAmrOpenCodeExecutable(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const configured = executableFilePath(env.VELA_OPENCODE_BIN);
+  if (configured) return configured;
+  // In packaged builds prefer the bundled companion under
+  // `OD_RESOURCE_ROOT/bin/libexec/opencode/opencode` so a stale global
+  // `opencode` on the user's PATH can't override the known-good build that
+  // shipped with this app. PATH is only consulted as a last resort.
+  const resourceRoot = (
+    env.OD_RESOURCE_ROOT ?? process.env.OD_RESOURCE_ROOT
+  )?.trim();
+  if (resourceRoot) {
+    const bundledDir = packagedVelaOpenCodeCompanionTree(resourceRoot);
+    if (bundledDir) {
+      const bundled = executableFilePath(
+        path.join(
+          bundledDir,
+          process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+        ),
+      );
+      if (bundled) return bundled;
+    }
+  }
+  return resolveOnPath('opencode-cli') ?? resolveOnPath('opencode');
+}
+
+// `tools/pack/tests/resources.test.ts` ships the AMR OpenCode companion as a
+// `<resourceRoot>/bin/libexec/opencode/opencode` *executable file*, not just
+// the directory. Treating any directory there as a valid companion produces a
+// false-positive availability path: `detectAgents()` would surface AMR as
+// available even though the first real run can't launch (`vela` would spawn
+// a missing/non-executable inner binary). Verify the inner executable too.
+function packagedVelaOpenCodeCompanionTree(resourceRoot: string): string | null {
+  const candidate = path.join(resourceRoot, 'bin', 'libexec', 'opencode');
+  const exe = path.join(
+    candidate,
+    process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+  );
+  try {
+    if (!statSync(candidate).isDirectory()) return null;
+    if (!statSync(exe).isFile()) return null;
+    if (process.platform === 'win32') {
+      if (!looksExecutableOnWindows(exe)) return null;
+    } else {
+      accessSync(exe, constants.X_OK);
+    }
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+function packagedBuiltInExecutable(
+  def: RuntimeAgentDef,
+  configuredEnv: Record<string, string> = {},
+): string | null {
+  if (def.id !== 'amr') return null;
+  const resourceRoot = process.env.OD_RESOURCE_ROOT?.trim();
+  if (!resourceRoot) return null;
+  if (
+    !resolveAmrOpenCodeExecutable({ ...process.env, ...configuredEnv }) &&
+    !packagedVelaOpenCodeCompanionTree(resourceRoot)
+  ) {
+    return null;
+  }
+  const candidate = path.join(
+    resourceRoot,
+    'bin',
+    process.platform === 'win32' ? 'vela.exe' : 'vela',
+  );
+  try {
+    if (!statSync(candidate).isFile()) return null;
+    if (process.platform === 'win32') {
+      if (!looksExecutableOnWindows(candidate)) return null;
+    } else {
+      accessSync(candidate, constants.X_OK);
+    }
+    return candidate;
   } catch {
     return null;
   }
@@ -164,9 +265,10 @@ export function inspectAgentExecutableResolution(
       break;
     }
   }
+  const builtInPath = packagedBuiltInExecutable(def, configuredEnv);
   return {
     configuredOverridePath,
     pathResolvedPath,
-    selectedPath: configuredOverridePath || pathResolvedPath,
+    selectedPath: configuredOverridePath || builtInPath || pathResolvedPath,
   };
 }

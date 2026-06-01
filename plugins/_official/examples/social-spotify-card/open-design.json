@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-social-spotify-card",
   "title": "Spotify Now-Playing Card",
+  "title_i18n": {
+    "en": "Spotify Now-Playing Card",
+    "zh-CN": "Spotify 正在播放卡",
+    "zh-TW": "Spotify 正在播放卡片",
+    "ja": "Spotify 再生中カード",
+    "ko": "Spotify 재생 중 카드",
+    "de": "Spotify Aktuell-Läuft-Karte",
+    "fr": "Carte Spotify En Lecture",
+    "ru": "Карточка Spotify «Сейчас играет»",
+    "es": "Tarjeta Spotify Reproduciendo",
+    "pt-BR": "Card Spotify Tocando Agora",
+    "it": "Card Spotify In Riproduzione",
+    "vi": "Thẻ Đang Phát Spotify",
+    "pl": "Karta Spotify Teraz Odtwarzane",
+    "id": "Kartu Spotify Sedang Diputar",
+    "nl": "Spotify Nu-Afspelen Kaart",
+    "ar": "بطاقة التشغيل الحالي Spotify",
+    "tr": "Spotify Şimdi Çalıyor Kartı",
+    "uk": "Картка Spotify «Зараз грає»"
+  },
   "version": "0.1.0",
   "description": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
+  "description_i18n": {
+    "en": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
+    "zh-CN": "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页",
+    "zh-TW": "Spotify 風格的正在播放卡片，包含專輯封面、進度條和播放控制，適用於影片疊加層或個人首頁。",
+    "ja": "Spotify風の再生中カード。アルバムアート、プログレスバー、再生コントロールを備え、動画オーバーレイや個人ホームページに最適。",
+    "ko": "앨범 아트, 진행 표시줄, 재생 컨트롤이 포함된 Spotify 재생 중 스타일 카드로, 영상 오버레이나 개인 홈페이지에 적합합니다.",
+    "de": "Spotify-Wiedergabekarte mit Albumcover, Fortschrittsbalken und Steuerungselementen, geeignet für Video-Overlays oder persönliche Homepages.",
+    "fr": "Carte de lecture Spotify avec pochette d'album, barre de progression et contrôles de lecture, adaptée aux overlays vidéo ou pages d'accueil personnelles.",
+    "ru": "Карточка воспроизведения в стиле Spotify с обложкой альбома, прогресс-баром и элементами управления, подходит для видео-оверлеев или личных страниц.",
+    "es": "Tarjeta estilo Spotify con carátula de álbum, barra de progreso y controles de reproducción, ideal para superposiciones de video o páginas personales.",
+    "pt-BR": "Card estilo Spotify com capa do álbum, barra de progresso e controles de reprodução, adequado para overlays de vídeo ou páginas pessoais.",
+    "it": "Card in stile Spotify con copertina album, barra di avanzamento e controlli di riproduzione, adatto per overlay video o homepage personali.",
+    "vi": "Thẻ đang phát kiểu Spotify với ảnh bìa album, thanh tiến trình và điều khiển phát, phù hợp cho lớp phủ video hoặc trang chủ cá nhân.",
+    "pl": "Karta w stylu Spotify z okładką albumu, paskiem postępu i kontrolkami odtwarzania, idealna do nakładek wideo lub stron osobistych.",
+    "id": "Kartu gaya Spotify dengan sampul album, bilah progres, dan kontrol pemutaran, cocok untuk overlay video atau homepage pribadi.",
+    "nl": "Spotify-afspeelkaart met albumhoes, voortgangsbalk en afspeelbediening, geschikt voor video-overlays of persoonlijke homepages.",
+    "ar": "بطاقة تشغيل بنمط Spotify مع غلاف الألبوم وشريط التقدم وعناصر التحكم، مناسبة لطبقات الفيديو أو الصفحات الشخصية.",
+    "tr": "Albüm kapağı, ilerleme çubuğu ve oynatma kontrolleri içeren Spotify tarzı kart, video yerleşimleri veya kişisel ana sayfalar için uygundur.",
+    "uk": "Картка відтворення в стилі Spotify з обкладинкою альбому, прогрес-баром і елементами керування, підходить для відео-оверлеїв або особистих сторінок."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -83,13 +123,5 @@
       "prompt:inject",
       "fs:write"
     ]
-  },
-  "title_i18n": {
-    "en": "Spotify Now-Playing Card",
-    "zh-CN": "Spotify 正在播放卡"
-  },
-  "description_i18n": {
-    "en": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
-    "zh-CN": "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页"
   }
 }

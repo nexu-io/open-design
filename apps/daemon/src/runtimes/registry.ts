@@ -1,3 +1,4 @@
+import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
 import { codexAgentDef } from './defs/codex.js';
 import { devinAgentDef } from './defs/devin.js';
@@ -17,10 +18,13 @@ import { kiloAgentDef } from './defs/kilo.js';
 import { vibeAgentDef } from './defs/vibe.js';
 import { deepseekAgentDef } from './defs/deepseek.js';
 import { aiderAgentDef } from './defs/aider.js';
+import { antigravityAgentDef } from './defs/antigravity.js';
+import { reasonixAgentDef } from './defs/reasonix.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
 
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
+  amrAgentDef,
   claudeAgentDef,
   codexAgentDef,
   devinAgentDef,
@@ -40,6 +44,8 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   vibeAgentDef,
   deepseekAgentDef,
   aiderAgentDef,
+  antigravityAgentDef,
+  reasonixAgentDef,
 ];
 
 export function readLocalAgentProfileDefs(

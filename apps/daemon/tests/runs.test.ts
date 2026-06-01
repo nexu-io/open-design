@@ -1,5 +1,9 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { EventEmitter } from 'node:events';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createChatRunService } from '../src/runs.js';
 
@@ -31,6 +35,22 @@ describe('chat run service shutdown', () => {
     });
   });
 
+
+
+  it('ignores subsequent finish attempts after the run reaches a terminal state', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+    runs.finish(run, 'failed', 1, 'SIGTERM');
+
+    expect(run.status).toBe('succeeded');
+    expect(run.exitCode).toBe(0);
+    expect(run.signal).toBeNull();
+    expect(run.events.filter((event: { event: string }) => event.event === 'end')).toHaveLength(1);
+    await expect(wait).resolves.toMatchObject({ status: 'succeeded', exitCode: 0, signal: null });
+  });
   it('filters active runs by conversation within the same project', () => {
     const runs = createRuns();
     const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
@@ -41,6 +61,62 @@ describe('chat run service shutdown', () => {
     expect(
       runs.list({ projectId: 'project-1', conversationId: 'conv-b', status: 'active' }),
     ).toEqual([runB]);
+  });
+
+  it('stores effective media execution policy on run status bodies', () => {
+    const runs = createRuns();
+    const defaultRun = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
+    const scopedRun = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-b',
+      mediaExecution: { mode: 'enabled', allowedSurfaces: ['image'] },
+    });
+
+    expect(runs.statusBody(defaultRun)).toMatchObject({
+      mediaExecution: { mode: 'enabled' },
+    });
+    expect(runs.statusBody(scopedRun)).toMatchObject({
+      mediaExecution: { mode: 'enabled', allowedSurfaces: ['image'] },
+    });
+  });
+
+  it('stores a run-scoped tool bundle and returns a redacted status summary', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-a',
+      toolBundle: {
+        mcpServers: [
+          {
+            id: 'run-tools',
+            transport: 'stdio',
+            command: 'node',
+            args: ['server.js', '--token=secret'],
+            env: { API_TOKEN: 'secret' },
+          },
+        ],
+      },
+    }) as any;
+
+    expect(run.toolBundle.mcpServers).toHaveLength(1);
+    expect(run.toolBundle.mcpServers[0]).toMatchObject({
+      id: 'run-tools',
+      command: 'node',
+      env: { API_TOKEN: 'secret' },
+    });
+
+    const status = runs.statusBody(run);
+    expect(status.toolBundle).toEqual({
+      mcpServers: [
+        {
+          id: 'run-tools',
+          transport: 'stdio',
+          enabled: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(status)).not.toContain('secret');
+    expect(JSON.stringify(status)).not.toContain('server.js');
   });
 
   it('cancels active runs and terminates their child process during daemon shutdown', async () => {
@@ -201,3 +277,91 @@ class FakeChildProcess extends EventEmitter {
     return true;
   }
 }
+
+// Persist every SSE event the daemon emits to a per-run JSONL file at
+// <runsLogDir>/<runId>/events.jsonl. The path is surfaced on statusBody
+// as `eventsLogPath`, which is what the MCP `get_run` tool returns to
+// the external coding agent — so Codex / Cursor / Zed can `tail` the
+// file in their own shell during a long-running OD generation, instead
+// of cancelling the run because polling shows nothing changing.
+describe('run event log persistence', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-runs-log-test-'));
+  });
+  afterEach(() => {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+  });
+
+  function createRunsWithLog(runsLogDir: string | null) {
+    return createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      // runs.ts is `// @ts-nocheck`, so the inferred type for the
+      // `runsLogDir = null` default narrows to literal `null` from the
+      // outside; cast to bypass and pass the real string. Production
+      // callers (server.ts) use a string path directly.
+      runsLogDir: runsLogDir as unknown as null,
+    });
+  }
+
+  it('writes each emitted event as a JSONL line under runsLogDir/<runId>/events.jsonl', async () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1' });
+
+    runs.emit(run, 'agent', { type: 'text_delta', delta: 'hello' });
+    runs.emit(run, 'agent', { type: 'text_delta', delta: ' world' });
+    runs.finish(run, 'succeeded', 0, null);
+
+    // Wait for the write stream to fully flush to disk. The stream is
+    // buffered through libuv; .end() is async and only resolves once
+    // the kernel has accepted everything. Poll for the expected line
+    // count with a short cap to keep the test snappy.
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    let lines: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      if (fs.existsSync(logPath)) {
+        const text = fs.readFileSync(logPath, 'utf8').trim();
+        lines = text ? text.split('\n') : [];
+        if (lines.length >= 3) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(fs.existsSync(logPath)).toBe(true);
+    expect(lines.length).toBe(3); // 2 agent + 1 end
+    const parsed = lines.map((l) => JSON.parse(l));
+    expect(parsed[0]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: 'hello' } });
+    expect(parsed[1]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: ' world' } });
+    expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+  });
+
+  it('exposes eventsLogPath on statusBody when runsLogDir is configured', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1' });
+
+    const body = runs.statusBody(run);
+    expect(body.eventsLogPath).toBe(path.join(tmpDir, run.id, 'events.jsonl'));
+  });
+
+  it('reports eventsLogPath: null when runsLogDir is not configured (back-compat)', () => {
+    const runs = createRunsWithLog(null);
+    const run = runs.create({ projectId: 'p1' });
+
+    const body = runs.statusBody(run);
+    expect(body.eventsLogPath).toBeNull();
+  });
+
+  it('does not touch the filesystem when runsLogDir is not configured', () => {
+    const runs = createRunsWithLog(null);
+    const run = runs.create({ projectId: 'p1' });
+    runs.emit(run, 'agent', { type: 'text_delta', delta: 'x' });
+    runs.finish(run, 'succeeded', 0, null);
+
+    // The tmpDir we'd otherwise have written under stays empty
+    // because we configured runsLogDir=null.
+    expect(fs.readdirSync(tmpDir)).toEqual([]);
+  });
+});

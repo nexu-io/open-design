@@ -132,4 +132,27 @@ describe('conversation timestamps', () => {
 
     expect(conversationMetaLabel(conversation, t as never)).toBe('15s');
   });
+
+  it('prefers cumulative conversation duration over the latest run duration', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
+    const t = (key: string, vars?: Record<string, string | number>) =>
+      key === 'common.minutesShort' ? `${vars?.n}m` : key;
+    const conversation = {
+      id: 'conv-1',
+      projectId: 'project-1',
+      title: 'Multi-run session',
+      createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      updatedAt: Date.parse('2025-01-15T12:03:00Z'),
+      totalDurationMs: 85_000,
+      latestRun: {
+        status: 'succeeded',
+        startedAt: 120_000,
+        endedAt: 130_000,
+        durationMs: 10_000,
+      },
+    } satisfies Conversation & { totalDurationMs: number };
+
+    expect(conversationMetaLabel(conversation, t as never)).toBe('1m 25s');
+  });
 });

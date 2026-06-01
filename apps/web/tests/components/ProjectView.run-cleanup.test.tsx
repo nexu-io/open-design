@@ -153,8 +153,12 @@ vi.mock('../../src/components/ChatPane', () => ({
   },
 }));
 
+const fileWorkspaceSpy = vi.fn();
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: () => null,
+  FileWorkspace: (props: Record<string, unknown>) => {
+    fileWorkspaceSpy(props);
+    return null;
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -702,6 +706,85 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  it('queues board comment attachments while the current daemon run is still busy', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async () => new Promise<void>(() => {}));
+
+    render(
+      <ProjectView
+        project={{
+          id: 'project-comments',
+          name: 'Project',
+          skillId: null,
+          designSystemId: null,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    await chatProps.onSend!('keep running', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
+    });
+
+    const workspaceProps = fileWorkspaceSpy.mock.calls.at(-1)?.[0] as {
+      onSendBoardCommentAttachments?: (attachments: unknown[]) => Promise<boolean | void>;
+    };
+    expect(workspaceProps.onSendBoardCommentAttachments).toBeTruthy();
+
+    await workspaceProps.onSendBoardCommentAttachments!([
+      {
+        id: 'hero-board-1',
+        order: 1,
+        filePath: 'preview.html',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        comment: 'Use a warmer accent',
+        currentText: 'Hero',
+        pagePosition: { x: 10, y: 20, width: 100, height: 40 },
+        htmlHint: '<main data-od-id="hero">',
+        source: 'board-batch',
+      },
+    ]);
+
+    await waitFor(() => {
+      const latest = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+        queuedItems?: Array<{ commentAttachments?: Array<{ comment: string }> }>;
+      };
+      expect(latest.queuedItems).toHaveLength(1);
+      expect(latest.queuedItems?.[0]?.commentAttachments?.[0]?.comment).toBe('Use a warmer accent');
+    });
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+  });
+
   it('audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -1073,6 +1156,75 @@ describe('ProjectView daemon cleanup', () => {
         !call[2]?.runId,
     );
     expect(phantomSave).toBeUndefined();
+  });
+
+  it('persists a daemon assistant row as failed after an AMR auth error returns post-run creation', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.onRunCreated?.('run-auth-expired');
+      options.handlers.onError(
+        new Error('Your authentication token has expired. Please sign in again.'),
+      );
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-auth-expired', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('retry auth', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const failedAssistantSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-auth-expired' &&
+          call[1] === 'conv-1' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-auth-expired' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.events?.some(
+            (event: { kind?: string; label?: string; detail?: string }) =>
+              event.kind === 'status' &&
+              event.label === 'error' &&
+              event.detail === 'Your authentication token has expired. Please sign in again.',
+          ),
+      );
+      expect(failedAssistantSave).toBeTruthy();
+    });
   });
 
   it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {

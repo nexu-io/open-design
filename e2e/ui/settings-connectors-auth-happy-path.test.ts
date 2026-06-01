@@ -43,6 +43,11 @@ function baseConfig(): Record<string, unknown> {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    composio: {
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '1234',
+    },
     mediaProviders: {},
     agentModels: {},
     agentCliEnv: {},
@@ -109,6 +114,7 @@ async function openConnectorsSettings(
     onDisconnect?: () => { status: number; body: Record<string, unknown> };
   } = {},
 ) {
+  let githubState: Record<string, unknown> = { ...CONNECTORS[0] };
   await page.addInitScript(({ key, value }) => {
     window.localStorage.setItem(key, JSON.stringify(value));
     window.open = ((() => ({
@@ -159,10 +165,15 @@ async function openConnectorsSettings(
     const statuses = Object.fromEntries(
       connectors.map((connector) => [
         connector.id,
-        {
-          status: connector.status,
-          accountLabel: 'accountLabel' in connector ? connector.accountLabel : undefined,
-        },
+        connector.id === 'github'
+          ? {
+              status: githubState.status,
+              accountLabel: githubState.accountLabel,
+            }
+          : {
+              status: connector.status,
+              accountLabel: 'accountLabel' in connector ? connector.accountLabel : undefined,
+            },
       ]),
     );
     await route.fulfill({ json: { statuses } });
@@ -171,8 +182,25 @@ async function openConnectorsSettings(
   await page.route('**/api/connectors/discovery*', async (route) => {
     await route.fulfill({
       json: {
-        connectors,
+        connectors: connectors.map((connector) => (
+          connector.id === 'github' ? ({ ...connector, ...githubState }) : connector
+        )),
         meta: { provider: 'composio' },
+      },
+    });
+  });
+
+  await page.route('**/api/connectors/github**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        connector: {
+          ...CONNECTORS[0],
+          ...githubState,
+        },
       },
     });
   });
@@ -191,6 +219,10 @@ async function openConnectorsSettings(
 
   await page.route('**/api/connectors/github/connect', async (route) => {
     const response = onConnect();
+    githubState = {
+      ...CONNECTORS[0],
+      ...(response.body.connector ?? {}),
+    };
     await route.fulfill({
       status: response.status,
       contentType: 'application/json',
@@ -200,6 +232,10 @@ async function openConnectorsSettings(
 
   await page.route('**/api/connectors/github/connection', async (route) => {
     const response = onDisconnect();
+    githubState = {
+      ...CONNECTORS[0],
+      ...(response.body.connector ?? {}),
+    };
     await route.fulfill({
       status: response.status,
       contentType: 'application/json',
@@ -310,5 +346,62 @@ test.describe('Settings connectors auth happy path', () => {
     await expect.poll(() => disconnectRequests).toBe(1);
     await expect(githubCard.getByRole('button', { name: 'Connect' })).toBeVisible();
     await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toHaveCount(0);
+  });
+
+  test('disconnecting and reconnecting keeps the connector usable without stale pending state', async ({ page }) => {
+    let connectAttempts = 0;
+    let disconnectRequests = 0;
+    const dialog = await openConnectorsSettings(page, {
+      onConnect: () => {
+        connectAttempts += 1;
+        const accountLabel = connectAttempts === 1 ? 'octo-user' : 'octo-user-2';
+        return {
+          status: 200,
+          body: {
+            connector: {
+              ...CONNECTORS[0],
+              status: 'connected',
+              accountLabel,
+            },
+            auth: { kind: 'connected' },
+          },
+        };
+      },
+      onDisconnect: () => {
+        disconnectRequests += 1;
+        return {
+          status: 200,
+          body: {
+            connector: {
+              ...CONNECTORS[0],
+              status: 'available',
+            },
+          },
+        };
+      },
+    });
+
+    const githubCard = connectorCard(dialog, 'github');
+
+    await githubCard.getByRole('button', { name: 'Connect' }).click();
+    await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+
+    await githubCard.click();
+    const drawer = page.getByTestId('connector-drawer');
+    await expect(drawer).toContainText('Connected');
+    await expect(drawer).not.toContainText('Authorization pending');
+    await drawer.getByTestId('connector-drawer-close').click();
+
+    await githubCard.getByRole('button', { name: 'Disconnect' }).click();
+    await expect.poll(() => disconnectRequests).toBe(1);
+    await expect(githubCard.getByRole('button', { name: 'Connect' })).toBeVisible();
+
+    await githubCard.getByRole('button', { name: 'Connect' }).click();
+    await expect.poll(() => connectAttempts).toBe(2);
+    await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toBeVisible();
+    await githubCard.click();
+    await expect(drawer).toContainText('Connected');
+    await expect(drawer).not.toContainText('Authorization pending');
+    await expect(drawer).not.toContainText("Couldn't cancel authorization");
   });
 });

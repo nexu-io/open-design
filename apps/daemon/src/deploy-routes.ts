@@ -89,7 +89,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: deployProject?.metadata },
+        { metadata: deployProject?.metadata, includeProjectFiles: true },
       );
       const project = getProject(db, req.params.id);
       const cloudflarePagesProjectName =
@@ -171,7 +171,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: preflightProject?.metadata, providerId },
+        { metadata: preflightProject?.metadata, providerId, includeProjectFiles: true },
       );
       res.json(body);
     } catch (err: any) {

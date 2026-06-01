@@ -17,6 +17,7 @@ export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
+export type ToolPackAmrProfile = "prod" | "test" | "local";
 type ToolPackPrereleaseChannel = "beta" | "nightly" | "preview";
 
 export type ToolPackCliOptions = {
@@ -35,6 +36,7 @@ export type ToolPackCliOptions = {
   removeLogs?: boolean;
   removeProductUserData?: boolean;
   removeSidecars?: boolean;
+  requireVelaCli?: boolean;
   signed?: boolean;
   silent?: boolean;
   to?: string;
@@ -70,9 +72,11 @@ export type ToolPackConfig = {
   removeLogs: boolean;
   removeProductUserData: boolean;
   removeSidecars: boolean;
+  requireVelaCli: boolean;
   roots: ToolPackRoots;
   silent: boolean;
   signed: boolean;
+  amrProfile?: ToolPackAmrProfile;
   telemetryRelayUrl?: string;
   /**
    * PostHog product-analytics ingest key, sourced from process.env.POSTHOG_KEY
@@ -162,6 +166,14 @@ function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string 
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
+}
+
+function resolveToolPackAmrProfile(value: string | undefined): ToolPackAmrProfile | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  if (normalized === "prod" || normalized === "test" || normalized === "local") return normalized;
+  throw new Error(`OPEN_DESIGN_AMR_PROFILE must be prod, test, or local: ${value}`);
 }
 
 function resolveToolPackPosthogKey(value: string | undefined): string | undefined {
@@ -318,8 +330,10 @@ export function resolveToolPackConfig(
     removeLogs: options.removeLogs === true,
     removeProductUserData: options.removeProductUserData === true,
     removeSidecars: options.removeSidecars === true,
+    requireVelaCli: options.requireVelaCli === true,
     silent: options.silent !== false,
     signed: options.signed === true,
+    amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),

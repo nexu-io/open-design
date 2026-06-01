@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
 import type {
+  AgentInfo,
   AppConfig,
   ChatMessage,
   Conversation,
@@ -156,6 +157,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     queuedItems,
     previewComments,
     attachedComments,
+    messages,
     onAttachComment,
     onSelectConversation,
     onSend,
@@ -170,6 +172,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     queuedItems?: Array<{ id: string; prompt: string }>;
     previewComments?: PreviewComment[];
     attachedComments?: PreviewComment[];
+    messages?: ChatMessage[];
     error: string | null;
     onAttachComment?: (comment: PreviewComment) => void;
     onSelectConversation: (id: string) => void;
@@ -183,6 +186,21 @@ vi.mock('../../src/components/ChatPane', () => ({
         <output data-testid="active-conversation">{activeConversationId}</output>
         <output data-testid="streaming-state">{streaming ? 'streaming' : 'idle'}</output>
         <output data-testid="chat-error">{error}</output>
+        <output data-testid="assistant-events">
+          {(messages ?? [])
+            .filter((message) => message.role === 'assistant')
+            .flatMap((message) => message.events ?? [])
+            .map((event) => {
+              if (event.kind === 'text') return event.text;
+              if (event.kind === 'status') {
+                const code = (event as { code?: string }).code;
+                return `${code ? code + ' ' : ''}${event.detail ?? event.label}`;
+              }
+              return '';
+            })
+            .filter(Boolean)
+            .join('\n')}
+        </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
         {queuedItems?.map((item, index) => (
           <button
@@ -442,6 +460,43 @@ describe('ProjectView conversation run isolation', () => {
         projectId: 'project-1',
         conversationId: 'conv-b',
         locale: 'zh-CN',
+      }),
+    );
+  });
+
+  it('submits the live AMR fallback model when the saved AMR model is stale', async () => {
+    conversationAMessages = [];
+    renderProjectView(
+      {
+        ...config,
+        agentId: 'amr',
+        agentModels: {
+          amr: { model: 'gpt-5.4-mini', reasoning: 'medium' },
+        },
+      },
+      project,
+      [
+        {
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        },
+      ],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'amr',
+        model: 'glm-5',
+        reasoning: 'medium',
       }),
     );
   });
@@ -747,15 +802,140 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamMessage).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
   });
+
+  it('converges a daemon chat back to idle when the first AMR run fails authentication', async () => {
+    conversationAMessages = [];
+    fetchChatRunStatus.mockResolvedValue(null);
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        onRunCreated?: (runId: string) => void;
+        handlers: { onError: (error: Error) => void };
+      }) => {
+        options.onRunCreated?.('run-auth-expired');
+        options.handlers.onError(
+          new Error('Your authentication token has expired. Please sign in again.'),
+        );
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('chat-error').textContent).toBe(
+        'Your authentication token has expired. Please sign in again.',
+      ),
+    );
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
+    expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false);
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+  });
+
+  it('renders recharge guidance for structured AMR insufficient-balance errors', async () => {
+    conversationAMessages = [];
+    fetchChatRunStatus.mockResolvedValue(null);
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        onRunCreated?: (runId: string) => void;
+        handlers: { onError: (error: Error) => void };
+      }) => {
+        options.onRunCreated?.('run-amr-balance');
+        const error = new Error(
+          'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://open-design.ai/amr/wallet, then retry this run.',
+        ) as Error & { code: string; details: unknown };
+        error.code = 'AMR_INSUFFICIENT_BALANCE';
+        error.details = {
+          kind: 'amr_account',
+          action: 'recharge',
+          actionUrl: 'https://open-design.ai/amr/wallet',
+        };
+        options.handlers.onError(error);
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('chat-error').textContent).toContain('insufficient balance'),
+    );
+    // The structured code rides on the error event; ChatPane keys the recharge
+    // affordance off it.
+    expect(screen.getByTestId('assistant-events').textContent).toContain(
+      'AMR_INSUFFICIENT_BALANCE',
+    );
+    expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
+  });
+
+  it('renders re-login guidance for structured AMR auth-required errors', async () => {
+    conversationAMessages = [];
+    fetchChatRunStatus.mockResolvedValue(null);
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        onRunCreated?: (runId: string) => void;
+        handlers: { onError: (error: Error) => void };
+      }) => {
+        options.onRunCreated?.('run-amr-auth');
+        const error = new Error(
+          'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
+        ) as Error & { code: string; details: unknown };
+        error.code = 'AMR_AUTH_REQUIRED';
+        error.details = {
+          kind: 'amr_account',
+          action: 'relogin',
+        };
+        options.handlers.onError(error);
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('chat-error').textContent).toContain(
+        'AMR sign-in is required',
+      ),
+    );
+    // The structured code rides on the error event; ChatPane keys the
+    // authorize-and-retry affordance off it.
+    expect(screen.getByTestId('assistant-events').textContent).toContain(
+      'AMR_AUTH_REQUIRED',
+    );
+    expect(screen.getByTestId('streaming-state').textContent).toBe('idle');
+  });
 });
 
-function renderProjectView(renderConfig = config, renderProject: Project = project) {
+function renderProjectView(
+  renderConfig = config,
+  renderProject: Project = project,
+  renderAgents: AgentInfo[] = [
+    { id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] },
+  ],
+) {
   return render(
     <ProjectView
       project={renderProject}
       routeFileName={null}
       config={renderConfig}
-      agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+      agents={renderAgents}
       skills={[]}
       designTemplates={[]}
       designSystems={[]}

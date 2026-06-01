@@ -58,6 +58,8 @@ export interface Dict {
   'common.exportPdf': string;
   'common.exportZip': string;
   'common.exportHtml': string;
+  'common.exportImage': string;
+  'common.exportImageFailed': string;
   'common.justNow': string;
   'common.minutesAgo': string;
   'common.hoursAgo': string;
@@ -88,6 +90,13 @@ export interface Dict {
   'plugins.availableDetails.integrity': string;
   'plugins.availableDetails.permissions': string;
   'plugins.availableDetails.capabilitySummary': string;
+  'plugins.actions.copyInstallCommand': string;
+  'plugins.actions.copyPluginId': string;
+  'plugins.actions.copyReadmeBadge': string;
+  'plugins.actions.openSourceGithub': string;
+  'plugins.actions.openSource': string;
+  'plugins.actions.openHomepage': string;
+  'plugins.actions.openMarketplace': string;
 
   // App / brand
   'app.brand': string;
@@ -107,12 +116,24 @@ export interface Dict {
   'settings.onboardingSystemsBody': string;
   'settings.onboardingExecutionTitle': string;
   'settings.onboardingExecutionBody': string;
+  'settings.onboardingAmrCloudBenefitOfficial': string;
+  'settings.onboardingAmrCloudBenefitReady': string;
+  'settings.onboardingAmrCloudBenefitModels': string;
+  'settings.onboardingAmrCloudBenefitPricing': string;
+  'settings.onboardingAmrCloudUpcomingLabel': string;
+  'settings.onboardingAmrCloudUpcomingImageVideo': string;
+  'settings.onboardingAmrCloudUpcomingSkills': string;
+  'settings.onboardingAmrCloudUpcomingRouting': string;
+  'settings.onboardingAmrModelSourceLabel': string;
+  'settings.onboardingAmrCloudAuthorizeAction': string;
+  'settings.onboardingAmrCloudAuthorizedAction': string;
   'settings.onboardingStepConnect': string;
   'settings.onboardingStepDesignSystem': string;
   'settings.onboardingStepProfile': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
   'settings.onboardingRecommended': string;
+  'settings.onboardingAmrCloudOfficialBadge': string;
   'settings.onboardingLocalTitle': string;
   'settings.onboardingLocalBody': string;
   'settings.onboardingLocalAction': string;
@@ -234,6 +255,28 @@ export interface Dict {
   'settings.agentAuthRequired': string;
   'settings.agentAuthUnknown': string;
   'settings.advanced': string;
+  'settings.amrLogin': string;
+  'settings.amrLogout': string;
+  'settings.amrLoggingIn': string;
+  'settings.amrLoggingOut': string;
+  'settings.amrLoggedInAs': string;
+  'settings.amrLoggedInWithPlan': string;
+  'settings.amrLoggedInPill': string;
+  'settings.amrNotLoggedIn': string;
+  'settings.amrCloud': string;
+  'settings.amrAuthorize': string;
+  'settings.amrBenefitOfficial': string;
+  'settings.amrBenefitLowerPrice': string;
+  'settings.amrBenefitManyModels': string;
+  'settings.amrPromoBonus': string;
+  'settings.amrSignInToContinue': string;
+  'settings.amrSignIn': string;
+  'settings.amrSignedIn': string;
+  'settings.amrNotSignedIn': string;
+  'settings.amrSigningIn': string;
+  'settings.amrCancelSignIn': string;
+  'settings.amrAccountStatus': string;
+  'settings.amrLoginErrorCompact': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.customProvider': string;
@@ -402,6 +445,20 @@ export interface Dict {
   'settings.designSystemsCategory': string;
   'settings.designSystemsAllCategories': string;
   'settings.designSystemsShowInHomeGallery': string;
+  'settings.projectLocations': string;
+  'settings.projectLocationsHint': string;
+  'settings.projectLocationsDescription': string;
+  'settings.projectLocationsSaveError': string;
+  'settings.projectLocationsSaved': string;
+  'settings.projectLocationsScanError': string;
+  'settings.projectLocationsScanComplete': string;
+  'settings.projectLocationsNoFolderSelected': string;
+  'settings.projectLocationsDuplicate': string;
+  'settings.projectLocationsWorkBaseMeta': string;
+  'settings.projectLocationsAddFolder': string;
+  'settings.projectLocationsDefaultBadge': string;
+  'settings.projectLocationsMakeDefault': string;
+  'settings.projectLocationsDefaultSaved': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
@@ -638,6 +695,13 @@ export interface Dict {
   'settings.mcpCopied': string;
   'settings.mcpCopy': string;
   'settings.mcpCursorApproval': string;
+  'settings.mcpCodexOneClickInstall': string;
+  'settings.mcpCodexOneClickUninstall': string;
+  'settings.mcpCodexOneClickUnavailable': string;
+  'settings.mcpCodexInstallSuccess': string;
+  'settings.mcpCodexUninstallSuccess': string;
+  'settings.mcpCodexBusy': string;
+  'settings.mcpCodexInstallError': string;
   'settings.mcpRestartNote': string;
   'settings.mcpRestartDetail': string;
   'settings.mcpCapabilitiesTitle': string;
@@ -919,6 +983,11 @@ export interface Dict {
   'pluginCard.publishTitle': string;
   'pluginCard.contributeAria': string;
   'pluginCard.contributeTitle': string;
+  'skillPluginCandidate.createForMe': string;
+  'skillPluginCandidate.contributeToMain': string;
+  'skillPluginCandidate.publishRepo': string;
+  'skillPluginCandidate.dismiss': string;
+  'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;
   'integrations.agentReady': string;
@@ -1211,6 +1280,7 @@ export interface Dict {
   'routines.status.canceled': string;
   'routines.confirmDelete': string;
   'routines.errorPickProject': string;
+  'routines.errorAgentEmptyOutput': string;
   // Bottom-of-rail help menu
   'entry.helpAria': string;
   'entry.helpMenuAria': string;
@@ -1377,6 +1447,9 @@ export interface Dict {
   'newproj.fileSingular': string;
   'newproj.filePlural': string;
   'newproj.create': string;
+  'newproj.locationLabel': string;
+  'newproj.locationDefault': string;
+  'newproj.locationExternalBase': string;
   'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
@@ -1639,6 +1712,18 @@ export interface Dict {
   'project.instructionsActive': string;
   'project.resizeChatPanel': string;
   'chat.tabChat': string;
+  'chat.amrCard.switchTitle': string;
+  'chat.amrCard.switchBody': string;
+  'chat.amrCard.chipOfficial': string;
+  'chat.amrCard.chipNoKey': string;
+  'chat.amrCard.chipAutoRetry': string;
+  'chat.amrCard.switchCta': string;
+  'chat.amrError.authMessage': string;
+  'chat.amrError.balanceMessage': string;
+  'chat.amrError.authorizeCta': string;
+  'chat.amrError.rechargeCta': string;
+  'chat.antigravityError.launchTerminalCta': string;
+  'chat.antigravityError.launchSwitchModelCta': string;
   'chat.tabComments': string;
   'chat.commentsSoon': string;
   'chat.comments.attached': string;
@@ -1658,6 +1743,7 @@ export interface Dict {
   'chat.comments.sending': string;
   'chat.comments.edit': string;
   'chat.comments.select': string;
+  'chat.comments.selectAll': string;
   'chat.comments.deselect': string;
   'chat.comments.nSelected': string;
   'chat.comments.pin': string;
@@ -1667,6 +1753,24 @@ export interface Dict {
   'chat.comments.pinAtCoords': string;
   'chat.comments.capturedItems': string;
   'chat.comments.clear': string;
+  'chat.comments.targetImage': string;
+  'chat.comments.targetControl': string;
+  'chat.comments.targetLink': string;
+  'chat.comments.targetText': string;
+  'chat.comments.targetSection': string;
+  'chat.comments.targetPage': string;
+  'chat.comments.targetArea': string;
+  'chat.annotationNotePlaceholder': string;
+  'chat.annotationQueue': string;
+  'chat.annotationQueueing': string;
+  'chat.annotationSending': string;
+  'chat.annotationSendDisabledReason': string;
+  'chat.annotationPreviewMissing': string;
+  'chat.annotationPreviewMissingInk': string;
+  'chat.annotationTimeout': string;
+  'chat.annotationFailed': string;
+  'chat.annotationProjectCreateFailed': string;
+  'chat.annotationUploadFailed': string;
   'chat.inspect.noEditableTargets': string;
   'chat.inspect.noCommentTargets': string;
   'chat.inspect.editHint': string;
@@ -1707,6 +1811,35 @@ export interface Dict {
   'chat.importFolder': string;
   'chat.importSkills': string;
   'chat.importProject': string;
+  'chat.importDesignSystemHeader': string;
+  'chat.importDesignSystemBack': string;
+  'chat.importDesignSystemSearch': string;
+  'chat.importDesignSystemEmpty': string;
+  'chat.importDesignSystemNone': string;
+  'chat.importDesignSystemNoneSub': string;
+  'chat.importDesignSystemActive': string;
+  'chat.importDesignSystemSwitched': string;
+  'chat.importDesignSystemFailed': string;
+  'chat.importDesignSystemLoadFailed': string;
+  'chat.mentionTabsAria': string;
+  'chat.mentionTabAll': string;
+  'chat.mentionTabPlugins': string;
+  'chat.mentionTabSkills': string;
+  'chat.mentionTabMcp': string;
+  'chat.mentionTabConnectors': string;
+  'chat.mentionTabFiles': string;
+  'chat.mentionNoResults': string;
+  'chat.mentionSearchPrompt': string;
+  'chat.mentionSectionPlugins': string;
+  'chat.mentionSectionSkills': string;
+  'chat.mentionSectionMcp': string;
+  'chat.mentionSectionConnectors': string;
+  'chat.mentionSectionFiles': string;
+  'chat.mentionActiveSkill': string;
+  'chat.mentionUseMcpTitle': string;
+  'chat.mentionUseConnectorTitle': string;
+  'chat.mentionPluginOfficial': string;
+  'chat.mentionPluginMine': string;
   'chat.linkedFolderRemoveAria': string;
   'chat.linkedFolderNotFound': string;
   'chat.linkedFolderAlready': string;
@@ -1734,6 +1867,22 @@ export interface Dict {
 
   // Preview modal
   'preview.shareMenu': string;
+  'preview.exportMenu': string;
+  'preview.shareTemplateBadge': string;
+  'preview.shareToX': string;
+  'preview.shareToReddit': string;
+  'preview.shareToFacebook': string;
+  'preview.shareToLinkedIn': string;
+  'preview.shareToInstagram': string;
+  'preview.shareToXiaohongshu': string;
+  'preview.copyTemplateLink': string;
+  'preview.copyShareText': string;
+  'preview.shareSocialGroup': string;
+  'preview.shareCopyGroup': string;
+  'preview.shareExportGroup': string;
+  'preview.shareCopied': string;
+  'preview.shareCopyFailed': string;
+  'preview.shareTextDefault': string;
   'preview.openInNewTab': string;
   'preview.exit': string;
   'preview.fullscreen': string;
@@ -1742,13 +1891,23 @@ export interface Dict {
   'preview.errorTitle': string;
   'preview.errorBody': string;
   'preview.retry': string;
-  // Friendly placeholder copy for skills whose `od.preview.type` is not
-  // `html` — they ship no fetchable example artifact, so the loading /
-  // error states are misleading. Issue #897.
+  // Friendly placeholder copy for surfaces whose `od.preview.type` is
+  // not `html`, or whose manifest declares a preview entry that doesn't
+  // ship on disk — they have no fetchable example artifact, so the
+  // loading / error states are misleading. Issues #897, #2840, #3216.
+  // Body uses the `{kind}` placeholder (raw `od.preview.type` token,
+  // e.g. "markdown" or "image"); both keys use the `{noun}` placeholder
+  // so the same wording reads correctly on skills, plugins, and design
+  // templates (filled from one of the `preview.noun.*` keys below).
   'preview.unavailableTitle': string;
-  // Body copy uses the `{kind}` placeholder (raw `od.preview.type`
-  // token, e.g. "markdown" or "image") so each kind reads naturally.
   'preview.unavailableBody': string;
+  // Noun variants so the unavailable placeholder reads with the right
+  // word for each surface — Skills tab vs. Community/Plugins vs. deck
+  // design-templates. Keep these short, capitalised by the host
+  // language's conventions, and translatable in every locale.
+  'preview.nounSkill': string;
+  'preview.nounPlugin': string;
+  'preview.nounTemplate': string;
   'preview.showSidebar': string;
   'preview.hideSidebar': string;
 
@@ -1768,6 +1927,22 @@ export interface Dict {
   'workspace.openFromDesignFiles': string;
   'workspace.designFilesLink': string;
   'workspace.loadingSketch': string;
+  'generationPreview.title': string;
+  'generationPreview.failedTitle': string;
+  'generationPreview.failedFallback': string;
+  'generationPreview.footnote': string;
+  'generationPreview.stepUnderstand': string;
+  'generationPreview.stepGenerate': string;
+  'generationPreview.stepPrepare': string;
+  'generationPreview.retry': string;
+  'generationPreview.awaitingTitle': string;
+  'generationPreview.awaitingLead': string;
+  'generationPreview.stoppedTitle': string;
+  'generationPreview.stoppedLead': string;
+  'generationPreview.reasonAuth': string;
+  'generationPreview.reasonRateLimited': string;
+  'generationPreview.reasonService': string;
+  'generationPreview.reasonBalance': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
@@ -1900,10 +2075,17 @@ export interface Dict {
   'fileViewer.comment': string;
   'fileViewer.edit': string;
   'fileViewer.draw': string;
+  'fileViewer.mark': string;
+  'fileViewer.markTool': string;
+  'fileViewer.boxSelect': string;
+  'fileViewer.screenshot': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;
   'manualEdit.title': string;
+  'manualEdit.fallbackTitle': string;
+  'manualEdit.movePanel': string;
+  'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;
   'manualEdit.empty': string;
   'manualEdit.noEditableLayers': string;
@@ -1970,6 +2152,24 @@ export interface Dict {
   'fileViewer.presentNewTab': string;
   'fileViewer.exitPresentation': string;
   'fileViewer.shareLabel': string;
+  'fileViewer.shareMenuShareLink': string;
+  'fileViewer.shareMenuPublishOnline': string;
+  'fileViewer.shareMenuDownload': string;
+  'fileViewer.shareMenuPresentation': string;
+  'fileViewer.shareMenuSourceFiles': string;
+  'fileViewer.shareMenuSave': string;
+  'fileViewer.copyShareLink': string;
+  'fileViewer.openSharePage': string;
+  'fileViewer.shareLinkRequiresDeploy': string;
+  'fileViewer.shareLinkPublishGuide': string;
+  'fileViewer.shareAfterGenerationComplete': string;
+  'fileViewer.copyProviderLink': string;
+  'fileViewer.copyCloudflareLink': string;
+  'fileViewer.screenshotCopying': string;
+  'fileViewer.screenshotCopied': string;
+  'fileViewer.screenshotClipboardDenied': string;
+  'fileViewer.screenshotPreviewLoading': string;
+  'fileViewer.screenshotCaptureFailed': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;
   'fileViewer.exportPptxBusy': string;
@@ -1980,8 +2180,15 @@ export interface Dict {
   'fileViewer.exportMd': string;
   'fileViewer.exportImage': string;
   'fileViewer.exportImageFailed': string;
+  'fileViewer.exportImageModalSubtitle': string;
+  'fileViewer.exportImageFormatLabel': string;
+  'fileViewer.exportImageSaving': string;
+  'fileViewer.exportImageSaved': string;
+  'fileViewer.exportImageDownloadStarted': string;
+  'fileViewer.exportImageDownloadDetails': string;
   'fileViewer.exportJsx': string;
   'fileViewer.exportReactHtml': string;
+  'fileViewer.exportStarted': string;
   'fileViewer.saveAsTemplate': string;
   'fileViewer.savingTemplate': string;
   'fileViewer.savedTemplate': string;
@@ -2111,6 +2318,8 @@ export interface Dict {
   'fileViewer.deployProviderFailed': string;
   'fileViewer.deployResultLabel': string;
   'fileViewer.deployLinkReady': string;
+  'fileViewer.deploySuccessToast': string;
+  'fileViewer.deploySuccessToastDetails': string;
   'fileViewer.deployLinkPreparingLabel': string;
   'fileViewer.deployLinkDelayed': string;
   'fileViewer.deployLinkFailed': string;

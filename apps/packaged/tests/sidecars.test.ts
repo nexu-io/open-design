@@ -16,15 +16,16 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildPackagedDaemonSpawnEnv,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
+  resolvePackagedElectronNodeCommand,
   resolvePackagedPathEnv,
   waitForStatus,
 } from '../src/sidecars.js';
@@ -83,28 +84,115 @@ describe('packaged child Vite+ environment forwarding', () => {
 
   it('forwards standard Node proxy variables to packaged sidecars', () => {
     const env = resolvePackagedChildBaseEnv({
+      ALL_PROXY: 'socks5://127.0.0.1:1080',
       HOME: '/Users/tester',
       HTTP_PROXY: 'http://127.0.0.1:7890',
       HTTPS_PROXY: 'http://127.0.0.1:7890',
       NODE_USE_ENV_PROXY: '1',
       NO_PROXY: 'localhost,127.0.0.1',
       RANDOM_INTERNAL_FLAG: 'drop-me',
+      all_proxy: 'socks5://127.0.0.1:1081',
       http_proxy: 'http://127.0.0.1:7891',
       https_proxy: 'http://127.0.0.1:7891',
       no_proxy: 'localhost,127.0.0.1,::1',
     });
 
     expect(env).toMatchObject({
+      ALL_PROXY: 'socks5://127.0.0.1:1081',
       HOME: '/Users/tester',
-      HTTP_PROXY: 'http://127.0.0.1:7890',
-      HTTPS_PROXY: 'http://127.0.0.1:7890',
+      HTTP_PROXY: 'http://127.0.0.1:7891',
+      HTTPS_PROXY: 'http://127.0.0.1:7891',
       NODE_USE_ENV_PROXY: '1',
-      NO_PROXY: 'localhost,127.0.0.1',
+      NO_PROXY: 'localhost,127.0.0.1,::1',
+      all_proxy: 'socks5://127.0.0.1:1081',
       http_proxy: 'http://127.0.0.1:7891',
       https_proxy: 'http://127.0.0.1:7891',
       no_proxy: 'localhost,127.0.0.1,::1',
     });
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
+  it('merges system proxy env when the packaged app was GUI-launched without shell proxy vars', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+      },
+      false,
+      {
+        HTTP_PROXY: 'http://system-proxy:8080',
+        HTTPS_PROXY: 'http://system-proxy:8443',
+        ALL_PROXY: 'socks5://system-proxy:1080',
+        NO_PROXY: '.local,localhost',
+        NODE_USE_ENV_PROXY: '1',
+      },
+    );
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+      HTTP_PROXY: 'http://system-proxy:8080',
+      HTTPS_PROXY: 'http://system-proxy:8443',
+      ALL_PROXY: 'socks5://system-proxy:1080',
+      NO_PROXY: '.local,localhost',
+      NODE_USE_ENV_PROXY: '1',
+    });
+  });
+
+  it('lets forwarded lowercase proxy env override system uppercase proxy env', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+        https_proxy: 'http://user-lowercase:9443',
+      },
+      false,
+      {
+        HTTPS_PROXY: 'http://system-uppercase:8443',
+        NODE_USE_ENV_PROXY: '1',
+      },
+    );
+
+    expect(env.HTTPS_PROXY).toBe('http://user-lowercase:9443');
+    if (process.platform !== 'win32') {
+      expect(env.https_proxy).toBe('http://user-lowercase:9443');
+    }
+  });
+
+  it('enables Node env proxy support for forwarded lowercase proxy env', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+        https_proxy: 'http://user-lowercase:9443',
+      },
+      false,
+      {},
+    );
+
+    expect(env.HTTPS_PROXY).toBe('http://user-lowercase:9443');
+    expect(env.NODE_USE_ENV_PROXY).toBe('1');
+    if (process.platform !== 'win32') {
+      expect(env.https_proxy).toBe('http://user-lowercase:9443');
+    }
+  });
+
+  it('can skip injecting system proxy env into the packaged daemon base env', () => {
+    const env = resolvePackagedChildBaseEnv(
+      {
+        HOME: '/Users/tester',
+      },
+      true,
+      {
+        HTTP_PROXY: 'http://system-proxy:8080',
+        HTTPS_PROXY: 'http://system-proxy:8443',
+        NODE_USE_ENV_PROXY: '1',
+      },
+      false,
+    );
+
+    expect(env).toMatchObject({
+      HOME: '/Users/tester',
+    });
+    expect(env.HTTP_PROXY).toBeUndefined();
+    expect(env.HTTPS_PROXY).toBeUndefined();
+    expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
   });
 
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
@@ -121,6 +209,53 @@ describe('packaged child Vite+ environment forwarding', () => {
       else process.env.VP_HOME = originalVpHome;
       rmSync(vpHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe('resolvePackagedElectronNodeCommand', () => {
+  it('uses the hidden Electron helper as the macOS Electron-as-Node command when available', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-electron-helper-'));
+    try {
+      const appPath = join(root, 'Open Design.app');
+      const execPath = join(appPath, 'Contents', 'MacOS', 'Open Design');
+      const helperPath = join(
+        appPath,
+        'Contents',
+        'Frameworks',
+        'Open Design Helper.app',
+        'Contents',
+        'MacOS',
+        'Open Design Helper',
+      );
+
+      mkdirSync(join(appPath, 'Contents', 'MacOS'), { recursive: true });
+      mkdirSync(dirname(helperPath), { recursive: true });
+      writeFileSync(execPath, '#!/bin/sh\n', 'utf8');
+      writeFileSync(helperPath, '#!/bin/sh\n', 'utf8');
+
+      await expect(resolvePackagedElectronNodeCommand(execPath, 'darwin')).resolves.toBe(helperPath);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to the main executable when the macOS helper is unavailable', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-no-electron-helper-'));
+    try {
+      const execPath = join(root, 'Open Design.app', 'Contents', 'MacOS', 'Open Design');
+      mkdirSync(dirname(execPath), { recursive: true });
+      writeFileSync(execPath, '#!/bin/sh\n', 'utf8');
+
+      await expect(resolvePackagedElectronNodeCommand(execPath, 'darwin')).resolves.toBe(execPath);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the main executable on non-macOS platforms', async () => {
+    const execPath = '/opt/Open Design/open-design';
+
+    await expect(resolvePackagedElectronNodeCommand(execPath, 'linux')).resolves.toBe(execPath);
   });
 });
 
@@ -250,6 +385,17 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OPEN_DESIGN_TELEMETRY_RELAY_URL).toBe(
       'https://telemetry.open-design.ai/api/langfuse',
     );
+  });
+
+  it('forwards the packaged AMR profile to the daemon when configured', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'test',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+    });
+    expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
   });
 
   it('forwards POSTHOG_KEY/POSTHOG_HOST to the daemon spawn env when baked into the bundle', () => {

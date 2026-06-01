@@ -64,13 +64,15 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Logs / screenshots (optional)
-      description: |
-        If relevant, paste any error output, console logs, or screenshots.
-        For daemon logs, run `pnpm tools-dev logs --json`.
+      label: Logs (optional)
+      description: Paste any error output or console logs. For daemon logs, run `pnpm tools-dev logs --json`.
       render: shell
-    validations:
-      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots (optional)
+      description: Drag and drop or paste images here to show the visual bug.
 
   - type: textarea
     id: context

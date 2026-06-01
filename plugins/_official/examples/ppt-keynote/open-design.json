@@ -3,8 +3,48 @@
   "specVersion": "1.0.0",
   "name": "example-ppt-keynote",
   "title": "Keynote-style Slides",
+  "title_i18n": {
+    "en": "Keynote-style Slides",
+    "zh-CN": "Keynote 风格 PPT",
+    "zh-TW": "Keynote 風格幻燈片",
+    "ja": "Keynote スタイルスライド",
+    "ko": "Keynote 스타일 슬라이드",
+    "de": "Folien im Keynote-Stil",
+    "fr": "Diapositives style Keynote",
+    "ru": "Слайды в стиле Keynote",
+    "es": "Diapositivas estilo Keynote",
+    "pt-BR": "Slides estilo Keynote",
+    "it": "Slide in stile Keynote",
+    "vi": "Slide kiểu Keynote",
+    "pl": "Slajdy w stylu Keynote",
+    "id": "Slide Gaya Keynote",
+    "nl": "Slides in Keynote-stijl",
+    "ar": "شرائح بنمط Keynote",
+    "tr": "Keynote Tarzı Slaytlar",
+    "uk": "Слайди в стилі Keynote"
+  },
   "version": "0.1.0",
   "description": "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation.",
+  "description_i18n": {
+    "en": "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation.",
+    "zh-CN": "苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换",
+    "zh-TW": "Apple Keynote 品質的幻燈片，每屏一卡片，支援鍵盤左右導航。",
+    "ja": "Apple Keynote 品質のスライド、1画面1カードでキーボードの左右キーでナビゲーション。",
+    "ko": "Apple Keynote 품질의 슬라이드, 화면당 하나의 카드, 키보드 좌우 탐색 지원.",
+    "de": "Folien in Apple Keynote-Qualität, eine Karte pro Bildschirm, mit Tastatur-Navigation links/rechts.",
+    "fr": "Diapositives de qualité Apple Keynote, une carte par écran, avec navigation clavier gauche/droite.",
+    "ru": "Слайды качества Apple Keynote, одна карточка на экран, с навигацией клавишами влево/вправо.",
+    "es": "Diapositivas con calidad Apple Keynote, una tarjeta por pantalla, con navegación por teclado izquierda/derecha.",
+    "pt-BR": "Slides com qualidade Apple Keynote, um card por tela, com navegação por teclado esquerda/direita.",
+    "it": "Slide di qualità Apple Keynote, una scheda per schermo, con navigazione da tastiera sinistra/destra.",
+    "vi": "Slide chất lượng Apple Keynote, một thẻ mỗi màn hình, điều hướng bằng phím trái/phải.",
+    "pl": "Slajdy w jakości Apple Keynote, jedna karta na ekran, z nawigacją klawiaturą lewo/prawo.",
+    "id": "Slide berkualitas Apple Keynote, satu kartu per layar, dengan navigasi keyboard kiri/kanan.",
+    "nl": "Slides met Apple Keynote-kwaliteit, één kaart per scherm, met toetsenbordnavigatie links/rechts.",
+    "ar": "شرائح بجودة Apple Keynote، بطاقة واحدة لكل شاشة، مع التنقل بلوحة المفاتيح يمين/يسار.",
+    "tr": "Apple Keynote kalitesinde slaytlar, ekran başına bir kart, klavye sol/sağ navigasyonu ile.",
+    "uk": "Слайди якості Apple Keynote, одна картка на екран, з навігацією клавішами ліворуч/праворуч."
+  },
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -79,13 +119,5 @@
       "prompt:inject",
       "fs:write"
     ]
-  },
-  "title_i18n": {
-    "en": "Keynote-style Slides",
-    "zh-CN": "Keynote 风格 PPT"
-  },
-  "description_i18n": {
-    "en": "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation.",
-    "zh-CN": "苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换"
   }
 }

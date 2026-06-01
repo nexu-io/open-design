@@ -323,10 +323,12 @@
   color: white;
   border-radius: 4px;
 }
+/* Run-failure error card. Neutral gray (not red): the actionable next step
+   lives in the AMR card below it; this card just states what happened. */
 .msg.error {
-  border: 1px solid var(--red-border);
-  background: var(--red-bg);
-  color: var(--red);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   display: flex;
@@ -335,11 +337,111 @@
   gap: 10px;
 }
 .chat-error-text { min-width: 0; }
+.chat-error-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .chat-error-retry {
   flex: 0 0 auto;
-  border-color: var(--red-border);
-  color: var(--red);
   padding: 4px 10px;
+}
+/* Contextual primary action in the gray error card (Authorize & retry / Top up). */
+.chat-error-action {
+  flex: 0 0 auto;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-error-action:hover {
+  background: var(--accent-hover, var(--accent));
+}
+
+/* AMR guidance card under the gray error card. Theme-color tinted; two
+   content variants (switch / recharge) share the shell. */
+.amr-card {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.amr-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.amr-card__icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+}
+.amr-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.amr-card__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.amr-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.amr-card__chip {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.amr-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.amr-card__cta {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.amr-card__cta:hover {
+  background: var(--accent-hover, var(--accent));
 }
 
 /* -------- Composer -------------------------------------------------- */
@@ -406,6 +508,12 @@
 .composer-textarea-layer {
   position: relative;
   min-height: 88px;
+  /* Single source of truth for the input font size. The real (transparent)
+     textarea owns the caret and the .composer-input-overlay renders the
+     visible glyphs; both inherit from here so they stay metric-identical.
+     Pinning the size on only one layer drifts them ~0.5px/em apart, which
+     reads as the caret sitting a full character off after a mention. */
+  font-size: 13px;
 }
 .composer-input-overlay {
   position: absolute;
@@ -415,11 +523,18 @@
   padding: 0;
   color: var(--text);
   font: inherit;
-  line-height: normal;
+  /* Mirror the textarea's inherited line-height (body is 1.5) instead of
+     forcing `normal`. The overlay is a visual echo of the transparent
+     textarea that owns the caret, so any line-height difference drifts the
+     glyphs off the caret vertically and accumulates per wrapped line. */
+  line-height: inherit;
   pointer-events: none;
   white-space: pre-wrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  /* Match the textarea's overflow-wrap so both layers break long runs at the
+     same points; `anywhere` here against the textarea's `break-word` can
+     diverge on long unbroken tokens and drift the caret off the glyphs. */
+  overflow-wrap: break-word;
 }
 .composer-input-overlay-inner {
   min-height: 100%;
@@ -435,26 +550,30 @@
   color: transparent;
 }
 .composer-inline-mention {
+  /* Render the mention as an inline run, not an atomic inline-block chip.
+     The transparent textarea that owns the caret breaks long tokens at
+     normal opportunities (e.g. after the hyphens in a filename), so a
+     nowrap inline-block that refuses to break wraps the whole token to the
+     next line while the textarea splits it. That drifts the caret off the
+     glyphs the moment a mention sits across a wrap boundary. An inline run
+     wraps at the same points as the textarea text, keeping the two locked. */
   display: inline;
-  max-width: none;
-  margin: 0;
-  padding: 0;
+  /* Padding pads the highlight background; the matching negative margin
+     cancels its layout advance so the net width equals the token's content
+     width. box-decoration-break stays default (slice), so the 1px pads apply
+     only at the run's start and end, never at a wrap fragment. */
+  margin: 0 -1px;
+  padding: 0 1px;
   border: 0;
   border-radius: 5px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
   color: color-mix(in srgb, var(--accent) 62%, var(--text));
   font: inherit;
   font-size: inherit;
   font-weight: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  vertical-align: baseline;
-  overflow: visible;
-  text-overflow: clip;
-  white-space: inherit;
 }
 .composer-row {
   display: flex;
@@ -657,6 +776,9 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px 4px 0;
+  max-height: min(148px, 22vh);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .staged-chip {
   display: inline-flex;
@@ -712,7 +834,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(17, 24, 39, 0.44);
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(4px);
 }
 .staged-preview-card {
   display: flex;

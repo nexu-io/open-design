@@ -1,12 +1,12 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
   "types": "./dist/cli.d.ts",
   "bin": {
-    "od": "./dist/cli.js"
+    "od": "./bin/od.mjs"
   },
   "exports": {
     ".": {
@@ -20,6 +20,7 @@
     }
   },
   "files": [
+    "bin",
     "dist",
     "package.json"
   ],

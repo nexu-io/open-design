@@ -6,3 +6,5 @@ paths:
 self-hosted-runner:
   labels:
     - agent-pr-explore
+    - nexu-win
+    - release-beta

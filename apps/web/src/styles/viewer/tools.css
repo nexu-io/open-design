@@ -665,6 +665,16 @@
 }
 
 .share-menu { position: relative; display: inline-block; }
+.template-share-menu > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.template-share-trigger[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .viewer-action-export {
   gap: 6px;
   background: var(--accent);
@@ -720,7 +730,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 50;
-  min-width: 240px;
+  min-width: 300px;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -733,6 +743,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 10px;
   font-size: 12.5px;
   text-align: left;
@@ -747,8 +758,165 @@
   border-color: transparent;
 }
 .share-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
-.share-menu-icon { flex: 0 0 auto; width: 18px; text-align: center; font-size: 13px; }
+.share-menu-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+}
+.share-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-menu-text small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
 .share-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
+.template-share-popover {
+  min-width: 320px;
+  gap: 6px;
+  padding: 8px;
+}
+.template-share-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 10px 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+.template-share-summary__eyebrow {
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.template-share-summary strong {
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.template-share-summary span:last-child {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.template-share-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.template-share-section + .template-share-section {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 6px;
+}
+.template-share-section__label {
+  padding: 2px 8px 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.template-share-platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.template-share-platform {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.template-share-platform:hover:not(:disabled):not([aria-disabled='true']),
+.template-share-platform:focus-visible {
+  background: var(--bg-subtle);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  outline: none;
+}
+.template-share-platform:disabled,
+.template-share-platform[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.template-share-platform__mark {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text);
+  color: var(--bg-panel);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.template-share-platform--reddit .template-share-platform__mark {
+  background: #ff4500;
+  color: white;
+}
+.template-share-platform--facebook .template-share-platform__mark {
+  background: #1877f2;
+  color: white;
+}
+.template-share-platform--linkedin .template-share-platform__mark {
+  background: #0a66c2;
+  color: white;
+}
+.template-share-platform--instagram .template-share-platform__mark {
+  background: #e4405f;
+  color: white;
+}
+.template-share-platform--xiaohongshu .template-share-platform__mark {
+  background: #ff2442;
+  color: white;
+}
+.share-menu-subitem {
+  padding-left: 18px;
+}
+.share-menu-section-label {
+  padding: 8px 10px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.share-menu-subsection-label {
+  padding: 6px 10px 2px 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
 
 .button-like {
   display: inline-flex;
@@ -772,6 +940,115 @@
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+.deploy-flow-modal {
+  --modal-padding: 22px;
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+}
+.image-export-modal.modal {
+  width: min(430px, calc(100vw - 32px));
+  gap: 0;
+  padding: 0;
+}
+.image-export-modal .modal-head {
+  padding: 22px 24px 12px;
+}
+.image-export-modal .modal-head .kicker {
+  display: none;
+}
+.image-export-modal .modal-head h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.image-export-modal .modal-head .subtitle {
+  max-width: none;
+  margin-top: 6px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.image-export-form {
+  padding: 0 24px 18px;
+}
+.image-export-format-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.image-export-format-field legend {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.image-export-format-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+.image-export-format-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.image-export-format-option:hover {
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+}
+.image-export-format-option.active {
+  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: var(--bg-panel);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 7%, transparent);
+}
+.image-export-format-option input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.image-export-format-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+.image-export-format-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+}
+.image-export-format-text strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.image-export-format-text span {
+  display: none;
+}
+.image-export-modal .modal-foot {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--border);
+}
 /* Add a few extra pixels above the deploy dialog's primary action so
    it does not crowd the divider. The shared .modal-foot uses 12px
    vertical padding which is fine for shorter dialogs but reads as
@@ -785,6 +1062,16 @@
 .deploy-flow-modal .modal-foot {
   padding-top: 16px;
 }
+.deploy-flow-modal .modal-foot .viewer-action.primary {
+  justify-content: center;
+  min-width: 104px;
+}
+.deploy-flow-modal .deploy-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--modal-padding) 18px;
+  margin-top: 0;
+}
 .deploy-form {
   display: flex;
   flex-direction: column;
@@ -796,21 +1083,66 @@
   flex-direction: column;
   gap: 6px;
 }
+.deploy-form .deploy-field-title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.deploy-form label.deploy-field-title {
+  display: inline;
+}
+.deploy-form .deploy-field-title.required::after {
+  content: ' *';
+  color: var(--accent);
+  font-weight: 700;
+}
+.deploy-token-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.deploy-token-input-row input {
+  min-width: 0;
+}
+.deploy-token-input-row .button-like {
+  min-height: 44px;
+}
+.deploy-field-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.deploy-field-inline-action {
+  border: 0;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.deploy-field-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .field-label-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
 }
-.field-label-note {
+.deploy-token-label-row {
+  margin-bottom: -2px;
+}
+.deploy-token-hints {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 4px;
-  max-width: min(420px, 70%);
-  text-align: right;
 }
-.field-label-note .hint {
+.deploy-token-hints .hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.35;

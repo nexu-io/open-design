@@ -97,6 +97,11 @@ export interface ManualEditSelectMessage {
   target: ManualEditTarget;
 }
 
+export interface ManualEditHoverMessage {
+  type: 'od-edit-hover';
+  target: ManualEditTarget;
+}
+
 export interface ManualEditPreviewAppliedMessage {
   type: 'od-edit-preview-style-applied';
   id: string;
@@ -114,6 +119,7 @@ export interface ManualEditTextCommitMessage {
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
+  | ManualEditHoverMessage
   | ManualEditPreviewAppliedMessage
   | ManualEditTextCommitMessage;
 

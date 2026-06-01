@@ -22,6 +22,70 @@
       return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
     };
 
+    // Best-effort OS + arch detection so the header download CTA points
+    // straight at the matching installer. Mirrors app/pages/index.astro — keep
+    // the two in sync. arm64 vs x64 on macOS isn't reliably exposed (Safari
+    // hides CPU arch), so we sniff the WebGL renderer and otherwise default to
+    // arm64. Linux has no artifact, so it keeps the releases-page fallback.
+    const detectPlatform = () => {
+      const ua = (navigator.userAgent || '').toLowerCase();
+      const uaPlatform = (
+        (navigator.userAgentData && navigator.userAgentData.platform) ||
+        navigator.platform ||
+        ''
+      ).toLowerCase();
+      const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
+      const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
+      const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
+      if (isWindows) return { os: 'Windows', arch: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
+      if (isMac) {
+        const isIntel = (() => {
+          try {
+            const gl = document.createElement('canvas').getContext('webgl');
+            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+            return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
+          } catch {
+            return false;
+          }
+        })();
+        const suffix = isIntel ? 'mac-x64.dmg' : 'mac-arm64.dmg';
+        const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
+        return { os: 'macOS', arch, match: (n) => n.endsWith(suffix) };
+      }
+      if (isLinux) return { os: 'Linux', arch: '', match: () => false };
+      return null;
+    };
+
+    const enhanceDownloadCtas = (release) => {
+      const ctas = document.querySelectorAll('[data-download-cta]');
+      if (ctas.length === 0) return;
+      const platform = detectPlatform();
+      if (!platform) return;
+      for (const slot of document.querySelectorAll('[data-download-os]')) {
+        slot.textContent = platform.os;
+      }
+      for (const slot of document.querySelectorAll('[data-download-arch]')) {
+        if (!platform.arch) continue;
+        slot.textContent = `（${platform.arch}）`;
+        slot.hidden = false;
+      }
+      const assets = Array.isArray(release?.assets) ? release.assets : [];
+      const asset = assets.find(
+        (a) =>
+          a &&
+          typeof a.name === 'string' &&
+          typeof a.browser_download_url === 'string' &&
+          platform.match(a.name),
+      );
+      if (!asset) return;
+      for (const cta of ctas) {
+        cta.href = asset.browser_download_url;
+        cta.removeAttribute('target');
+        cta.removeAttribute('rel');
+      }
+    };
+
     const chrome = document.querySelector('[data-chrome-headroom]');
     if (chrome) {
       // Wrap the scroll listener in requestAnimationFrame so a burst of
@@ -96,12 +160,14 @@
     }
 
     const versionSlots = document.querySelectorAll('[data-github-version]');
-    if (versionSlots.length > 0) {
+    const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
+    if (versionSlots.length > 0 || hasDownloadCtas) {
       fetch(`${REPO_API}/releases/latest`, {
         headers: { Accept: 'application/vnd.github+json' },
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
         .then((data) => {
+          enhanceDownloadCtas(data);
           const label = formatVersion(data);
           if (!label) return;
           for (const slot of versionSlots) slot.textContent = label;
