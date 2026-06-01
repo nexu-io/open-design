@@ -50,11 +50,13 @@ type PiRpcSessionOptions = {
   send: SendAgentEvent;
   imagePaths?: string[];
   uploadRoot?: string;
+  parentSession?: string;
 };
 
 type PiRpcSession = {
   hasFatalError(): boolean;
   abort(): void;
+  getLastSessionPath(): string | null;
 };
 
 type PiRpcContext = {
@@ -321,35 +323,74 @@ export function mapPiRpcEvent(
 }
 
 /**
+ * Scan a pi session directory for the most recent .jsonl session file.
+ * Returns the absolute path to the newest session file, or null if none
+ * are found or the directory does not exist.
+ */
+function resolveLastSessionPath(cwd: string | undefined): string | null {
+  if (typeof cwd !== 'string' || cwd.length === 0) return null;
+  const sessionsDir = path.join(cwd, '.pi', 'sessions');
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  let newestPath: string | null = null;
+  let newestMtime = 0;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+    try {
+      const full = path.join(sessionsDir, entry.name);
+      const stat = fs.statSync(full);
+      if (stat.mtimeMs > newestMtime) {
+        newestMtime = stat.mtimeMs;
+        newestPath = full;
+      }
+    } catch {
+      // Skip unreadable entries.
+    }
+  }
+  return newestPath;
+}
+
+/**
  * Attach a pi RPC session to a spawned child process.
  *
  * Emits `status: initializing` with the model name immediately so the UI
- * can show "pi · claude-sonnet-4-5" like every other adapter. Then sends
- * the prompt via RPC and streams events back.
+ * can show "pi · claude-sonnet-4-5" like every other adapter. Sends
+ * `new_session` with `parentSession` when provided (for conversational
+ * continuity across edit rounds), then sends the prompt via RPC and
+ * streams events back.
  *
  * The returned `abort()` method sends an RPC `abort` command so pi can
  * clean up gracefully (flush logs, finalize session files, etc.). The
  * caller (runs.cancel()) owns the SIGTERM fallback — abort() does not
  * kill the child process itself.
  *
+ * After the session completes, `getLastSessionPath()` returns the path
+ * to the .jsonl session file pi wrote to disk, or null if none was found.
+ *
  * @param {object} opts
  * @param {import('node:child_process').ChildProcess} opts.child  - spawned pi process
  * @param {string} opts.prompt   - composed user message
- * @param {string} [opts.cwd]    - working directory
+ * @param {string} [opts.cwd]    - working directory (used to resolve .pi/sessions/)
  * @param {string|null} [opts.model] - model id (null = default)
  * @param {string[]} [opts.imagePaths] - absolute paths to image files for multimodal input
  * @param {string} [opts.uploadRoot] - root directory that image paths must remain inside after symlink resolution
  * @param {function} opts.send   - SSE send function
- * @returns {{ hasFatalError(): boolean, abort(): void }}
+ * @param {string} [opts.parentSession] - path to a prior .jsonl session file for conversational continuity
+ * @returns {{ hasFatalError(): boolean, abort(): void, getLastSessionPath(): string | null }}
  */
 export function attachPiRpcSession({
   child,
   prompt,
-  cwd: _cwd,
+  cwd,
   model,
   send,
   imagePaths,
   uploadRoot,
+  parentSession,
 }: PiRpcSessionOptions): PiRpcSession {
   const stdin = child.stdin;
   const stdout = child.stdout;
@@ -364,6 +405,7 @@ export function attachPiRpcSession({
   let finished = false;
   let fatal = false;
   const sentFirstToken = { value: false };
+  let capturedSessionPath: string | null = null;
 
   let nextRpcId = 1;
   let stdinOpen = true;
@@ -394,7 +436,7 @@ export function attachPiRpcSession({
     model: typeof model === 'string' && model ? model : null,
   });
 
-  // ---- Outbound: send the prompt via RPC ----
+  // ---- Outbound: send new_session (if parentSession provided) then prompt via RPC ----
   stdin.on('error', (err: unknown) => {
     if (errorCode(err) !== 'EPIPE') {
       fail(`stdin: ${errorMessage(err)}`);
@@ -403,6 +445,13 @@ export function attachPiRpcSession({
   stdin.on('close', () => {
     stdinOpen = false;
   });
+
+  // If a prior session file path is provided, send new_session with
+  // parentSession so pi loads the prior conversation history into the
+  // new session, enabling conversational continuity across edit rounds.
+  if (parentSession) {
+    sendCommand(stdin, 'new_session', { parentSession });
+  }
 
   // Build the images array for pi's prompt command. pi's RPC protocol
   // accepts `images` as an array of {type, data, mimeType} objects where
@@ -492,6 +541,10 @@ export function attachPiRpcSession({
 
     if (result === 'agent_end') {
       finished = true;
+      // Capture the session file path pi just wrote to disk, so the
+      // caller can pass it as parentSession on the next RPC session
+      // for conversational continuity.
+      capturedSessionPath = resolveLastSessionPath(cwd);
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
       // so close stdin and let the process exit naturally, or kill it
@@ -523,6 +576,9 @@ export function attachPiRpcSession({
   return {
     hasFatalError() {
       return fatal;
+    },
+    getLastSessionPath() {
+      return capturedSessionPath;
     },
     abort() {
       // Send RPC abort so pi can clean up gracefully (flush logs,

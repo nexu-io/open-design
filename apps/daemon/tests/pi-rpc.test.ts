@@ -1106,3 +1106,103 @@ test('attachPiRpcSession: no agent events emitted after abort()', () => {
     'post-abort text must not appear in events',
   );
 });
+
+// ─── parentSession (conversational continuity) ─────────────────────────
+
+test('attachPiRpcSession sends new_session before prompt when parentSession is provided', () => {
+  const events: TestSentEvent[] = [];
+  const send = (channel: str, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  child.stdout.end();
+  const session = attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'test',
+    send,
+    parentSession: '/path/to/prior-session.jsonl',
+  });
+  // Use only read() to read stdin (not on('data')). attachPiRpcSession writes
+  // synchronously to the PassThrough, so all data is buffered and available
+  // via read(). Mixing on('data') + read() in flowing mode duplicates lines.
+  const chunks: str[] = [];
+  let buffered = child.stdin.read();
+  while (buffered) {
+    chunks.push(buffered.toString());
+    buffered = child.stdin.read();
+  }
+  const lines = chunks.join('').trim().split('\n').filter(Boolean);
+  // First line should be new_session with parentSession.
+  const first = parseJsonRecord(lines[0] ?? '');
+  assert.equal(first.type, 'new_session', 'first cmd should be new_session');
+  assert.equal(first.parentSession, '/path/to/prior-session.jsonl', 'parentSession should match');
+  // Second line should be prompt.
+  const second = parseJsonRecord(lines[1] ?? '');
+  assert.equal(second.type, 'prompt', 'second cmd should be prompt');
+  // new_session should have a smaller id than prompt.
+  assert.ok(first.id < second.id, 'new_session id should be less than prompt id');
+  // getLastSessionPath should return null initially (no real session dir).
+  assert.equal(session.getLastSessionPath(), null, 'no session path before agent_end');
+});
+
+test('attachPiRpcSession does NOT send new_session when parentSession is omitted', () => {
+  const events: TestSentEvent[] = [];
+  const send = (channel: str, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  child.stdout.end();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'test',
+    send,
+  });
+  // Use only read() to avoid streaming-mode duplication.
+  const chunks: str[] = [];
+  let buffered = child.stdin.read();
+  while (buffered) {
+    chunks.push(buffered.toString());
+    buffered = child.stdin.read();
+  }
+  const lines = chunks.join('').trim().split('\n').filter(Boolean);
+  const types = lines.map((l) => parseJsonRecord(l).type);
+  assert.ok(!types.includes('new_session'), 'should NOT send new_session');
+  assert.ok(types.includes('prompt'), 'should send prompt');
+});
+
+test('attachPiRpcSession getLastSessionPath returns path after agent_end with real session dir', async () => {
+  const tmpDir = await import('node:os').then((m) => m.tmpdir());
+  const piDir = path.join(tmpDir, `.pi-test-${Date.now()}`);
+  // resolveLastSessionPath scans <cwd>/.pi/sessions/, NOT <cwd>/sessions/.
+  const sessionsDir = path.join(piDir, '.pi', 'sessions');
+  const fsp = await import('node:fs/promises');
+  await fsp.mkdir(sessionsDir, { recursive: true });
+  // Write a fake session file so resolveLastSessionPath finds something.
+  const sessionFile = path.join(sessionsDir, '2026-06-01T00-00-00_test.jsonl');
+  await fsp.writeFile(sessionFile, '{"msg":"test"}\n');
+  try {
+    const send = (_channel: str, _payload: JsonRecord) => {};
+    const child = createMockChild();
+    const session = attachPiRpcSession({
+      child: child as unknown as ChildProcess,
+      prompt: 'test',
+      cwd: piDir,
+      send,
+    });
+    // Feed agent_end to trigger session path capture.
+    feedStdoutLines(child, [
+      { type: 'agent_start' },
+      { type: 'turn_start' },
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'Hello' },
+      },
+      { type: 'agent_end' },
+    ]);
+    closeStdout(child);
+    // Wait a tick for the async capture to complete.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const captured = session.getLastSessionPath();
+    assert.ok(captured, 'should return a session path after agent_end');
+    assert.ok(captured.endsWith('.jsonl'), 'session path should end with .jsonl');
+    assert.ok(captured.startsWith(sessionsDir), 'session path should be inside sessions dir');
+  } finally {
+    await fsp.rm(piDir, { recursive: true, force: true }).catch(() => {});
+  }
+});

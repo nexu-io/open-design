@@ -5554,6 +5554,12 @@ export async function startServer({
   // the same resolved-IP check before issuing the upstream request.
   const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrlResolved(baseUrl);
 
+  // Per-project pi RPC session tracking for conversational continuity.
+  // Maps project cwd path (stable across runs for the same project) to
+  // the most recent .jsonl session file. Used to pass parentSession on
+  // subsequent pi RPC calls so the agent sees prior conversation history.
+  const piParentSessionPaths = new Map();
+
   const resolvedPortRef = {
     get current() {
       return resolvedPort;
@@ -12432,6 +12438,9 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
+        parentSession: typeof effectiveCwd === 'string' && effectiveCwd.length > 0
+          ? piParentSessionPaths.get(effectiveCwd)
+          : undefined,
         send: (channel, payload) => {
           if (channel === 'agent') {
             sendAgentEvent(payload);
@@ -12833,6 +12842,17 @@ export async function startServer({
       // run's `finished` event.
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
+      }
+      // Capture the pi session file path for conversational continuity.
+      // The session path is discovered by attachPiRpcSession when it
+      // processes agent_end; getLastSessionPath() returns it after the
+      // session completes. Stored keyed by effectiveCwd (stable per
+      // project) so the next pi RPC call passes parentSession.
+      if (acpSession && typeof acpSession.getLastSessionPath === 'function' && typeof effectiveCwd === 'string' && effectiveCwd.length > 0) {
+        const sessionPath = acpSession.getLastSessionPath();
+        if (sessionPath) {
+          piParentSessionPaths.set(effectiveCwd, sessionPath);
+        }
       }
       design.runs.finish(run, status, code, signal);
       } finally {
