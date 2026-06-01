@@ -11478,23 +11478,6 @@ export async function startServer({
         newSessionId: agentResumeCtx.newSessionId,
       },
     );
-    // On a create turn we minted `newSessionId` and passed it via
-    // `--session-id`; persist it now so the next turn resumes. Claude
-    // adopts the id we supply, so the stored value equals its real
-    // session id. Resume turns keep the existing row untouched.
-    if (
-      def.resumesSessionViaCli === true &&
-      run.conversationId &&
-      !agentResumeCtx.isResuming &&
-      agentResumeCtx.newSessionId
-    ) {
-      upsertAgentSession(db, {
-        conversationId: run.conversationId,
-        agentId: def.id,
-        sessionId: agentResumeCtx.newSessionId,
-      });
-    }
-
     // Second-pass budget check that knows about the Windows `.cmd` shim
     // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
     // raw composed prompt; on Windows an npm-installed adapter resolves
@@ -11548,6 +11531,25 @@ export async function startServer({
         ),
       );
       return design.runs.finish(run, 'failed', 1, null);
+    }
+
+    // On a create turn we minted `newSessionId` and passed it via
+    // `--session-id`; persist it now — AFTER the spawn-budget guards above
+    // that can bail without launching — so the stored id only ever points
+    // at a session Claude actually opens. Claude adopts the id we supply,
+    // so the stored value equals its real session id. Resume turns keep the
+    // existing row untouched.
+    if (
+      def.resumesSessionViaCli === true &&
+      run.conversationId &&
+      !agentResumeCtx.isResuming &&
+      agentResumeCtx.newSessionId
+    ) {
+      upsertAgentSession(db, {
+        conversationId: run.conversationId,
+        agentId: def.id,
+        sessionId: agentResumeCtx.newSessionId,
+      });
     }
 
     // `runStartTimeMs` is consumed by the run-end artifact-manifest
