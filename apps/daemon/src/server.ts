@@ -409,10 +409,13 @@ import {
   updateProject,
   updateRoutine,
   updateRoutineRun,
+  clearAgentSession,
+  upsertAgentSession,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
+import { resolveAgentResumeContext, isClaudeResumeFailure } from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -11061,10 +11064,25 @@ export async function startServer({
       research,
       message,
     );
+    // Resume-capable adapters (today: Claude) continue their own CLI
+    // session so they keep working memory across turns. Decide once per
+    // run; reuse for the prompt-composition skipTranscript choice, the
+    // buildArgs flags, and the create-turn persistence below.
+    const agentResumeCtx =
+      def.resumesSessionViaCli === true && run.conversationId
+        ? resolveAgentResumeContext(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+          })
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
-      { skipTranscript: def.resumesSessionViaCli === true },
+      // Only trim to the latest turn when we are actually resuming an
+      // existing session. A create turn still sends the full transcript so
+      // a brand-new session (incl. first Claude turn after another agent)
+      // is seeded with prior context.
+      { skipTranscript: def.resumesSessionViaCli === true && agentResumeCtx.isResuming },
     );
     const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -11452,8 +11470,30 @@ export async function startServer({
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd: effectiveCwd, hasPriorAssistantTurn, agentLogFilePath },
+      {
+        cwd: effectiveCwd,
+        hasPriorAssistantTurn,
+        agentLogFilePath,
+        resumeSessionId: agentResumeCtx.resumeSessionId,
+        newSessionId: agentResumeCtx.newSessionId,
+      },
     );
+    // On a create turn we minted `newSessionId` and passed it via
+    // `--session-id`; persist it now so the next turn resumes. Claude
+    // adopts the id we supply, so the stored value equals its real
+    // session id. Resume turns keep the existing row untouched.
+    if (
+      def.resumesSessionViaCli === true &&
+      run.conversationId &&
+      !agentResumeCtx.isResuming &&
+      agentResumeCtx.newSessionId
+    ) {
+      upsertAgentSession(db, {
+        conversationId: run.conversationId,
+        agentId: def.id,
+        sessionId: agentResumeCtx.newSessionId,
+      });
+    }
 
     // Second-pass budget check that knows about the Windows `.cmd` shim
     // wrap. The pre-buildArgs `checkPromptArgvBudget` only looks at the
@@ -12493,6 +12533,26 @@ export async function startServer({
           ));
           return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
         }
+      }
+      if (
+        code !== 0 &&
+        !run.cancelRequested &&
+        def.resumesSessionViaCli === true &&
+        agentResumeCtx.isResuming &&
+        run.conversationId &&
+        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+      ) {
+        // The stored session id no longer resolves (pruned / machine moved
+        // / ~/.claude cleared). Drop it so the next turn starts a fresh
+        // session seeded with the full transcript, and surface a retryable
+        // error rather than a confusing hard failure.
+        clearAgentSession(db, run.conversationId, def.id);
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
