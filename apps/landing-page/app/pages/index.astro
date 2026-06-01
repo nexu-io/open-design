@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../_components/favicon-links.astro';
 import GoogleAnalytics from '../_components/google-analytics.astro';
+import PostHogAnalytics from '../_components/posthog-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
@@ -148,6 +149,7 @@ const pageHtml = renderToStaticMarkup(
     <ResourceHints />
 
     <GoogleAnalytics />
+    <PostHogAnalytics />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
@@ -397,11 +399,39 @@ const pageHtml = renderToStaticMarkup(
         const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
         enhanceHeader();
         enhanceWire();
+
+        // Fire a PostHog surface_view the first time a [data-od-id] section
+        // scrolls into view. Reuses the reveal observer below; a Set dedupes so
+        // each section reports once per page load. window.__odTrack is defined
+        // by posthog-analytics.astro and is a no-op when PostHog isn't loaded.
+        // Event shape matches 埋点文档2.0: surface_view + page_name/section_id/
+        // section_index, where section_index is the 1-based document order.
+        const seenSections = new Set();
+        let sectionOrder = 0;
+        const reportSection = (el) => {
+          const section = el.closest && el.closest('[data-od-id]');
+          if (!section) return;
+          const id = section.getAttribute('data-od-id');
+          if (!id || seenSections.has(id)) return;
+          seenSections.add(id);
+          sectionOrder += 1;
+          if (window.__odTrack)
+            window.__odTrack('surface_view', {
+              page_name: 'landing_home',
+              section_id: id,
+              section_index: sectionOrder,
+              locale: (document.documentElement.getAttribute('lang') || 'en').toLowerCase(),
+            });
+        };
+
         if (elements.length === 0) return;
 
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduceMotion || !('IntersectionObserver' in window)) {
-          for (const el of elements) el.dataset.revealed = 'true';
+          for (const el of elements) {
+            el.dataset.revealed = 'true';
+            reportSection(el);
+          }
           return;
         }
 
@@ -410,6 +440,7 @@ const pageHtml = renderToStaticMarkup(
             for (const entry of entries) {
               if (!entry.isIntersecting) continue;
               entry.target.dataset.revealed = 'true';
+              reportSection(entry.target);
               observer.unobserve(entry.target);
             }
           },
