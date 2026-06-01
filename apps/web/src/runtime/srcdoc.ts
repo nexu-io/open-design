@@ -2088,8 +2088,56 @@ function injectTweaksBridge(doc: string): string {
   }
 
   window.addEventListener('message', function(ev){
-    if (!ev.data || ev.data.type !== 'od:tweaks-panel-visible') return;
-    setPanelVisible(!!ev.data.visible);
+    if (!ev.data) return;
+    if (ev.data.type === 'od:tweaks-panel-visible') {
+      setPanelVisible(!!ev.data.visible);
+      return;
+    }
+    if (ev.data.type === 'od:tweak-discover') {
+      var discovered = [];
+      var seen = {};
+      try {
+        var sheets = document.styleSheets;
+        for (var i = 0; i < sheets.length; i++) {
+          var sheet = sheets[i];
+          var rules = null;
+          try { rules = sheet.cssRules; } catch (e) { continue; }
+          if (!rules) continue;
+          for (var j = 0; j < rules.length; j++) {
+            var rule = rules[j];
+            if (!rule || !rule.style) continue;
+            var selector = (rule.selectorText || '').toLowerCase();
+            // Only scan :root, html, body, or global rules to avoid noise from
+            // component-scoped variables.
+            if (selector && !/(^|,)\s*(:root|html|body)\b/.test(selector)) continue;
+            for (var k = 0; k < rule.style.length; k++) {
+              var prop = rule.style[k];
+              if (prop.indexOf('--') !== 0) continue;
+              if (seen[prop]) continue;
+              seen[prop] = true;
+              discovered.push({ name: prop, value: rule.style.getPropertyValue(prop).trim() });
+            }
+          }
+        }
+      } catch (e) {}
+      try {
+        parent.postMessage({ type: 'od:tweak-variables', variables: discovered }, '*');
+      } catch (e) {}
+      return;
+    }
+    if (ev.data.type === 'od:tweak-set') {
+      var vars = ev.data.vars || {};
+      var root = document.documentElement;
+      // Apply each variable as an inline style on :root. The host is
+      // responsible for committing the final values to a real <style> block
+      // before page reload if persistence is required.
+      for (var name in vars) {
+        if (!Object.prototype.hasOwnProperty.call(vars, name)) continue;
+        if (name.indexOf('--') !== 0) continue;
+        root.style.setProperty(name, vars[name]);
+      }
+      return;
+    }
   });
 })();</script>`;
   const withStyle = /<\/head>/i.test(doc)

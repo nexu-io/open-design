@@ -115,6 +115,7 @@ import type {
   PreviewCommentTarget,
 } from '../types';
 import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import { TweaksPanel, type TweakVariable } from './TweaksPanel';
 import {
   applyManualEditPatch,
   isManualEditFullHtmlDocument,
@@ -4229,8 +4230,12 @@ function HtmlViewer({
   // for hint managing hint box state
   const [openHintBox, setOpenHintBox] = useState(true);
   const [manualEditMode, setManualEditModeRaw] = useState(false);
-  const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
+  const [manualEditStale, setManualEditStale] = useState(false);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [tweakVariables, setTweakVariables] = useState<TweakVariable[]>([]);
+  const [tweakPreviewing, setTweakPreviewing] = useState<Record<string, string>>({});
+  const [tweakInitialValues, setTweakInitialValues] = useState<Record<string, string>>({});
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -4281,7 +4286,6 @@ function HtmlViewer({
     setManualEditModeRaw((prev) => {
       const value = typeof next === 'function' ? (next as (p: boolean) => boolean)(prev) : next;
       if (value !== prev && !value) {
-        setManualEditFrozenSource(null);
         setManualEditViewportWidth(null);
       }
       return value;
@@ -4313,6 +4317,45 @@ function HtmlViewer({
       setCommentPortalHost(null);
     };
   }, [commentPanelOpen, commentPortalId]);
+  // Poll for external file changes while in edit mode
+  useEffect(() => {
+    if (!manualEditMode) {
+      setManualEditStale(false);
+      return;
+    }
+    let cancelled = false;
+    const checkStale = () => {
+      if (cancelled) return;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<'stale'>((resolve) => {
+        timeoutId = setTimeout(() => resolve('stale'), 3000);
+      });
+      Promise.race([
+        fetchProjectFileText(projectId, file.name),
+        timeoutPromise,
+      ]).then((current) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (cancelled) return;
+        if (current === 'stale') {
+          // Couldn't reach the daemon in time; flag potentially stale so the
+          // user knows the inspector may not reflect disk state.
+          setManualEditStale(true);
+          return;
+        }
+        setManualEditStale(current !== sourceRef.current);
+      }).catch(() => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (cancelled) return;
+        setManualEditStale(true);
+      });
+    };
+    const interval = setInterval(checkStale, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      setManualEditStale(false);
+    };
+  }, [manualEditMode, projectId, file.name]);
   const capturePreviewScrollPosition = useCallback(() => {
     const host = previewBodyRef.current;
     let frameLeft = 0;
@@ -4681,14 +4724,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   // source rewrite during edit (1.5s debounced set-style patches) stays
   // invisible to the iframe — live updates flow through od-edit-preview-style
   // postMessage instead, so the canvas never has to reload.
-  useEffect(() => {
-    if (manualEditMode && manualEditFrozenSource === null && livePreviewSource != null) {
-      setManualEditFrozenSource(livePreviewSource);
-    }
-  }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
-  const previewSource = (manualEditMode && manualEditFrozenSource !== null)
-    ? manualEditFrozenSource
-    : livePreviewSource;
+  const previewSource = livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
   // When we URL-load the iframe directly, skip every in-host inlining /
@@ -5128,7 +5164,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setInspectError(null);
     setQueuedBoardNotes([]);
     setStrokePoints([]);
-    setManualEditFrozenSource(null);
     setManualEditViewportWidth(null);
     setManualEditTargets([]);
     setSelectedManualEditTarget(null);
@@ -5351,7 +5386,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     }
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
-      const data = ev.data as ManualEditBridgeMessage | null;
+      const data = ev.data as ManualEditBridgeMessage | { type: 'od:tweak-variables'; variables?: { name: string; value: string }[] } | null;
       if (!data?.type) return;
       if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
         setManualEditTargets(data.targets);
@@ -5383,6 +5418,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         }, 'Edit text');
         return;
       }
+      if (data.type === 'od:tweak-variables') {
+        const vars: TweakVariable[] = (data.variables ?? []).map((v: { name: string; value: string }) => ({
+          name: v.name,
+          value: v.value,
+        }));
+        setTweakVariables(vars);
+        setTweakInitialValues(Object.fromEntries(vars.map((v) => [v.name, v.value])));
+        return;
+      }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -5406,7 +5450,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     if (id !== '__body__' && !readManualEditOuterHtml(savedSource, id)) {
       setManualEditError('The selected target no longer exists in the saved source. Refreshing the preview.');
       setSelectedManualEditTarget(null);
-      setManualEditFrozenSource(null);
       setReloadKey((key) => key + 1);
       return;
     }
@@ -5523,6 +5566,48 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     postSelectedManualEditTargetToIframe(null);
   }
 
+  function clearTweaksPreview() {
+    if (Object.keys(tweakPreviewing).length === 0) return;
+    // Restore the initial values so the iframe's inline CSS variables don't
+    // leak past the panel's lifetime.
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'od:tweak-set', vars: tweakInitialValues },
+      '*',
+    );
+    setTweakPreviewing({});
+  }
+
+  function toggleTweaksPanel() {
+    if (tweaksOpen) {
+      clearTweaksPreview();
+      setTweaksOpen(false);
+      return;
+    }
+    setTweakVariables([]);
+    setTweakPreviewing({});
+    setTweakInitialValues({});
+    setTweaksOpen(true);
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweak-discover' }, '*');
+  }
+
+  function handleTweakPreview(vars: Record<string, string>) {
+    setTweakPreviewing((prev) => ({ ...prev, ...vars }));
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweak-set', vars }, '*');
+  }
+
+  async function handleTweakApply(vars: Record<string, string>) {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweak-set', vars }, '*');
+    setTweakPreviewing({});
+    setTweaksOpen(false);
+  }
+
+  function handleTweakReset(vars: Record<string, string>) {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweak-set', vars }, '*');
+    setTweakPreviewing({});
+    setTweakVariables([]);
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweak-discover' }, '*');
+  }
+
   async function selectManualEditTarget(target: ManualEditTarget) {
     if (manualEditPendingStyleRef.current?.id !== target.id) cancelManualEditStyleDraft();
     const base = sourceRef.current ?? '';
@@ -5549,6 +5634,42 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setManualEditError(null);
   }
 
+  // Id-keyed pending request registry so concurrent reads share one delegated
+  // message listener instead of stacking one handler per call. `null` means
+  // the request timed out (caller should NOT treat as fresh data).
+  const readStylesPendingRef = useRef(new Map<string, (styles: Partial<ManualEditStyles> | null) => void>());
+
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const data = ev.data as { type?: string; id?: string; styles?: Partial<ManualEditStyles> } | null;
+      if (data?.type !== 'od:styles' || typeof data.id !== 'string') return;
+      const resolver = readStylesPendingRef.current.get(data.id);
+      if (!resolver) return;
+      readStylesPendingRef.current.delete(data.id);
+      resolver(data.styles ?? {});
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  function readElementStylesFromIframe(id: string): Promise<Partial<ManualEditStyles> | null> {
+    return new Promise((resolve) => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win) return resolve(null);
+      const timeoutId = setTimeout(() => {
+        if (readStylesPendingRef.current.get(id) === resolve) {
+          readStylesPendingRef.current.delete(id);
+          resolve(null);
+        }
+      }, 3000);
+      readStylesPendingRef.current.set(id, (styles) => {
+        clearTimeout(timeoutId);
+        resolve(styles);
+      });
+      win.postMessage({ type: 'od:read-styles', id }, '*');
+    });
+  }
+
   async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
     if (manualEditSavingRef.current) return false;
     if (sourceRef.current == null) return false;
@@ -5557,7 +5678,18 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setManualEditError(null);
     try {
       const baseSource = sourceRef.current;
-      const result = applyManualEditPatch(baseSource, patch);
+      // For style patches, read current computed styles from live iframe so
+      // saved values match what the user sees in the preview. If the iframe
+      // read times out, fall back to the user's pending patch.styles rather
+      // than silently overwriting with stale data.
+      let patchForApply: ManualEditPatch = patch;
+      if (patch.kind === 'set-style') {
+        const freshStyles = await readElementStylesFromIframe(patch.id);
+        if (freshStyles) {
+          patchForApply = { id: patch.id, kind: 'set-style', styles: { ...patch.styles, ...freshStyles } };
+        }
+      }
+      const result = applyManualEditPatch(baseSource, patchForApply);
       if (!result.ok) {
         setManualEditError(result.error ?? 'Could not apply edit.');
         return false;
@@ -5586,9 +5718,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setSource(result.source);
       sourceRef.current = result.source;
       setInlinedSource(null);
-      if (patch.kind !== 'set-style') {
-        setManualEditFrozenSource(result.source);
-      }
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
@@ -5659,7 +5788,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
       setInlinedSource(null);
-      setManualEditFrozenSource(latest.beforeSource);
       setManualEditHistory(rest);
       setManualEditUndone((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
@@ -5691,7 +5819,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
       setInlinedSource(null);
-      setManualEditFrozenSource(latest.afterSource);
       setManualEditUndone(rest);
       setManualEditHistory((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
@@ -6661,6 +6788,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       canRedo={manualEditUndone.length > 0}
       busy={manualEditSaving}
       pageStylesEnabled={manualEditPageStylesEnabled}
+      stale={manualEditStale}
       onSelectTarget={selectManualEditTarget}
       onDraftChange={setManualEditDraft}
       onStyleChange={(id, styles, label) => {
@@ -6710,6 +6838,24 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         setManualEditError(null);
         return toOwnerRelativePath(file.name, uploaded.path);
       }}
+    />
+  ) : null;
+  const tweaksPanel = tweaksOpen ? (
+    <TweaksPanel
+      open={tweaksOpen}
+      variables={tweakVariables}
+      previewing={tweakPreviewing}
+      initialValues={tweakInitialValues}
+      onClose={() => {
+        clearTweaksPreview();
+        setTweaksOpen(false);
+      }}
+      onDiscover={() => {
+        iframeRef.current?.contentWindow?.postMessage({ type: 'od:tweak-discover' }, '*');
+      }}
+      onPreview={handleTweakPreview}
+      onApply={handleTweakApply}
+      onReset={handleTweakReset}
     />
   ) : null;
   const activeComposerComment = activePreviewCommentId
@@ -6938,6 +7084,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 onClick={activateManualEditTool}
               >
                 <RemixIcon name="edit-line" size={15} />
+              </button>
+              <button
+                className={`viewer-action viewer-action-icon${tweaksOpen ? ' active' : ''}`}
+                type="button"
+                data-tooltip={t('tweaks.title')}
+                title={t('tweaks.title')}
+                aria-label={t('tweaks.title')}
+                aria-pressed={tweaksOpen}
+                onClick={toggleTweaksPanel}
+              >
+                <RemixIcon name="settings-line" size={15} />
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
@@ -7271,6 +7428,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
           >
             {manualEditPanel}
+            {tweaksPanel}
             <div
               className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
               data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}

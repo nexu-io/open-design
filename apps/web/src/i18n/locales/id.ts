@@ -1261,6 +1261,12 @@ export const id: Dict = {
   'manualEdit.width': 'Lebar',
   'manualEdit.minHeight': 'Tinggi minimum',
 
+  'manualEdit.staleWarning': 'This file was modified outside Open Design. Reload to see the latest version.',
+  'tweaks.title': 'Tweaks',
+  'tweaks.noVariables': 'No CSS variables found. Add --variable-name: value; to your stylesheet.',
+  'tweaks.reset': 'Reset',
+  'tweaks.commit': 'Apply',
+  'tweaks.cancel': 'Cancel',
   'fileViewer.zoomOut': 'Perkecil',
   'fileViewer.zoomIn': 'Perbesar',
   'fileViewer.resetZoom': 'Atur ulang zoom',

@@ -38,6 +38,7 @@ export function ManualEditPanel({
   onApplyPatch,
   onPickImage,
   pageStylesEnabled = true,
+  stale = false,
   floatingStyle,
   onFloatingPositionChange,
 }: {
@@ -50,6 +51,7 @@ export function ManualEditPanel({
   canRedo: boolean;
   busy?: boolean;
   pageStylesEnabled?: boolean;
+  stale?: boolean;
   onSelectTarget: (target: ManualEditTarget) => void;
   onDraftChange: (draft: ManualEditDraft) => void;
   onStyleChange?: (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
@@ -66,16 +68,21 @@ export function ManualEditPanel({
   onUndo: () => void;
   onRedo: () => void;
 }) {
+  const EDIT_TABS = [
+    ['content', 'tabContent'],
+    ['style', 'tabStyle'],
+    ['attributes', 'tabAttributes'],
+    ['html', 'tabHtml'],
+    ['source', 'tabSource'],
+  ] as const;
+  type EditTab = typeof EDIT_TABS[number][0];
+  const [activeTab, setActiveTab] = useState<EditTab>('content');
   const t = useT();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
   const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : t('manualEdit.fallbackTitle');
-  useEffect(() => {
-    selectedTargetRef.current = selectedTarget;
-  }, [selectedTarget]);
 
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
@@ -157,70 +164,82 @@ export function ManualEditPanel({
             </button>
           ) : null}
         </div>
+        {stale ? (
+          <div className="manual-edit-stale-banner">
+            <Icon name="info" size={14} />
+            <span>{t('manualEdit.staleWarning')}</span>
+          </div>
+        ) : null}
         <div className="manual-edit-scroll">
-          {targetForInspector ? (
-            <StyleInspector
-              targetKind={targetForInspector.kind}
-              styles={draft.styles}
-              layoutEnabled={targetForInspector.isLayoutContainer}
-              onChange={changeTargetStyle}
-            />
-          ) : !targetForInspector ? (
-            <PageInspector
-              enabled={pageStylesEnabled}
-              onStyleChange={(styles) => {
-                const normalized = normalizeManualEditStyles(styles, { layoutEnabled: true });
-                if (!normalized.ok) {
-                  onError(normalized.error);
-                  onInvalidStyle?.('__body__', Object.keys(styles) as Array<keyof ManualEditStyles>);
-                  return;
-                }
-                onError('');
-                onStyleChange?.('__body__', normalized.styles, 'Page styles');
-              }}
+          <nav className="manual-edit-tabs" role="tablist" aria-label={t('manualEdit.tabsAria')}>
+            {EDIT_TABS.map(([id, labelKey]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === id}
+                className={`manual-edit-tab${activeTab === id ? ' active' : ''}`}
+                onClick={() => setActiveTab(id)}
+              >
+                {t(`manualEdit.${labelKey}`)}
+              </button>
+            ))}
+          </nav>
+          {activeTab === 'content' ? (
+            <ContentTab
+              target={targetForInspector}
+              draft={draft}
+              onDraftChange={onDraftChange}
+              onApplyPatch={onApplyPatch}
+              onPickImage={onPickImage}
+              uploadingImage={uploadingImage}
+              setUploadingImage={setUploadingImage}
+              fileInputRef={fileInputRef}
             />
           ) : null}
-
-          {targetForInspector?.kind === 'image' && onPickImage ? (
-            <div className="cc-section">
-              <header className="cc-section-head">IMAGE</header>
-              <div className="cc-section-body">
-                <button
-                  type="button"
-                  className="cc-action-btn"
-                  disabled={uploadingImage}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {uploadingImage ? t('manualEdit.uploadingImage') : t('manualEdit.uploadImage')}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={async (e) => {
-                    const file = e.currentTarget.files?.[0];
-                    if (!file) return;
-                    e.currentTarget.value = '';
-                    setUploadingImage(true);
-                    try {
-                      const src = await onPickImage(file);
-                      if (src) {
-                        const activeTargetId = selectedTargetRef.current?.id ?? targetForInspector.id;
-                        onApplyPatch(
-                          { id: activeTargetId, kind: 'set-image', src, alt: draft.alt },
-                          t('manualEdit.uploadImage'),
-                        );
-                      } else {
-                        onError(t('manualEdit.uploadImageFailed'));
-                      }
-                    } finally {
-                      setUploadingImage(false);
-                    }
-                  }}
-                />
-              </div>
-            </div>
+          {activeTab === 'style' ? (
+            targetForInspector ? (
+              <StyleInspector
+                targetKind={targetForInspector.kind}
+                styles={draft.styles}
+                layoutEnabled={targetForInspector.isLayoutContainer}
+                onChange={changeTargetStyle}
+              />
+            ) : !targetForInspector ? (
+              <PageInspector
+                enabled={pageStylesEnabled}
+                onStyleChange={(styles) => {
+                  const normalized = normalizeManualEditStyles(styles, { layoutEnabled: true });
+                  if (!normalized.ok) {
+                    onError(normalized.error);
+                    onInvalidStyle?.('__body__', Object.keys(styles) as Array<keyof ManualEditStyles>);
+                    return;
+                  }
+                  onError('');
+                  onStyleChange?.('__body__', normalized.styles, 'Page styles');
+                }}
+              />
+            ) : null
+          ) : null}
+          {activeTab === 'attributes' ? (
+            <AttributesTab
+              draft={draft}
+              onDraftChange={onDraftChange}
+              onError={onError}
+            />
+          ) : null}
+          {activeTab === 'html' ? (
+            <HtmlTab
+              target={targetForInspector}
+              draft={draft}
+              onDraftChange={onDraftChange}
+            />
+          ) : null}
+          {activeTab === 'source' ? (
+            <SourceTab
+              draft={draft}
+              onDraftChange={onDraftChange}
+            />
           ) : null}
         </div>
 
@@ -292,6 +311,233 @@ export function ManualEditPanel({
         </div>
       </section>
     </aside>
+  );
+}
+
+function ContentTab({
+  target,
+  draft,
+  onDraftChange,
+  onApplyPatch,
+  onPickImage,
+  uploadingImage,
+  setUploadingImage,
+  fileInputRef,
+}: {
+  target: ManualEditTarget | null;
+  draft: ManualEditDraft;
+  onDraftChange: (draft: ManualEditDraft) => void;
+  onApplyPatch: (patch: ManualEditPatch, label: string) => void;
+  onPickImage?: (file: File) => Promise<string | null>;
+  uploadingImage: boolean;
+  setUploadingImage: (value: boolean) => void;
+  fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
+}) {
+  const t = useT();
+  if (!target) {
+    return (
+      <p className="manual-edit-hint">{t('manualEdit.selectLayer')}</p>
+    );
+  }
+  if (target.kind === 'image') {
+    return (
+      <div className="cc-section">
+        <header className="cc-section-head">IMAGE</header>
+        <div className="cc-section-body">
+          <label className="cc-field">
+            <span>{t('manualEdit.imageUrl')}</span>
+            <input
+              type="text"
+              value={draft.src}
+              onChange={(e) => onDraftChange({ ...draft, src: e.target.value })}
+            />
+          </label>
+          <label className="cc-field">
+            <span>{t('manualEdit.altText')}</span>
+            <input
+              type="text"
+              value={draft.alt}
+              onChange={(e) => onDraftChange({ ...draft, alt: e.target.value })}
+            />
+          </label>
+          {onPickImage ? (
+            <>
+              <button
+                type="button"
+                className="cc-action-btn"
+                disabled={uploadingImage}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploadingImage ? t('manualEdit.uploadingImage') : t('manualEdit.uploadImage')}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (!file) return;
+                  e.currentTarget.value = '';
+                  setUploadingImage(true);
+                  try {
+                    const src = await onPickImage(file);
+                    if (src) {
+                      onDraftChange({ ...draft, src });
+                      onApplyPatch(
+                        { id: target.id, kind: 'set-image', src, alt: draft.alt },
+                        t('manualEdit.uploadImage'),
+                      );
+                    }
+                  } finally {
+                    setUploadingImage(false);
+                  }
+                }}
+              />
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+  if (target.kind === 'link') {
+    return (
+      <div className="cc-section">
+        <header className="cc-section-head">LINK</header>
+        <div className="cc-section-body">
+          <label className="cc-field">
+            <span>{t('manualEdit.href')}</span>
+            <input
+              type="text"
+              value={draft.href}
+              onChange={(e) => onDraftChange({ ...draft, href: e.target.value })}
+            />
+          </label>
+          <label className="cc-field">
+            <span>{t('manualEdit.text')}</span>
+            <input
+              type="text"
+              value={draft.text}
+              onChange={(e) => onDraftChange({ ...draft, text: e.target.value })}
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+  if (target.kind === 'text' || target.kind === 'token') {
+    return (
+      <div className="cc-section">
+        <header className="cc-section-head">CONTENT</header>
+        <div className="cc-section-body">
+          <textarea
+            className="manual-edit-textarea"
+            value={draft.text}
+            onChange={(e) => onDraftChange({ ...draft, text: e.target.value })}
+            rows={4}
+          />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <p className="manual-edit-hint">
+      {t('manualEdit.noEditableLayers')}
+    </p>
+  );
+}
+
+function AttributesTab({
+  draft,
+  onDraftChange,
+  onError,
+}: {
+  draft: ManualEditDraft;
+  onDraftChange: (draft: ManualEditDraft) => void;
+  onError: (message: string) => void;
+}) {
+  const t = useT();
+  const [parseError, setParseError] = useState<string | null>(null);
+  return (
+    <div className="cc-section">
+      <header className="cc-section-head">{t('manualEdit.attributesJson')}</header>
+      <div className="cc-section-body">
+        <textarea
+          className="manual-edit-attributes-textarea"
+          value={draft.attributesText}
+          spellCheck={false}
+          onChange={(e) => {
+            const text = e.target.value;
+            onDraftChange({ ...draft, attributesText: text });
+            try {
+              const parsed = JSON.parse(text || '{}');
+              if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                setParseError(t('manualEdit.invalidAttributes'));
+                onError(t('manualEdit.invalidAttributes'));
+                return;
+              }
+              setParseError(null);
+              onError('');
+            } catch {
+              setParseError(t('manualEdit.invalidAttributes'));
+              onError(t('manualEdit.invalidAttributes'));
+            }
+          }}
+        />
+        {parseError ? <p className="manual-edit-error">{parseError}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function HtmlTab({
+  target,
+  draft,
+  onDraftChange,
+}: {
+  target: ManualEditTarget | null;
+  draft: ManualEditDraft;
+  onDraftChange: (draft: ManualEditDraft) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="cc-section">
+      <header className="cc-section-head">{t('manualEdit.selectedHtml')}</header>
+      <div className="cc-section-body">
+        <textarea
+          className="manual-edit-html-textarea"
+          value={draft.outerHtml}
+          spellCheck={false}
+          rows={10}
+          onChange={(e) => onDraftChange({ ...draft, outerHtml: e.target.value })}
+          disabled={!target}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SourceTab({
+  draft,
+  onDraftChange,
+}: {
+  draft: ManualEditDraft;
+  onDraftChange: (draft: ManualEditDraft) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="cc-section">
+      <header className="cc-section-head">{t('manualEdit.fullSource')}</header>
+      <div className="cc-section-body">
+        <textarea
+          className="manual-edit-source-textarea"
+          value={draft.fullSource}
+          spellCheck={false}
+          rows={20}
+          onChange={(e) => onDraftChange({ ...draft, fullSource: e.target.value })}
+        />
+      </div>
+    </div>
   );
 }
 

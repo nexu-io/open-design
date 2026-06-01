@@ -2129,6 +2129,12 @@ export interface Dict {
   'manualEdit.uploadImageFailed': string;
   'manualEdit.focusSlides': string;
   'manualEdit.showPanels': string;
+  'manualEdit.staleWarning': string;
+  'tweaks.title': string;
+  'tweaks.noVariables': string;
+  'tweaks.reset': string;
+  'tweaks.commit': string;
+  'tweaks.cancel': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
