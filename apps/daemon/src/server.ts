@@ -416,7 +416,7 @@ import {
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
-import { resolveAgentResumeContext, isClaudeResumeFailure, hashStableInstructions } from './agent-session-resume.js';
+import { resolveAgentResumeContext, isClaudeResumeFailure, hashStableInstructions, computeIncludeStable } from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -11097,8 +11097,14 @@ export async function startServer({
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .join('\n\n---\n\n');
     const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
-    const includeStableInstructions =
-      !agentResumeCtx.isResuming || agentResumeCtx.storedStablePromptHash !== currentStableHash;
+    // `runtimeToolPrompt` is part of the fingerprint and varies only when the
+    // tool-token grant's presence flips between turns (rare cwd/projectId edge
+    // cases); any such change correctly forces a full re-send that turn.
+    const includeStableInstructions = computeIncludeStable(
+      agentResumeCtx.isResuming,
+      agentResumeCtx.storedStablePromptHash,
+      currentStableHash,
+    );
     const clientInstructionParts = includeStableInstructions
       ? [researchCommandContract, runContextPrompt, systemPrompt]
       : [researchCommandContract, runContextPrompt];

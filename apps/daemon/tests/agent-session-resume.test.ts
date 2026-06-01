@@ -11,6 +11,7 @@ import {
   upsertAgentSession,
 } from '../src/db.js';
 import {
+  computeIncludeStable,
   hashStableInstructions,
   isClaudeResumeFailure,
   resolveAgentResumeContext,
@@ -67,6 +68,21 @@ describe('resolveAgentResumeContext', () => {
     expect(resumed.isResuming).toBe(true);
     expect(resumed.resumeSessionId).toBe('sess-A');
     expect(resumed.storedStablePromptHash).toBe('h-1');
+  });
+});
+
+describe('computeIncludeStable', () => {
+  it('includes the stable block on a create turn (not resuming)', () => {
+    expect(computeIncludeStable(false, null, 'h-1')).toBe(true);
+  });
+  it('skips the stable block on a resume turn with a matching hash', () => {
+    expect(computeIncludeStable(true, 'h-1', 'h-1')).toBe(false);
+  });
+  it('includes the stable block on a resume turn whose hash changed', () => {
+    expect(computeIncludeStable(true, 'h-old', 'h-new')).toBe(true);
+  });
+  it('includes the stable block on a resume turn with no stored hash (legacy session)', () => {
+    expect(computeIncludeStable(true, null, 'h-1')).toBe(true);
   });
 });
 

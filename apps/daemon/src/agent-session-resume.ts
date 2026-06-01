@@ -53,6 +53,22 @@ export function hashStableInstructions(stable: string): string {
   return createHash('sha256').update(stable, 'utf8').digest('hex');
 }
 
+/**
+ * Decide whether a resume-capable spawn must include the stable instruction
+ * block (daemon prompt + tool contract + design system / skills / memory).
+ * Always include it on a create turn (not resuming) or when the block's hash
+ * differs from what was last sent on this session; skip it only on a resumed
+ * turn whose stable block is byte-identical to last time (incl. legacy
+ * sessions with no stored hash, which compare unequal and so re-send).
+ */
+export function computeIncludeStable(
+  isResuming: boolean,
+  storedStableHash: string | null,
+  currentStableHash: string,
+): boolean {
+  return !isResuming || storedStableHash !== currentStableHash;
+}
+
 /** True when CLI output indicates a resume target session is missing. */
 export function isClaudeResumeFailure(text: string): boolean {
   if (!text) return false;

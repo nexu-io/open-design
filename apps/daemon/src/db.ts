@@ -301,7 +301,7 @@ function migrate(db: SqliteDb): void {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
   }
   const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
-  if (!agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
   }
   migrateCritique(db);
