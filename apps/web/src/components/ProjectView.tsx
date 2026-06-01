@@ -1152,7 +1152,7 @@ export function ProjectView({
       const currentProjectFiles = projectFilesSnapshot ?? projectFilesRef.current;
       const existing = new Set(currentProjectFiles.map((f) => f.name));
       const savedArtifactName =
-        savedArtifactRef.current ?? matchingHtmlArtifactLineageFileName(art, lastHtmlArtifactLineageRef.current);
+        savedArtifactRef.current ?? matchingHtmlArtifactLineageFileName(art, lastHtmlArtifactLineageRef.current, currentProjectFiles);
       const canOverwriteExistingEntry = canOverwriteHtmlArtifactEntry({
         baseName,
         ext,
@@ -1189,7 +1189,9 @@ export function ProjectView({
         if (pointerTarget) {
           if (savedArtifactRef.current === pointerTarget) return;
           savedArtifactRef.current = pointerTarget;
-          lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(art, pointerTarget);
+          const pointerFile = currentProjectFiles.find((f) => f.name === pointerTarget || f.path === pointerTarget);
+          const pointerGroup = pointerFile?.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
+          lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(art, pointerTarget, String(pointerGroup));
           requestOpenFile(pointerTarget);
           return;
         }
@@ -1252,7 +1254,8 @@ export function ProjectView({
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
         if (ext === '.html') {
-          lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(art, file.name);
+          const groupId = file.artifactManifest?.metadata?.artifactGroupIdentifier ?? artifactGroupIdentifier ?? '';
+          lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(art, file.name, String(groupId));
         }
         requestOpenFile(file.name);
       } else {
@@ -2141,9 +2144,11 @@ export function ProjectView({
                   );
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
+                    const recoveredGroupId = recoveredExistingArtifact.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
                     lastHtmlArtifactLineageRef.current = htmlArtifactLineageFor(
                       parsedArtifact,
                       recoveredExistingArtifact.name,
+                      String(recoveredGroupId),
                     );
                     requestOpenFile(recoveredExistingArtifact.name);
                   } else {
@@ -4662,25 +4667,49 @@ interface HtmlArtifactLineage {
   identifier: string;
   title: string;
   artifactType: string;
+  artifactGroupIdentifier: string;
+  htmlContent: string;
 }
 
-function htmlArtifactLineageFor(art: Artifact, fileName: string): HtmlArtifactLineage {
+function htmlArtifactLineageFor(
+  art: Artifact,
+  fileName: string,
+  artifactGroupIdentifier: string,
+): HtmlArtifactLineage {
   return {
     fileName,
     identifier: art.identifier ?? '',
     title: art.title ?? '',
     artifactType: art.artifactType ?? '',
+    artifactGroupIdentifier,
+    htmlContent: art.html ?? '',
   };
 }
 
 function matchingHtmlArtifactLineageFileName(
   art: Artifact,
   lineage: HtmlArtifactLineage | null,
+  projectFiles: ProjectFile[],
 ): string | null {
   if (!lineage) return null;
   if ((art.identifier ?? '') !== lineage.identifier) return null;
   if ((art.title ?? '') !== lineage.title) return null;
   if ((art.artifactType ?? '') !== lineage.artifactType) return null;
+  if (lineage.artifactGroupIdentifier === '') return null;
+
+  // Verify HTML content matches to prevent unrelated artifacts from reusing
+  // the group
+  if ((art.html ?? '') !== lineage.htmlContent) return null;
+
+  // Verify the lineage file still exists and has the same group
+  const lineageFile = projectFiles.find(
+    (f) => f.name === lineage.fileName || f.path === lineage.fileName,
+  );
+  if (!lineageFile) return null;
+  const currentGroup =
+    lineageFile.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
+  if (currentGroup !== lineage.artifactGroupIdentifier) return null;
+
   return lineage.fileName;
 }
 
