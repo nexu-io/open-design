@@ -1111,7 +1111,7 @@ test('attachPiRpcSession: no agent events emitted after abort()', () => {
 
 test('attachPiRpcSession sends new_session before prompt when parentSession is provided', () => {
   const events: TestSentEvent[] = [];
-  const send = (channel: str, payload: JsonRecord) => events.push({ channel, ...payload });
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
   child.stdout.end();
   const session = attachPiRpcSession({
@@ -1123,7 +1123,7 @@ test('attachPiRpcSession sends new_session before prompt when parentSession is p
   // Use only read() to read stdin (not on('data')). attachPiRpcSession writes
   // synchronously to the PassThrough, so all data is buffered and available
   // via read(). Mixing on('data') + read() in flowing mode duplicates lines.
-  const chunks: str[] = [];
+  const chunks: string[] = [];
   let buffered = child.stdin.read();
   while (buffered) {
     chunks.push(buffered.toString());
@@ -1138,14 +1138,14 @@ test('attachPiRpcSession sends new_session before prompt when parentSession is p
   const second = parseJsonRecord(lines[1] ?? '');
   assert.equal(second.type, 'prompt', 'second cmd should be prompt');
   // new_session should have a smaller id than prompt.
-  assert.ok(first.id < second.id, 'new_session id should be less than prompt id');
+  assert.ok((first.id as number) < (second.id as number), 'new_session id should be less than prompt id');
   // getLastSessionPath should return null initially (no real session dir).
   assert.equal(session.getLastSessionPath(), null, 'no session path before agent_end');
 });
 
 test('attachPiRpcSession does NOT send new_session when parentSession is omitted', () => {
   const events: TestSentEvent[] = [];
-  const send = (channel: str, payload: JsonRecord) => events.push({ channel, ...payload });
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
   child.stdout.end();
   attachPiRpcSession({
@@ -1154,7 +1154,7 @@ test('attachPiRpcSession does NOT send new_session when parentSession is omitted
     send,
   });
   // Use only read() to avoid streaming-mode duplication.
-  const chunks: str[] = [];
+  const chunks: string[] = [];
   let buffered = child.stdin.read();
   while (buffered) {
     chunks.push(buffered.toString());
@@ -1177,7 +1177,7 @@ test('attachPiRpcSession getLastSessionPath returns path after agent_end with re
   const sessionFile = path.join(sessionsDir, '2026-06-01T00-00-00_test.jsonl');
   await fsp.writeFile(sessionFile, '{"msg":"test"}\n');
   try {
-    const send = (_channel: str, _payload: JsonRecord) => {};
+    const send = (_channel: string, _payload: JsonRecord) => {};
     const child = createMockChild();
     const session = attachPiRpcSession({
       child: child as unknown as ChildProcess,
