@@ -333,6 +333,68 @@ test('BYOK auto-loads provider models and reuses cached results for the same con
   await expect.poll(() => providerModelRequests.length).toBe(1);
 });
 
+
+test('BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
+  const providerModelRequests: Array<Record<string, unknown>> = [];
+  await page.route('**/api/provider/models', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    providerModelRequests.push(payload);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 15,
+        models: [
+          { id: 'aa-nightly-model', label: 'AA Nightly Model' },
+          { id: 'bb-nightly-model', label: 'BB Nightly Model' },
+          { id: 'cc-nightly-model', label: 'CC Nightly Model' },
+          { id: 'dd-nightly-model', label: 'DD Nightly Model' },
+          { id: 'ee-nightly-model', label: 'EE Nightly Model' },
+          { id: 'ff-nightly-model', label: 'FF Nightly Model' },
+          { id: 'gg-nightly-model', label: 'GG Nightly Model' },
+          { id: 'hh-nightly-model', label: 'HH Nightly Model' },
+          { id: 'mm-nightly-model', label: 'MM Nightly Model' },
+          { id: 'zz-nightly-model', label: 'ZZ Nightly Model' },
+        ],
+      }),
+    });
+  });
+
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('API key').fill('sk-openai-test');
+  await dialog.getByLabel('API key').blur();
+  await expect(dialog.getByText('Loaded 10 models from your account.')).toBeVisible();
+  await expect.poll(() => providerModelRequests.length).toBe(1);
+
+  await dialog.getByRole('combobox', { name: 'Model', exact: true }).click();
+  const popover = page.getByTestId('settings-byok-model-popover');
+  const search = page.getByTestId('settings-byok-model-search');
+  await expect(popover).toBeVisible();
+  await expect(search).toBeVisible();
+  await search.fill('mm-nightly');
+  await expect(popover.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toBeVisible();
+  await expect(popover.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
+});
+
 test('saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
   await openExecutionSettingsWithAgents(
     page,

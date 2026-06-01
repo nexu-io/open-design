@@ -5855,6 +5855,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     win.postMessage({ type: 'od:slide', action }, '*');
   }
 
+  function syncCachedSlideStateToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
+    const active = htmlPreviewSlideState.get(previewStateKey)?.active;
+    const win = target?.contentWindow;
+    if (!win || typeof active !== 'number') return;
+    win.postMessage({ type: 'od:slide', action: 'go', index: active }, '*');
+  }
+
   function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
@@ -7666,6 +7673,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                           }, '*');
                           replayInspectOverridesToIframe(frame);
                           syncBridgeModes(frame);
+                          syncCachedSlideStateToIframe(frame);
                           if (!useUrlLoadPreview) restorePreviewScrollPosition();
                         }}
                       />

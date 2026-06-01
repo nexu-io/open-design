@@ -588,6 +588,56 @@ fsTest('detectAgents marks AMR available from packaged built-in Vela with the bu
   }
 });
 
+
+fsTest('detectAgents prefers configured AMR live models over stale fallback defaults', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-detect-amr-live-models-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'OD_RESOURCE_ROOT', 'VELA_OPENCODE_BIN'], async () => {
+      const fakeVela = join(root, 'vela');
+      const fakeOpenCode = join(root, 'opencode');
+      writeFileSync(
+        fakeVela,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "vela custom-live"; exit 0; fi
+if [ "$1" = "models" ]; then printf "%s\n" "public_model_deepseek_v4_flash    vela" "public_model_glm_5    vela"; exit 0; fi
+exit 0
+`,
+      );
+      writeFileSync(fakeOpenCode, `#!/bin/sh
+exit 0
+`);
+      chmodSync(fakeVela, 0o755);
+      chmodSync(fakeOpenCode, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'empty-home');
+      delete process.env.OD_RESOURCE_ROOT;
+      delete process.env.VELA_OPENCODE_BIN;
+
+      const agents = await detectAgents({
+        amr: {
+          VELA_BIN: fakeVela,
+          VELA_OPENCODE_BIN: fakeOpenCode,
+        },
+      });
+      const amrAgent = agents.find((agent) => agent.id === 'amr');
+
+      assert.ok(amrAgent);
+      assert.equal(amrAgent.available, true);
+      assert.equal(amrAgent.path, fakeVela);
+      assert.equal(amrAgent.version, 'vela custom-live');
+      assert.equal(amrAgent.modelsSource, 'live');
+      assert.deepEqual(amrAgent.models, [
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+        { id: 'glm-5', label: 'glm-5' },
+      ]);
+      assert.equal(amrAgent.models.some((model) => model.id === 'default'), false);
+      assert.equal(amrAgent.models.some((model) => model.id === 'gpt-5.4-mini'), false);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function codexNativeTargetTriple(): string {
   if (process.platform === 'darwin' && process.arch === 'arm64') return 'aarch64-apple-darwin';
   if (process.platform === 'darwin' && process.arch === 'x64') return 'x86_64-apple-darwin';
