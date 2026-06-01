@@ -86,18 +86,13 @@ describe('ManualEditPanel', () => {
     expect(host.querySelector('.manual-edit-drag-handle')?.getAttribute('aria-label')).toBe('Move edit panel');
   });
 
-  it('allows returning from an element inspector to the page inspector', () => {
+  it('does not show page-level controls inside an element inspector', () => {
     const onClearSelection = vi.fn();
     renderPanel({ onClearSelection });
 
-    const pageButton = host.querySelector('button[aria-label="Show page inspector"]') as HTMLButtonElement | null;
-    if (!pageButton) throw new Error('Page inspector button not found');
-
-    act(() => {
-      pageButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onClearSelection).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('button[aria-label="Show page inspector"]')).toBeNull();
+    expect(host.textContent).not.toContain('PAGE');
+    expect(onClearSelection).not.toHaveBeenCalled();
   });
 
   it('keeps inspector controls scrollable separately from footer actions', () => {

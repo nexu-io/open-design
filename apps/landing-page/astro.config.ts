@@ -257,11 +257,11 @@ export default defineConfig({
           item.priority = 0.9;
           item.changefreq = changefreq.weekly;
         } else if (
-          path === '/skills/' ||
-          path === '/systems/' ||
-          path === '/templates/' ||
           path === '/craft/' ||
-          path === '/plugins/'
+          path === '/plugins/' ||
+          path === '/plugins/skills/' ||
+          path === '/plugins/systems/' ||
+          path === '/plugins/templates/'
         ) {
           item.priority = 0.7;
           item.changefreq = changefreq.weekly;

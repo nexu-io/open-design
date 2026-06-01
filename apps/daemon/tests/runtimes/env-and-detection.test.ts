@@ -1,6 +1,8 @@
 import { symlinkSync } from 'node:fs';
 import { test, vi } from 'vitest';
 import { homedir } from 'node:os';
+import { dirname, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as platform from '@open-design/platform';
 import {
   assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
@@ -8,6 +10,7 @@ import {
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
 // Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
 // credentials, silently billing API usage. Strip it for the claude
@@ -53,6 +56,113 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal(env.PATH, '/usr/bin');
   assert.equal('CODEX_HOME' in base, false);
   assert.equal('CODEX_BIN' in base, false);
+});
+
+test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-'));
+  try {
+    const codexEnv = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+      },
+    );
+    assert.equal(
+      codexEnv.CODEX_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.codex'),
+    );
+    assert.equal(codexEnv.HOME, join(dataDir, 'sandbox', 'agent-home'));
+
+    const claudeEnv = spawnEnvForAgent(
+      'claude',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CLAUDE_CONFIG_DIR: '/Users/test/.claude-host',
+      },
+    );
+    assert.equal(
+      claudeEnv.CLAUDE_CONFIG_DIR,
+      join(dataDir, 'sandbox', 'config', 'claude'),
+    );
+
+    const amrEnv = spawnEnvForAgent(
+      'amr',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        OPENCODE_TEST_HOME: '/Users/test/.opencode-host',
+      },
+    );
+    assert.equal(
+      amrEnv.OPENCODE_TEST_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.opencode'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent keeps sandbox roots pinned to the base OD_DATA_DIR', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-base-'));
+  try {
+    const env = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+        OD_DATA_DIR: '/host/path/.od',
+      },
+    );
+
+    assert.equal(env.OD_DATA_DIR, dataDir);
+    assert.equal(env.CODEX_HOME, join(dataDir, 'sandbox', 'agent-home', '.codex'));
+    assert.equal(env.HOME, join(dataDir, 'sandbox', 'agent-home'));
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent resolves relative OD_DATA_DIR before applying sandbox roots', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-relative-'));
+  try {
+    const relativeDataDir = relative(repoRoot, dataDir);
+    const env = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: relativeDataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+      },
+    );
+
+    assert.equal(
+      env.CODEX_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.codex'),
+    );
+    assert.equal(env.CLAUDE_CONFIG_DIR, join(dataDir, 'sandbox', 'config', 'claude'));
+    assert.equal(env.HOME, join(dataDir, 'sandbox', 'agent-home'));
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
@@ -844,6 +954,22 @@ test('spawnEnvForAgent strips ANTHROPIC_API_KEY case-insensitively for the claud
     (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY',
   );
   assert.deepEqual(remaining, []);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when claude resolves to OpenClaude fallback', () => {
+  const env = spawnEnvForAgent(
+    'claude',
+    {
+      ANTHROPIC_API_KEY: 'sk-openclaude',
+      PATH: '/usr/bin',
+    },
+    {},
+    {},
+    { resolvedBin: '/tools/openclaude' },
+  );
+
+  assert.equal(env.ANTHROPIC_API_KEY, 'sk-openclaude');
   assert.equal(env.PATH, '/usr/bin');
 });
 

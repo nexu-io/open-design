@@ -16,12 +16,10 @@ import { buildSrcdoc } from '../../src/runtime/srcdoc';
 //      this, FileViewer's `liveCommentTargets` map never updates and
 //      the hint banner sticks at its instructive-default state even
 //      though there's nothing to click.
-//   2. Drop click events on unannotated elements without posting an
-//      `od:comment-target` — the click handler walks up to <html>,
-//      finds nothing tagged, and must bail. Posting a synthetic id
-//      here would change save-to-source semantics for inspect
-//      overrides (the persisted CSS keys off the same elementId), so
-//      this test pins the no-fallback contract.
+//   2. In Comment picker mode, fall back to meaningful DOM selectors
+//      for unannotated surfaces so imported or partially annotated HTML
+//      can still be reviewed. Inspect mode still needs a real annotated
+//      selector for live style persistence.
 //
 // The host-side hint switch lives in `apps/web/src/components/FileViewer.tsx`
 // (search for `inspect-empty-hint-no-targets`); these tests pin the
@@ -252,7 +250,7 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(clickMessages[0].text).toBe('Launch');
   });
 
-  it('does not use Picker DOM fallback on mixed annotated and unannotated pages', async () => {
+  it('uses Picker DOM fallback for meaningful unannotated elements on mixed pages', async () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<main><section data-od-id="hero">Hero</section><button id="cta">Launch</button></main>',
       'comment',
@@ -269,7 +267,67 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     const clickMessages = parentPostMessage.mock.calls
       .map((call) => call[0])
       .filter((message) => message?.type === 'od:comment-target');
-    expect(clickMessages).toEqual([]);
+    expect(clickMessages).toHaveLength(1);
+    expect(clickMessages[0]).toMatchObject({
+      elementId: 'dom:body > main:nth-of-type(1) > button:nth-of-type(1)',
+      selector: 'body > main:nth-of-type(1) > button:nth-of-type(1)',
+      text: 'Launch',
+    });
+  });
+
+  it('uses leaf-first DOM fallback in Comment mode instead of an annotated section ancestor', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<section data-screen-label="01 Hero"><h1 id="headline"><span>ERP</span> and CRM delivery</h1><p>Subhead</p></section>',
+      'comment',
+      ['#headline'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+
+    win.document.getElementById('headline')!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    const clickMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-target');
+    expect(clickMessages).toHaveLength(1);
+    expect(clickMessages[0]).toMatchObject({
+      elementId: 'dom:body > section:nth-of-type(1) > h1:nth-of-type(1)',
+      selector: 'body > section:nth-of-type(1) > h1:nth-of-type(1)',
+      label: 'h1',
+      text: 'ERP and CRM delivery',
+      position: {
+        x: 10,
+        y: 20,
+        width: 120,
+        height: 48,
+      },
+    });
+  });
+
+  it('does not broadcast the generated React root as a page-sized Comment target', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<div id="root" data-od-id="path-0"><header><a>Brand</a></header><main><h1 id="headline">Hero</h1></main><footer>Footer</footer></div>',
+      'comment',
+      ['#root', '#headline'],
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+
+    const targetMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-targets');
+    expect(targetMessages.length).toBeGreaterThan(0);
+    const last = targetMessages.at(-1);
+    expect(last.targets).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          elementId: 'path-0',
+        }),
+      ]),
+    );
   });
 
   it('broadcasts DOM fallback targets in comment mode so Pods can hit-test unannotated pages', async () => {

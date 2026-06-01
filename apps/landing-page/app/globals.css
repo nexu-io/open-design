@@ -33,6 +33,7 @@
   --ink-faint: #8b8676;
   --coral: #ed6f5c;
   --coral-soft: #f08e7c;
+  --amr-green: #237f00;
   --mustard: #e9b94a;
   --olive: #6e7448;
   --bone: #f7f1de;
@@ -604,7 +605,84 @@ body::before {
 .nav-side {
   display: inline-flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
+}
+/*
+ * Compact icon-only chrome buttons for community-channel links
+ * (Discord, X) sitting beside the Download / Star CTAs. They share
+ * the ghost-button outline language but stay square so they read as
+ * social affordances and don't compete with the text CTAs.
+ */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(21, 20, 15, 0.18);
+  color: var(--ink);
+  background: transparent;
+  text-decoration: none;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  flex-shrink: 0;
+}
+.nav-icon:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.nav-icon svg {
+  display: block;
+}
+.nav-amr {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 13px 6px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(35, 127, 0, 0.28);
+  background: linear-gradient(135deg, rgba(135, 234, 92, 0.26), rgba(247, 241, 222, 0.82));
+  color: var(--amr-green);
+  box-shadow: 0 10px 28px -22px rgba(35, 127, 0, 0.7);
+  font-family: var(--sans);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.nav-amr:hover {
+  transform: translateY(-1px);
+  border-color: rgba(35, 127, 0, 0.42);
+  background: linear-gradient(135deg, rgba(135, 234, 92, 0.38), rgba(247, 241, 222, 0.92));
+  box-shadow: 0 14px 30px -20px rgba(35, 127, 0, 0.78);
+}
+.nav-amr img {
+  width: 28px;
+  height: 28px;
+  display: block;
+  flex: 0 0 auto;
+}
+.nav-amr-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1;
+}
+.nav-amr-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.nav-amr-kicker {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: rgba(13, 84, 0, 0.72);
 }
 .nav-cta {
   display: inline-flex;
@@ -2446,6 +2524,7 @@ footer {
   .container { padding: 0 44px; }
   .work { margin: 0 44px; padding: 90px 44px; }
   .side-rail { display: none; }
+  .nav-links { gap: 30px; }
 }
 /* hide topbar mid text early — between 1200 and 1280 it crowds even with nowrap */
 @media (max-width: 1200px) {
@@ -2458,6 +2537,7 @@ footer {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
   .nav-links { gap: 28px; }
+  .nav-side .nav-icon { display: none; }
 }
 
 /* nav: at ≤1080px there's no clean way to fit Product · Skills · Systems ·
@@ -2470,8 +2550,10 @@ footer {
 @media (max-width: 1080px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
-  /* Hide Download from the bar (Star stays). */
+  /* Hide AMR, Download + Discord/X icon buttons from the bar (Star stays). */
+  .nav-side .nav-amr { display: none; }
   .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-icon { display: none; }
   /* Collapse the nav <ul> into a panel that drops below the header bar.
    * The header is `position: sticky`, so absolute-positioning the panel
    * relative to the header element keeps it pinned correctly. */
@@ -2518,7 +2600,7 @@ footer {
     margin-left: 6px;
     font-size: 11px;
   }
-  /* Product dropdown flattens — always show OD + HA as nested static items. */
+  /* Product dropdown flattens — always show OD + HA + AMR as nested static items. */
   .nav-links li.has-dropdown { position: static; }
   .nav-links .dropdown-caret { display: none; }
   .nav-dropdown {
@@ -2620,11 +2702,14 @@ footer {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta and Download
-   * stay hidden; Star CTA still pings in the bar. */
+   * the hamburger panel introduced at ≤1080px. Brand meta, Download,
+   * and the Discord/X icon buttons stay hidden; Star CTA still pings
+   * in the bar. */
   .nav { padding: 16px 0; }
   .brand-meta { display: none; }
+  .nav-side .nav-amr { display: none; }
   .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-icon { display: none; }
 }
 @media (max-width: 640px) {
   .topbar-inner { gap: 14px; }

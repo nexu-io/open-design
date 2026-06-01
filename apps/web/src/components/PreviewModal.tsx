@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { exportAsHtml, exportAsPdf, exportAsZip, openSandboxedPreviewInNewTab } from '../runtime/exports';
+import {
+  exportAsHtml,
+  exportAsImage,
+  exportAsPdf,
+  exportAsZip,
+  openSandboxedPreviewInNewTab,
+  requestPreviewSnapshot,
+} from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
 
@@ -197,10 +204,10 @@ interface Props {
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
   // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
-  // / "open_in_new_tab"). Used by callers that want to track popover-
+  // / "image" / "open_in_new_tab"). Used by callers that want to track popover-
   // level clicks separately from the share trigger.
   onSharePopoverItemClick?: (
-    item: 'pdf' | 'zip' | 'html' | 'open_in_new_tab',
+    item: 'pdf' | 'zip' | 'html' | 'image' | 'open_in_new_tab',
   ) => void;
 }
 
@@ -243,6 +250,7 @@ export function PreviewModal({
   const templateShareRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageFrameRef = useRef<HTMLDivElement | null>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [stageSize, setStageSize] = useState<{ w: number; h: number }>({
     w: 0,
     h: 0,
@@ -740,6 +748,34 @@ export function PreviewModal({
                             type="button"
                             className="share-menu-item"
                             role="menuitem"
+                            onClick={async () => {
+                              onSharePopoverItemClick?.('image');
+                              setTemplateShareOpen(false);
+                              const iframe = previewIframeRef.current;
+                              if (!iframe) return;
+                              const snap = await requestPreviewSnapshot(iframe);
+                              try {
+                                if (snap) {
+                                  exportAsImage(snap.dataUrl, exportTitle);
+                                } else {
+                                  console.warn('[PreviewModal] snapshot capture returned null');
+                                  alert(t('common.exportImageFailed'));
+                                }
+                              } catch (err) {
+                                console.warn('[PreviewModal] failed to convert snapshot:', err);
+                                alert(t('common.exportImageFailed'));
+                              }
+                            }}
+                          >
+                            <span className="share-menu-icon">
+                              <Icon name="image" size={14} />
+                            </span>
+                            <span>{t('common.exportImage')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
                             onClick={() => {
                               onSharePopoverItemClick?.('open_in_new_tab');
                               setTemplateShareOpen(false);
@@ -848,6 +884,7 @@ export function PreviewModal({
               <div className="ds-modal-stage-iframe-scaler" style={scalerStyle}>
                 <iframe
                   key={activeView?.id ?? 'view'}
+                  ref={previewIframeRef}
                   title={`${title} ${activeView?.label ?? ''}`}
                   sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                   srcDoc={srcDoc}

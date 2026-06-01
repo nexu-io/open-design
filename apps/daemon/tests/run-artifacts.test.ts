@@ -20,6 +20,7 @@ import {
   countDesignSystemPreviewModules,
   countNewHtmlArtifacts,
   didRunCreateDesignSystemFile,
+  runAskedUserQuestion,
 } from '../src/run-artifacts.js';
 
 let nextId = 0;
@@ -286,5 +287,49 @@ describe('countDesignSystemPreviewModules', () => {
         ...pair('Write', '/proj/preview/typography.html'),
       ]),
     ).toBe(1);
+  });
+});
+
+// Helper: emit a bare tool_use (no result) for a named tool. Clarification
+// detection only needs the tool_use to appear; AskUserQuestion is answered
+// out-of-band via POST /api/runs/:id/tool-result, not a stream tool_result.
+function toolUse(name: string, id = freshId()) {
+  return [
+    {
+      event: 'agent',
+      data: { type: 'tool_use', id, name, input: {} },
+    },
+  ];
+}
+
+describe('runAskedUserQuestion', () => {
+  it('returns false for an empty event list', () => {
+    expect(runAskedUserQuestion([])).toBe(false);
+  });
+
+  it('returns true when the run raised an AskUserQuestion card', () => {
+    expect(runAskedUserQuestion(toolUse('AskUserQuestion'))).toBe(true);
+  });
+
+  it('matches the snake_case ask_user_question proxy shape', () => {
+    expect(runAskedUserQuestion(toolUse('ask_user_question'))).toBe(true);
+  });
+
+  it('returns false for a run that only wrote artifacts', () => {
+    expect(
+      runAskedUserQuestion([
+        ...pair('Write', '/proj/index.html'),
+        ...toolUse('Read'),
+      ]),
+    ).toBe(false);
+  });
+
+  it('detects the card even when mixed with other tool calls', () => {
+    expect(
+      runAskedUserQuestion([
+        ...pair('Write', '/proj/index.html'),
+        ...toolUse('AskUserQuestion'),
+      ]),
+    ).toBe(true);
   });
 });

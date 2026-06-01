@@ -954,6 +954,125 @@
   background: var(--bg-subtle);
 }
 
+/* ----- Mid-chat design-system switcher (issue #498 v1) ----- */
+.composer-ds-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 280px;
+  max-height: 360px;
+}
+.composer-ds-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 4px;
+}
+.composer-ds-picker-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11.5px;
+}
+.composer-ds-picker-back:hover { background: var(--bg-subtle); color: var(--text); }
+.composer-ds-picker-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.composer-ds-picker-search {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+.composer-ds-picker-search:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.composer-ds-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 280px;
+  padding-right: 2px;
+}
+.composer-ds-picker-group { display: flex; flex-direction: column; gap: 2px; }
+.composer-ds-picker-group-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 6px 4px 2px;
+}
+.composer-ds-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.composer-ds-picker-item:hover:not(:disabled) { background: var(--bg-subtle); }
+.composer-ds-picker-item:disabled { cursor: default; opacity: 0.65; }
+.composer-ds-picker-item.current { background: var(--bg-subtle); }
+.composer-ds-picker-item-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.composer-ds-picker-item-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.composer-ds-picker-item-summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.composer-ds-picker-item-swatches {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(2, 6px);
+  gap: 1px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.composer-ds-picker-swatch { width: 6px; height: 6px; }
+.composer-ds-picker-current-tag {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 2px 6px;
+}
+.composer-ds-picker-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* ============================================================
    Pet — uploaded image / spritesheet rendering
    ------------------------------------------------------------
@@ -1059,4 +1178,3 @@
 .pet-custom-sprite {
   overflow: hidden;
 }
-

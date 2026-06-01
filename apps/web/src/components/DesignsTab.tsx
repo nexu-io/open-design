@@ -561,7 +561,14 @@ export function DesignsTab({
 								<button
 									type="button"
 									className="primary designs-empty-cta"
-									onClick={onNewProject}
+									onClick={() => {
+										trackProjectsListControlsClick(analytics.track, {
+											page_name: "projects",
+											area: "list_controls",
+											element: "create_project",
+										});
+										onNewProject();
+									}}
 								>
 									<span>{t("entry.navNewProject")}</span>
 								</button>

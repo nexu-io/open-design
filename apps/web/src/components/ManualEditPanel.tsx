@@ -32,7 +32,6 @@ export function ManualEditPanel({
   onStyleChange,
   onInvalidStyle,
   onError,
-  onClearSelection,
   onCancelDraft,
   onSaveDraft,
   onExit,
@@ -164,7 +163,6 @@ export function ManualEditPanel({
               targetKind={targetForInspector.kind}
               styles={draft.styles}
               layoutEnabled={targetForInspector.isLayoutContainer}
-              onClearSelection={onClearSelection}
               onChange={changeTargetStyle}
             />
           ) : !targetForInspector ? (
@@ -568,12 +566,11 @@ function styleLabel(key: keyof ManualEditStyles): string {
 }
 
 function StyleInspector({
-  targetKind, styles, layoutEnabled, onClearSelection, onChange,
+  targetKind, styles, layoutEnabled, onChange,
 }: {
   targetKind: ManualEditTarget['kind'];
   styles: ManualEditStyles;
   layoutEnabled: boolean;
-  onClearSelection: () => void;
   onChange: (key: keyof ManualEditStyles, value: string) => void;
 }) {
   const u = (key: keyof ManualEditStyles, value: string) => onChange(key, value);
@@ -584,11 +581,6 @@ function StyleInspector({
 
   return (
     <div className="cc-inspector">
-      <div className="cc-inspector-nav">
-        <button type="button" className="cc-inspector-page" onClick={onClearSelection} aria-label="Show page inspector">
-          Page
-        </button>
-      </div>
       {showTypography ? (
         <Section title="TYPOGRAPHY">
           <FontRow value={styles.fontFamily} onChange={(v) => u('fontFamily', v)} />

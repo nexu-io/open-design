@@ -96,6 +96,7 @@ import type {
   DesignSystemSummary,
   Project,
   ProjectTemplate,
+  ProviderModelOption,
   PromptTemplateSummary,
   SkillSummary,
 } from './types';
@@ -232,6 +233,9 @@ function AppInner() {
   const [appVersionInfo, setAppVersionInfo] = useState<AppVersionInfo | null>(
     null,
   );
+  const [providerModelsCache, setProviderModelsCache] = useState<
+    Record<string, ProviderModelOption[]>
+  >({});
   const [daemonMediaProviders, setDaemonMediaProviders] = useState<
     AppConfig['mediaProviders'] | null
   >(null);
@@ -1495,6 +1499,8 @@ function AppInner() {
         defaultDesignSystemId={config.designSystemId}
         agents={agents}
         config={config}
+        providerModelsCache={providerModelsCache}
+        onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
         composioConfigLoading={composioConfigLoading}
         daemonLive={daemonLive}
@@ -1616,8 +1622,11 @@ function AppInner() {
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+          onProjectsRefresh={refreshProjects}
           onSkillsChanged={handleSkillsChanged}
           onDesignSystemsChanged={handleDesignSystemsChanged}
+          providerModelsCache={providerModelsCache}
+          onProviderModelsCacheChange={setProviderModelsCache}
         />
       ) : null}
       <MemoryToast onOpenMemory={() => openSettings('memory')} />

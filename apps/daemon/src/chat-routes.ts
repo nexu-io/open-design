@@ -24,7 +24,7 @@ import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
-import { parseMediaExecutionPolicyInput } from './media-policy.js';
+import { createRoleMarkerGuard } from './role-marker-guard.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -49,7 +49,7 @@ export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'htt
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { startChatRun, submitToolResultToRun } = ctx.chat;
+  const { submitToolResultToRun } = ctx.chat;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
@@ -58,7 +58,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     critiqueResponseCapBytes,
     critiqueRunRegistry,
   } = ctx.critique;
-  const isDaemonShuttingDown = ctx.lifecycle?.isDaemonShuttingDown ?? (() => false);
   const rejectProxyPluginContext = (body: Record<string, unknown>, res: any) => {
     if (
       (typeof body.pluginId === 'string' && body.pluginId.trim().length > 0) ||
@@ -83,6 +82,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   // so any handler we wired here was shadowed and never executed. Plugin
   // snapshot resolution, clientType inference, and the daemon-side
   // run_created/finished analytics all live in `server.ts` now.
+  // POST /api/chat is likewise owned by `server.ts`; keep the chat run
+  // launch path single-sourced so validation changes land on the live route.
 
   app.get('/api/runs', (req, res) => {
     const { projectId, conversationId, status } = req.query;
@@ -220,23 +221,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       scoreMetadata,
     });
     res.status(202).json(outcome);
-  });
-
-  app.post('/api/chat', (req, res) => {
-    if (isDaemonShuttingDown()) {
-      return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
-    }
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const mediaExecution = parseMediaExecutionPolicyInput(
-      (body as { mediaExecution?: unknown }).mediaExecution,
-    );
-    if (!mediaExecution.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
-    }
-    const runBody = { ...body, mediaExecution: mediaExecution.policy };
-    const run = design.runs.create(runBody);
-    design.runs.stream(run, req, res);
-    design.runs.start(run, () => startChatRun(runBody, run));
   });
 
   // ---- Connection tests (single-shot JSON; no SSE) ------------------------
@@ -636,7 +620,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!match || match.index === undefined) break;
         const frame = buffer.slice(0, match.index);
         buffer = buffer.slice(match.index + match[0].length);
-        if (await onFrame(collectSseFrame(frame))) return;
+        if (await onFrame(collectSseFrame(frame))) {
+          // Fire-and-forget cancel: awaiting hangs on some response-stream
+          // implementations (notably Response built from Uint8Array body,
+          // exposed by tests/proxy-routes.test.ts ollama case where the
+          // mock body's tee'd cancel() never resolves). The cancel signal
+          // is a hint; we're already returning from the function, so we
+          // don't gain anything by blocking on it.
+          void reader.cancel().catch(() => {});
+          return;
+        }
       }
     }
 
@@ -662,7 +655,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!line) continue;
         try {
           const data = JSON.parse(line);
-          if (await onFrame({ data })) return;
+          if (await onFrame({ data })) {
+            // See note in streamUpstreamSse — fire-and-forget cancel.
+            void reader.cancel().catch(() => {});
+            return;
+          }
         } catch {
           // Ignore malformed provider keepalive lines.
         }
@@ -730,6 +727,30 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
     return '';
   };
+
+  // Per-request role-marker guard for BYOK proxy streams (#3247).
+  function createDeltaGuard(sse: any) {
+    const guard = createRoleMarkerGuard('proxy');
+    return {
+      sendDelta(text: string) {
+        if (guard.contaminated || !text) return;
+        const safe = guard.feedText(text);
+        if (safe.length > 0) {
+          sse.send('delta', { delta: safe });
+        }
+        if (guard.contaminated) {
+          const warn = guard.warningEvent();
+          const markerText = warn?.marker ?? '## user';
+          sse.send('delta', {
+            delta: `\n\n---\n⚠️ **Security warning:** The model attempted to emit a fabricated role marker (\`${markerText}\`). Response was truncated to prevent unauthorized instruction injection. See issue #3247.\n`,
+          });
+        }
+      },
+      get contaminated() { 
+        return guard.contaminated; 
+      },
+    };
+  }
 
   app.post('/api/proxy/anthropic/stream', async (req, res) => {
     /** @type {Partial<ProxyStreamRequest>} */
@@ -824,7 +845,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       proxyBody,
       providerTag: 'openai',
       url,
-      authHeaders: { Authorization: `Bearer ${apiKey}` },
+      authHeaders: {
+        Authorization: `Bearer ${apiKey}`,
+        // OpenRouter prefers an HTTP-Referer + X-Title attribution header on
+        // its OpenAI-compatible chat endpoint; pass them through so models
+        // routed via openrouter.ai keep working.
+        ...(validated.parsed!.hostname === 'openrouter.ai' ? {
+          'HTTP-Referer': 'https://opendesign.dev',
+          'X-Title': 'Open Design',
+        } : {}),
+      },
       model,
       systemPrompt,
       messages,
@@ -891,6 +921,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     // carries the model in the URL (so omit it from the body there). Azure has
     // no dedicated media provider in the registry, so we don't self-seed —
     // in-chat media routes to whatever the user configured in Settings → Media.
+    // runByokMediaChat internally retries with max_completion_tokens when the
+    // upstream rejects max_tokens (newer Azure deployments), so we don't need
+    // an inline retry pair here.
     await runByokMediaChat({
       res,
       proxyBody,
@@ -983,6 +1016,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
 
         let ended = false;
+        const guard = createDeltaGuard(sse);
         await streamUpstreamSse(response, ({ data }: any) => {
           if (!data) return false;
           const streamError = extractStreamErrorMessage(data);
@@ -992,7 +1026,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             return true;
           }
           const delta = extractGeminiText(data);
-          if (delta) sse.send('delta', { delta });
+          if (delta) {
+            guard.sendDelta(delta);
+            if (guard.contaminated) {
+              sse.send('end', {});
+              ended = true;
+              return true;
+            }
+          }
           const blockMessage = extractGeminiBlockMessage(data);
           if (blockMessage) {
             sendProxyError(sse, blockMessage, { details: data });
@@ -1068,6 +1109,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
 
         let ended = false;
+        const guard = createDeltaGuard(sse);
         await streamUpstreamNdjson(response, ({ data }: any) => {
           if (!data) return false;
           if (data.done) {
@@ -1076,7 +1118,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             return true;
           }
           const content = data.message?.content;
-          if (typeof content === 'string' && content) sse.send('delta', { delta: content });
+          if (typeof content === 'string' && content) {
+            guard.sendDelta(content);
+            if (guard.contaminated) {
+              sse.send('end', {});
+              ended = true;
+              return true;
+            }
+          }
           return false;
         });
         if (!ended) sse.send('end', {});
@@ -1255,6 +1304,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       let finishReason = '';
       let providerError = '';
 
+      const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload, data }: any) => {
         if (payload === '[DONE]') return true;
         if (!data) return false;
@@ -1271,7 +1321,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const delta = choice.delta || {};
 
         if (typeof delta.content === 'string' && delta.content) {
-          sse.send('delta', { delta: delta.content });
+          guard.sendDelta(delta.content);
+          if (guard.contaminated) { 
+            sse.send('end', {}); 
+            return true; 
+          }
         }
 
         if (Array.isArray(delta.tool_calls)) {

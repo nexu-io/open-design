@@ -347,13 +347,27 @@ export async function fetchSkill(id: string): Promise<SkillDetail | null> {
 }
 
 export async function fetchDesignSystems(): Promise<DesignSystemSummary[]> {
+  const result = await fetchDesignSystemsResult();
+  return result.ok ? result.designSystems : [];
+}
+
+// Discriminated-union variant: surfaces the fetch outcome instead of
+// collapsing a network/HTTP failure into an empty array. The mid-chat
+// design-system picker uses this so it can render a load-failure state
+// instead of silently showing an empty catalog, which would otherwise
+// be indistinguishable from "registry truly has no systems."
+export type DesignSystemsResult =
+  | { ok: true; designSystems: DesignSystemSummary[] }
+  | { ok: false };
+
+export async function fetchDesignSystemsResult(): Promise<DesignSystemsResult> {
   try {
     const resp = await fetch('/api/design-systems');
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { designSystems: DesignSystemSummary[] };
-    return json.designSystems ?? [];
+    if (!resp.ok) return { ok: false };
+    const json = (await resp.json()) as { designSystems?: DesignSystemSummary[] };
+    return { ok: true, designSystems: json.designSystems ?? [] };
   } catch {
-    return [];
+    return { ok: false };
   }
 }
 

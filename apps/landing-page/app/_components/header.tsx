@@ -21,6 +21,9 @@ import {
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const X_TWITTER = 'https://x.com/nexudotio';
+const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -167,6 +170,14 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                <li role='none'>
+                  <a role='menuitem' href={AMR_URL}>
+                    <span className='dropdown-name'>{productMenuCopy.amrName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.amrBlurb}
+                    </span>
+                  </a>
+                </li>
                 {/* Tutorials is a top-level nav item (see Library section
                   below). Don't list it here too — duplicating it once at
                   Product/Tutorials and again at top-level confuses users
@@ -227,15 +238,6 @@ export function Header({
                     <span className='dropdown-name'>{headerCopy.nav.systems}</span>
                   </a>
                 </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/plugins/craft/')}
-                    className={linkClass('craft')}
-                  >
-                    <span className='dropdown-name'>{headerCopy.nav.craft}</span>
-                  </a>
-                </li>
               </ul>
             </li>
             <li>
@@ -274,6 +276,48 @@ export function Header({
           </ul>
         </nav>
         <div className='nav-side'>
+          {/*
+            Discord + X icon buttons live before Download / Star so the
+            community channels are reachable from every page without
+            burning a nav text slot. The icons are aria-labeled and
+            otherwise unlabeled. At ≤1080px they collapse alongside the
+            ghost Download CTA and the text-only nav <ul> (the latter
+            moves into the hamburger panel) — only the Star CTA stays
+            visible in the bar.
+          */}
+          <a
+            className='nav-icon'
+            href={DISCORD}
+            aria-label='Join Open Design on Discord'
+            title='Discord'
+            {...ext}
+          >
+            <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'>
+              <path d='M19.27 5.33A18 18 0 0 0 14.72 4l-.2.4a13.7 13.7 0 0 0-5.04 0L9.27 4a18 18 0 0 0-4.54 1.33C2.4 8.94 1.78 12.45 2.09 15.9a18.4 18.4 0 0 0 5.6 2.83l1.13-1.55a11.6 11.6 0 0 1-1.78-.86l.44-.34a13 13 0 0 0 11.04 0l.44.34c-.55.33-1.16.61-1.78.86l1.13 1.55a18.3 18.3 0 0 0 5.6-2.83c.45-4.05-.5-7.53-2.64-10.57ZM9.5 14.07c-1.07 0-1.95-.99-1.95-2.21 0-1.22.86-2.22 1.95-2.22 1.1 0 1.97 1 1.95 2.22 0 1.22-.86 2.21-1.95 2.21Zm5 0c-1.07 0-1.95-.99-1.95-2.21 0-1.22.87-2.22 1.96-2.22 1.1 0 1.96 1 1.95 2.22 0 1.22-.86 2.21-1.96 2.21Z' />
+            </svg>
+          </a>
+          <a
+            className='nav-icon'
+            href={X_TWITTER}
+            aria-label='Follow Open Design on X'
+            title='X / Twitter'
+            {...ext}
+          >
+            <svg viewBox='0 0 24 24' width='16' height='16' fill='currentColor' aria-hidden='true'>
+              <path d='M17.53 3H21l-7.39 8.45L22 21h-6.83l-5.36-6.99L3.7 21H.23l7.9-9.04L0 3h7l4.85 6.41L17.53 3Zm-2.39 16h2.04L5.96 4.9H3.78L15.14 19Z' />
+            </svg>
+          </a>
+          <a
+            className='nav-amr'
+            href={AMR_URL}
+            aria-label={`${productMenuCopy.amrName}: ${productMenuCopy.amrBlurb}`}
+          >
+            <img src='/amr-logo.svg' alt='' width={28} height={28} aria-hidden='true' />
+            <span className='nav-amr-copy'>
+              <span className='nav-amr-title'>AMR</span>
+              <span className='nav-amr-kicker'>{productMenuCopy.amrKicker}</span>
+            </span>
+          </a>
           <a
             className='nav-cta ghost'
             href={REPO_RELEASES}

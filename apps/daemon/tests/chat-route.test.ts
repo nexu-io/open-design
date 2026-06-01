@@ -216,6 +216,36 @@ process.exit(0);
     );
   });
 
+  it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stderr.write('json-rpc id 4: opencode event stream: read opencode SSE: bufio.Scanner: token too long\\n');
+process.exit(1);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('AGENT_EXECUTION_FAILED');
+        expect(body).toContain('The run failed due to an unknown upstream streaming error. Please retry.');
+        expect(body).toContain('event: stderr');
+        expect(body).toContain('"status":"failed"');
+      },
+    );
+  });
+
   it('retries transient AMR Link catalog failures before aborting startup', async () => {
     const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
     const previousLinkUrl = process.env.VELA_LINK_URL;

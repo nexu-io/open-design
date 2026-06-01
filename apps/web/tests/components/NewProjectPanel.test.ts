@@ -42,6 +42,16 @@ describe('NewProjectPanel image provider visibility', () => {
     const models = supportedModels('audio', AUDIO_MODELS_BY_KIND.speech);
     expect(models.some((model) => model.id === 'senseaudio-tts')).toBe(true);
   });
+
+  it('shows OpenRouter in supported image models', () => {
+    const models = supportedModels('image', IMAGE_MODELS);
+    expect(models.some((model) => model.provider === 'openrouter')).toBe(true);
+  });
+
+  it('shows OpenRouter in supported video models', () => {
+    const models = supportedModels('video', VIDEO_MODELS);
+    expect(models.some((model) => model.provider === 'openrouter')).toBe(true);
+  });
 });
 
 describe('SenseAudio voice catalogue', () => {

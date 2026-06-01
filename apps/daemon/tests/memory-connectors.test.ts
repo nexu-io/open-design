@@ -1023,7 +1023,7 @@ process.stdout.write(JSON.stringify({
     }
   });
 
-  it('runs OpenCode Local CLI with a message argument and attached prompt file', async () => {
+  it('runs OpenCode Local CLI memory extraction with the prompt on stdin', async () => {
     await writeMemoryConfig(dataDir, { extraction: null });
     const tempDir = await fsp.mkdtemp(path.join(tmpdir(), 'od-opencode-memory-'));
     const binPath = path.join(tempDir, 'opencode-cli');
@@ -1031,16 +1031,33 @@ process.stdout.write(JSON.stringify({
     const previousPath = process.env.PATH;
     const previousCapture = process.env.OD_MEMORY_OPENCODE_ARGS_OUT;
 
+    // Model the real `opencode run` arg parser: `-f, --file` is a yargs
+    // *array* option, so it greedily swallows every following non-flag
+    // token as a file path. Any captured path that doesn't exist makes the
+    // real CLI exit 1 with "File not found: <token>" — which is exactly how
+    // a trailing positional message after `--file` crashed extraction. The
+    // supported one-shot shape is bare `run` with the prompt on stdin.
     await fsp.writeFile(
       binPath,
       `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
-const fileIndex = args.indexOf('--file');
-const attachedFile = fileIndex >= 0 ? args[fileIndex + 1] : null;
-const prompt = attachedFile ? fs.readFileSync(attachedFile, 'utf8') : '';
 const stdin = fs.readFileSync(0, 'utf8');
-fs.writeFileSync(process.env.OD_MEMORY_OPENCODE_ARGS_OUT, JSON.stringify({ args, attachedFile, prompt, stdin }));
+const files = [];
+const fileFlag = args.findIndex((a) => a === '--file' || a === '-f');
+if (fileFlag >= 0) {
+  for (let i = fileFlag + 1; i < args.length; i += 1) {
+    if (args[i].startsWith('-')) break;
+    files.push(args[i]);
+  }
+}
+fs.writeFileSync(process.env.OD_MEMORY_OPENCODE_ARGS_OUT, JSON.stringify({ args, stdin, files }));
+for (const f of files) {
+  if (!fs.existsSync(f)) {
+    process.stderr.write('Error: File not found: ' + f + '\\n');
+    process.exit(1);
+  }
+}
 process.stdout.write(JSON.stringify({
   type: 'text',
   part: {
@@ -1048,9 +1065,9 @@ process.stdout.write(JSON.stringify({
     text: JSON.stringify({
       entries: [{
         type: 'project',
-        name: 'OpenCode prompt attachment',
-        description: 'OpenCode memory used a prompt file',
-        body: 'OpenDesign connector memory extraction should pass the compacted prompt to OpenCode as an attached file while sending a short message argument.'
+        name: 'OpenCode stdin prompt',
+        description: 'OpenCode memory used stdin',
+        body: 'OpenDesign connector memory extraction should pass the compacted prompt to OpenCode on stdin and parse the JSON event stream response.'
       }]
     })
   }
@@ -1077,7 +1094,7 @@ process.stdout.write(JSON.stringify({
       expect(result.suggestions).toEqual([
         expect.objectContaining({
           type: 'project',
-          name: 'OpenCode prompt attachment',
+          name: 'OpenCode stdin prompt',
         }),
       ]);
 
@@ -1086,14 +1103,15 @@ process.stdout.write(JSON.stringify({
         'run',
         '--format',
         'json',
-        '--file',
-        'Read the attached OpenDesign memory extraction prompt and return strict JSON only.',
+        'openai/gpt-5',
       ]));
-      expect(captured.args).toContain('openai/gpt-5');
-      expect(captured.prompt).toContain('You are a design-memory extractor');
-      expect(captured.prompt).toContain('OpenDesign connector memory should collect design preferences');
-      expect(captured.stdin).toBe('');
-      await expect(fsp.access(captured.attachedFile)).rejects.toThrow();
+      // The prompt rides on stdin like the chat-run path; no `--file`
+      // attachment (whose array option would swallow any trailing message).
+      expect(captured.args).not.toContain('--file');
+      expect(captured.args).not.toContain('-f');
+      expect(captured.files).toEqual([]);
+      expect(captured.stdin).toContain('You are a design-memory extractor');
+      expect(captured.stdin).toContain('OpenDesign connector memory should collect design preferences');
     } finally {
       if (previousPath == null) {
         delete process.env.PATH;

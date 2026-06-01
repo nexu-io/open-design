@@ -29,8 +29,10 @@ import {
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  commentPreviewCanvasSize,
   effectivePreviewScale,
   parseInspectOverridesFromSource,
+  previewOverlayTransform,
   serializeInspectOverrides,
   updateInspectOverride,
 } from '../../src/components/FileViewer';
@@ -74,6 +76,30 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
+  return calls
+    .map(([message]) => message)
+    .filter((message): message is { type: 'od:srcdoc-transport-activate'; html: string } => {
+      if (typeof message !== 'object' || message === null) return false;
+      const data = message as { type?: unknown; html?: unknown };
+      return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
+    });
+}
+
+function testRect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    width,
+    height,
+    top,
+    left,
+    right: left + width,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
 function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
@@ -94,7 +120,10 @@ describe('FileViewer preview scale', () => {
       '.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas',
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\) \.comment-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\):not\(\.comment-preview-layer-with-side-dock\) \.comment-preview-canvas,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*width: calc\(var\(--preview-viewport-width\) \* var\(--preview-scale, 1\)\);/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
     );
   });
 
@@ -118,6 +147,79 @@ describe('FileViewer preview scale', () => {
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
     expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
     expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  });
+
+  it('uses the reduced board canvas size when the side dock is open', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+
+    expect(dockedCanvas).toEqual({ width: 552, height: 684 });
+    expect(effectivePreviewScale('tablet', 1, dockedCanvas)).toBeLessThan(
+      effectivePreviewScale('tablet', 1, { width: 900, height: 700 }),
+    );
+  });
+
+  it('uses stacked canvas sizing for narrow board panes instead of a 1px docked canvas', () => {
+    const narrowCanvas = commentPreviewCanvasSize(
+      { width: 400, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+
+    expect(narrowCanvas).toEqual({ width: 384, height: 452 });
+  });
+
+  it('subtracts only the collapsed stacked rail height when the side dock is collapsed in the stacked layout', () => {
+    const expandedStackedCanvas = commentPreviewCanvasSize(
+      { width: 300, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+    const collapsedStackedCanvas = commentPreviewCanvasSize(
+      { width: 300, height: 700 },
+      { boardMode: true, sidePanelCollapsed: true },
+    );
+
+    expect(expandedStackedCanvas).toEqual({ width: 284, height: 452 });
+    expect(collapsedStackedCanvas).toEqual({ width: 284, height: 624 });
+    expect(collapsedStackedCanvas!.height).toBeGreaterThan(expandedStackedCanvas!.height);
+  });
+
+  it('matches the rendered non-desktop dock padding in board canvas sizing', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false, viewport: 'tablet' },
+    );
+
+    expect(dockedCanvas).toEqual({ width: 520, height: 652 });
+  });
+
+  it('fits non-desktop board previews against the inner canvas without subtracting viewport padding again', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false, viewport: 'tablet' },
+    );
+
+    expect(effectivePreviewScale('tablet', 1, dockedCanvas, { canvasPadding: 0 })).toBeCloseTo(652 / 1180);
+  });
+
+  it('offsets tablet and mobile overlays to the centered viewport card', () => {
+    expect(previewOverlayTransform('desktop', 1.25, { width: 1200, height: 800 })).toEqual({
+      scale: 1.25,
+      offsetX: 0,
+      offsetY: 0,
+    });
+
+    expect(previewOverlayTransform('mobile', 1, { width: 1200, height: 1000 })).toEqual({
+      scale: 1,
+      offsetX: 405,
+      offsetY: 24,
+    });
+
+    const tablet = previewOverlayTransform('tablet', 1.25, { width: 1200, height: 800 });
+    expect(tablet.scale).toBeCloseTo(752 / 1180, 5);
+    expect(tablet.offsetX).toBeCloseTo(24 + (1152 - 820 * (752 / 1180)) / 2, 5);
+    expect(tablet.offsetY).toBe(24);
   });
 });
 
@@ -421,7 +523,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -429,7 +531,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -576,8 +678,40 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+  });
+
+  it('offers image export for URL-loaded HTML previews', () => {
+    const file = baseFile({
+      name: 'workspace.html',
+      path: 'workspace.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Workspace',
+        entry: 'workspace.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><main>Workspace</main></body></html>"
+      />,
+    );
+
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(screen.getByRole('menuitem', { name: /export as image/i })).toBeTruthy();
   });
 
   it('keeps inactive HTML preview transports mounted without booting the artifact', async () => {
@@ -754,7 +888,8 @@ describe('FileViewer SVG artifacts', () => {
 
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
-    expect(getFrame()?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
+    const initialFrame = getFrame();
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -762,9 +897,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -1616,14 +1751,16 @@ describe('FileViewer tweaks toolbar', () => {
       'chat.comments.emptySaved': 'No saved comments.',
       'chat.comments.targetText': 'Text',
       'chat.comments.targetLink': 'Link',
+      'chat.comments.selectAll': 'Select all',
       'common.close': 'Close',
+      'common.delete': 'Delete',
       'preview.showSidebar': 'Show Comments',
       'preview.hideSidebar': 'Hide Comments',
     };
     return labels[key] ?? key;
   };
 
-  function htmlPreviewFile(): ProjectFile {
+  function htmlPreviewFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
     return baseFile({
       name: 'preview.html',
       path: 'preview.html',
@@ -1637,6 +1774,7 @@ describe('FileViewer tweaks toolbar', () => {
         renderer: 'html',
         exports: ['html'],
       },
+      ...overrides,
     });
   }
 
@@ -1654,26 +1792,63 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByRole('menuitem', { name: 'Pick element' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Region' })).toBeNull();
     expect(screen.getByTestId('draw-overlay-toggle')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Draw' })).toBeTruthy();
-    expect(screen.getByTestId('screenshot-capture-toggle')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeTruthy();
-    expect(screen.queryByPlaceholderText('Add a note for this annotation')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
+    expect(screen.queryByTestId('screenshot-capture-toggle')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Screenshot' })).toBeNull();
+    expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pods' })).toBeNull();
 
     fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
-    expect(screen.getByPlaceholderText('Add a note for this annotation')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Box select' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pen' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy();
 
     clickAgentTool('draw-overlay-toggle');
-    expect(screen.queryByPlaceholderText('Add a note for this annotation')).toBeNull();
+    expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+  });
 
-    fireEvent.click(screen.getByTestId('screenshot-capture-toggle'));
-    expect(screen.queryByPlaceholderText('Add a note for this annotation')).toBeNull();
-    expect(screen.getByRole('status').textContent).toContain('Copying screenshot');
-    expect(screen.getByTestId('screenshot-capture-toggle').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('false');
+  it('keeps preview viewport selection scoped to each HTML file', async () => {
+    const firstFile = htmlPreviewFile({ name: 'first.html', path: 'first.html' });
+    const secondFile = htmlPreviewFile({ name: 'second.html', path: 'second.html' });
+    const { rerender } = render(
+      <FileViewer
+        projectId="viewport-scope-project"
+        projectKind="prototype"
+        file={firstFile}
+        liveHtml='<html><body><main>First</main></body></html>'
+      />,
+    );
+
+    const viewportButton = screen.getByRole('button', { name: 'Preview viewport' });
+    expect(viewportButton.textContent).toContain('Desktop');
+    fireEvent.click(viewportButton);
+    fireEvent.click(screen.getByRole('option', { name: /tablet/i }));
+    expect(screen.getByRole('button', { name: 'Preview viewport' }).textContent).toContain('Tablet');
+
+    rerender(
+      <FileViewer
+        projectId="viewport-scope-project"
+        projectKind="prototype"
+        file={secondFile}
+        liveHtml='<html><body><main>Second</main></body></html>'
+      />,
+    );
+
+    expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Desktop');
+
+    rerender(
+      <FileViewer
+        projectId="viewport-scope-project"
+        projectKind="prototype"
+        file={firstFile}
+        liveHtml='<html><body><main>First</main></body></html>'
+      />,
+    );
+
+    expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Tablet');
   });
 
   it('keeps the Draw bar open after queueing an annotation', () => {
@@ -1684,15 +1859,15 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     clickAgentTool('draw-overlay-toggle');
-    const note = screen.getByPlaceholderText('Add a note for this annotation');
+    const note = screen.getByPlaceholderText('Add a note for this mark');
     fireEvent.change(note, { target: { value: 'mark this' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
 
-    expect(screen.getByPlaceholderText('Add a note for this annotation')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();
 
     clickAgentTool('draw-overlay-toggle');
-    expect(screen.queryByPlaceholderText('Add a note for this annotation')).toBeNull();
+    expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
   });
 
   it('uses a materialized srcDoc bridge while the Draw bar is open', async () => {
@@ -1722,8 +1897,54 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
-  it('disables Draw direct send during a run but keeps Queue available so the annotation is not lost', async () => {
+  it('preserves URL-loaded preview scroll when opening Draw', async () => {
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(urlFrame.getAttribute('src')).toContain('odPreviewBridge=scroll');
+
+    const srcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    const postSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-scroll',
+        frameLeft: 4,
+        frameTop: 640,
+        canvasLeft: 0,
+        canvasTop: 640,
+      },
+    }));
+
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      expect(postSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'od:preview-scroll-restore',
+          frameLeft: 4,
+          frameTop: 640,
+          canvasTop: 640,
+        }),
+        '*',
+      );
+    });
+  });
+
+  it('lets Draw direct send emit a queued annotation while a task is running', async () => {
     const annotationSpy = vi.fn();
+
     window.addEventListener(ANNOTATION_EVENT, annotationSpy);
 
     render(
@@ -1734,7 +1955,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     clickAgentTool('draw-overlay-toggle');
-    fireEvent.change(screen.getByPlaceholderText('Add a note for this annotation'), {
+    fireEvent.change(screen.getByPlaceholderText('Add a note for this mark'), {
       target: { value: 'mark this' },
     });
 
@@ -1796,6 +2017,22 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Already sent to Claude')).toBeNull();
   });
 
+  it('does not render the comments drawer over the preview while waiting for a configured dock portal', () => {
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        commentPortalId="project-comments-dock"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    expect(container.querySelector('.comment-preview-layer > .comment-side-panel')).toBeNull();
+  });
+
   it('shows the open comment count beside the comments icon', () => {
     const openComment: PreviewComment = {
       id: 'comment-open',
@@ -1842,7 +2079,7 @@ describe('FileViewer tweaks toolbar', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      screen.getByTestId('screenshot-capture-toggle').compareDocumentPosition(commentsButton) &
+      screen.getByTestId('manual-edit-mode-toggle').compareDocumentPosition(commentsButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
@@ -1877,6 +2114,125 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByTestId('inspect-empty-hint-container')).toBeNull();
+  });
+
+  it('keeps the picker hint inside the canvas and clear of the open comment side panel', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    const dock = screen.getByTestId('comment-side-dock');
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByTestId('comment-side-collapsed-rail')).toBeTruthy();
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
+  });
+
+  it('keeps non-docked tablet comment-tool previews fitted to the padded canvas', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Preview viewport'));
+    fireEvent.click(screen.getByRole('option', { name: 'Tablet' }));
+    clickAgentTool('board-mode-toggle');
+
+    const layout = screen.getByTestId('comment-preview-layout');
+    await waitFor(() => {
+      expect(layout.className).not.toContain('comment-preview-layer-with-side-dock');
+      expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo((700 - 48) / 1180);
+    });
+  });
+
+  it('docks the comment side panel outside the clickable preview canvas', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this.dataset.testid === 'comment-preview-canvas') return testRect(8, 8, 552, 684);
+        if (this.dataset.testid === 'comment-side-dock') return testRect(572, 8, 320, 684);
+        if (this.dataset.testid === 'comment-side-panel') return testRect(572, 8, 320, 684);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    const dock = screen.getByTestId('comment-side-dock');
+    const panel = screen.getByTestId('comment-side-panel');
+    const canvasBox = canvas.getBoundingClientRect();
+    const dockBox = dock.getBoundingClientRect();
+    const panelBox = panel.getBoundingClientRect();
+
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(panel)).toBe(true);
+    expect(canvas.contains(panel)).toBe(false);
+    expect(screen.getByTestId('comment-preview-layout').className).toContain(
+      'comment-preview-layer-with-side-dock',
+    );
+    expect(dockBox.left).toBeGreaterThanOrEqual(canvasBox.right);
+    expect(panelBox.left).toBeGreaterThanOrEqual(canvasBox.right);
+  });
+
+  it('uses the narrow board layout when docking would leave too little canvas', async () => {
+    const getBoundingClientRectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 400, 700);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-preview-layout').className).toContain(
+        'comment-preview-layer-side-dock-stacked',
+      );
+    });
+
+    getBoundingClientRectSpy.mockRestore();
   });
 
   it('keeps saved comment pins visible while adding another comment', async () => {
@@ -1961,6 +2317,55 @@ describe('FileViewer tweaks toolbar', () => {
     expect(document.querySelector('[data-comment-id="comment-older"]')?.className).not.toContain('active');
   });
 
+  it('orders and timestamps side comments by latest update time', () => {
+    const createdFirstUpdatedLast: PreviewComment = {
+      id: 'comment-updated-last',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero-title',
+      selector: '[data-od-id="hero-title"]',
+      label: 'Hero title',
+      text: 'Hero',
+      htmlHint: '<h1 data-od-id="hero-title">Hero</h1>',
+      position: { x: 24, y: 32, width: 180, height: 36 },
+      note: 'Latest edit',
+      status: 'open',
+      createdAt: Date.now() - 20 * 60_000,
+      updatedAt: Date.now(),
+    };
+    const createdLastUpdatedFirst: PreviewComment = {
+      ...createdFirstUpdatedLast,
+      id: 'comment-created-last',
+      elementId: 'hero-subtitle',
+      selector: '[data-od-id="hero-subtitle"]',
+      label: 'Hero subtitle',
+      note: 'Older edit',
+      createdAt: Date.now() - 5 * 60_000,
+      updatedAt: Date.now() - 10 * 60_000,
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[createdLastUpdatedFirst, createdFirstUpdatedLast]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const items = screen.getAllByTestId('comment-side-item');
+    const [firstItem, secondItem] = items;
+    expect(firstItem).toBeDefined();
+    expect(secondItem).toBeDefined();
+    expect(firstItem!.textContent).toContain('Latest edit');
+    expect(firstItem!.textContent).toContain('just now');
+    expect(secondItem!.textContent).toContain('Older edit');
+  });
+
   it('does not preload non-open element comments into the picker composer', async () => {
     const applyingElementComment: PreviewComment = {
       id: 'comment-element-applying',
@@ -2009,6 +2414,57 @@ describe('FileViewer tweaks toolbar', () => {
     expect(input.value).toBe('');
     expect(screen.queryByText('Remove')).toBeNull();
     expect(screen.queryByText('Do not resurrect this note')).toBeNull();
+  });
+
+  it('does not preload open element comments when starting a new annotation', async () => {
+    const openComment: PreviewComment = {
+      id: 'comment-element-open',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'Hero',
+      text: 'Hero',
+      htmlHint: '<main data-od-id="hero">Hero</main>',
+      position: { x: 8, y: 12, width: 120, height: 48 },
+      note: 'Existing note should stay in the thread',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        previewComments={[openComment]}
+        onRemovePreviewComment={vi.fn()}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
+    expect(input.value).toBe('');
+    expect(screen.queryByText('Existing note should stay in the thread')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });
 
   it('keeps the comment composer focused on the note after picking an element', async () => {
@@ -2104,6 +2560,7 @@ describe('FileViewer tweaks toolbar', () => {
     }));
 
     const input = await screen.findByTestId('comment-popover-input');
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     fireEvent.change(input, { target: { value: '加大字号' } });
     fireEvent.click(screen.getByTestId('comment-popover-save'));
 
@@ -2114,6 +2571,88 @@ describe('FileViewer tweaks toolbar', () => {
     const activeItem = document.querySelector('[data-comment-id="comment-saved"]');
     expect(activeItem?.className).toContain('active');
     expect(activeItem?.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('lets element comments queue to chat while a task is running', async () => {
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(undefined);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        streaming
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: '加大字号' } });
+    const send = screen.getByTestId('comment-add-send') as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(onSendBoardCommentAttachments.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      filePath: 'preview.html',
+      elementId: 'hero',
+      comment: '加大字号',
+      source: 'board-batch',
+    });
+    await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
+  });
+
+  it('keeps the comment draft when chat queueing declines the send', async () => {
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(false);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '保留这个评论' } });
+    fireEvent.click(screen.getByTestId('comment-add-send'));
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('comment-popover')).toBeTruthy();
+    expect((screen.getByTestId('comment-popover-input') as HTMLTextAreaElement).value)
+      .toBe('保留这个评论');
   });
 
   it('returns to element picking from the Comment button while another annotation tool is active', async () => {
@@ -2136,7 +2675,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('shows element parameters on annotation hover and opens comments on click', async () => {
+  it('opens annotation parameters and comments on click only', async () => {
     render(
       <FileViewer
         projectId="project-1"
@@ -2169,11 +2708,10 @@ describe('FileViewer tweaks toolbar', () => {
       data: { ...target, type: 'od:comment-hover' },
     }));
 
-    const summary = await screen.findByTestId('annotation-hover-style-summary');
-    expect(summary.textContent).toContain('Color');
-    expect(summary.textContent).toContain('#1A1916');
-    expect(summary.textContent).toContain('13.5px');
+    expect(screen.queryByTestId('annotation-hover-style-summary')).toBeNull();
+    expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
     expect(screen.queryByTestId('inspect-panel')).toBeNull();
+    expect(await screen.findByTestId('comment-target-overlay')).toBeTruthy();
     expect(screen.queryByTestId('comment-popover-input')).toBeNull();
 
     window.dispatchEvent(new MessageEvent('message', {
@@ -2181,9 +2719,14 @@ describe('FileViewer tweaks toolbar', () => {
       data: { ...target, type: 'od:comment-target' },
     }));
 
+    const summary = await screen.findByTestId('comment-popover-style-summary');
+    expect(summary.textContent).toContain('Color');
+    expect(summary.textContent).toContain('#1A1916');
+    expect(summary.textContent).toContain('13.5px');
     expect(await screen.findByTestId('comment-popover-input')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('comment-target-overlay')).toBeTruthy();
+    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByTestId('inspect-panel')).toBeNull();
     await waitFor(() => {
       expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
@@ -2241,14 +2784,14 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
-  it('closes the comment side panel from the header close button', () => {
+  it('moves focus between comment side panel toggles when collapsing and expanding without a pre-focused click target', async () => {
     const onCollapseChange = vi.fn();
-    const onClose = vi.fn();
+    const onSelectAll = vi.fn();
+    const onReply = vi.fn();
 
     function Harness() {
       const [collapsed, setCollapsed] = useState(false);
-      const [open, setOpen] = useState(true);
-      return open ? (
+      return (
         <CommentSidePanel
           comments={[
             {
@@ -2275,32 +2818,89 @@ describe('FileViewer tweaks toolbar', () => {
             onCollapseChange(next);
             setCollapsed(next);
           }}
-          onClose={() => {
-            onClose();
-            setOpen(false);
-          }}
           onToggleSelect={() => {}}
+          onSelectAll={onSelectAll}
           onClearSelection={() => {}}
-          onReply={() => {}}
+          onReply={onReply}
           onSendSelected={() => {}}
           sending={false}
           t={t}
         />
-      ) : null;
+      );
     }
 
     render(<Harness />);
 
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     expect(screen.getByText('不要github，换成微信')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Select all' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    fireEvent.click(screen.getByText('不要github，换成微信').closest('[data-testid="comment-side-item"]')!);
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'comment-1' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    const hideComments = screen.getByRole('button', { name: /hide comments/i });
 
-    expect(onClose).toHaveBeenCalledOnce();
-    expect(onCollapseChange).not.toHaveBeenCalled();
+    fireEvent.click(hideComments);
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByText('不要github，换成微信')).toBeNull();
     expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
-    expect(screen.queryByTestId('comment-side-collapsed-rail')).toBeNull();
+    const showComments = screen.getByTestId('comment-side-collapsed-rail');
+    await waitFor(() => expect(document.activeElement).toBe(showComments));
+
+    fireEvent.click(showComments);
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(false);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /hide comments/i }));
+    });
+  });
+
+  it('announces comment side dock disclosure state without pointing at an unmounted panel', () => {
+    function Harness() {
+      const [collapsed, setCollapsed] = useState(false);
+      return (
+        <CommentSidePanel
+          comments={[]}
+          selectedIds={new Set()}
+          activeCommentId={null}
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+          onToggleSelect={() => {}}
+          onSelectAll={() => {}}
+          onClearSelection={() => {}}
+          onReply={() => {}}
+          onSendSelected={() => {}}
+          sending={false}
+          t={t}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    const panel = screen.getByTestId('comment-side-panel');
+    const hideComments = screen.getByRole('button', { name: /hide comments/i });
+    const panelId = panel.id;
+
+    expect(panelId).toBeTruthy();
+    expect(hideComments.getAttribute('aria-controls')).toBe(panelId);
+    expect(hideComments.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(hideComments);
+
+    const showComments = screen.getByTestId('comment-side-collapsed-rail');
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(document.getElementById(panelId)).toBeNull();
+    expect(showComments.getAttribute('aria-controls')).toBeNull();
+    expect(showComments.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('lets the inspect panel shrink inside narrow preview layouts', () => {
+    const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
+    const rule = css.match(/\.inspect-panel\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('width: min(296px, calc(100% - 28px));');
   });
 
   it('does not classify text labels containing a standalone article as links', () => {
@@ -2328,8 +2928,8 @@ describe('FileViewer tweaks toolbar', () => {
         activeCommentId={null}
         collapsed={false}
         onCollapsedChange={() => {}}
-        onClose={() => {}}
         onToggleSelect={() => {}}
+        onSelectAll={() => {}}
         onClearSelection={() => {}}
         onReply={() => {}}
         onSendSelected={() => {}}
@@ -2342,7 +2942,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Link')).toBeNull();
   });
 
-  it('deletes selected comments when clear is clicked', async () => {
+  it('clears the comment selection without deleting when clear is clicked', async () => {
     const removed: string[] = [];
 
     function Harness() {
@@ -2405,10 +3005,10 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.click(firstSelectButton);
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
 
-    await waitFor(() => {
-      expect(screen.queryByText('Second')).toBeNull();
-    });
-    expect(removed).toEqual(['comment-2']);
+    // Per #3081, Clear deselects rather than batch-deleting: the comments stay
+    // and removal stays wired to per-comment delete / send-selected instead.
+    expect(screen.queryByText('Second')).not.toBeNull();
+    expect(removed).toEqual([]);
   });
 });
 
@@ -2976,6 +3576,35 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('right: calc(env(safe-area-inset-right, 0px) + 20px);');
     expect(rule).toContain('display: inline-flex;');
     expect(rule).toContain('align-items: center;');
+  });
+
+  it('uses the shared zoom dropdown for live artifact previews', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    const zoomTrigger = await screen.findByRole('button', { name: '100%' });
+    expect(screen.queryByRole('button', { name: /zoom out/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /zoom in/i })).toBeNull();
+
+    fireEvent.click(zoomTrigger);
+    expect(screen.getByRole('menuitem', { name: '50%' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: '200%' })).toBeTruthy();
   });
 
   it('enters and exits in-tab presentation from the present menu', async () => {
