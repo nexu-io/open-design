@@ -87,6 +87,7 @@ function migrate(db: SqliteDb): void {
       conversation_id TEXT NOT NULL,
       agent_id        TEXT NOT NULL,
       session_id      TEXT NOT NULL,
+      stable_prompt_hash TEXT,
       updated_at      INTEGER NOT NULL,
       PRIMARY KEY (conversation_id, agent_id),
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
@@ -298,6 +299,10 @@ function migrate(db: SqliteDb): void {
   }
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
+  }
+  const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
+  if (!agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
   }
   migrateCritique(db);
   migrateMediaTasks(db);
@@ -910,14 +915,58 @@ export function getAgentSession(
 
 export function upsertAgentSession(
   db: SqliteDb,
-  input: { conversationId: string; agentId: string; sessionId: string },
+  input: {
+    conversationId: string;
+    agentId: string;
+    sessionId: string;
+    stablePromptHash?: string | null;
+  },
 ): void {
   db.prepare(
-    `INSERT INTO agent_sessions (conversation_id, agent_id, session_id, updated_at)
-       VALUES (?, ?, ?, ?)
+    `INSERT INTO agent_sessions (conversation_id, agent_id, session_id, stable_prompt_hash, updated_at)
+       VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(conversation_id, agent_id)
-       DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at`,
-  ).run(input.conversationId, input.agentId, input.sessionId, Date.now());
+       DO UPDATE SET session_id = excluded.session_id,
+                     stable_prompt_hash = excluded.stable_prompt_hash,
+                     updated_at = excluded.updated_at`,
+  ).run(
+    input.conversationId,
+    input.agentId,
+    input.sessionId,
+    input.stablePromptHash ?? null,
+    Date.now(),
+  );
+}
+
+export function getAgentSessionRecord(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): { sessionId: string; stablePromptHash: string | null } | null {
+  const row = db
+    .prepare(
+      `SELECT session_id, stable_prompt_hash FROM agent_sessions
+        WHERE conversation_id = ? AND agent_id = ?`,
+    )
+    .get(conversationId, agentId) as DbRow | undefined;
+  if (!row || typeof row.session_id !== 'string') return null;
+  return {
+    sessionId: row.session_id,
+    stablePromptHash:
+      typeof row.stable_prompt_hash === 'string' ? row.stable_prompt_hash : null,
+  };
+}
+
+export function updateAgentSessionStableHash(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+  stablePromptHash: string,
+): void {
+  db.prepare(
+    `UPDATE agent_sessions SET stable_prompt_hash = ?, updated_at = ?
+      WHERE conversation_id = ? AND agent_id = ?`,
+  ).run(stablePromptHash, Date.now(), conversationId, agentId);
 }
 
 export function clearAgentSession(
