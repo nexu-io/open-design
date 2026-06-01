@@ -3,17 +3,60 @@ import type { MediaExecutionPolicy } from '@open-design/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
 import type { RouteDeps } from './server-context.js';
 import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { isSandboxModeEnabled } from './sandbox-mode.js';
 import type { ToolTokenGrant } from './tool-tokens.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'ids' | 'auth' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
 
+export type LegacyMediaRouteGrantDecision =
+  | { ok: true; grant: ToolTokenGrant | null }
+  | {
+      ok: false;
+      code: string;
+      details?: Record<string, unknown>;
+      message: string;
+      status: number;
+    };
+
+export function resolveLegacyMediaRouteGrant(input: {
+  grant: ToolTokenGrant | null;
+  projectId: string;
+  requestProjectOverride: (projectId: string, tokenProjectId: string) => boolean;
+  sandboxMode: boolean;
+}): LegacyMediaRouteGrantDecision {
+  if (
+    input.sandboxMode &&
+    input.grant &&
+    input.requestProjectOverride(input.projectId, input.grant.projectId)
+  ) {
+    return {
+      ok: false,
+      code: 'FORBIDDEN',
+      details: { suppliedProjectId: input.projectId },
+      message: 'projectId is derived from the tool token',
+      status: 403,
+    };
+  }
+
+  if (!input.grant && input.sandboxMode) {
+    return {
+      ok: false,
+      code: 'TOOL_TOKEN_MISSING',
+      message: 'tool token is required for media generation in sandbox mode',
+      status: 401,
+    };
+  }
+
+  return { ok: true, grant: input.grant };
+}
+
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
-  const { authorizeToolRequest, optionalToolGrantFromRequest } = ctx.auth;
+  const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
   const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
@@ -24,10 +67,19 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
 
-  const mediaPolicyForGrant = (grant: ToolTokenGrant | null): MediaExecutionPolicy => {
-    if (!grant?.runId) return defaultMediaExecutionPolicy();
+  const mediaPolicyForGrant = (grant: ToolTokenGrant | null):
+    | { ok: true; policy: MediaExecutionPolicy }
+    | { ok: false; code: string; message: string } => {
+    if (!grant?.runId) return { ok: true, policy: defaultMediaExecutionPolicy() };
     const run = design.runs.get(grant.runId);
-    return run?.mediaExecution ?? defaultMediaExecutionPolicy();
+    if (!run) {
+      return {
+        ok: false,
+        code: 'MEDIA_POLICY_UNAVAILABLE',
+        message: 'media generation policy is unavailable for this run',
+      };
+    }
+    return { ok: true, policy: run.mediaExecution ?? defaultMediaExecutionPolicy() };
   };
 
   const handleGenerate = async (
@@ -49,7 +101,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
 
     const policy = mediaPolicyForGrant(options.grant);
-    const denial = mediaPolicyDenial(policy, { surface, model });
+    if (!policy.ok) {
+      return sendApiError(res, 403, policy.code, policy.message);
+    }
+    const denial = mediaPolicyDenial(policy.policy, { surface, model });
     if (denial) {
       return sendApiError(res, 403, denial.code, denial.message);
     }
@@ -289,9 +344,23 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
 
     try {
-      // #3199: valid run tokens enforce media policy here; no-token local calls remain a known v1 gap.
-      const grant = optionalToolGrantFromRequest(req);
-      await handleGenerate(req, res, { projectId: req.params.id, grant });
+      const grant = optionalToolGrantFromRequest(req, { operation: 'media:generate' });
+      const grantDecision = resolveLegacyMediaRouteGrant({
+        grant,
+        projectId: req.params.id,
+        requestProjectOverride,
+        sandboxMode: isSandboxModeEnabled(process.env),
+      });
+      if (!grantDecision.ok) {
+        return sendApiError(
+          res,
+          grantDecision.status,
+          grantDecision.code,
+          grantDecision.message,
+          grantDecision.details ? { details: grantDecision.details } : {},
+        );
+      }
+      await handleGenerate(req, res, { projectId: req.params.id, grant: grantDecision.grant });
     } catch (err: any) {
       const status = typeof err?.status === 'number' ? err.status : 400;
       const code = err?.code;
