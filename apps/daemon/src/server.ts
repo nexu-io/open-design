@@ -410,12 +410,13 @@ import {
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
+  updateAgentSessionStableHash,
   upsertAgentSession,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
-import { resolveAgentResumeContext, isClaudeResumeFailure } from './agent-session-resume.js';
+import { resolveAgentResumeContext, isClaudeResumeFailure, hashStableInstructions } from './agent-session-resume.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -11074,7 +11075,7 @@ export async function startServer({
             conversationId: run.conversationId,
             agentId: def.id,
           })
-        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false };
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -11084,13 +11085,30 @@ export async function startServer({
       // is seeded with prior context.
       { skipTranscript: def.resumesSessionViaCli === true && agentResumeCtx.isResuming },
     );
-    const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
+    // The stable instruction slice (daemon prompt + tool contract + system
+    // prompt = design system / skills / memory) is identical across turns of
+    // a conversation in the common case. A resumed Claude session already
+    // holds it, so on resume turns we skip it unless it changed since the
+    // session was seeded — keyed by a hash stored on agent_sessions. Create
+    // turns and changed-hash turns send the full block (byte-identical to the
+    // previous behavior); non-Claude agents have isResuming === false and so
+    // always send the full block.
+    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .join('\n\n---\n\n');
+    const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
+    const includeStableInstructions =
+      !agentResumeCtx.isResuming || agentResumeCtx.storedStablePromptHash !== currentStableHash;
+    const clientInstructionParts = includeStableInstructions
+      ? [researchCommandContract, runContextPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt];
+    const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
       .join('\n\n---\n\n');
     const instructionPrompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt,
-      runtimeToolPrompt,
+      daemonSystemPrompt: includeStableInstructions ? daemonSystemPrompt : '',
+      runtimeToolPrompt: includeStableInstructions ? runtimeToolPrompt : '',
       clientSystemPrompt: clientInstructionPrompt,
       finalPromptOverride: codexImagegenOverride,
     });
@@ -11549,7 +11567,18 @@ export async function startServer({
         conversationId: run.conversationId,
         agentId: def.id,
         sessionId: agentResumeCtx.newSessionId,
+        stablePromptHash: currentStableHash,
       });
+    } else if (
+      def.resumesSessionViaCli === true &&
+      run.conversationId &&
+      agentResumeCtx.isResuming &&
+      includeStableInstructions
+    ) {
+      // Resumed session whose stable block changed this turn (design system /
+      // skill / memory switch). We re-sent the full block above, so advance the
+      // stored hash to match — the next unchanged turn can skip again.
+      updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
     }
 
     // `runStartTimeMs` is consumed by the run-end artifact-manifest
