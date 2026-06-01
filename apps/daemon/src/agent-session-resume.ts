@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
 
-import { getAgentSession } from './db.js';
+import { getAgentSessionRecord } from './db.js';
 
 type SqliteDb = Database.Database;
 
@@ -13,6 +13,8 @@ export interface AgentResumeContext {
   newSessionId: string;
   /** True when a prior session id exists for this (conversation, agent). */
   isResuming: boolean;
+  /** Hash of the stable instruction block last sent on this session, or null. */
+  storedStablePromptHash: string | null;
 }
 
 /**
@@ -25,11 +27,13 @@ export function resolveAgentResumeContext(
   db: SqliteDb,
   input: { conversationId: string; agentId: string },
 ): AgentResumeContext {
-  const resumeSessionId = getAgentSession(db, input.conversationId, input.agentId);
+  const record = getAgentSessionRecord(db, input.conversationId, input.agentId);
+  const resumeSessionId = record?.sessionId ?? null;
   return {
     resumeSessionId,
     newSessionId: randomUUID(),
     isResuming: resumeSessionId != null,
+    storedStablePromptHash: record?.stablePromptHash ?? null,
   };
 }
 
@@ -43,6 +47,11 @@ const CLAUDE_RESUME_FAILURE_PATTERNS: RegExp[] = [
   /no session found/i,
   /session .* not found/i,
 ];
+
+/** sha256 hex digest of the composed stable instruction block. */
+export function hashStableInstructions(stable: string): string {
+  return createHash('sha256').update(stable, 'utf8').digest('hex');
+}
 
 /** True when CLI output indicates a resume target session is missing. */
 export function isClaudeResumeFailure(text: string): boolean {

@@ -10,7 +10,11 @@ import {
   openDatabase,
   upsertAgentSession,
 } from '../src/db.js';
-import { isClaudeResumeFailure, resolveAgentResumeContext } from '../src/agent-session-resume.js';
+import {
+  hashStableInstructions,
+  isClaudeResumeFailure,
+  resolveAgentResumeContext,
+} from '../src/agent-session-resume.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -49,6 +53,32 @@ describe('resolveAgentResumeContext', () => {
     const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
     expect(ctx.isResuming).toBe(true);
     expect(ctx.resumeSessionId).toBe('sess-A');
+  });
+
+  it('returns null storedStablePromptHash when none stored, and the value when present', () => {
+    const db = seed();
+    const fresh = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
+    expect(fresh.storedStablePromptHash).toBeNull();
+
+    upsertAgentSession(db, {
+      conversationId: 'conv-1', agentId: 'claude', sessionId: 'sess-A', stablePromptHash: 'h-1',
+    });
+    const resumed = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
+    expect(resumed.isResuming).toBe(true);
+    expect(resumed.resumeSessionId).toBe('sess-A');
+    expect(resumed.storedStablePromptHash).toBe('h-1');
+  });
+});
+
+describe('hashStableInstructions', () => {
+  it('is deterministic for the same input', () => {
+    expect(hashStableInstructions('abc')).toBe(hashStableInstructions('abc'));
+  });
+  it('differs when the input differs', () => {
+    expect(hashStableInstructions('abc')).not.toBe(hashStableInstructions('abd'));
+  });
+  it('returns a 64-char hex sha256 digest', () => {
+    expect(hashStableInstructions('abc')).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 
