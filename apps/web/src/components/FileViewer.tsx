@@ -7644,6 +7644,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                             }, '*');
                             syncBridgeModes(frame);
                             if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            // Issue #2143 — relay saved route to new iframe after transport switch
+                            const route = previewRouteRef.current;
+                            if (route && frame?.contentWindow) {
+                              frame.contentWindow.postMessage({
+                                type: 'od:route-restore',
+                                path: route.path,
+                                generation: route.generation,
+                                scrollX: route.scrollX,
+                                scrollY: route.scrollY,
+                              }, '*');
+                            }
                           }}
                         />
                       ) : (
@@ -7667,6 +7678,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                             }, '*');
                             syncBridgeModes(frame);
                             if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            // Issue #2143 — relay saved route to new iframe after transport switch
+                            const route = previewRouteRef.current;
+                            if (route && frame?.contentWindow) {
+                              frame.contentWindow.postMessage({
+                                type: 'od:route-restore',
+                                path: route.path,
+                                generation: route.generation,
+                                scrollX: route.scrollX,
+                                scrollY: route.scrollY,
+                              }, '*');
+                            }
                           }}
                         />
                       )}
@@ -7729,6 +7751,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                           syncBridgeModes(frame);
                           syncCachedSlideStateToIframe(frame);
                           if (!useUrlLoadPreview) restorePreviewScrollPosition();
+                          // Issue #2143 — relay saved route to new srcDoc iframe
+                          const route = previewRouteRef.current;
+                          if (route && frame?.contentWindow) {
+                            frame.contentWindow.postMessage({
+                              type: 'od:route-restore',
+                              path: route.path,
+                              generation: route.generation,
+                              scrollX: route.scrollX,
+                              scrollY: route.scrollY,
+                            }, '*');
+                          }
                         }}
                       />
                     </div>
