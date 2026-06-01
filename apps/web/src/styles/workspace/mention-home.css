@@ -673,7 +673,10 @@
    narrow viewports. The kicker/title/subtitle should keep their
    normal width but reserve right-side gutter for the chrome. */
 .modal-settings .modal-head {
+  position: relative;
+  z-index: 2;
   padding-right: calc(var(--modal-padding) + 56px);
+  background: var(--bg-elevated);
 }
 
 /* Compact settings header: place subtitle on the same line as the h2
@@ -1005,6 +1008,8 @@
   display: none;
 }
 .settings-content {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
   /* Top inset matches `.settings-sidebar`'s `padding-top: 16` so the first
@@ -1146,6 +1151,92 @@
 }
 
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
+.project-locations-section { gap: 14px; }
+.project-location-card,
+.project-location-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  transition: border-color 120ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-location-card:hover,
+.project-location-edit:hover {
+  border-color: var(--border-strong);
+}
+.project-location-card.is-default,
+.project-location-edit.is-default {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.project-location-card code {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+.project-location-default-control span {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-subtle);
+  white-space: nowrap;
+}
+.project-location-default-control {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  cursor: pointer;
+}
+.project-location-default-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.project-location-default-control input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.project-location-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.project-location-edit {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+.project-location-edit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.project-location-edit-main code {
+  color: var(--text-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+.project-location-edit-main small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.project-location-add { align-self: flex-start; }
+@media (max-width: 720px) {
+  .project-location-edit { grid-template-columns: 1fr; align-items: stretch; }
+  .project-location-default-control { justify-self: start; }
+}
 .settings-section-connectors { gap: 16px; }
 /* Credentials sit above the catalog now; the divider lives under the field
    so the eye reads "configure key → catalog unlocks below". */

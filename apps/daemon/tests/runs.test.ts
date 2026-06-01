@@ -80,6 +80,45 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('stores a run-scoped tool bundle and returns a redacted status summary', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-a',
+      toolBundle: {
+        mcpServers: [
+          {
+            id: 'run-tools',
+            transport: 'stdio',
+            command: 'node',
+            args: ['server.js', '--token=secret'],
+            env: { API_TOKEN: 'secret' },
+          },
+        ],
+      },
+    }) as any;
+
+    expect(run.toolBundle.mcpServers).toHaveLength(1);
+    expect(run.toolBundle.mcpServers[0]).toMatchObject({
+      id: 'run-tools',
+      command: 'node',
+      env: { API_TOKEN: 'secret' },
+    });
+
+    const status = runs.statusBody(run);
+    expect(status.toolBundle).toEqual({
+      mcpServers: [
+        {
+          id: 'run-tools',
+          transport: 'stdio',
+          enabled: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(status)).not.toContain('secret');
+    expect(JSON.stringify(status)).not.toContain('server.js');
+  });
+
   it('cancels active runs and terminates their child process during daemon shutdown', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });

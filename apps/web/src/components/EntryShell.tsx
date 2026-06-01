@@ -307,6 +307,7 @@ interface Props {
       | 'appearance'
       | 'notifications'
       | 'pet'
+      | 'projectLocations'
       | 'library'
       | 'about'
       | 'memory'

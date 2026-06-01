@@ -32,14 +32,18 @@ function safeFilename(name: string, fallback: string): string {
   return slug || fallback;
 }
 
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
+function triggerHrefDownload(href: string, filename: string): void {
   const a = document.createElement('a');
-  a.href = url;
+  a.href = href;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  triggerHrefDownload(url, filename);
   // Revoke later — Safari sometimes hasn't finished reading the blob yet
   // when the click handler returns.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -397,9 +401,198 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const [header, base64] = dataUrl.split(',');
   const mime = header?.match(/:(.*?);/)?.[1] ?? 'image/png';
   const bytes = atob(base64 ?? '');
+  if (bytes.length <= 0) {
+    throw new Error('Image snapshot is empty');
+  }
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
   return new Blob([arr], { type: mime });
+}
+
+export type ImageExportFormat = 'png' | 'jpeg' | 'webp';
+
+type ImageExportSpec = {
+  extension: string;
+  mime: `image/${string}`;
+  pickerLabel: string;
+};
+
+const IMAGE_EXPORT_SPECS: Record<ImageExportFormat, ImageExportSpec> = {
+  png: {
+    extension: 'png',
+    mime: 'image/png',
+    pickerLabel: 'PNG image',
+  },
+  jpeg: {
+    extension: 'jpg',
+    mime: 'image/jpeg',
+    pickerLabel: 'JPEG image',
+  },
+  webp: {
+    extension: 'webp',
+    mime: 'image/webp',
+    pickerLabel: 'WebP image',
+  },
+};
+
+type FileSystemWritableFileStreamLike = {
+  write(data: Blob): Promise<void>;
+  close(): Promise<void>;
+};
+
+type FileSystemFileHandleLike = {
+  createWritable(): Promise<FileSystemWritableFileStreamLike>;
+};
+
+type SaveFilePickerOptionsLike = {
+  suggestedName?: string;
+  types?: Array<{
+    description?: string;
+    accept: Record<string, string[]>;
+  }>;
+};
+
+type WindowWithSaveFilePicker = Window & {
+  showSaveFilePicker?: (options?: SaveFilePickerOptionsLike) => Promise<FileSystemFileHandleLike>;
+};
+
+export type ImageExportTarget = {
+  filename: string;
+  method: 'download' | 'picker';
+  save: (blob: Blob) => Promise<void> | void;
+};
+
+type ImageExportTargetOptions = {
+  useNativePicker?: boolean;
+};
+
+function imageExportFilename(title: string, format: ImageExportFormat): string {
+  const spec = IMAGE_EXPORT_SPECS[format];
+  return `${safeFilename(title, 'artifact')}.${spec.extension}`;
+}
+
+function downloadImageExportTarget(filename: string): ImageExportTarget {
+  return {
+    filename,
+    method: 'download',
+    save: (blob) => {
+      triggerDownload(blob, filename);
+    },
+  };
+}
+
+export function downloadImageDataUrl(dataUrl: string, filename: string): void {
+  // Validate the snapshot without converting the actual download path to a blob URL.
+  dataUrlToBlob(dataUrl);
+  triggerHrefDownload(dataUrl, filename);
+}
+
+function isDomExceptionNamed(err: unknown, names: ReadonlySet<string>): boolean {
+  if (typeof DOMException !== 'undefined' && err instanceof DOMException) {
+    return names.has(err.name);
+  }
+  if (!err || typeof err !== 'object' || !('name' in err)) return false;
+  return typeof err.name === 'string' && names.has(err.name);
+}
+
+function loadImageFromDataUrl(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not decode image snapshot'));
+    img.src = dataUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error(`Could not encode snapshot as ${mime}`));
+        return;
+      }
+      if (blob.type && blob.type !== mime) {
+        reject(new Error(`Browser encoded ${blob.type} instead of ${mime}`));
+        return;
+      }
+      resolve(blob);
+    }, mime, quality);
+  });
+}
+
+export async function imageDataUrlToBlob(
+  dataUrl: string,
+  format: ImageExportFormat,
+): Promise<Blob> {
+  const spec = IMAGE_EXPORT_SPECS[format];
+  if (format === 'png') {
+    const blob = dataUrlToBlob(dataUrl);
+    if (blob.type === spec.mime) return blob;
+  }
+
+  const img = await loadImageFromDataUrl(dataUrl);
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  if (width <= 0 || height <= 0) {
+    throw new Error('Image snapshot is empty');
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is not available');
+  if (format === 'jpeg') {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
+  }
+  ctx.drawImage(img, 0, 0, width, height);
+  return canvasToBlob(canvas, spec.mime, format === 'jpeg' ? 0.92 : undefined);
+}
+
+export async function prepareImageExportTarget(
+  title: string,
+  format: ImageExportFormat,
+  options: ImageExportTargetOptions = {},
+): Promise<ImageExportTarget | null> {
+  const spec = IMAGE_EXPORT_SPECS[format];
+  const filename = imageExportFilename(title, format);
+  const picker = (window as WindowWithSaveFilePicker).showSaveFilePicker;
+  if (options.useNativePicker !== false && typeof picker === 'function') {
+    try {
+      const handle = await picker.call(window, {
+        suggestedName: filename,
+        types: [
+          {
+            description: spec.pickerLabel,
+            accept: {
+              [spec.mime]: [`.${spec.extension}`],
+            },
+          },
+        ],
+      });
+      return {
+        filename,
+        method: 'picker',
+        save: async (blob) => {
+          const writable = await handle.createWritable();
+          try {
+            await writable.write(blob);
+          } finally {
+            await writable.close();
+          }
+        },
+      };
+    } catch (err) {
+      if (isDomExceptionNamed(err, new Set(['AbortError']))) return null;
+      if (isDomExceptionNamed(err, new Set(['NotAllowedError', 'SecurityError']))) {
+        return downloadImageExportTarget(filename);
+      }
+      throw err;
+    }
+  }
+
+  return downloadImageExportTarget(filename);
 }
 
 /** Download a snapshot data-URL as a PNG file. */

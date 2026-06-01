@@ -74,6 +74,7 @@ import {
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
+  usesAnthropicProxy,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
@@ -168,6 +169,7 @@ import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
+import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import {
   buildFinalizeCredentialsMissingToast,
   buildFinalizeRequest,
@@ -741,6 +743,8 @@ export function ProjectView({
     || failedMessagesConversationId === activeConversationId
     || currentConversationAwaitingActiveRunAttach;
   const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
+  const currentConversationQueueDisabled = currentConversationLoading
+    || failedMessagesConversationId === activeConversationId;
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
         .filter((item) => item.conversationId === activeConversationId)
@@ -2762,6 +2766,7 @@ export function ProjectView({
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           research: meta?.research,
+          mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           locale,
@@ -2859,6 +2864,7 @@ export function ProjectView({
           userMsg.id,
           project.id,
           projectFiles,
+          { omitNativeImageAttachments: usesAnthropicProxy(config) },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         let accumulatedAssistantText = '';
@@ -3060,13 +3066,15 @@ export function ProjectView({
 
   const handleSendBoardCommentAttachments = useCallback(
     async (commentAttachments: ChatCommentAttachment[]) => {
-      if (currentConversationActionDisabled || commentAttachments.length === 0) return;
+      if (currentConversationQueueDisabled || commentAttachments.length === 0) return false;
       setWorkspaceFocused(false);
       setCommentInspectorActive(false);
       await handleSend('', [], commentAttachments);
+      return true;
     },
-    [handleSend, currentConversationActionDisabled],
+    [handleSend, currentConversationQueueDisabled],
   );
+  const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
     (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
@@ -4260,6 +4268,37 @@ export function ProjectView({
   const projectInstructions = (project.customInstructions ?? '').trim();
   const hasProjectInstructions = projectInstructions.length > 0;
   const projectInstructionsPreview = compactInlinePreview(projectInstructions);
+  const executionControls = (
+    <>
+      {!hasProjectInstructions ? (
+        <button
+          type="button"
+          className="icon-btn"
+          data-testid="project-instructions-add"
+          title={t('project.customInstructions')}
+          aria-label={t('project.customInstructions')}
+          onClick={() => {
+            setInstructionsDraft('');
+            setInstructionsMode('edit');
+          }}
+        >
+          <Icon name="sliders" size={15} />
+        </button>
+      ) : null}
+      <AvatarMenu
+        config={config}
+        agents={agents}
+        daemonLive={daemonLive}
+        onModeChange={onModeChange}
+        onAgentChange={onAgentChange}
+        onAgentModelChange={onAgentModelChange}
+        onOpenSettings={() => onOpenSettings('execution')}
+        onRefreshAgents={onRefreshAgents}
+        onBack={onBack}
+        placement="up"
+      />
+    </>
+  );
 
   return (
     <div className="app">
@@ -4272,41 +4311,24 @@ export function ProjectView({
         onBack={onBack}
         backLabel={t('project.backToProjects')}
         fileActionsBefore={(
-          <div
-            className="app-chrome-file-actions-before workspace-tabs-file-actions"
-            data-app-chrome-file-actions="true"
-          />
-        )}
-        actions={(
           <>
+            <HandoffButton projectId={project.id} />
             <button
               type="button"
               className="settings-icon-btn"
-              data-testid="project-settings-trigger"
-              title={t('project.customInstructions')}
-              aria-label={t('project.customInstructions')}
-              aria-expanded={instructionsMode !== 'closed'}
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
-              }}
+              onClick={() => onOpenSettings('execution')}
+              title={t('chat.cliSettingsTitle')}
+              aria-label={t('chat.cliSettingsAria')}
             >
-              <Icon name="sliders" size={16} />
+              <Icon name="settings" size={16} />
             </button>
-            <HandoffButton projectId={project.id} />
-            <AvatarMenu
-              config={config}
-              agents={agents}
-              daemonLive={daemonLive}
-              onModeChange={onModeChange}
-              onAgentChange={onAgentChange}
-              onAgentModelChange={onAgentModelChange}
-              onOpenSettings={onOpenSettings}
-              onRefreshAgents={onRefreshAgents}
-              onBack={onBack}
+            <div
+              className="app-chrome-file-actions-before workspace-tabs-file-actions"
+              data-app-chrome-file-actions="true"
             />
           </>
         )}
+        actions={null}
       >
         <div className="app-project-title">
           <span className="app-project-title-line">
@@ -4512,6 +4534,14 @@ export function ProjectView({
                 onProjectChange({ ...project, skillId });
               }}
               activePluginSnapshot={activePluginSnapshot}
+              composerFooterAccessory={executionControls}
+              currentDesignSystemId={project.designSystemId}
+              onActiveDesignSystemChange={(updatedProject) => {
+                onProjectChange(updatedProject);
+              }}
+              onShowToast={(message) => {
+                setProjectActionsToast({ message, details: null });
+              }}
               onCollapse={() => setWorkspaceFocused(true)}
             />
           ) : (
@@ -4552,6 +4582,8 @@ export function ProjectView({
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
           streaming={currentConversationActionDisabled}
+          commentQueueOnSend={commentQueueOnSend}
+          commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}
           liveArtifactEvents={liveArtifactEvents}
           designSystemActivityEvents={designSystemActivityEvents}
@@ -4576,6 +4608,13 @@ export function ProjectView({
           githubConnected={githubConnected}
           commentPortalId={commentInspectorPortalId}
           onCommentModeChange={setCommentInspectorActive}
+          messages={messages}
+          artifactHtml={artifact?.html}
+          conversationError={error}
+          onRetry={handleRetry}
+          onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
+          onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+          conversationId={activeConversationId}
         />
       </div>
       {projectActionsToast ? (

@@ -618,7 +618,19 @@
 }
 .chrome-action-secondary:hover:not(:disabled) {
   background: var(--bg-subtle);
-  border-color: var(--text-muted);
+  border-color: var(--border);
+}
+.chrome-file-action-menus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chrome-action-with-label {
+  gap: 8px;
+}
+.present-trigger[aria-expanded='true'] {
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
 }
 .chrome-action-primary {
   background: var(--text-strong);

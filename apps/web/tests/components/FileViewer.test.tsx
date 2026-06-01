@@ -29,6 +29,7 @@ import {
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
   applyInspectOverridesToSource,
+  commentPreviewCanvasSize,
   effectivePreviewScale,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
@@ -52,6 +53,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, 'clipboard');
+  Reflect.deleteProperty(document, 'execCommand');
 });
 
 function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
@@ -75,6 +77,30 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
+  return calls
+    .map(([message]) => message)
+    .filter((message): message is { type: 'od:srcdoc-transport-activate'; html: string } => {
+      if (typeof message !== 'object' || message === null) return false;
+      const data = message as { type?: unknown; html?: unknown };
+      return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
+    });
+}
+
+function testRect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    width,
+    height,
+    top,
+    left,
+    right: left + width,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
 function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
@@ -95,7 +121,10 @@ describe('FileViewer preview scale', () => {
       '.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas',
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\) \.comment-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\):not\(\.comment-preview-layer-with-side-dock\) \.comment-preview-canvas,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*width: calc\(var\(--preview-viewport-width\) \* var\(--preview-scale, 1\)\);/,
+    );
+    expect(css).toMatch(
+      /\.preview-viewport:not\(\.preview-viewport-desktop\) \.preview-frame-clip,\s*\n\.preview-viewport:not\(\.preview-viewport-desktop\)\.manual-edit-workspace \.manual-edit-canvas \{\s*\n\s*position: relative;/,
     );
   });
 
@@ -119,6 +148,60 @@ describe('FileViewer preview scale', () => {
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
     expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
     expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
+  });
+
+  it('uses the reduced board canvas size when the side dock is open', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+
+    expect(dockedCanvas).toEqual({ width: 552, height: 684 });
+    expect(effectivePreviewScale('tablet', 1, dockedCanvas)).toBeLessThan(
+      effectivePreviewScale('tablet', 1, { width: 900, height: 700 }),
+    );
+  });
+
+  it('uses stacked canvas sizing for narrow board panes instead of a 1px docked canvas', () => {
+    const narrowCanvas = commentPreviewCanvasSize(
+      { width: 400, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+
+    expect(narrowCanvas).toEqual({ width: 384, height: 452 });
+  });
+
+  it('subtracts only the collapsed stacked rail height when the side dock is collapsed in the stacked layout', () => {
+    const expandedStackedCanvas = commentPreviewCanvasSize(
+      { width: 300, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false },
+    );
+    const collapsedStackedCanvas = commentPreviewCanvasSize(
+      { width: 300, height: 700 },
+      { boardMode: true, sidePanelCollapsed: true },
+    );
+
+    expect(expandedStackedCanvas).toEqual({ width: 284, height: 452 });
+    expect(collapsedStackedCanvas).toEqual({ width: 284, height: 624 });
+    expect(collapsedStackedCanvas!.height).toBeGreaterThan(expandedStackedCanvas!.height);
+  });
+
+  it('matches the rendered non-desktop dock padding in board canvas sizing', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false, viewport: 'tablet' },
+    );
+
+    expect(dockedCanvas).toEqual({ width: 520, height: 652 });
+  });
+
+  it('fits non-desktop board previews against the inner canvas without subtracting viewport padding again', () => {
+    const dockedCanvas = commentPreviewCanvasSize(
+      { width: 900, height: 700 },
+      { boardMode: true, sidePanelCollapsed: false, viewport: 'tablet' },
+    );
+
+    expect(effectivePreviewScale('tablet', 1, dockedCanvas, { canvasPadding: 0 })).toBeCloseTo(652 / 1180);
   });
 
   it('offsets tablet and mobile overlays to the centered viewport card', () => {
@@ -441,7 +524,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -449,7 +532,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -596,8 +679,40 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+  });
+
+  it('offers image export for URL-loaded HTML previews', () => {
+    const file = baseFile({
+      name: 'workspace.html',
+      path: 'workspace.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Workspace',
+        entry: 'workspace.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><main>Workspace</main></body></html>"
+      />,
+    );
+
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+
+    expect(screen.getByRole('menuitem', { name: /export as image/i })).toBeTruthy();
   });
 
   it('keeps inactive HTML preview transports mounted without booting the artifact', async () => {
@@ -774,7 +889,8 @@ describe('FileViewer SVG artifacts', () => {
 
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
-    expect(getFrame()?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0');
+    const initialFrame = getFrame();
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -782,9 +898,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -1045,9 +1161,9 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(screen.getByText('Account ID')).toBeTruthy();
-    expect(screen.getByText(/Pages Edit is required/i)).toBeTruthy();
-    expect(screen.getByText(/Zone Read is required to list domains/i)).toBeTruthy();
-    expect(screen.getByText(/DNS Edit is only needed when binding a custom domain/i)).toBeTruthy();
+    expect(screen.getByText(/Select Pages Edit when creating the API token/i)).toBeTruthy();
+    expect(screen.getByText(/Zone Read/i)).toBeTruthy();
+    expect(screen.getByText(/custom domains need Zone Read \/ DNS Edit/i)).toBeTruthy();
     expect(screen.queryByText(/Pages Read\/Write/i)).toBeNull();
     const subdomainInput = screen.getByLabelText('Subdomain prefix');
     const domainSelect = screen.getByLabelText('Domain');
@@ -1083,7 +1199,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const exportButton = screen.getByRole('button', { name: /share/i });
+    const exportButton = screen.getByRole('button', { name: /download/i });
     await waitFor(() => {
       expect(exportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -1132,7 +1248,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const firstExportButton = screen.getByRole('button', { name: /share/i });
+    const firstExportButton = screen.getByRole('button', { name: /download/i });
     await waitFor(() => {
       expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -1148,7 +1264,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const secondExportButton = screen.getByRole('button', { name: /share/i });
+    const secondExportButton = screen.getByRole('button', { name: /download/i });
     await waitFor(() => {
       expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -1411,7 +1527,7 @@ describe('FileViewer SVG artifacts', () => {
     });
     fireEvent.change(screen.getByLabelText(/Subdomain prefix/i), { target: { value: 'demo' } });
 
-    const deployButtons = screen.getAllByRole('button', { name: /Deploy to Cloudflare Pages/i });
+    const deployButtons = screen.getAllByRole('button', { name: /^Deploy$/i });
     fireEvent.click(deployButtons[deployButtons.length - 1]!);
 
     const pagesDevLabel = await screen.findByText('pages.dev URL');
@@ -1437,7 +1553,7 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
-  it('shows separate copy links for existing Vercel and Cloudflare deployments', async () => {
+  it('copies the newest deployment URL across providers', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -1501,11 +1617,190 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /Copy Vercel link/i })).toBeTruthy();
-    const cloudflareCopy = await screen.findByRole('menuitem', { name: /Copy Cloudflare link/i });
-    fireEvent.click(cloudflareCopy);
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    expect(screen.queryByRole('menuitem', { name: /Copy Vercel link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy Cloudflare link/i })).toBeNull();
+    fireEvent.click(copyShareLink);
 
     expect(writeText).toHaveBeenCalledWith('https://cloudflare.pages.dev');
+    expect(await screen.findByRole('menuitem', { name: /Copied!/i })).toBeTruthy();
+  });
+
+  it('uses a ready Cloudflare custom domain for the share link', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'cloudflare-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'cloudflare-pages',
+          url: 'https://demo-pages.pages.dev',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          cloudflarePages: {
+            projectName: 'demo-pages',
+            pagesDev: {
+              url: 'https://demo-pages.pages.dev',
+              status: 'ready',
+            },
+            customDomain: {
+              hostname: 'demo.example.com',
+              url: 'https://demo.example.com',
+              zoneId: 'zone-1',
+              zoneName: 'example.com',
+              domainPrefix: 'demo',
+              status: 'ready',
+            },
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    fireEvent.click(copyShareLink);
+
+    expect(writeText).toHaveBeenCalledWith('https://demo.example.com');
+  });
+
+  it('allows copying but not opening a deployment while its public link is still preparing', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'pending-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://pending.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'link-delayed',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
+    expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
+    expect(openSharePage.disabled).toBe(true);
+    expect(screen.getAllByText(/public link is still being prepared/i).length).toBeGreaterThan(0);
+    fireEvent.click(copyShareLink);
+
+    expect(writeText).toHaveBeenCalledWith('https://pending.example');
+  });
+
+  it('allows copying and opening a protected deployment but shows an access hint', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'protected-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://protected.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'protected',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
+    expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
+    expect(openSharePage.disabled).toBe(false);
+    expect(screen.getAllByText(/requiring authentication/i).length).toBeGreaterThan(0);
+    fireEvent.click(openSharePage);
+
+    expect(openSpy).toHaveBeenCalledWith('https://protected.example', '_blank', 'noopener');
   });
 
   it('shows one copy link when only one deployment provider has a URL', async () => {
@@ -1523,6 +1818,7 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
+    const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       deployments: [
         {
@@ -1539,6 +1835,10 @@ describe('FileViewer SVG artifacts', () => {
         },
       ],
     }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
 
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
@@ -1548,8 +1848,207 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /Copy Cloudflare link/i })).toBeTruthy();
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    fireEvent.click(copyShareLink);
+
+    expect(writeText).toHaveBeenCalledWith('https://cloudflare.pages.dev');
     expect(screen.queryByRole('menuitem', { name: /Copy Vercel link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy Cloudflare link/i })).toBeNull();
+  });
+
+  it('separates deploy sharing actions from download actions', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ deployments: [] }), { status: 200 })));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(screen.getByText('SHARE')).toBeTruthy();
+    expect(screen.getByText('PUBLISH ONLINE')).toBeTruthy();
+    const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(menuItems.slice(0, 1)).toEqual([
+      'Publish online above to enable share ↑',
+    ]);
+    expect(menuItems.slice(1, 3)).toEqual([
+      'Deploy to Vercel',
+      'Deploy to Cloudflare Pages',
+    ]);
+    expect(screen.getByText('Publish online above to enable share ↑')).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Copy share link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Open share page/i })).toBeNull();
+    expect(menuItems).not.toContain('Export as PDF');
+    expect(menuItems).not.toContain('Export as image');
+    expect(menuItems).not.toContain('Download as .zip');
+    expect(menuItems).not.toContain('Export as standalone HTML');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /Publish online above to enable share/i }));
+    expect(await screen.findByText('Publish online first to get a link')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+
+    const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(downloadItems).toContain('Export as PDF');
+    expect(downloadItems).toContain('Export as image');
+    expect(downloadItems).toContain('Download as .zip');
+    expect(downloadItems).toContain('Export as standalone HTML');
+    expect(downloadItems).not.toContain('Copy share link');
+    expect(downloadItems).not.toContain('Deploy to Vercel');
+    expect(downloadItems).not.toContain('Export as PPTX');
+    expect(downloadItems).not.toContain('Export as Markdown');
+  });
+
+  it('disables share link actions while the artifact is still streaming', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'vercel-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://vercel.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+        streaming
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i }) as HTMLButtonElement;
+    const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
+    expect(copyShareLink.disabled).toBe(true);
+    expect(openSharePage.disabled).toBe(true);
+    expect(screen.getAllByText(/Share after generation completes/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows markdown export without exposing deploy actions for markdown artifacts', async () => {
+    const file = baseFile({
+      name: 'notes.md',
+      path: 'notes.md',
+      mime: 'text/markdown',
+      kind: 'text',
+      artifactManifest: {
+        version: 1,
+        kind: 'markdown-document',
+        title: 'Notes',
+        entry: 'notes.md',
+        renderer: 'markdown',
+        exports: ['md'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/notes.md') {
+        return new Response('# Notes\n\nKeep this as markdown.');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    expect(screen.queryByRole('button', { name: /^deploy$/i })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /^download$/i }));
+
+    expect(screen.getByRole('menuitem', { name: /Export as Markdown/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
+  });
+
+  it('shows failed copy feedback when deployed link copying is blocked', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'vercel-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://vercel.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(copyShareLink);
+
+    expect(await screen.findByRole('menuitem', { name: /Copy failed/i })).toBeTruthy();
+    expect(screen.getAllByText('Copy failed').length).toBeGreaterThan(1);
+    expect(screen.getByRole('menu')).toBeTruthy();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
@@ -1608,7 +2107,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
@@ -1782,11 +2281,54 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
-  it('keeps Draw queue available while disabling direct send during a running task', async () => {
-    const annotationSpy = vi.fn((event: Event) => {
-      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
-      detail.ack?.({ ok: true });
+  it('preserves URL-loaded preview scroll when opening Draw', async () => {
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
     });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(urlFrame.getAttribute('src')).toContain('odPreviewBridge=scroll');
+
+    const srcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    const postSpy = vi.spyOn(srcDocFrame.contentWindow!, 'postMessage');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: urlFrame.contentWindow,
+      data: {
+        type: 'od:preview-scroll',
+        frameLeft: 4,
+        frameTop: 640,
+        canvasLeft: 0,
+        canvasTop: 640,
+      },
+    }));
+
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      expect(postSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'od:preview-scroll-restore',
+          frameLeft: 4,
+          frameTop: 640,
+          canvasTop: 640,
+        }),
+        '*',
+      );
+    });
+  });
+
+  it('lets Draw direct send emit a queued annotation while a task is running', async () => {
+    const annotationSpy = vi.fn();
+
     window.addEventListener(ANNOTATION_EVENT, annotationSpy);
 
     render(
@@ -1958,23 +2500,39 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('inspect-empty-hint-container')).toBeNull();
   });
 
-  it('exits comment mode when closing the comments side panel', () => {
-    const openComment: PreviewComment = {
-      id: 'comment-open',
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-      filePath: 'preview.html',
-      elementId: 'pin-open',
-      selector: '[data-od-pin="pin-open"]',
-      label: 'pin-open',
-      text: '',
-      htmlHint: '',
-      position: { x: 24, y: 32, width: 18, height: 18 },
-      note: 'Open comment',
-      status: 'open',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+  it('keeps the picker hint inside the canvas and clear of the open comment side panel', () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    const dock = screen.getByTestId('comment-side-dock');
+
+    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByTestId('comment-side-collapsed-rail')).toBeTruthy();
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(screen.getByTestId('artifact-preview-frame'))).toBe(false);
+  });
+
+  it('keeps non-docked tablet comment-tool previews fitted to the padded canvas', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        return testRect(0, 0, 0, 0);
+      });
 
     render(
       <FileViewer
@@ -1982,22 +2540,83 @@ describe('FileViewer tweaks toolbar', () => {
         projectKind="prototype"
         file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
-        previewComments={[openComment]}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Preview viewport'));
+    fireEvent.click(screen.getByRole('option', { name: 'Tablet' }));
+    clickAgentTool('board-mode-toggle');
+
+    const layout = screen.getByTestId('comment-preview-layout');
+    await waitFor(() => {
+      expect(layout.className).not.toContain('comment-preview-layer-with-side-dock');
+      expect(Number(layout.style.getPropertyValue('--preview-scale'))).toBeCloseTo((700 - 48) / 1180);
+    });
+  });
+
+  it('docks the comment side panel outside the clickable preview canvas', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this.dataset.testid === 'comment-preview-canvas') return testRect(8, 8, 552, 684);
+        if (this.dataset.testid === 'comment-side-dock') return testRect(572, 8, 320, 684);
+        if (this.dataset.testid === 'comment-side-panel') return testRect(572, 8, 320, 684);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
       />,
     );
 
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('comment-saved-marker-pin-open')).toBeTruthy();
+    const canvas = screen.getByTestId('comment-preview-canvas');
+    const dock = screen.getByTestId('comment-side-dock');
+    const panel = screen.getByTestId('comment-side-panel');
+    const canvasBox = canvas.getBoundingClientRect();
+    const dockBox = dock.getBoundingClientRect();
+    const panelBox = panel.getBoundingClientRect();
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(canvas.contains(screen.getByTestId('artifact-preview-frame'))).toBe(true);
+    expect(dock.contains(panel)).toBe(true);
+    expect(canvas.contains(panel)).toBe(false);
+    expect(screen.getByTestId('comment-preview-layout').className).toContain(
+      'comment-preview-layer-with-side-dock',
+    );
+    expect(dockBox.left).toBeGreaterThanOrEqual(canvasBox.right);
+    expect(panelBox.left).toBeGreaterThanOrEqual(canvasBox.right);
+  });
 
-    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
-    expect(screen.queryByTestId('comment-saved-marker-pin-open')).toBeNull();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+  it('uses the narrow board layout when docking would leave too little canvas', async () => {
+    const getBoundingClientRectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, 400, 700);
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-preview-layout').className).toContain(
+        'comment-preview-layer-side-dock-stacked',
+      );
+    });
+
+    getBoundingClientRectSpy.mockRestore();
   });
 
   it('keeps saved comment pins visible while adding another comment', async () => {
@@ -2338,6 +2957,88 @@ describe('FileViewer tweaks toolbar', () => {
     expect(activeItem?.getAttribute('aria-current')).toBe('true');
   });
 
+  it('lets element comments queue to chat while a task is running', async () => {
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(undefined);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        streaming
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: '加大字号' } });
+    const send = screen.getByTestId('comment-add-send') as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(onSendBoardCommentAttachments.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      filePath: 'preview.html',
+      elementId: 'hero',
+      comment: '加大字号',
+      source: 'board-batch',
+    });
+    await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
+  });
+
+  it('keeps the comment draft when chat queueing declines the send', async () => {
+    const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(false);
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+        onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '保留这个评论' } });
+    fireEvent.click(screen.getByTestId('comment-add-send'));
+
+    await waitFor(() => expect(onSendBoardCommentAttachments).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('comment-popover')).toBeTruthy();
+    expect((screen.getByTestId('comment-popover-input') as HTMLTextAreaElement).value)
+      .toBe('保留这个评论');
+  });
+
   it('returns to element picking from the Comment button while another annotation tool is active', async () => {
     render(
       <FileViewer
@@ -2467,16 +3168,14 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
-  it('closes the comment side panel from the header close button', () => {
+  it('moves focus between comment side panel toggles when collapsing and expanding without a pre-focused click target', async () => {
     const onCollapseChange = vi.fn();
-    const onClose = vi.fn();
     const onSelectAll = vi.fn();
     const onReply = vi.fn();
 
     function Harness() {
       const [collapsed, setCollapsed] = useState(false);
-      const [open, setOpen] = useState(true);
-      return open ? (
+      return (
         <CommentSidePanel
           comments={[
             {
@@ -2503,10 +3202,6 @@ describe('FileViewer tweaks toolbar', () => {
             onCollapseChange(next);
             setCollapsed(next);
           }}
-          onClose={() => {
-            onClose();
-            setOpen(false);
-          }}
           onToggleSelect={() => {}}
           onSelectAll={onSelectAll}
           onClearSelection={() => {}}
@@ -2515,7 +3210,7 @@ describe('FileViewer tweaks toolbar', () => {
           sending={false}
           t={t}
         />
-      ) : null;
+      );
     }
 
     render(<Harness />);
@@ -2527,13 +3222,69 @@ describe('FileViewer tweaks toolbar', () => {
     fireEvent.click(screen.getByText('不要github，换成微信').closest('[data-testid="comment-side-item"]')!);
     expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 'comment-1' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    const hideComments = screen.getByRole('button', { name: /hide comments/i });
 
-    expect(onClose).toHaveBeenCalledOnce();
-    expect(onCollapseChange).not.toHaveBeenCalled();
+    fireEvent.click(hideComments);
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByText('不要github，换成微信')).toBeNull();
     expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
-    expect(screen.queryByTestId('comment-side-collapsed-rail')).toBeNull();
+    const showComments = screen.getByTestId('comment-side-collapsed-rail');
+    await waitFor(() => expect(document.activeElement).toBe(showComments));
+
+    fireEvent.click(showComments);
+
+    expect(onCollapseChange).toHaveBeenLastCalledWith(false);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /hide comments/i }));
+    });
+  });
+
+  it('announces comment side dock disclosure state without pointing at an unmounted panel', () => {
+    function Harness() {
+      const [collapsed, setCollapsed] = useState(false);
+      return (
+        <CommentSidePanel
+          comments={[]}
+          selectedIds={new Set()}
+          activeCommentId={null}
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+          onToggleSelect={() => {}}
+          onSelectAll={() => {}}
+          onClearSelection={() => {}}
+          onReply={() => {}}
+          onSendSelected={() => {}}
+          sending={false}
+          t={t}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    const panel = screen.getByTestId('comment-side-panel');
+    const hideComments = screen.getByRole('button', { name: /hide comments/i });
+    const panelId = panel.id;
+
+    expect(panelId).toBeTruthy();
+    expect(hideComments.getAttribute('aria-controls')).toBe(panelId);
+    expect(hideComments.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(hideComments);
+
+    const showComments = screen.getByTestId('comment-side-collapsed-rail');
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(document.getElementById(panelId)).toBeNull();
+    expect(showComments.getAttribute('aria-controls')).toBeNull();
+    expect(showComments.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('lets the inspect panel shrink inside narrow preview layouts', () => {
+    const css = readFileSync(join(process.cwd(), 'src/styles/viewer/core.css'), 'utf8');
+    const rule = css.match(/\.inspect-panel\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('width: min(296px, calc(100% - 28px));');
   });
 
   it('does not classify text labels containing a standalone article as links', () => {
@@ -2561,7 +3312,6 @@ describe('FileViewer tweaks toolbar', () => {
         activeCommentId={null}
         collapsed={false}
         onCollapsedChange={() => {}}
-        onClose={() => {}}
         onToggleSelect={() => {}}
         onSelectAll={() => {}}
         onClearSelection={() => {}}

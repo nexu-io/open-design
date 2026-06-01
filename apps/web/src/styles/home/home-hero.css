@@ -1272,7 +1272,7 @@
   padding: 6px;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   border-radius: 13px;
-  background: #fff;
+  background: color-mix(in srgb, var(--bg-panel) 98%, var(--bg-subtle) 2%);
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16), 0 1px 2px rgba(15, 23, 42, 0.08);
   isolation: isolate;
 }
@@ -1299,7 +1299,7 @@
   top: 0;
   z-index: 1;
   padding-bottom: 8px;
-  background: #fff;
+  background: color-mix(in srgb, var(--bg-panel) 98%, var(--bg-subtle) 2%);
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-search {
   margin: 0;
@@ -1311,7 +1311,7 @@
   height: 42px;
   border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
   border-radius: 10px;
-  background: #fff;
+  background: var(--bg-panel);
   color: var(--text);
   font: inherit;
   font-size: 14px;
@@ -1335,7 +1335,7 @@
 .home-hero__footer-select-search input:focus {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
-  background: #fff;
+  background: var(--bg-panel);
 }
 .home-hero__footer-option--select[data-field-name='designSystem'] .home-hero__footer-select-search input:focus {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
@@ -1624,6 +1624,22 @@
 }
 .home-hero__model-option-icon--custom {
   color: var(--text-muted);
+}
+[data-theme="dark"] .home-hero__model-option-icon--openai img,
+[data-theme="dark"] .home-hero__model-option-icon--dalle img,
+[data-theme="dark"] .home-hero__model-option-icon--grok img,
+[data-theme="dark"] .home-hero__model-option-icon--elevenlabs img,
+[data-theme="dark"] .home-hero__model-option-icon--suno img {
+  filter: invert(1) brightness(1.2);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .home-hero__model-option-icon--openai img,
+  html:not([data-theme="light"]) .home-hero__model-option-icon--dalle img,
+  html:not([data-theme="light"]) .home-hero__model-option-icon--grok img,
+  html:not([data-theme="light"]) .home-hero__model-option-icon--elevenlabs img,
+  html:not([data-theme="light"]) .home-hero__model-option-icon--suno img {
+    filter: invert(1) brightness(1.2);
+  }
 }
 .home-hero__ratio-option-icon {
   width: 26px;

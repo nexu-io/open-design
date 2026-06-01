@@ -818,6 +818,7 @@ export function NewAutomationModal({
                             setPopover(null);
                           }}
                           label={p.name}
+                          title={p.name}
                         />
                       ))}
                     </>
@@ -1018,17 +1019,24 @@ function PopoverItem({
   label,
   hint,
   onClick,
+  title,
 }: {
   selected?: boolean;
   label: string;
   hint?: string;
   onClick: () => void;
+  // Native hover tooltip surfaced when the visible label is truncated to
+  // ellipsis (e.g. long project names in the picker, #3274). Optional so
+  // unchanged call sites with short fixed labels don't grow a noisy
+  // duplicate tooltip.
+  title?: string;
 }) {
   return (
     <button
       type="button"
       className={`automation-popover__item${selected ? ' is-selected' : ''}`}
       onClick={onClick}
+      title={title}
     >
       <span className="automation-popover__check">
         {selected ? <Icon name="check" size={12} /> : null}

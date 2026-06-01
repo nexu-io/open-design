@@ -1088,7 +1088,9 @@
 .app .composer textarea {
   min-height: 88px;
   max-height: min(184px, 34vh);
-  font-size: 13px;
+  /* Font size lives on .composer-textarea-layer so the textarea and its
+     mention-highlight overlay share one value. Re-pinning it here would
+     only set the textarea, drifting the overlay glyphs off the caret. */
 }
 .app .composer-row {
   min-height: 32px;

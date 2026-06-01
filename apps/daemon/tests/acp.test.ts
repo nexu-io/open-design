@@ -237,6 +237,74 @@ test('attachAcpSession includes image attachments as ACP resource links', () => 
   });
 });
 
+test('attachAcpSession converts cumulative ACP message snapshots into deltas', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe the project',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven — managed AI agents' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven — managed AI agents' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Agent Haven', ' — managed AI agents']);
+});
+
+test('attachAcpSession keeps incremental ACP message chunks unchanged', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe the project',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: 'Agent Haven' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { text: ' — managed AI agents' },
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const textDeltas = events
+    .filter((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'text_delta')
+    .map((entry) => (entry.payload as { delta?: unknown }).delta);
+
+  assert.deepEqual(textDeltas, ['Agent Haven', ' — managed AI agents']);
+});
+
 test('attachAcpSession exposes abort and sends session cancel after session creation', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
@@ -315,6 +383,59 @@ test('attachAcpSession.abort during startup ends stdin without sending session/c
   assert.equal(cancelRequests.length, 0);
 });
 
+test('attachAcpSession accepts pretty-printed ACP startup responses', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stdout.write('{\n  "id": 1,\n  "result":\n  {}\n}\n');
+  child.stdout.write('{\n  "id": 2,\n  "result":\n  {\n    "sessionId": "session-1"\n  }\n}\n');
+
+  const methods = parseRpcWrites(writes)
+    .map((entry) => entry.method)
+    .filter(Boolean);
+  assert.deepEqual(methods, ['initialize', 'session/new', 'session/prompt']);
+  assert.equal(events.some((entry) => entry.event === 'error'), false);
+});
+
+test('attachAcpSession recovers when bracket-prefixed logs precede JSON frames', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  child.stdout.write('[vela] starting OpenCode bridge\n');
+  child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`);
+  child.stdout.write('{not json but looks like an object log\n');
+  child.stdout.write('more startup text after the bad object log\n');
+  child.stdout.write(`${JSON.stringify({ id: 2, result: { sessionId: 'session-1' } })}\n`);
+
+  const methods = parseRpcWrites(writes)
+    .map((entry) => entry.method)
+    .filter(Boolean);
+  assert.deepEqual(methods, ['initialize', 'session/new', 'session/prompt']);
+  assert.equal(events.some((entry) => entry.event === 'error'), false);
+});
+
 function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
   return writes
     .join('')
@@ -326,6 +447,10 @@ function parseRpcWrites(writes: string[]): Array<Record<string, unknown>> {
 
 function writeAcpResult(child: FakeAcpChild, id: number, result: unknown): void {
   child.stdout.write(`${JSON.stringify({ id, result })}\n`);
+}
+
+function writeAcpUpdate(child: FakeAcpChild, update: unknown): void {
+  child.stdout.write(`${JSON.stringify({ method: 'session/update', params: { update } })}\n`);
 }
 
 function agentModelStatuses(events: Array<{ event: string; payload: unknown }>): unknown[] {

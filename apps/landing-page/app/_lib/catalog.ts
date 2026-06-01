@@ -24,6 +24,13 @@ import {
   localizeTaxonomyValue,
   localizeTemplateText,
 } from '../content-i18n';
+import { getBundledPlugins } from './bundled-plugins';
+import {
+  bundledRecordOf,
+  categorizePlugin,
+  PLUGIN_CATEGORIES,
+  type PluginCategorySlug,
+} from './plugin-facets';
 
 // ---------------------------------------------------------------------------
 // Preview imagery lookup
@@ -850,6 +857,41 @@ export interface CatalogCounts {
   byMode: Readonly<Record<string, number>>;
   /** SKILL.md `od.platform` → count. Lowercase keys (e.g. `mobile`, `desktop`). */
   byPlatform: Readonly<Record<string, number>>;
+  /**
+   * Live `PLUGIN_CATEGORIES` breakdown for the `/plugins/templates/`
+   * library, computed with the same `categorizePlugin` rule the
+   * templates page uses so the homepage Labs pills never drift from
+   * the real catalog. Ordered by count descending, zero-count
+   * categories dropped; `total` is the count of all categorized
+   * templates (the "All" pill).
+   */
+  templateCategories: {
+    total: number;
+    byCategory: ReadonlyArray<{ slug: PluginCategorySlug; count: number }>;
+  };
+}
+
+// Templates view = bundled plugins that land in one of the
+// PLUGIN_CATEGORIES artifact kinds (categorizePlugin !== null). Mirrors
+// the count the `/plugins/templates/` page derives so the homepage Labs
+// pills stay in lockstep with the library. Locale-independent (counts
+// don't vary by language), so it ignores the locale arg.
+function computeTemplateCategories(): CatalogCounts['templateCategories'] {
+  const counts = new Map<PluginCategorySlug, number>();
+  let total = 0;
+  for (const record of getBundledPlugins()) {
+    const category = categorizePlugin(bundledRecordOf(record));
+    if (!category) continue;
+    total += 1;
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  }
+  const byCategory = PLUGIN_CATEGORIES.map((cat) => ({
+    slug: cat.slug,
+    count: counts.get(cat.slug) ?? 0,
+  }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count);
+  return { total, byCategory };
 }
 
 const catalogCountsCache = new Map<LandingLocaleCode, Promise<CatalogCounts>>();
@@ -881,6 +923,7 @@ export async function getCatalogCounts(
       craft: craft.length,
       byMode: tallyKey(skills.map((s) => s.mode)),
       byPlatform: tallyKey(skills.map((s) => s.platform)),
+      templateCategories: computeTemplateCategories(),
     };
   }
 
@@ -903,6 +946,7 @@ export async function getCatalogCounts(
       craft: craft.length,
       byMode: tallyKey(skills.map((s) => s.mode)),
       byPlatform: tallyKey(skills.map((s) => s.platform)),
+      templateCategories: computeTemplateCategories(),
     };
   })();
 

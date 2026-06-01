@@ -23,6 +23,7 @@ export interface PreviewCommentSnapshot {
   selectionKind?: PreviewCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
+  slideIndex?: number;
 }
 
 export interface CommentOverlayBounds {
@@ -95,7 +96,80 @@ export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCom
               : 0)
         : undefined,
     podMembers: podMembers.length > 0 ? podMembers : undefined,
+    ...(snapshot.slideIndex === undefined ? {} : { slideIndex: snapshot.slideIndex }),
   };
+}
+
+export function isValidCommentOverlayPosition(
+  position: { x: number; y: number; width: number; height: number } | undefined | null,
+): boolean {
+  if (!position) return false;
+  const normalized = normalizePosition(position);
+  return (
+    Number.isFinite(normalized.x)
+    && Number.isFinite(normalized.y)
+    && Number.isFinite(normalized.width)
+    && Number.isFinite(normalized.height)
+    && normalized.width > 0
+    && normalized.height > 0
+  );
+}
+
+export function commentVisibleOnDeckSlide(
+  comment: Pick<PreviewComment, 'slideIndex'>,
+  activeSlideIndex: number | null | undefined,
+): boolean {
+  if (activeSlideIndex == null) return true;
+  if (typeof comment.slideIndex !== 'number') return true;
+  return comment.slideIndex === activeSlideIndex;
+}
+
+export function commentSnapshotOverlayEqual(
+  a: PreviewCommentSnapshot,
+  b: PreviewCommentSnapshot,
+): boolean {
+  const positionA = normalizePosition(a.position);
+  const positionB = normalizePosition(b.position);
+  return (
+    a.elementId === b.elementId
+    && a.filePath === b.filePath
+    && positionA.x === positionB.x
+    && positionA.y === positionB.y
+    && positionA.width === positionB.width
+    && positionA.height === positionB.height
+    && (a.slideIndex ?? -1) === (b.slideIndex ?? -1)
+  );
+}
+
+export function commentSnapshotEqual(
+  a: PreviewCommentSnapshot,
+  b: PreviewCommentSnapshot,
+): boolean {
+  if (!commentSnapshotOverlayEqual(a, b)) return false;
+  return (
+    a.selector === b.selector
+    && a.label === b.label
+    && trimContextText(a.text) === trimContextText(b.text)
+    && trimHtmlHint(a.htmlHint) === trimHtmlHint(b.htmlHint)
+    && normalizeSelectionKind(a.selectionKind) === normalizeSelectionKind(b.selectionKind)
+    && normalizeMemberCount(a.memberCount) === normalizeMemberCount(b.memberCount)
+    && JSON.stringify(normalizeStyle(a.style) ?? null) === JSON.stringify(normalizeStyle(b.style) ?? null)
+    && JSON.stringify(normalizeMembers(a.podMembers)) === JSON.stringify(normalizeMembers(b.podMembers))
+    && normalizeHoverPoint(a.hoverPoint).x === normalizeHoverPoint(b.hoverPoint).x
+    && normalizeHoverPoint(a.hoverPoint).y === normalizeHoverPoint(b.hoverPoint).y
+  );
+}
+
+export function liveCommentTargetMapsEqual(
+  current: Map<string, PreviewCommentSnapshot>,
+  next: Map<string, PreviewCommentSnapshot>,
+): boolean {
+  if (current.size !== next.size) return false;
+  for (const [elementId, snapshot] of current) {
+    const candidate = next.get(elementId);
+    if (!candidate || !commentSnapshotEqual(snapshot, candidate)) return false;
+  }
+  return true;
 }
 
 export function overlayBoundsFromSnapshot(
@@ -118,8 +192,11 @@ export function liveSnapshotForComment(
   snapshots: Map<string, PreviewCommentSnapshot>,
 ): PreviewCommentSnapshot | null {
   const snapshot = snapshots.get(comment.elementId);
-  if (snapshot && snapshot.filePath === comment.filePath) return snapshot;
+  if (snapshot && snapshot.filePath === comment.filePath && isValidCommentOverlayPosition(snapshot.position)) {
+    return snapshot;
+  }
   if (!comment.elementId.startsWith('pin-')) return null;
+  if (!isValidCommentOverlayPosition(comment.position)) return null;
   return {
     filePath: comment.filePath,
     elementId: comment.elementId,
@@ -132,6 +209,7 @@ export function liveSnapshotForComment(
     selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
     memberCount: comment.memberCount,
     podMembers: normalizeMembers(comment.podMembers),
+    slideIndex: comment.slideIndex,
   };
 }
 
@@ -372,6 +450,26 @@ function normalizePosition(input: PreviewComment['position']): PreviewComment['p
 
 function finite(value: number | undefined): number {
   return Number.isFinite(value) ? Math.round(value as number) : 0;
+}
+
+function normalizeSelectionKind(
+  selectionKind: PreviewCommentSnapshot['selectionKind'],
+): PreviewCommentSelectionKind {
+  return selectionKind === 'pod' ? 'pod' : 'element';
+}
+
+function normalizeMemberCount(value: number | undefined): number | undefined {
+  return Number.isFinite(value) ? Math.round(value as number) : undefined;
+}
+
+function normalizeHoverPoint(
+  input: PreviewCommentSnapshot['hoverPoint'],
+): { x: number | undefined; y: number | undefined } {
+  if (!input) return { x: undefined, y: undefined };
+  return {
+    x: Number.isFinite(input.x) ? Math.round(input.x) : undefined,
+    y: Number.isFinite(input.y) ? Math.round(input.y) : undefined,
+  };
 }
 
 function normalizeMembers(input: PreviewCommentMember[] | undefined): PreviewCommentMember[] {

@@ -68,6 +68,40 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
+  it('sends run-scoped media execution policy to the daemon', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'make an image' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      mediaExecution: {
+        mode: 'enabled',
+        allowedSurfaces: ['image'],
+        allowedModels: ['doubao-seedream-3-0-t2i-250415'],
+      },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.mediaExecution).toEqual({
+      mode: 'enabled',
+      allowedSurfaces: ['image'],
+      allowedModels: ['doubao-seedream-3-0-t2i-250415'],
+    });
+  });
+
   it('drops prior assistant turns from another agent when composing daemon transcript', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -564,6 +598,69 @@ describe('streamViaDaemon', () => {
     });
 
     expect(handlers.onDone).toHaveBeenCalledWith('ok');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('finalizes streamed output when a run ends as canceled', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stdout',
+              'data: {"chunk":"partial output"}',
+              '',
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"canceled"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('partial output');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('finalizes textless canceled runs so ProjectView can compute produced files', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"canceled"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('');
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
