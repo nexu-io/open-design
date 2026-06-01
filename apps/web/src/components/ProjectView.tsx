@@ -4266,6 +4266,21 @@ export function ProjectView({
   const projectInstructionsPreview = compactInlinePreview(projectInstructions);
   const executionControls = (
     <>
+      {!hasProjectInstructions ? (
+        <button
+          type="button"
+          className="icon-btn"
+          data-testid="project-instructions-add"
+          title={t('project.customInstructions')}
+          aria-label={t('project.customInstructions')}
+          onClick={() => {
+            setInstructionsDraft('');
+            setInstructionsMode('edit');
+          }}
+        >
+          <Icon name="sliders" size={15} />
+        </button>
+      ) : null}
       <AvatarMenu
         config={config}
         agents={agents}

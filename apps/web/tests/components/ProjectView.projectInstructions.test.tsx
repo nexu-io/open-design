@@ -119,7 +119,9 @@ vi.mock('../../src/components/Loading', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: () => <div data-testid="chat-pane" />,
+  ChatPane: ({ composerFooterAccessory }: { composerFooterAccessory?: ReactNode }) => (
+    <div data-testid="chat-pane">{composerFooterAccessory}</div>
+  ),
 }));
 
 const mockedListConversations = vi.mocked(listConversations);
@@ -233,11 +235,27 @@ describe('ProjectView – saved Project instructions surface (#1822)', () => {
     expect(textarea.value).toBe(SAVED);
   });
 
-  it('does not show a top-bar add affordance when no instructions are saved', async () => {
+  it('creates project instructions from the empty-state composer affordance', async () => {
+    mockedPatchProject.mockResolvedValue({ ...baseProject, customInstructions: 'Keep the UI sparse.' });
     render(<ProjectViewHarness initialProject={baseProject} />);
 
     expect(screen.queryByTestId('project-settings-trigger')).toBeNull();
     expect(screen.queryByTestId('project-instructions-chip')).toBeNull();
+
+    fireEvent.click(await screen.findByTestId('project-instructions-add'));
+
+    const textarea = screen.getByTestId('project-instructions-textarea') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('');
+    fireEvent.change(textarea, {
+      target: { value: 'Keep the UI sparse.' },
+    });
+    fireEvent.click(screen.getByTestId('project-instructions-save'));
+
+    expect(mockedPatchProject).toHaveBeenCalledWith('project-1', { customInstructions: 'Keep the UI sparse.' });
+    await waitFor(() => {
+      expect(screen.getByTestId('project-instructions-chip')).toBeTruthy();
+      expect(screen.getByTestId('project-instructions-preview').textContent).toBe('Keep the UI sparse.');
+    });
   });
 
   it('reads the saved value back in the review panel right after editing existing instructions', async () => {
