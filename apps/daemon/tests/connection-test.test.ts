@@ -10,6 +10,7 @@ import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
 import {
+  assertExternalAssetUrl,
   createAgentSink,
   isSmokeOkReply,
   mergeNoProxyWithLoopbackDefaults,
@@ -19,8 +20,10 @@ import {
   testAgentConnection,
   testProviderConnection,
   validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
+import { configuredAllowedInternalHosts } from '../src/origin-validation.js';
 import { listProviderModels } from '../src/providerModels.js';
 import { startServer } from '../src/server.js';
 
@@ -477,6 +480,44 @@ describe('POST /api/provider/models', () => {
         ([input]) => !String(input).startsWith(baseUrl),
       ),
     ).toBe(false);
+  });
+
+  // Issue #3225 — end-to-end through the real route: the same private-IP
+  // base URL that is forbidden by default is reachable once the operator
+  // lists the host in OD_ALLOWED_INTERNAL_HOSTS. The route reads the env per
+  // request, so the running server picks it up without a restart.
+  it('lists models from an allowlisted internal endpoint that is otherwise blocked', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      expect(url).toBe('http://10.0.0.5:4000/v1/models');
+      return jsonResponse({ data: [{ id: 'litellm-proxy-model', object: 'model' }] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const prev = process.env.OD_ALLOWED_INTERNAL_HOSTS;
+    process.env.OD_ALLOWED_INTERNAL_HOSTS = '10.0.0.5';
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'http://10.0.0.5:4000/v1',
+          apiKey: 'sk-internal',
+        }),
+      });
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        models: [{ id: 'litellm-proxy-model', label: 'litellm-proxy-model' }],
+      });
+      // The guard let the request through to the real internal endpoint.
+      expect(
+        fetchMock.mock.calls.some(([input]) => String(input) === 'http://10.0.0.5:4000/v1/models'),
+      ).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.OD_ALLOWED_INTERNAL_HOSTS;
+      else process.env.OD_ALLOWED_INTERNAL_HOSTS = prev;
+    }
   });
 
   // Regression for the DNS-bypass SSRF gap flagged on PR #1176: the route
@@ -3406,5 +3447,134 @@ describe('validateBaseUrlResolved (DNS-aware base URL validation)', () => {
     const result = await validateBaseUrlResolved('https://offline.example.com/v1', failingLookup);
     expect(result.error).toBeUndefined();
     expect(failingLookup).toHaveBeenCalledOnce();
+  });
+
+  // Issue #3225 — the optional allowlist threaded in from the daemon's
+  // `OD_ALLOWED_INTERNAL_HOSTS` env opens a deliberate, host-scoped hole in
+  // the resolved-IP guard. These exercise the resolver layer directly with
+  // the `lookupReturning` helper defined above so no real DNS is hit.
+  it('permits a hostname that resolves to a private IP when the HOSTNAME is allowlisted', async () => {
+    const lookup = lookupReturning([{ address: '10.0.0.5', family: 4 }]);
+    const result = await validateBaseUrlResolved(
+      'https://litellm.internal.corp/v1',
+      lookup,
+      { allowedInternalHosts: ['litellm.internal.corp'] },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.parsed?.hostname).toBe('litellm.internal.corp');
+    // Trusting the hostname short-circuits the resolved-IP block, so we never
+    // even need the lookup result to clear it.
+  });
+
+  it('permits a hostname that resolves to a private IP when the resolved IP is allowlisted', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://litellm.internal.corp/v1',
+      lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('permits an allowlisted literal private-IP base URL', async () => {
+    const result = await validateBaseUrlResolved(
+      'http://10.0.0.5:4000/v1',
+      lookupReturning([]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('still blocks a resolved private IP that is NOT on the allowlist (no blanket bypass)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://other.internal.corp/v1',
+      lookupReturning([{ address: '10.0.0.6', family: 4 }]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
+  });
+});
+
+describe('OD_ALLOWED_INTERNAL_HOSTS allowlist plumbing (#3225)', () => {
+  function lookupReturning(addresses: DnsLookupAddress[]) {
+    return vi.fn(async () => addresses);
+  }
+
+  function withEnv<T>(value: string | undefined, run: () => T): T {
+    const prev = process.env.OD_ALLOWED_INTERNAL_HOSTS;
+    if (value === undefined) delete process.env.OD_ALLOWED_INTERNAL_HOSTS;
+    else process.env.OD_ALLOWED_INTERNAL_HOSTS = value;
+    try {
+      return run();
+    } finally {
+      if (prev === undefined) delete process.env.OD_ALLOWED_INTERNAL_HOSTS;
+      else process.env.OD_ALLOWED_INTERNAL_HOSTS = prev;
+    }
+  }
+
+  it('parses comma/whitespace lists and strips scheme/port to bare hostnames', () => {
+    expect(withEnv('', () => configuredAllowedInternalHosts())).toEqual([]);
+    expect(withEnv(undefined, () => configuredAllowedInternalHosts())).toEqual([]);
+    expect(
+      withEnv('10.0.0.5, litellm.internal.corp:4000  http://gw.internal/v1', () =>
+        configuredAllowedInternalHosts(),
+      ),
+    ).toEqual(['10.0.0.5', 'litellm.internal.corp', 'gw.internal']);
+  });
+
+  it('accepts bracketed IPv6 entries (with or without a port) and matches a resolved IPv6 address', async () => {
+    // IPv6 must be bracketed so the `:port` is unambiguous. The parser keeps
+    // the bracketed hostname; the matcher strips brackets before comparing,
+    // so a DNS-resolved bare `fd00::1` still matches.
+    expect(
+      withEnv('[fd00::1], [fd00::2]:4000', () => configuredAllowedInternalHosts()),
+    ).toEqual(['[fd00::1]', '[fd00::2]']);
+
+    await expect(
+      withEnv('[fd00::1]', () =>
+        validateUserProviderBaseUrl(
+          'https://ipv6.internal.corp/v1',
+          lookupReturning([{ address: 'fd00::1', family: 6 }]),
+        ),
+      ),
+    ).resolves.toMatchObject({ parsed: { hostname: 'ipv6.internal.corp' } });
+  });
+
+  it('validateUserProviderBaseUrl honors the operator env allowlist', async () => {
+    // Blocked without the opt-in...
+    await expect(
+      withEnv(undefined, () =>
+        validateUserProviderBaseUrl(
+          'https://litellm.internal.corp/v1',
+          lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+        ),
+      ),
+    ).resolves.toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
+
+    // ...permitted once the operator lists the host.
+    await expect(
+      withEnv('litellm.internal.corp', () =>
+        validateUserProviderBaseUrl(
+          'https://litellm.internal.corp/v1',
+          lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+        ),
+      ),
+    ).resolves.toMatchObject({ parsed: { hostname: 'litellm.internal.corp' } });
+  });
+
+  // SECURITY INVARIANT: the allowlist is for user-CONFIGURED provider
+  // endpoints only. Asset-download URLs come back inside an upstream
+  // response and are attacker-controllable, so `assertExternalAssetUrl` must
+  // stay strict even when the operator has set OD_ALLOWED_INTERNAL_HOSTS.
+  it('does NOT let the allowlist relax the attacker-controllable asset-download guard', async () => {
+    await withEnv('10.0.0.5', async () => {
+      // Same host the operator trusts for their provider endpoint is still
+      // refused as an asset-download target.
+      await expect(assertExternalAssetUrl('http://10.0.0.5/evil.png')).resolves.toMatchObject({
+        ok: false,
+      });
+      await expect(
+        assertExternalAssetUrl('http://169.254.169.254/latest/meta-data'),
+      ).resolves.toMatchObject({ ok: false });
+    });
   });
 });

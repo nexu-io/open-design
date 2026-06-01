@@ -32,6 +32,40 @@ export function configuredAllowedHosts(origins = configuredAllowedOrigins()): st
   return origins.map((origin) => new URL(origin).host);
 }
 
+// Issue #3225 — operator-declared allowlist of internal hosts that are
+// exempt from the default-deny SSRF guard for USER-CONFIGURED provider
+// endpoints (an internally-hosted LiteLLM/Ollama on an RFC1918 address
+// reachable only over VPN). Comma- or whitespace-separated; each entry may
+// be a bare host (`10.0.0.5`), `host:port`, or a full URL — only the
+// hostname is retained, since the SSRF block is host-based. IPv6 literals
+// must be bracketed (`[fd00::1]` or `[fd00::1]:4000`) so the port is
+// unambiguous; the host matcher strips the brackets before comparing. An
+// empty/unset
+// value yields `[]`, preserving the strict default for every deployment
+// that does not opt in. This list is threaded ONLY into the
+// user-configured-endpoint validators, never the attacker-controllable
+// asset-download guard (`assertExternalAssetUrl`).
+export function configuredAllowedInternalHosts(
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const raw = env.OD_ALLOWED_INTERNAL_HOSTS || '';
+  if (!raw.trim()) return [];
+  const hosts: string[] = [];
+  for (const part of raw.split(/[,\s]+/)) {
+    const entry = part.trim();
+    if (!entry) continue;
+    try {
+      const url = new URL(entry.includes('://') ? entry : `http://${entry}`);
+      if (url.hostname) hosts.push(url.hostname.toLowerCase());
+    } catch {
+      // Tolerate a token that the URL parser rejects by keeping the raw
+      // value; the host matcher normalizes brackets/case/trailing dots.
+      hosts.push(entry.toLowerCase());
+    }
+  }
+  return hosts;
+}
+
 export function allowedBrowserPorts(
   port: number | string | null | undefined,
   env: NodeJS.ProcessEnv = process.env,

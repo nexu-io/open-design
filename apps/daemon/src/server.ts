@@ -267,7 +267,7 @@ import {
   testAgentConnection,
   testProviderConnection,
   validateBaseUrl,
-  validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
 } from './connectionTest.js';
 import { listProviderModels } from './providerModels.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
@@ -5550,9 +5550,10 @@ export async function startServer({
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
-  // `validateBaseUrlResolved` here so every proxy and finalize handler runs
-  // the same resolved-IP check before issuing the upstream request.
-  const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrlResolved(baseUrl);
+  // `validateUserProviderBaseUrl` here so every proxy and finalize handler
+  // runs the same resolved-IP check before issuing the upstream request,
+  // while honoring the operator's `OD_ALLOWED_INTERNAL_HOSTS` opt-in (#3225).
+  const validateExternalApiBaseUrl = (baseUrl) => validateUserProviderBaseUrl(baseUrl);
 
   const resolvedPortRef = {
     get current() {

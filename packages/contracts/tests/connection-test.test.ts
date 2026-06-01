@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isAllowlistedInternalHost,
   isLoopbackApiHost,
   validateBaseUrl,
 } from '../src/api/connectionTest';
@@ -65,5 +66,51 @@ describe('provider base URL validation', () => {
         forbidden: true,
       });
     }
+  });
+});
+
+// Issue #3225: operators running an internally-hosted LLM gateway (e.g. a
+// VPN-only LiteLLM endpoint on an RFC1918 address) need an explicit,
+// opt-in escape hatch from the default-deny SSRF guard. The allowlist
+// loosens the block ONLY for hosts the operator has deliberately declared
+// trusted; everything else stays blocked.
+describe('internal-host allowlist (#3225)', () => {
+  it('matches a private IPv4 literal against the allowlist (case/format-insensitive)', () => {
+    expect(isAllowlistedInternalHost('10.0.0.5', ['10.0.0.5'])).toBe(true);
+    // Trailing-dot FQDN form and uppercase must normalize before matching,
+    // mirroring the normalization the block-list itself applies.
+    expect(isAllowlistedInternalHost('10.0.0.5.', ['10.0.0.5'])).toBe(true);
+    expect(isAllowlistedInternalHost('LiteLLM.Internal.Corp', ['litellm.internal.corp'])).toBe(true);
+  });
+
+  it('does not match hosts that are absent from the allowlist', () => {
+    expect(isAllowlistedInternalHost('10.0.0.6', ['10.0.0.5'])).toBe(false);
+    expect(isAllowlistedInternalHost('169.254.169.254', ['10.0.0.5'])).toBe(false);
+    expect(isAllowlistedInternalHost('10.0.0.5', [])).toBe(false);
+    expect(isAllowlistedInternalHost('10.0.0.5', undefined)).toBe(false);
+  });
+
+  it('permits an allowlisted private IPv4 base URL that would otherwise be blocked', () => {
+    // Without the allowlist this is a hard block (proven by the suites above).
+    expect(validateBaseUrl('http://10.0.0.5:4000/v1')).toMatchObject({
+      error: 'Internal IPs blocked',
+      forbidden: true,
+    });
+    // With the operator-declared allowlist the same URL is permitted.
+    const allowed = validateBaseUrl('http://10.0.0.5:4000/v1', {
+      allowedInternalHosts: ['10.0.0.5'],
+    });
+    expect(allowed.error).toBeUndefined();
+    expect(allowed.parsed?.hostname).toBe('10.0.0.5');
+  });
+
+  it('keeps blocking private hosts that are not on the allowlist', () => {
+    // A non-empty allowlist must not become a blanket bypass: an address
+    // the operator did not list stays blocked.
+    expect(
+      validateBaseUrl('http://192.168.1.5:4000/v1', {
+        allowedInternalHosts: ['10.0.0.5'],
+      }),
+    ).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
   });
 });
