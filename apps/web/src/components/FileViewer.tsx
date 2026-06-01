@@ -4343,6 +4343,18 @@ function HtmlViewer({
     canvasTop: number;
     expiresAt: number;
   } | null>(null);
+  // Issue #2143 — route persistence across transport flips (URL-load ↔ srcDoc).
+  // The route-persist bridge posts snapshots to the parent on every navigation;
+  // we store the latest here so it survives iframe teardown during mode toggles
+  // that force a transport switch (edit/tweaks/draw/palette).
+  const previewRouteRef = useRef<{ path: string; generation: string; scrollX?: number; scrollY?: number } | null>(null);
+  // State mirror for triggering async fetches when the iframe navigates to a
+  // different page. When the srcDoc transport rebuilds, we use the routed
+  // page's content instead of the entry file's source so the visible document
+  // matches the restored route.
+  const [routedPath, setRoutedPath] = useState<string | null>(null);
+  const [routedSource, setRoutedSource] = useState<string | null>(null);
+  const [routedSourceForPath, setRoutedSourceForPath] = useState<string | null>(null);
   const previewScrollPositionRef = useRef({
     frameLeft: 0,
     frameTop: 0,
@@ -4846,8 +4858,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     };
   }, [source, effectiveDeck, projectId, file.name, useUrlLoadPreview]);
 
+  // Issue #2143 — when the iframe navigated to a sub-page and we're building
+  // srcDoc for a transport switch, use the routed page's content so the
+  // visible document matches the restored route. Falls back to the entry
+  // file's previewSource when the iframe hasn't navigated away.
+  const effectiveSrcDocSource = routedSource ?? previewSource;
   const srcDoc = useMemo(
-    () => (previewSource ? buildSrcdoc(previewSource, {
+    () => (effectiveSrcDocSource ? buildSrcdoc(effectiveSrcDocSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
@@ -4856,7 +4873,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode],
+    [effectiveSrcDocSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -5074,6 +5091,43 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       window.removeEventListener('message', onDcViewportMessage);
     };
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+
+  // Issue #2143 — collect route snapshots from the preview iframe bridge so
+  // navigation state survives transport flips (URL-load → srcDoc when
+  // edit/tweaks/draw/palette modes activate).
+  useEffect(() => {
+    function onRouteSnapshot(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; path?: string; generation?: string; scrollX?: number; scrollY?: number } | null;
+      if (!data || data.type !== 'od:route-snapshot' || !data.path) return;
+      previewRouteRef.current = { path: data.path, generation: data.generation || '', scrollX: data.scrollX, scrollY: data.scrollY };
+      setRoutedPath(data.path);
+    }
+    window.addEventListener('message', onRouteSnapshot);
+    return () => window.removeEventListener('message', onRouteSnapshot);
+  }, [isOurPreviewIframeSource]);
+
+  // Issue #2143 — when the iframe navigated to a different page (e.g.
+  // page2.html) and we're about to build srcDoc for a transport switch,
+  // fetch the actual page content so the srcDoc rebuild matches the
+  // restored route. Without this the srcDoc shows the entry file's HTML
+  // with a fake route, which breaks multi-page artifacts on mode toggle.
+  useEffect(() => {
+    if (!routedPath || routedPath === file.name || routedPath === routedSourceForPath) return;
+    // Normalize: strip leading / and query params to get the daemon file name.
+    const routedFileName = routedPath.replace(/^\//, '').split('?')[0];
+    if (!routedFileName) return;
+    let cancelled = false;
+    void fetchProjectFileText(projectId, routedFileName, {
+      cacheBustKey: file.mtime,
+    }).then((text) => {
+      if (!cancelled && text != null) {
+        setRoutedSource(text);
+        setRoutedSourceForPath(routedPath);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [routedPath, file.name, projectId, file.mtime, routedSourceForPath]);
 
   useEffect(() => {
     if (!effectiveDeck) {

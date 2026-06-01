@@ -93,9 +93,29 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   return true;
 }
 
+// Recognizes either the artifact-owned `od-direct-edit.js` (legacy) or
+// signals that the daemon will inject bridges at serve-time (Issue #2143).
+// Both give the host a postMessage target for picker/inspect inside URL-load
+// previews, so the render-mode decision can keep URL-load on for comment
+// and inspect mode without flipping to srcDoc.
+//
+// The daemon injects ROUTE_PERSIST, SELECTION_BRIDGE, and
+// SELECTION_BRIDGE_STYLE into every HTML response served through the
+// preview iframe path (gated by Sec-Fetch-Dest: iframe).  The raw source
+// fetched via fetchProjectFileText (with X-OD-Source-View: 1) will
+// *never* contain these injected markers, so scanning for them is wrong.
+// Instead we detect whether the source is HTML — if it is, the daemon's
+// /raw/* endpoint will inject bridges when the browser loads it as an
+// iframe, which is the only path we care about.
 export function hasUrlModeBridge(source: string | null | undefined): boolean {
   if (!source) return false;
-  return /<script\b[^>]*\bsrc\s*=\s*["'][^"']*\bod-direct-edit\.js\b[^"']*["'][^>]*>/i.test(source);
+  // Legacy: artifact-owned od-direct-edit.js bridge — detectable in source.
+  if (/<script\b[^>]*\bsrc\s*=\s*["'][^"']*\bod-direct-edit\.js\b[^"']*["'][^>]*>/i.test(source)) return true;
+  // Issue #2143: daemon-injected bridges are a transport guarantee for HTML.
+  // Detect HTML by looking for structural tags — any HTML file served through
+  // the preview path gets bridge injection from the daemon.
+  if (/<(?:!doctype|html|head|body|script|style|meta|link|div|span|p|h[1-6])\b/i.test(source)) return true;
+  return false;
 }
 
 /**
