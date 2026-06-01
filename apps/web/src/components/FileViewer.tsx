@@ -125,6 +125,7 @@ import {
   readManualEditStyles,
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
+import { recognizeDrawIntent } from '../edit-mode/draw-intent';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 function resolveChromeActionsHost(): HTMLElement | null {
@@ -5341,6 +5342,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           y: clampBridgeCoordinate(point.y),
         }));
         setStrokePoints(points);
+        const intent = recognizeDrawIntent(points);
+        // Phase 4 stub: only 'comment' is wired today. Other intents
+        // fall through to the comment path for now — future phases will
+        // route 'highlight' / 'modify' / 'select' to their own
+        // handlers without touching this dispatcher.
+        if (intent.intent !== 'comment') {
+          setStrokePoints([]);
+          return;
+        }
         const nextTarget = buildPodSnapshot({
           filePath: file.name,
           strokePoints: points,
