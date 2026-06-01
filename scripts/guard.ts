@@ -511,6 +511,7 @@ const productNeutralitySkippedDirectories = new Set([
 // add stricter local terms through OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
 const productNeutralityCheckedPathPrefixes = [
   "apps/daemon/src/",
+  "apps/web/app/",
   "apps/web/src/",
   "craft/",
   "design-systems/",
