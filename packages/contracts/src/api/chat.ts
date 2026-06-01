@@ -47,7 +47,7 @@ export interface ChatRequest {
    */
   mediaExecution?: MediaExecutionPolicy;
   /**
-   * Run-scoped tool bundle supplied by an orchestrator such as Muginn.
+   * Run-scoped tool bundle supplied by an external orchestrator.
    * These servers are made available only to the spawned agent for this run
    * and are never written into the persistent Settings MCP registry.
    */
