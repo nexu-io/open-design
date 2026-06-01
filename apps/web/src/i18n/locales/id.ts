@@ -259,6 +259,7 @@ export const id: Dict = {
   'settings.modelSourceLive': 'Langsung dari CLI',
   'settings.modelSourceFallback': 'Daftar bawaan',
   'settings.reasoningPicker': 'Kekuatan penalaran',
+  'settings.serviceTierPicker': "Tingkat layanan",
   'settings.modelPickerHint':
     'Diambil dari CLI jika tersedia. "Default" mengikuti konfigurasi CLI; "Custom..." untuk mengetik model id sendiri.',
   'settings.modelPickerLiveHint':
@@ -822,6 +823,7 @@ export const id: Dict = {
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
   'avatar.reasoningLabel': 'Penalaran',
+  'avatar.serviceTierLabel': "Tingkat layanan",
   'avatar.customSuffix': '(kustom)',
 
   'inlineSwitcher.chipTitle': 'Beralih CLI / model',

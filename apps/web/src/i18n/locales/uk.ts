@@ -263,6 +263,7 @@ export const uk: Dict = {
   'settings.modelSourceLive': 'Наживо з CLI',
   'settings.modelSourceFallback': 'Вбудований список',
   'settings.reasoningPicker': 'Інтенсивність міркувань',
+  'settings.serviceTierPicker': "Рівень сервісу",
   'settings.modelPickerHint':
     'Отримується з CLI, коли він виявляє команду `models`. «За замовчуванням» залишає вибір конфігурації CLI; «Власна…» дозволяє ввести будь-яке ID моделі, яке приймає CLI.',
   'settings.modelPickerLiveHint':
@@ -731,6 +732,7 @@ export const uk: Dict = {
   'avatar.modelSection': 'Модель',
   'avatar.modelLabel': 'Модель',
   'avatar.reasoningLabel': 'Міркування',
+  'avatar.serviceTierLabel': "Рівень сервісу",
   'avatar.customSuffix': '(власна)',
 
   'inlineSwitcher.chipTitle': 'Перемкнути CLI / модель',

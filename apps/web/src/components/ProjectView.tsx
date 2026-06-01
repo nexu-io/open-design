@@ -204,7 +204,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onRefreshAgents: () => void;
   onOpenSettings: (section?: SettingsSection) => void;
@@ -2702,6 +2702,7 @@ export function ProjectView({
           research: meta?.research,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
+          serviceTier: choice?.serviceTier ?? null,
           locale,
           ...(dsAnalyticsHints ? { analyticsHints: dsAnalyticsHints } : {}),
           onRunCreated: (runId) => {

@@ -272,6 +272,7 @@ export const en: Dict = {
   'settings.modelSourceLive': 'Live from CLI',
   'settings.modelSourceFallback': 'Built-in list',
   'settings.reasoningPicker': 'Reasoning effort',
+  'settings.serviceTierPicker': "Service tier",
   'settings.modelPickerHint':
     'Default uses the CLI’s own config. Custom… lets you type any model id.',
   'settings.modelPickerLiveHint':
@@ -1298,6 +1299,7 @@ export const en: Dict = {
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
   'avatar.reasoningLabel': 'Reasoning',
+  'avatar.serviceTierLabel': "Service tier",
   'avatar.customSuffix': '(custom)',
 
   'inlineSwitcher.chipTitle': 'Switch CLI / model',

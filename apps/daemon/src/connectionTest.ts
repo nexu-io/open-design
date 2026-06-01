@@ -24,6 +24,7 @@ import path from 'node:path';
 import {
   applyAgentLaunchEnv,
   getAgentDef,
+  isKnownServiceTier,
   resolveAgentLaunch,
   spawnEnvForAgent,
 } from './agents.js';
@@ -1359,11 +1360,23 @@ async function testAgentConnectionInternal(
   try {
     let args: string[];
     try {
+      const requestedServiceTier = input.serviceTier ?? null;
+      const safeServiceTier = isKnownServiceTier(
+        def,
+        input.model ?? null,
+        requestedServiceTier,
+      )
+        ? requestedServiceTier
+        : null;
       args = def.buildArgs(
         SMOKE_PROMPT,
         [],
         [],
-        { model: input.model ?? null, reasoning: input.reasoning ?? null },
+        {
+          model: input.model ?? null,
+          reasoning: input.reasoning ?? null,
+          serviceTier: safeServiceTier,
+        },
         { cwd: tempDir },
       );
     } catch (err) {

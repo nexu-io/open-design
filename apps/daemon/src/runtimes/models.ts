@@ -10,26 +10,48 @@ export const DEFAULT_MODEL_OPTION: RuntimeModelOption = {
 // recent live list (refreshed every detectAgents() call) and additionally
 // trust any value present in the static fallback. A model that's neither
 // gets rejected so a stale or hostile value can't smuggle arbitrary flags.
-const liveModelCache = new Map<string, Set<string>>();
+const liveModelCache = new Map<string, Map<string, RuntimeModelOption>>();
 
 export function rememberLiveModels(agentId: string, models: RuntimeModelOption[]) {
   if (!Array.isArray(models)) return;
   liveModelCache.set(
     agentId,
-    new Set(
-      models.map((m) => m && m.id).filter((id) => typeof id === 'string'),
+    new Map(
+      models
+        .filter((m) => m && typeof m.id === 'string')
+        .map((m) => [m.id, m]),
     ),
   );
 }
 
-export function isKnownModel(def: RuntimeAgentDef, modelId: string | null | undefined) {
-  if (!modelId) return false;
+export function findKnownModel(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+): RuntimeModelOption | null {
+  if (!modelId) return null;
   const live = liveModelCache.get(def.id);
-  if (live && live.has(modelId)) return true;
+  const liveModel = live?.get(modelId);
+  if (liveModel) return liveModel;
   if (Array.isArray(def.fallbackModels)) {
-    return def.fallbackModels.some((m) => m.id === modelId);
+    return def.fallbackModels.find((m) => m.id === modelId) ?? null;
   }
-  return false;
+  return null;
+}
+
+export function isKnownModel(def: RuntimeAgentDef, modelId: string | null | undefined) {
+  return Boolean(findKnownModel(def, modelId));
+}
+
+export function isKnownServiceTier(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  serviceTier: string | null | undefined,
+) {
+  if (!serviceTier || serviceTier === 'default') return false;
+  const model = findKnownModel(def, modelId);
+  return Boolean(
+    model?.serviceTierOptions?.some((tier) => tier.id === serviceTier),
+  );
 }
 
 // Permit user-typed model ids that didn't appear in either the live

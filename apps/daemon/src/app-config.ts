@@ -69,6 +69,7 @@ export function readPluginEnvKnobs(): PluginEnvKnobs {
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
+  serviceTier?: string;
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
@@ -121,7 +122,11 @@ function configFile(dataDir: string): string {
   return path.join(dataDir, 'app-config.json');
 }
 
-const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
+const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set([
+  'model',
+  'reasoning',
+  'serviceTier',
+]);
 
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
   'metrics',

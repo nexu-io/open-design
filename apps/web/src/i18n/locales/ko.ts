@@ -262,6 +262,7 @@ export const ko: Dict = {
   'settings.modelSourceLive': 'CLI에서 실시간 가져옴',
   'settings.modelSourceFallback': '내장 목록',
   'settings.reasoningPicker': '추론 (Reasoning)',
+  'settings.serviceTierPicker': "서비스 티어",
   'settings.modelPickerHint':
     'CLI가 `models` 명령어를 지원할 때 가져옵니다. "Default"는 CLI 자체 설정을 따르며, "직접 입력…"을 선택하면 CLI가 허용하는 모델 ID를 입력할 수 있습니다.',
   'settings.modelPickerLiveHint':
@@ -709,6 +710,7 @@ export const ko: Dict = {
   'avatar.modelSection': '모델',
   'avatar.modelLabel': '모델',
   'avatar.reasoningLabel': '추론 (Reasoning)',
+  'avatar.serviceTierLabel': "서비스 티어",
   'avatar.customSuffix': '(직접 입력)',
 
   'inlineSwitcher.chipTitle': 'CLI / 모델 전환',

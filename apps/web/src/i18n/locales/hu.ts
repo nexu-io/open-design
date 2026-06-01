@@ -262,6 +262,7 @@ export const hu: Dict = {
   'settings.modelSourceLive': 'Élőben a CLI-ből',
   'settings.modelSourceFallback': 'Beépített lista',
   'settings.reasoningPicker': 'Gondolkodási erőfeszítés',
+  'settings.serviceTierPicker': "Szolgáltatási szint",
   'settings.modelPickerHint':
     'A CLI-tól kérdezi le, ha az közzéteszi a `models` parancsot. Az „Alapértelmezett" a CLI saját konfigjára bízza a választást; az „Egyedi…" tetszőleges, a CLI által elfogadott modell-id-t enged megadni.',
   'settings.modelPickerLiveHint':
@@ -709,6 +710,7 @@ export const hu: Dict = {
   'avatar.modelSection': 'Modell',
   'avatar.modelLabel': 'Modell',
   'avatar.reasoningLabel': 'Gondolkodás',
+  'avatar.serviceTierLabel': "Szolgáltatási szint",
   'avatar.customSuffix': '(egyedi)',
 
   'inlineSwitcher.chipTitle': 'CLI / modell váltása',

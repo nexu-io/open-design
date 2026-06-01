@@ -257,6 +257,7 @@ export const th: Dict = {
   'settings.modelSourceLive': 'สดจาก CLI',
   'settings.modelSourceFallback': 'รายการในตัว',
   'settings.reasoningPicker': 'ความพยายามในการให้เหตุผล',
+  'settings.serviceTierPicker': "ระดับบริการ",
   'settings.modelPickerHint': 'ดึงข้อมูลจาก CLI เมื่อมีคำสั่ง `models`',
   'settings.modelPickerLiveHint':
     'รีเฟรชโมเดลจาก CLI ที่ติดตั้งแล้ว ค่าเริ่มต้นยังใช้การตั้งค่าของ CLI',
@@ -683,6 +684,7 @@ export const th: Dict = {
   'avatar.modelSection': 'โมเดล',
   'avatar.modelLabel': 'โมเดล',
   'avatar.reasoningLabel': 'การใช้เหตุผล',
+  'avatar.serviceTierLabel': "ระดับบริการ",
   'avatar.customSuffix': '(กำหนดเอง)',
 
   'project.backToProjects': 'กลับไปยังโปรเจกต์',

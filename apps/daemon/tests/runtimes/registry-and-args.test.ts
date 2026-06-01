@@ -206,6 +206,10 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   ];
 
   assert.deepEqual(codex.fallbackModels.map((m) => m.id), expectedModels);
+  assert.deepEqual(
+    codex.fallbackModels.find((m) => m.id === 'gpt-5.5')?.serviceTierOptions,
+    [{ id: 'priority', label: 'Fast' }],
+  );
   assert.ok(codex.reasoningOptions, 'codex must define reasoningOptions');
   assert.deepEqual(codex.reasoningOptions.map((o) => o.id), [
     'default',
@@ -261,6 +265,14 @@ test('codex parses live model catalog from debug models JSON', () => {
         slug: 'gpt-6-codex',
         display_name: 'GPT-6 Codex',
         visibility: 'list',
+        additional_speed_tiers: ['fast'],
+        service_tiers: [
+          {
+            id: 'priority',
+            name: 'Fast',
+            description: '1.5x speed, increased usage',
+          },
+        ],
       },
       {
         slug: 'gpt-6-codex-mini',
@@ -277,7 +289,12 @@ test('codex parses live model catalog from debug models JSON', () => {
 
   assert.deepEqual(parsed, [
     { id: 'default', label: 'Default (CLI config)' },
-    { id: 'gpt-6-codex', label: 'GPT-6 Codex' },
+    {
+      id: 'gpt-6-codex',
+      label: 'GPT-6 Codex',
+      additionalSpeedTiers: ['fast'],
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
     { id: 'gpt-6-codex-mini', label: 'GPT-6 Codex Mini' },
   ]);
 });

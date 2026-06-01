@@ -731,7 +731,10 @@ export function App() {
   );
 
   const handleAgentModelChange = useCallback(
-    (agentId: string, choice: { model?: string; reasoning?: string }) => {
+    (
+      agentId: string,
+      choice: { model?: string; reasoning?: string; serviceTier?: string },
+    ) => {
       const prev = config.agentModels?.[agentId] ?? {};
       const merged = { ...prev, ...choice };
       const nextAgentModels = {

@@ -262,6 +262,7 @@ export const ru: Dict = {
   'settings.modelSourceLive': 'Из CLI в реальном времени',
   'settings.modelSourceFallback': 'Встроенный список',
   'settings.reasoningPicker': 'Сложность рассуждений',
+  'settings.serviceTierPicker': "Уровень сервиса",
   'settings.modelPickerHint':
     'Получается из CLI, если он поддерживает команду `models`. «По умолчанию» оставляет выбор конфигурации CLI, а «Пользовательская…» позволяет ввести любой ID модели, который CLI принимает.',
   'settings.modelPickerLiveHint':
@@ -730,6 +731,7 @@ export const ru: Dict = {
   'avatar.modelSection': 'Модель',
   'avatar.modelLabel': 'Модель',
   'avatar.reasoningLabel': 'Рассуждения',
+  'avatar.serviceTierLabel': "Уровень сервиса",
   'avatar.customSuffix': '(пользовательская)',
 
   'inlineSwitcher.chipTitle': 'Переключить CLI / модель',

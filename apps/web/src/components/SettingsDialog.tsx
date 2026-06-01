@@ -971,6 +971,7 @@ export function SettingsDialog({
     cfg.agentId,
     agentChoiceForTest?.model,
     agentChoiceForTest?.reasoning,
+    agentChoiceForTest?.serviceTier,
     cfg.agentCliEnv,
   ]);
   // Rescan notices are list-level feedback for a one-shot action and
@@ -1116,6 +1117,7 @@ export function SettingsDialog({
           agentId: selected.id,
           model: choice.model || undefined,
           reasoning: choice.reasoning || undefined,
+          serviceTier: choice.serviceTier || undefined,
           agentCliEnv: cfg.agentCliEnv ?? {},
         },
         controller.signal,
@@ -2552,7 +2554,11 @@ export function SettingsDialog({
                 if (!hasModels && !hasReasoning) return null;
                 const choice = cfg.agentModels?.[selected.id] ?? {};
                 const setChoice = (
-                  next: { model?: string; reasoning?: string },
+                  next: {
+                    model?: string;
+                    reasoning?: string;
+                    serviceTier?: string;
+                  },
                 ) => {
                   setCfg((c) => {
                     const prev = c.agentModels?.[selected.id] ?? {};
@@ -2570,6 +2576,18 @@ export function SettingsDialog({
                 const reasoningValue =
                   choice.reasoning ??
                   selected.reasoningOptions?.[0]?.id ?? '';
+                const modelOption =
+                  selected.models?.find((m) => m.id === modelValue) ?? null;
+                const serviceTierOptions =
+                  modelOption?.serviceTierOptions ?? [];
+                const hasServiceTiers = serviceTierOptions.length > 0;
+                const serviceTierValue =
+                  hasServiceTiers &&
+                  serviceTierOptions.some(
+                    (tier) => tier.id === choice.serviceTier,
+                  )
+                    ? choice.serviceTier!
+                    : 'default';
                 const customActive =
                   hasModels &&
                   shouldShowCustomModelInput(
@@ -2615,7 +2633,10 @@ export function SettingsDialog({
                                     next.add(selected.id);
                                     return next;
                                   });
-                                  setChoice({ model: '' });
+                                  setChoice({
+                                    model: '',
+                                    serviceTier: undefined,
+                                  });
                                 } else {
                                   setAgentCustomModelIds((prev) => {
                                     if (!prev.has(selected.id)) return prev;
@@ -2623,7 +2644,21 @@ export function SettingsDialog({
                                     next.delete(selected.id);
                                     return next;
                                   });
-                                  setChoice({ model: e.target.value });
+                                  const nextModelOption = selected.models!.find(
+                                    (m) => m.id === e.target.value,
+                                  );
+                                  const nextServiceTierOptions =
+                                    nextModelOption?.serviceTierOptions ?? [];
+                                  const nextServiceTier =
+                                    nextServiceTierOptions.some(
+                                      (tier) => tier.id === choice.serviceTier,
+                                    )
+                                      ? choice.serviceTier
+                                      : undefined;
+                                  setChoice({
+                                    model: e.target.value,
+                                    serviceTier: nextServiceTier,
+                                  });
                                 }
                               }}
                             >
@@ -2674,6 +2709,35 @@ export function SettingsDialog({
                             {selected.reasoningOptions!.map((r) => (
                               <option key={r.id} value={r.id}>
                                 {r.label}
+                              </option>
+                            ))}
+                          </select>
+                          <Icon
+                            name="chevron-down"
+                            size={12}
+                            className="agent-model-select-chevron"
+                          />
+                        </div>
+                      </label>
+                    ) : null}
+                    {hasServiceTiers ? (
+                      <label className="field">
+                        <span className="field-label">
+                          {t('settings.serviceTierPicker')}
+                        </span>
+                        <div className="agent-model-select-wrap">
+                          <select
+                            value={serviceTierValue}
+                            onChange={(e) =>
+                              setChoice({ serviceTier: e.target.value })
+                            }
+                          >
+                            <option value="default">
+                              {t('common.default')}
+                            </option>
+                            {serviceTierOptions.map((tier) => (
+                              <option key={tier.id} value={tier.id}>
+                                {tier.label}
                               </option>
                             ))}
                           </select>

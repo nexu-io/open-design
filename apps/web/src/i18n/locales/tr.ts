@@ -262,6 +262,7 @@ export const tr: Dict = {
   'settings.modelSourceLive': 'CLI\'dan canlı',
   'settings.modelSourceFallback': 'Yerleşik liste',
   'settings.reasoningPicker': 'Akıl yürütme eforu',
+  'settings.serviceTierPicker': "Hizmet katmanı",
   'settings.modelPickerHint':
     'Bir `models` komutu açığa çıkaran CLI’lardan getirilir. "Varsayılan" seçimi CLI’ın kendi ayarına bırakır; "Özel…" CLI’ın kabul edeceği herhangi bir model kimliği seçmenize izin verir.',
   'settings.modelPickerLiveHint':
@@ -698,6 +699,7 @@ export const tr: Dict = {
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
   'avatar.reasoningLabel': 'Akıl yürütme',
+  'avatar.serviceTierLabel': "Hizmet katmanı",
   'avatar.customSuffix': '(özel)',
 
   'inlineSwitcher.chipTitle': 'CLI / modeli değiştir',

@@ -262,6 +262,7 @@ export const ar: Dict = {
   'settings.modelSourceLive': 'مباشر من CLI',
   'settings.modelSourceFallback': 'القائمة المضمنة',
   'settings.reasoningPicker': 'جهد التفكير',
+  'settings.serviceTierPicker': "مستوى الخدمة",
   'settings.modelPickerHint':
     'يتم جلبه من CLI عندما يعرض أمر `models`. "الافتراضي" يترك الخيار لإعدادات CLI؛ "مخصص..." يسمح لك بكتابة أي معرف نموذج يقبله CLI.',
   'settings.modelPickerLiveHint':
@@ -709,6 +710,7 @@ export const ar: Dict = {
   'avatar.modelSection': 'النموذج',
   'avatar.modelLabel': 'النموذج',
   'avatar.reasoningLabel': 'التفكير',
+  'avatar.serviceTierLabel': "مستوى الخدمة",
   'avatar.customSuffix': '(مخصص)',
 
   'inlineSwitcher.chipTitle': 'تبديل CLI / النموذج',

@@ -61,6 +61,7 @@ export interface ChatSseStartPayload {
   projectId?: string | null;
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
 }
 
 export interface ChatSseChunkPayload {

@@ -25,7 +25,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
@@ -94,8 +94,15 @@ export function InlineModelSwitcher({
     (config.agentId && config.agentModels?.[config.agentId]) || {};
   const currentModelId =
     currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
+  const currentModelOption =
+    currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
   const currentModelLabel =
-    currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
+    currentModelOption?.label ?? null;
+  const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
+  const currentServiceTierId =
+    currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
+      ? currentChoice.serviceTier!
+      : 'default';
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerForProtocol = useMemo(
@@ -283,6 +290,7 @@ export function InlineModelSwitcher({
                     onChange={(e) =>
                       onAgentModelChange?.(currentAgent.id, {
                         model: e.target.value,
+                        serviceTier: undefined,
                       })
                     }
                   >
@@ -293,6 +301,30 @@ export function InlineModelSwitcher({
                         {currentModelId} {t('inlineSwitcher.customSuffix')}
                       </option>
                     ) : null}
+                  </select>
+                </div>
+              ) : null}
+              {currentAgent && currentServiceTierOptions.length > 0 ? (
+                <div className="inline-switcher__row">
+                  <span className="inline-switcher__label">
+                    {t('avatar.serviceTierLabel')}
+                  </span>
+                  <select
+                    className="inline-switcher__select"
+                    data-testid="inline-model-switcher-service-tier"
+                    value={currentServiceTierId}
+                    onChange={(e) =>
+                      onAgentModelChange?.(currentAgent.id, {
+                        serviceTier: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="default">{t('common.default')}</option>
+                    {currentServiceTierOptions.map((tier) => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               ) : null}

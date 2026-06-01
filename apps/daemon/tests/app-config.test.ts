@@ -283,7 +283,7 @@ describe('app-config', () => {
     it('validates agentModels entries, dropping invalid shapes', async () => {
       await writeAppConfig(dataDir, {
         agentModels: {
-          validAgent: { model: 'gpt-4', reasoning: 'fast' },
+          validAgent: { model: 'gpt-4', reasoning: 'fast', serviceTier: 'priority' },
           invalidAgent: 'not-an-object',
           arrayAgent: [1, 2, 3],
           badKeys: { model: 'ok', extra: 42 },
@@ -291,7 +291,7 @@ describe('app-config', () => {
       });
       const cfg = await readAppConfig(dataDir);
       expect(cfg.agentModels).toEqual({
-        validAgent: { model: 'gpt-4', reasoning: 'fast' },
+        validAgent: { model: 'gpt-4', reasoning: 'fast', serviceTier: 'priority' },
       });
     });
 

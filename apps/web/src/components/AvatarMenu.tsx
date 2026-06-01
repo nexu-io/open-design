@@ -15,7 +15,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onOpenSettings: () => void;
   onRefreshAgents: () => void;
@@ -79,6 +79,14 @@ export function AvatarMenu({
     currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
   const currentReasoningId =
     currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
+  const currentModelOption = currentAgent?.models?.find(
+    (m) => m.id === currentModelId,
+  ) ?? null;
+  const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
+  const currentServiceTierId =
+    currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
+      ? currentChoice.serviceTier!
+      : 'default';
   const currentModelLabel = currentAgent?.models?.find(
     (m) => m.id === currentModelId,
   )?.label;
@@ -225,6 +233,7 @@ export function AvatarMenu({
                         onChange={(e) =>
                           onAgentModelChange(currentAgent.id, {
                             model: e.target.value,
+                            serviceTier: undefined,
                           })
                         }
                       >
@@ -263,6 +272,29 @@ export function AvatarMenu({
                         {currentAgent.reasoningOptions.map((r) => (
                           <option key={r.id} value={r.id}>
                             {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {currentServiceTierOptions.length > 0 ? (
+                    <label className="avatar-select-row">
+                      <span className="avatar-select-label">
+                        {t('avatar.serviceTierLabel')}
+                      </span>
+                      <select
+                        className="avatar-select"
+                        value={currentServiceTierId}
+                        onChange={(e) =>
+                          onAgentModelChange(currentAgent.id, {
+                            serviceTier: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="default">{t('common.default')}</option>
+                        {currentServiceTierOptions.map((tier) => (
+                          <option key={tier.id} value={tier.id}>
+                            {tier.label}
                           </option>
                         ))}
                       </select>

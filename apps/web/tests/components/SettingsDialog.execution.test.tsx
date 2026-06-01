@@ -1114,6 +1114,59 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     ).toBeTruthy();
   });
 
+  it('shows and saves Codex service tier only for models that advertise tiers', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            models: [
+              { id: 'default', label: 'Default' },
+              {
+                id: 'gpt-5.5',
+                label: 'GPT-5.5',
+                serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+              },
+              { id: 'gpt-5.4', label: 'GPT-5.4' },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const modelSelect = screen.getAllByRole('combobox').find((el) =>
+      Boolean((el as HTMLSelectElement).querySelector('option[value="gpt-5.5"]')),
+    ) as HTMLSelectElement | undefined;
+    expect(modelSelect).toBeTruthy();
+    fireEvent.change(modelSelect!, {
+      target: { value: 'gpt-5.5' },
+    });
+
+    const tierSelect = await screen.findByLabelText('Service tier');
+    fireEvent.change(tierSelect, { target: { value: 'priority' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.change(modelSelect!, {
+      target: { value: 'gpt-5.4' },
+    });
+
+    expect(screen.queryByLabelText('Service tier')).toBeNull();
+  });
+
   it('labels fallback CLI model metadata in the model picker', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },

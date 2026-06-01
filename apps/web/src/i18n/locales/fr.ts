@@ -262,6 +262,7 @@ export const fr: Dict = {
   'settings.modelSourceLive': 'En direct depuis la CLI',
   'settings.modelSourceFallback': 'Liste intégrée',
   'settings.reasoningPicker': 'Effort de raisonnement',
+  'settings.serviceTierPicker': "Niveau de service",
   'settings.modelPickerHint':
     'Par défaut utilise la configuration propre de la CLI. Personnalisé… vous permet de saisir n’importe quel identifiant de modèle.',
   'settings.modelPickerLiveHint':
@@ -725,6 +726,7 @@ export const fr: Dict = {
   'avatar.modelSection': 'Modèle',
   'avatar.modelLabel': 'Modèle',
   'avatar.reasoningLabel': 'Raisonnement',
+  'avatar.serviceTierLabel': "Niveau de service",
   'avatar.customSuffix': '(personnalisé)',
 
   'inlineSwitcher.chipTitle': 'Changer de CLI / modèle',

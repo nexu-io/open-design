@@ -5,6 +5,8 @@ export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 export type RuntimeModelOption = {
   id: string;
   label: string;
+  additionalSpeedTiers?: string[];
+  serviceTierOptions?: RuntimeModelOption[];
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';
@@ -14,6 +16,7 @@ export type RuntimeReasoningOption = RuntimeModelOption;
 export type RuntimeBuildOptions = {
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
 };
 
 export type RuntimeContext = {

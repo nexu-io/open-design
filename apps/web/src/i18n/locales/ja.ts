@@ -262,6 +262,7 @@ export const ja: Dict = {
   'settings.modelSourceLive': 'CLI から取得',
   'settings.modelSourceFallback': '組み込みリスト',
   'settings.reasoningPicker': '推論の強さ',
+  'settings.serviceTierPicker': "サービスティア",
   'settings.modelPickerHint':
     'CLI が `models` コマンドを公開している場合に取得されます。「デフォルト」は CLI 自身の設定に委ね、「カスタム…」は CLI が受け付ける任意のモデル ID を入力できます。',
   'settings.modelPickerLiveHint':
@@ -596,6 +597,7 @@ export const ja: Dict = {
   'avatar.modelSection': 'モデル',
   'avatar.modelLabel': 'モデル',
   'avatar.reasoningLabel': '推論',
+  'avatar.serviceTierLabel': "サービスティア",
   'avatar.customSuffix': '（カスタム）',
 
   'inlineSwitcher.chipTitle': 'CLI / モデルを切り替え',

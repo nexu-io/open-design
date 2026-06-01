@@ -601,6 +601,36 @@ test('codex buildArgs omits model_reasoning_effort when reasoning is "default"',
   );
 });
 
+test('codex buildArgs forwards selected service tier as Codex config', () => {
+  const args = codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-5.5', reasoning: 'medium', serviceTier: 'priority' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.ok(args.includes('service_tier="priority"'));
+  assert.ok(args.includes('model_reasoning_effort="medium"'));
+});
+
+test('codex buildArgs omits service_tier when service tier is "default"', () => {
+  const args = codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-5.5', serviceTier: 'default' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.equal(
+    args.some(
+      (a) => typeof a === 'string' && a.startsWith('service_tier='),
+    ),
+    false,
+  );
+});
+
 test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
   // Long composed prompts (system prompt + design system + skill body +
   // user message) routinely exceed Linux MAX_ARG_STRLEN (~128 KB) and the

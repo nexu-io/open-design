@@ -262,6 +262,7 @@ export const ptBR: Dict = {
   'settings.modelSourceLive': 'Ao vivo da CLI',
   'settings.modelSourceFallback': 'Lista integrada',
   'settings.reasoningPicker': 'Esforço de raciocínio',
+  'settings.serviceTierPicker': "Nível de serviço",
   'settings.modelPickerHint':
     'Buscado na CLI quando ela expõe um comando `models`. "Padrão" deixa a escolha para a configuração da própria CLI; "Personalizado…" permite digitar qualquer id de modelo aceito pela CLI.',
   'settings.modelPickerLiveHint':
@@ -730,6 +731,7 @@ export const ptBR: Dict = {
   'avatar.modelSection': 'Modelo',
   'avatar.modelLabel': 'Modelo',
   'avatar.reasoningLabel': 'Raciocínio',
+  'avatar.serviceTierLabel': "Nível de serviço",
   'avatar.customSuffix': '(personalizado)',
 
   'inlineSwitcher.chipTitle': 'Trocar CLI / modelo',

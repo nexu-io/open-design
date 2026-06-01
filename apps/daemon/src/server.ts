@@ -34,6 +34,7 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  isKnownServiceTier,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
   sanitizeCustomModel,
@@ -5154,6 +5155,7 @@ export async function startServer({
     testAgentConnection,
     getAgentDef,
     isKnownModel,
+    isKnownServiceTier,
     sanitizeCustomModel,
   };
   const critiqueDeps = {
@@ -10017,6 +10019,7 @@ export async function startServer({
       commentAttachments = [],
       model,
       reasoning,
+      serviceTier,
       locale,
       research,
       context,
@@ -10037,6 +10040,7 @@ export async function startServer({
     if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
+    if (typeof serviceTier === 'string' && serviceTier) run.serviceTier = serviceTier;
     if (typeof skillId === 'string' && skillId) run.skillId = skillId;
     if (typeof designSystemId === 'string' && designSystemId)
       run.designSystemId = designSystemId;
@@ -10397,7 +10401,16 @@ export async function startServer({
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const safeServiceTier =
+      typeof serviceTier === 'string' &&
+      isKnownServiceTier(def, safeModel, serviceTier)
+        ? serviceTier
+        : null;
+    const agentOptions = {
+      model: safeModel,
+      reasoning: safeReasoning,
+      serviceTier: safeServiceTier,
+    };
     const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
       enabled: Boolean(toolTokenGrant?.token),
       command: process.execPath,
@@ -10794,6 +10807,7 @@ export async function startServer({
       cwd,
       model: safeModel,
       reasoning: safeReasoning,
+      serviceTier: safeServiceTier,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
     noteAgentActivity();
@@ -11592,6 +11606,7 @@ export async function startServer({
       designSystemId: orbitDesignSystemId,
       model: modelPrefs.model ?? null,
       reasoning: modelPrefs.reasoning ?? null,
+      serviceTier: modelPrefs.serviceTier ?? null,
       message: prompt,
       systemPrompt: [
         renderOrbitTemplateSystemPrompt(template),
@@ -12283,6 +12298,7 @@ export async function startServer({
       context: routineContext,
       model: modelPrefs.model ?? null,
       reasoning: modelPrefs.reasoning ?? null,
+      serviceTier: modelPrefs.serviceTier ?? null,
       message: routine.prompt,
       systemPrompt: [
         `You are running an unattended scheduled routine named "${routine.name}".`,

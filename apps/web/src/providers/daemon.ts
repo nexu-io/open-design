@@ -181,6 +181,7 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
   locale?: string;
@@ -242,6 +243,7 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  serviceTier,
   research,
   context,
   locale,
@@ -274,6 +276,7 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    serviceTier: serviceTier ?? null,
     locale,
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
