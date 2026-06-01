@@ -98,6 +98,8 @@ export function InlineModelSwitcher({
     currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
   const currentModelLabel =
     currentModelOption?.label ?? null;
+  const currentReasoningId =
+    currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
   const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
   const currentServiceTierId =
     currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
@@ -301,6 +303,31 @@ export function InlineModelSwitcher({
                         {currentModelId} {t('inlineSwitcher.customSuffix')}
                       </option>
                     ) : null}
+                  </select>
+                </div>
+              ) : null}
+              {currentAgent &&
+              currentAgent.reasoningOptions &&
+              currentAgent.reasoningOptions.length > 0 ? (
+                <div className="inline-switcher__row">
+                  <span className="inline-switcher__label">
+                    {t('avatar.reasoningLabel')}
+                  </span>
+                  <select
+                    className="inline-switcher__select"
+                    data-testid="inline-model-switcher-reasoning"
+                    value={currentReasoningId ?? ''}
+                    onChange={(e) =>
+                      onAgentModelChange?.(currentAgent.id, {
+                        reasoning: e.target.value,
+                      })
+                    }
+                  >
+                    {currentAgent.reasoningOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               ) : null}

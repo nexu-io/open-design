@@ -21,6 +21,11 @@ const codexAgent: AgentInfo = {
     },
     { id: 'gpt-5.4', label: 'GPT-5.4' },
   ],
+  reasoningOptions: [
+    { id: 'default', label: 'Default' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'high', label: 'High' },
+  ],
 };
 
 const baseConfig: AppConfig = {
@@ -103,6 +108,22 @@ describe('InlineModelSwitcher service tier picker', () => {
     expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
       model: 'gpt-5.4',
       serviceTier: undefined,
+    });
+  });
+
+  it('shows and updates reasoning choices for agents that expose reasoning options', () => {
+    const { onAgentModelChange } = renderSwitcher({
+      ...baseConfig,
+      agentModels: { codex: { model: 'gpt-5.5', reasoning: 'medium' } },
+    });
+
+    const reasoningSelect = screen.getByTestId('inline-model-switcher-reasoning');
+    expect(reasoningSelect).toBeTruthy();
+    expect((reasoningSelect as HTMLSelectElement).value).toBe('medium');
+
+    fireEvent.change(reasoningSelect, { target: { value: 'high' } });
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      reasoning: 'high',
     });
   });
 });
