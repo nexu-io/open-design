@@ -10,7 +10,7 @@ import {
   openDatabase,
   upsertAgentSession,
 } from '../src/db.js';
-import { resolveAgentResumeContext } from '../src/agent-session-resume.js';
+import { isClaudeResumeFailure, resolveAgentResumeContext } from '../src/agent-session-resume.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -49,5 +49,18 @@ describe('resolveAgentResumeContext', () => {
     const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
     expect(ctx.isResuming).toBe(true);
     expect(ctx.resumeSessionId).toBe('sess-A');
+  });
+});
+
+describe('isClaudeResumeFailure', () => {
+  it('matches the missing-session error shape', () => {
+    expect(isClaudeResumeFailure('Error: No conversation found with session ID: abc')).toBe(true);
+    expect(isClaudeResumeFailure('no session found for id abc')).toBe(true);
+    expect(isClaudeResumeFailure('session abc-123 not found')).toBe(true);
+  });
+
+  it('does not match unrelated errors', () => {
+    expect(isClaudeResumeFailure('rate limit exceeded')).toBe(false);
+    expect(isClaudeResumeFailure('')).toBe(false);
   });
 });

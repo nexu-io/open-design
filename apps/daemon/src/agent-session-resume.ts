@@ -32,3 +32,20 @@ export function resolveAgentResumeContext(
     isResuming: resumeSessionId != null,
   };
 }
+
+// Signatures Claude Code prints to stderr when a `--resume <id>` target no
+// longer exists on disk (session pruned, repo moved machines, ~/.claude
+// cleared). VERIFY against the installed CLI during implementation and add
+// the exact observed string to a mocks/ fixture — these patterns are the
+// planning-time best guess, intentionally permissive.
+const CLAUDE_RESUME_FAILURE_PATTERNS: RegExp[] = [
+  /no conversation found with session id/i,
+  /no session found/i,
+  /session .* not found/i,
+];
+
+/** True when CLI output indicates a resume target session is missing. */
+export function isClaudeResumeFailure(text: string): boolean {
+  if (!text) return false;
+  return CLAUDE_RESUME_FAILURE_PATTERNS.some((re) => re.test(text));
+}
