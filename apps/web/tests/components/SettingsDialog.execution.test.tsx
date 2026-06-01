@@ -598,8 +598,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    // A genuinely malformed URL still fails the client preflight and blocks
+    // autosave. (Internal/private IPs are intentionally NOT flagged here
+    // anymore — the daemon owns that decision via OD_ALLOWED_INTERNAL_HOSTS,
+    // see #3225 — so we use a real typo to exercise the invalid-URL path.)
     fireEvent.change(screen.getByLabelText('Base URL'), {
-      target: { value: 'http://10.0.0.5:11434/v1' },
+      target: { value: 'htp://typo.example.com' },
     });
     expect(screen.getByRole('alert').textContent).toContain(
       'Enter a valid public http:// or https:// URL.',
