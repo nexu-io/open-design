@@ -804,6 +804,7 @@ export const ru: Dict = {
   'inlineSwitcher.noAgentsDetected': 'CLI не найден в PATH',
   'inlineSwitcher.openSettingsForModel': 'Настройте провайдера в Настройках',
   'inlineSwitcher.missingApiKey': 'API-ключ не задан — откройте Настройки.',
+  'inlineSwitcher.openFullSettings': 'Открыть настройки выполнения',
   'inlineSwitcher.customSuffix': '(пользовательская)',
 
   'project.backToProjects': 'Назад к проектам',

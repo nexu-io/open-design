@@ -783,6 +783,7 @@ export const hu: Dict = {
   'inlineSwitcher.noAgentsDetected': 'Nincs CLI a PATH-ban',
   'inlineSwitcher.openSettingsForModel': 'Állítsd be a szolgáltatót a Beállításokban',
   'inlineSwitcher.missingApiKey': 'Hiányzó API-kulcs — add hozzá a Beállításokban.',
+  'inlineSwitcher.openFullSettings': 'Végrehajtási beállítások megnyitása',
   'inlineSwitcher.customSuffix': '(egyedi)',
 
   'project.backToProjects': 'Vissza a projektekhez',

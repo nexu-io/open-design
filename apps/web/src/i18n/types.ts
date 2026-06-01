@@ -1699,6 +1699,7 @@ export interface Dict {
   'inlineSwitcher.noAgentsDetected': string;
   'inlineSwitcher.openSettingsForModel': string;
   'inlineSwitcher.missingApiKey': string;
+  'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
 
   // Project view / chat pane / composer

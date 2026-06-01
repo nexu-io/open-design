@@ -783,6 +783,7 @@ export const ar: Dict = {
   'inlineSwitcher.noAgentsDetected': 'لم يتم العثور على CLI في PATH',
   'inlineSwitcher.openSettingsForModel': 'قم بإعداد المزود في الإعدادات',
   'inlineSwitcher.missingApiKey': 'مفتاح API غير محدد — افتح الإعدادات لإضافته.',
+  'inlineSwitcher.openFullSettings': 'فتح إعدادات التنفيذ',
   'inlineSwitcher.customSuffix': '(مخصص)',
 
   'project.backToProjects': 'العودة للمشاريع',

@@ -670,6 +670,7 @@ export const ja: Dict = {
   'inlineSwitcher.noAgentsDetected': 'PATH に CLI が見つかりません',
   'inlineSwitcher.openSettingsForModel': '設定でプロバイダーを構成してください',
   'inlineSwitcher.missingApiKey': 'API キー未設定 — 設定から追加してください。',
+  'inlineSwitcher.openFullSettings': '実行設定を開く',
   'inlineSwitcher.customSuffix': '（カスタム）',
 
   'project.backToProjects': 'プロジェクトに戻る',

@@ -896,6 +896,7 @@ export const id: Dict = {
   'inlineSwitcher.noAgentsDetected': 'Tidak ada CLI di PATH',
   'inlineSwitcher.openSettingsForModel': 'Atur penyedia di Pengaturan',
   'inlineSwitcher.missingApiKey': 'Kunci API belum diatur — buka Pengaturan.',
+  'inlineSwitcher.openFullSettings': 'Buka pengaturan eksekusi',
   'inlineSwitcher.customSuffix': '(kustom)',
 
   'project.backToProjects': 'Kembali ke proyek',

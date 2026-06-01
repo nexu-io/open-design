@@ -672,6 +672,7 @@ export const esES: Dict = {
   'inlineSwitcher.noAgentsDetected': 'No se detectó CLI en PATH',
   'inlineSwitcher.openSettingsForModel': 'Configura el proveedor en Ajustes',
   'inlineSwitcher.missingApiKey': 'Falta la clave API — abre Ajustes para añadirla.',
+  'inlineSwitcher.openFullSettings': 'Abrir ajustes de ejecución',
   'inlineSwitcher.customSuffix': '(personalizado)',
 
   'project.backToProjects': 'Volver a los proyectos',

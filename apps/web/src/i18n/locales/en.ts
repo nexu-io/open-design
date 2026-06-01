@@ -1387,6 +1387,7 @@ export const en: Dict = {
   'inlineSwitcher.noAgentsDetected': 'No CLI detected on PATH',
   'inlineSwitcher.openSettingsForModel': 'Configure provider in Settings',
   'inlineSwitcher.missingApiKey': 'API key not set — open Settings to add it.',
+  'inlineSwitcher.openFullSettings': 'Open execution settings',
   'inlineSwitcher.customSuffix': '(custom)',
 
   'project.backToProjects': 'Back to projects',

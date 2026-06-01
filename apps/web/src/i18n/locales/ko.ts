@@ -783,6 +783,7 @@ export const ko: Dict = {
   'inlineSwitcher.noAgentsDetected': 'PATH에서 CLI를 찾을 수 없습니다',
   'inlineSwitcher.openSettingsForModel': '설정에서 제공자를 구성하세요',
   'inlineSwitcher.missingApiKey': 'API 키 미설정 — 설정에서 추가하세요.',
+  'inlineSwitcher.openFullSettings': '실행 설정 열기',
   'inlineSwitcher.customSuffix': '(직접 입력)',
 
   'project.backToProjects': '프로젝트 목록으로 돌아가기',

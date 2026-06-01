@@ -804,6 +804,7 @@ export const ptBR: Dict = {
   'inlineSwitcher.noAgentsDetected': 'Nenhum CLI detectado no PATH',
   'inlineSwitcher.openSettingsForModel': 'Configure o provedor em Configurações',
   'inlineSwitcher.missingApiKey': 'Chave de API ausente — abra Configurações.',
+  'inlineSwitcher.openFullSettings': 'Abrir configurações de execução',
   'inlineSwitcher.customSuffix': '(personalizado)',
 
   'project.backToProjects': 'Voltar aos projetos',

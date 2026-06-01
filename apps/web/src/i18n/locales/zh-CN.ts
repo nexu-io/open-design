@@ -1379,6 +1379,7 @@ export const zhCN: Dict = {
   'inlineSwitcher.noAgentsDetected': 'PATH 中未发现可用 CLI',
   'inlineSwitcher.openSettingsForModel': '在“设置”中配置该服务商',
   'inlineSwitcher.missingApiKey': '尚未填写 API Key — 在“设置”中添加。',
+  'inlineSwitcher.openFullSettings': '打开执行设置',
   'inlineSwitcher.customSuffix': '（自定义）',
 
   'project.backToProjects': '返回项目列表',

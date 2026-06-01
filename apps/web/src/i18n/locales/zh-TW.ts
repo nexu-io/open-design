@@ -981,6 +981,7 @@ export const zhTW: Dict = {
   'inlineSwitcher.noAgentsDetected': 'PATH 中未偵測到可用 CLI',
   'inlineSwitcher.openSettingsForModel': '在「設定」中設定該服務商',
   'inlineSwitcher.missingApiKey': '尚未填寫 API Key — 在「設定」中新增。',
+  'inlineSwitcher.openFullSettings': '開啟執行設定',
   'inlineSwitcher.customSuffix': '（自訂）',
 
   'project.backToProjects': '返回專案列表',

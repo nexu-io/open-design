@@ -1319,6 +1319,7 @@ export const fr: Dict = {
   'inlineSwitcher.noAgentsDetected': 'Aucune CLI détectée dans le PATH',
   'inlineSwitcher.openSettingsForModel': 'Configurez le fournisseur dans les Paramètres',
   'inlineSwitcher.missingApiKey': 'Clé API manquante — ajoutez-la dans les Paramètres.',
+  'inlineSwitcher.openFullSettings': 'Ouvrir les paramètres d\'exécution',
   'inlineSwitcher.customSuffix': '(personnalisé)',
   'project.backToProjects': 'Retour aux projets',
   'project.metaFreeform': 'libre',

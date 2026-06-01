@@ -772,6 +772,7 @@ export const tr: Dict = {
   'inlineSwitcher.noAgentsDetected': "PATH'te CLI bulunamadı",
   'inlineSwitcher.openSettingsForModel': 'Sağlayıcıyı Ayarlardan yapılandırın',
   'inlineSwitcher.missingApiKey': 'API anahtarı yok — Ayarlardan ekleyin.',
+  'inlineSwitcher.openFullSettings': 'Yürütme ayarlarını aç',
   'inlineSwitcher.customSuffix': '(özel)',
 
   'project.backToProjects': 'Projelere dön',

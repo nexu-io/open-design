@@ -805,6 +805,7 @@ export const fa: Dict = {
   'inlineSwitcher.noAgentsDetected': 'هیچ CLI در PATH یافت نشد',
   'inlineSwitcher.openSettingsForModel': 'ارائه‌دهنده را در تنظیمات پیکربندی کنید',
   'inlineSwitcher.missingApiKey': 'کلید API تنظیم نشده — تنظیمات را باز کنید.',
+  'inlineSwitcher.openFullSettings': 'باز کردن تنظیمات اجرا',
   'inlineSwitcher.customSuffix': '(سفارشی)',
 
   'project.backToProjects': 'بازگشت به پروژه‌ها',
