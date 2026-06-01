@@ -143,6 +143,8 @@ export function AvatarMenu({
     (config.agentId && config.agentModels?.[config.agentId]) || {};
   const currentModelId =
     currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
+  const currentReasoningId =
+    currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
   const currentModelLabel = currentAgent?.models?.find(
     (m) => m.id === currentModelId,
   )?.label;
@@ -285,41 +287,67 @@ export function AvatarMenu({
               })}
               {currentAgent &&
               currentAgent.available &&
-              currentAgent.models &&
-              currentAgent.models.length > 0 ? (
+              ((currentAgent.models && currentAgent.models.length > 0) ||
+                (currentAgent.reasoningOptions &&
+                  currentAgent.reasoningOptions.length > 0)) ? (
                 <div className="avatar-model-section">
                   <div className="avatar-section-label">
                     {t('avatar.modelSection')}
                   </div>
-                  <label className="avatar-select-row">
-                    <span className="avatar-select-label">
-                      {t('avatar.modelLabel')}
-                    </span>
-                    <select
-                      className="avatar-select"
-                      value={currentModelId ?? ''}
-                      onChange={(e) =>
-                        onAgentModelChange(currentAgent.id, {
-                          model: e.target.value,
-                        })
-                      }
-                    >
-                      {renderModelOptions(currentAgent.models)}
-                      {/* When the user has typed a custom id in
-                          Settings, surface it here too so the dropdown
-                          actually shows the active selection rather
-                          than collapsing to "Default". */}
-                      {currentModelId &&
-                      !currentAgent.models.some(
-                        (m) => m.id === currentModelId,
-                      ) ? (
-                        <option value={currentModelId}>
-                          {currentModelId}{' '}
-                          {t('avatar.customSuffix')}
-                        </option>
-                      ) : null}
-                    </select>
-                  </label>
+                  {currentAgent.models && currentAgent.models.length > 0 ? (
+                    <label className="avatar-select-row">
+                      <span className="avatar-select-label">
+                        {t('avatar.modelLabel')}
+                      </span>
+                      <select
+                        className="avatar-select"
+                        value={currentModelId ?? ''}
+                        onChange={(e) =>
+                          onAgentModelChange(currentAgent.id, {
+                            model: e.target.value,
+                          })
+                        }
+                      >
+                        {renderModelOptions(currentAgent.models)}
+                        {/* When the user has typed a custom id in
+                            Settings, surface it here too so the dropdown
+                            actually shows the active selection rather
+                            than collapsing to "Default". */}
+                        {currentModelId &&
+                        !currentAgent.models.some(
+                          (m) => m.id === currentModelId,
+                        ) ? (
+                          <option value={currentModelId}>
+                            {currentModelId}{' '}
+                            {t('avatar.customSuffix')}
+                          </option>
+                        ) : null}
+                      </select>
+                    </label>
+                  ) : null}
+                  {currentAgent.reasoningOptions &&
+                  currentAgent.reasoningOptions.length > 0 ? (
+                    <label className="avatar-select-row">
+                      <span className="avatar-select-label">
+                        {t('avatar.reasoningLabel')}
+                      </span>
+                      <select
+                        className="avatar-select"
+                        value={currentReasoningId ?? ''}
+                        onChange={(e) =>
+                          onAgentModelChange(currentAgent.id, {
+                            reasoning: e.target.value,
+                          })
+                        }
+                      >
+                        {currentAgent.reasoningOptions.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
               ) : null}
               <button
