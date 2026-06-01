@@ -216,12 +216,9 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'openai',
       ),
     ).toBe(false);
-    expect(
-      canFetchProviderModels(
-        { apiKey: 'sk-openai', baseUrl: 'http://10.0.0.5:11434/v1' },
-        'openai',
-      ),
-    ).toBe(false);
+    // An internal/private base URL is NOT pre-rejected here — the daemon owns
+    // that decision via OD_ALLOWED_INTERNAL_HOSTS (#3225). Covered by the
+    // "defers to the daemon" suite below.
     expect(
       canFetchProviderModels(
         { apiKey: 'azure-key', baseUrl: 'https://example.openai.azure.com' },
@@ -288,17 +285,49 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('ftp://api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('http:api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('https://')).toBe(false);
-    expect(isValidApiBaseUrl('http://0.0.0.0:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://10.0.0.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://100.64.0.1:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://224.0.0.1:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[::]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
+    // NOTE: internal/private base URLs are intentionally NOT rejected here
+    // anymore — the daemon owns the SSRF decision and honors the operator
+    // allowlist (#3225). See the "defers to the daemon" suite below for the
+    // current contract; only malformed / non-http(s) URLs stay invalid.
+  });
+});
+
+// Issue #3225 / PR #3411 review (@mrcfps): the client preflight must not
+// hard-block internal/private base URLs, because the operator-controlled
+// `OD_ALLOWED_INTERNAL_HOSTS` allowlist lives on the daemon and is invisible
+// to the browser. If the client gated on its own internal-IP check, an
+// operator who allowlisted their endpoint still couldn't run the connection
+// test or model discovery from Settings. The daemon stays the source of
+// truth for the SSRF decision; the client only rejects genuinely malformed
+// URLs.
+describe('SettingsDialog internal base URL defers to the daemon (#3225)', () => {
+  it('treats a syntactically-valid internal base URL as UI-valid (daemon decides)', () => {
+    for (const url of [
+      'http://10.0.0.5:4000/v1',
+      'http://192.168.1.5:11434/v1',
+      'http://172.16.0.5:8080/v1',
+      'http://[fd00::1]:4000/v1',
+    ]) {
+      expect(isValidApiBaseUrl(url)).toBe(true);
+    }
+  });
+
+  it('keeps rejecting genuinely malformed / non-http(s) URLs client-side', () => {
+    for (const url of ['ddddd', 'api.openai.com/v1', 'ftp://api.example.com', 'https://']) {
+      expect(isValidApiBaseUrl(url)).toBe(false);
+    }
+  });
+
+  it('keeps the Test and Fetch-models controls enabled for an allowlistable internal endpoint', () => {
+    const internalCfg = {
+      apiKey: 'sk-internal',
+      baseUrl: 'http://10.0.0.5:4000/v1',
+      model: 'litellm-proxy-model',
+    };
+    // Connection-test gate: required fields present + base URL not pre-rejected.
+    expect(canRunProviderConnectionTest(internalCfg)).toBe(true);
+    // Fetch-models gate (OpenAI-compatible protocol): base URL not pre-rejected.
+    expect(canFetchProviderModels(internalCfg, 'openai')).toBe(true);
   });
 });
 
