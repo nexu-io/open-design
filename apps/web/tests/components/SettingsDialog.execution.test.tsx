@@ -446,8 +446,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    // Quick fill dropdown indexes for the openai protocol:
+    // 0 = OpenAI, 1 = OpenRouter, 2 = DeepSeek — OpenAI, …
     fireEvent.change(screen.getByLabelText('Quick fill provider'), {
-      target: { value: '1' },
+      target: { value: '2' },
     });
 
     expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
@@ -1808,8 +1810,8 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+      expect(screen.getByText('late@example.com')).toBeTruthy();
     });
-    expect(screen.getByText('late@example.com')).toBeTruthy();
   });
 
   it('renders the signed-in AMR account state inside Settings without leaking vela branding', async () => {

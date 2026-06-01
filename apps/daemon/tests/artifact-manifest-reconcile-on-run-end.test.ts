@@ -146,6 +146,14 @@ describe('run-end artifact manifest reconciliation (#2893)', () => {
 
     // File written during the run
     await writeProjectFile(projectsRoot, PROJECT_ID, 'new-output.html', '<p>new</p>');
+    // Force the new file's mtime strictly above runStartTimeMs. Without this,
+    // CI runners occasionally produce a file whose ms-truncated mtime equals
+    // (or, due to NTP jitter, falls a hair below) Date.now() captured a few
+    // microseconds earlier, which made the `<` mtime filter incorrectly skip
+    // the new file and the sidecar-existence assertion flaked.
+    const newPath = path.join(projectsRoot, PROJECT_ID, 'new-output.html');
+    const futureTime = new Date(runStartTimeMs + 1_000);
+    fs.utimesSync(newPath, futureTime, futureTime);
 
     // Simulate the close-handler reconciliation with mtime filter
     const dir = path.join(projectsRoot, PROJECT_ID);

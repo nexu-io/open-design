@@ -1125,6 +1125,29 @@ function meaningfulDomFallbackTarget(el) {
   function previewScrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
   }
+  function previewScrollBy(left, top){
+    var dx = Number(left || 0);
+    var dy = Number(top || 0);
+    if (!Number.isFinite(dx)) dx = 0;
+    if (!Number.isFinite(dy)) dy = 0;
+    if (!dx && !dy) return;
+    var el = previewScrollElement();
+    if (!el) return;
+    try {
+      if (typeof el.scrollBy === 'function') el.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+      else {
+        el.scrollLeft = (el.scrollLeft || 0) + dx;
+        el.scrollTop = (el.scrollTop || 0) + dy;
+      }
+    } catch (_) {
+      try {
+        el.scrollLeft = (el.scrollLeft || 0) + dx;
+        el.scrollTop = (el.scrollTop || 0) + dy;
+      } catch (__) {}
+    }
+    schedulePostTargets();
+    schedulePostPreviewScroll();
+  }
   function postPreviewScroll(){
     var el = previewScrollElement();
     if (!el) return;
@@ -1322,6 +1345,11 @@ function meaningfulDomFallbackTarget(el) {
       schedulePostActiveCommentTarget();
       return;
     }
+    if (data.type === 'od:preview-scroll-by') {
+      previewScrollBy(data.left, data.top);
+      return;
+    }
+
     if (data.type === 'od:inspect-mode') {
       inspectEnabled = !!data.enabled;
       document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);

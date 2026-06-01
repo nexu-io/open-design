@@ -201,10 +201,15 @@ export function validateArtifactManifestInput(
     }
   }
 
-  const safeEntry = typeof entry === 'string' ? entry : '';
-  if (!safeEntry || safeEntry.length > MAX_ENTRY_LENGTH) {
-    return { ok: false, error: `artifact entry exceeds max length (${MAX_ENTRY_LENGTH})` };
+  const manifestEntry =
+    typeof manifest.entry === 'string' && manifest.entry.trim()
+      ? manifest.entry.trim()
+      : entry;
+  const entryErr = validateSupportingPath(manifestEntry);
+  if (entryErr) {
+    return { ok: false, error: `artifactManifest.entry ${entryErr}` };
   }
+  const safeEntry = (manifestEntry as string).replace(/\\/g, '/');
 
   return { ok: true, value: sanitizeManifest(manifest, safeEntry, options) };
 }

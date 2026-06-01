@@ -247,7 +247,12 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .od-select-option.selected {
   color: var(--text);
+  background: color-mix(in srgb, var(--selected) 9%, var(--bg-subtle));
   font-weight: 600;
+}
+.od-select-option.selected:hover:not(:disabled),
+.od-select-option.selected.active:not(:disabled) {
+  background: color-mix(in srgb, var(--selected) 13%, var(--bg-subtle));
 }
 .od-select-option:disabled {
   opacity: 0.45;

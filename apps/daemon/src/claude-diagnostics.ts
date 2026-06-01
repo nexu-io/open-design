@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { redactSecrets } from './redact.js';
 
 export interface ClaudeCliDiagnosticInput {
@@ -7,6 +9,7 @@ export interface ClaudeCliDiagnosticInput {
   stderrTail?: string | null;
   stdoutTail?: string | null;
   env?: Record<string, unknown> | null;
+  resolvedBin?: string | null;
 }
 
 export interface ClaudeCliDiagnostic {
@@ -51,6 +54,15 @@ function withContext(
   };
 }
 
+function selectedClaudeCompatibleRuntime(input: ClaudeCliDiagnosticInput): 'claude' | 'openclaude' {
+  if (typeof input.resolvedBin !== 'string' || !input.resolvedBin.trim()) return 'claude';
+  const base = path
+    .basename(input.resolvedBin.trim().replace(/\\/g, '/'))
+    .replace(/\.(exe|cmd|bat)$/i, '')
+    .toLowerCase();
+  return base === 'openclaude' ? 'openclaude' : 'claude';
+}
+
 export function diagnoseClaudeCliFailure(
   input: ClaudeCliDiagnosticInput,
 ): ClaudeCliDiagnostic | null {
@@ -61,6 +73,8 @@ export function diagnoseClaudeCliFailure(
   const normalized = text.toLowerCase();
   const hasCustomBaseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL') !== null;
   const hasConfigDir = envValue(input.env, 'CLAUDE_CONFIG_DIR') !== null;
+  const runtime = selectedClaudeCompatibleRuntime(input);
+  const isOpenClaude = runtime === 'openclaude';
 
   const customEndpointConnectionFailure =
     hasCustomBaseUrl &&
@@ -90,6 +104,13 @@ export function diagnoseClaudeCliFailure(
     );
   }
   if (authFailure) {
+    if (isOpenClaude) {
+      return withContext(
+        'OpenClaude could not authenticate with its configured endpoint.',
+        'The spawned OpenClaude process exited before producing a response. Check the OpenClaude API key, endpoint, and local configuration, then retry.',
+        input,
+      );
+    }
     const configHint = hasConfigDir
       ? 'The configured Claude config directory may contain stale or expired auth state.'
       : 'If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so Open Design spawns the same profile that works in your terminal.';
@@ -147,6 +168,13 @@ export function diagnoseClaudeCliFailure(
   }
 
   if (!text.trim() && input.exitCode === 1) {
+    if (isOpenClaude) {
+      return withContext(
+        'OpenClaude exited before producing diagnostics.',
+        'Check the OpenClaude API key, endpoint, and local configuration, then retry.',
+        input,
+      );
+    }
     const message = hasConfigDir
       ? 'Claude Code exited before producing diagnostics while using the configured Claude profile.'
       : 'Claude Code exited before producing diagnostics.';

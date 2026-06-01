@@ -182,6 +182,14 @@ export function mapPiRpcEvent(
         });
       }
     }
+
+    if (message?.stopReason === 'error') {
+      const messageText =
+        typeof message.errorMessage === 'string' && message.errorMessage.length > 0
+          ? message.errorMessage
+          : 'Pi agent error';
+      send('agent', { type: 'error', message: messageText, raw });
+    }
     return null;
   }
 

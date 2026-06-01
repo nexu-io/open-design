@@ -23,6 +23,7 @@ const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
+const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -169,6 +170,14 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                <li role='none'>
+                  <a role='menuitem' href={AMR_URL}>
+                    <span className='dropdown-name'>{productMenuCopy.amrName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.amrBlurb}
+                    </span>
+                  </a>
+                </li>
                 {/* Tutorials is a top-level nav item (see Library section
                   below). Don't list it here too — duplicating it once at
                   Product/Tutorials and again at top-level confuses users
@@ -227,15 +236,6 @@ export function Header({
                     className={linkClass('systems')}
                   >
                     <span className='dropdown-name'>{headerCopy.nav.systems}</span>
-                  </a>
-                </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/plugins/craft/')}
-                    className={linkClass('craft')}
-                  >
-                    <span className='dropdown-name'>{headerCopy.nav.craft}</span>
                   </a>
                 </li>
               </ul>
@@ -306,6 +306,17 @@ export function Header({
             <svg viewBox='0 0 24 24' width='16' height='16' fill='currentColor' aria-hidden='true'>
               <path d='M17.53 3H21l-7.39 8.45L22 21h-6.83l-5.36-6.99L3.7 21H.23l7.9-9.04L0 3h7l4.85 6.41L17.53 3Zm-2.39 16h2.04L5.96 4.9H3.78L15.14 19Z' />
             </svg>
+          </a>
+          <a
+            className='nav-amr'
+            href={AMR_URL}
+            aria-label={`${productMenuCopy.amrName}: ${productMenuCopy.amrBlurb}`}
+          >
+            <img src='/amr-logo.svg' alt='' width={28} height={28} aria-hidden='true' />
+            <span className='nav-amr-copy'>
+              <span className='nav-amr-title'>AMR</span>
+              <span className='nav-amr-kicker'>{productMenuCopy.amrKicker}</span>
+            </span>
           </a>
           <a
             className='nav-cta ghost'

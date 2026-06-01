@@ -124,6 +124,95 @@ test('conversation latest run follows assistant message position', () => {
   assert.equal(getConversation(db, conversationId)?.latestRun?.status, 'running');
 });
 
+test('conversation summaries expose cumulative completed run duration', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-duration',
+    name: 'project-duration',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  insertConversation(db, {
+    id: 'project-duration-conversation',
+    projectId: 'project-duration',
+    title: 'Duration test',
+    createdAt: 1,
+    updatedAt: 4,
+  });
+  upsertMessage(db, 'project-duration-conversation', {
+    id: 'project-duration-first',
+    role: 'assistant',
+    content: 'first done',
+    runId: 'project-duration-first-run',
+    runStatus: 'succeeded',
+    startedAt: 10_000,
+    endedAt: 40_000,
+  });
+  upsertMessage(db, 'project-duration-conversation', {
+    id: 'project-duration-running',
+    role: 'assistant',
+    content: 'still running',
+    runId: 'project-duration-running-run',
+    runStatus: 'running',
+    startedAt: 45_000,
+  });
+  upsertMessage(db, 'project-duration-conversation', {
+    id: 'project-duration-second',
+    role: 'assistant',
+    content: 'second done',
+    runId: 'project-duration-second-run',
+    runStatus: 'failed',
+    startedAt: 50_000,
+    endedAt: 125_000,
+  });
+
+  const listed = listConversations(db, 'project-duration')[0] as { totalDurationMs?: number };
+  const fetched = getConversation(db, 'project-duration-conversation') as { totalDurationMs?: number } | null;
+
+  assert.equal(listed.totalDurationMs, 105_000);
+  assert.equal(fetched?.totalDurationMs, 105_000);
+});
+
+test('conversation summaries include usage-only terminal run durations', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-usage-duration',
+    name: 'project-usage-duration',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  insertConversation(db, {
+    id: 'project-usage-duration-conversation',
+    projectId: 'project-usage-duration',
+    title: 'Usage duration test',
+    createdAt: 1,
+    updatedAt: 4,
+  });
+  upsertMessage(db, 'project-usage-duration-conversation', {
+    id: 'project-usage-duration-imported',
+    role: 'assistant',
+    content: 'imported done',
+    runId: 'project-usage-duration-imported-run',
+    runStatus: 'succeeded',
+    events: [{ kind: 'usage', durationMs: 22_000 }],
+  });
+  upsertMessage(db, 'project-usage-duration-conversation', {
+    id: 'project-usage-duration-timestamped',
+    role: 'assistant',
+    content: 'timestamped done',
+    runId: 'project-usage-duration-timestamped-run',
+    runStatus: 'succeeded',
+    startedAt: 30_000,
+    endedAt: 60_000,
+  });
+
+  const listed = listConversations(db, 'project-usage-duration')[0] as { totalDurationMs?: number };
+  const fetched = getConversation(db, 'project-usage-duration-conversation') as { totalDurationMs?: number } | null;
+
+  assert.equal(listed.totalDurationMs, 52_000);
+  assert.equal(fetched?.totalDurationMs, 52_000);
+});
+
 test('conversation listing batches latest run summaries for large projects', () => {
   const db = createDb();
   insertProject(db, {

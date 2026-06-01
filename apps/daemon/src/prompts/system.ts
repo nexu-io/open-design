@@ -222,6 +222,62 @@ export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip 
 
 This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
 
+// Injected into non-media projects so the agent knows how to dispatch
+// media generation if the user asks for it mid-session (e.g. "generate an
+// image with fal"). Without this, agents in prototype/deck projects try to
+// call provider REST APIs directly and ask the user for keys that the daemon
+// already holds in .od/media-config.json.
+const MEDIA_DISPATCH_HINT = `
+
+---
+
+## Media generation (if asked)
+
+If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
+
+The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
+
+- \`OD_NODE_BIN\`   — absolute path to the Node runtime
+- \`OD_BIN\`        — absolute path to the OD CLI script
+- \`OD_PROJECT_ID\` — the active project id
+
+**Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (flux-pro-ultra ~60–180s, veo-3-fal longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
+
+Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, \`&\` operator). Uses \`python3\` for JSON parsing (do NOT use \`jq\`):
+
+\`\`\`bash
+# POSIX bash — do NOT convert to PowerShell
+out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
+  --project "$OD_PROJECT_ID" \\
+  --surface image \\
+  --model flux-pro-ultra \\
+  --prompt "..." \\
+  --aspect 16:9)
+ec=\$?
+if [ "\$ec" -ne 0 ]; then echo "\$out" >&2; exit "\$ec"; fi
+last=\$(printf '%s\\n' "\$out" | tail -1)
+task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
+since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
+since="\${since:-0}"
+while [ -n "\$task_id" ]; do
+  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  ec=\$?
+  last=\$(printf '%s\\n' "\$out" | tail -1)
+  since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
+  since="\${since:-0}"
+  if [ "\$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "\$ec" -ne 2 ]; then
+    echo "\$out" >&2; exit "\$ec"
+  fi
+done
+printf '%s\\n' "\$last"
+\`\`\`
+
+**Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
+
+For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+
 const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 
 ---
@@ -439,6 +495,21 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  // Skip the HTML-artifact discovery layer for media surfaces (image / video /
+  // audio). DISCOVERY_AND_PHILOSOPHY is ~3 000 tokens of rules about question
+  // forms, brand extraction, direction pickers, and HTML artifact checklist —
+  // none of which apply to media generation. Including it forces the agent to
+  // parse and override all of those rules before it can start, adding tokens
+  // and LLM inference time. The MEDIA_GENERATION_CONTRACT (pushed below) is
+  // the sole workflow authority for these surfaces.
+  const isMediaSurfaceEarly =
+    skillMode === 'image' ||
+    skillMode === 'video' ||
+    skillMode === 'audio' ||
+    metadata?.kind === 'image' ||
+    metadata?.kind === 'video' ||
+    metadata?.kind === 'audio';
+
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
@@ -450,9 +521,12 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  if (!isMediaSurfaceEarly) {
+    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+  }
+
   parts.push(
-    DISCOVERY_AND_PHILOSOPHY,
-    '\n\n---\n\n# Identity and workflow charter (background)\n\n',
+    '# Identity and workflow charter (background)\n\n',
     BASE_SYSTEM_PROMPT,
   );
 
@@ -614,6 +688,11 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution));
+  } else {
+    // Non-media projects (prototype, deck, etc.): inject a lightweight hint
+    // so the agent uses `od media generate` if the user asks for an image/video
+    // mid-session, rather than hunting for provider API keys in the environment.
+    parts.push(MEDIA_DISPATCH_HINT);
   }
 
   if (includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
@@ -959,10 +1038,10 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'image') {
     lines.push(
-      `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model to use)'}`,
+      `- **imageModel**: ${metadata.imageModel ?? 'gpt-image-2 (default — override if the user asks for a specific model or provider)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
+      `- **aspectRatio**: ${metadata.imageAspect ?? '1:1 (default — use 16:9 for landscape/outdoor scenes, 9:16 for portrait/vertical)'}`,
     );
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);

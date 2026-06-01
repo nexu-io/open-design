@@ -34,3 +34,85 @@
 /fa/plugins/*  /plugins/:splat  301
 /hu/plugins/*  /plugins/:splat  301
 /th/plugins/*  /plugins/:splat  301
+
+# ─────────────────────────────────────────────────────────────────────
+# Catalog migration: legacy /skills /systems /templates -> /plugins/*
+# The old Astro generators were removed; these 301s preserve inbound
+# links and SEO equity. Cloudflare matches first rule wins, so order is:
+# faceted/specific -> detail prefixes -> bare index -> locale variants.
+# trailingSlash:'always', so every source and target ends in '/'.
+# ─────────────────────────────────────────────────────────────────────
+
+# Faceted pages have no new equivalent -> degrade to the section landing.
+/skills/mode/*       /plugins/skills/    301
+/skills/scenario/*   /plugins/skills/    301
+/systems/category/*  /plugins/systems/   301
+
+# Systems detail: design-system-<folder> is the uniform new slug.
+# These 8 folders have no new detail page -> degrade (must precede splat).
+/systems/cisco/  /plugins/systems/  301
+/systems/hud/  /plugins/systems/  301
+/systems/loom/  /plugins/systems/  301
+/systems/perplexity/  /plugins/systems/  301
+/systems/slack/  /plugins/systems/  301
+/systems/trading-terminal/  /plugins/systems/  301
+/systems/webex/  /plugins/systems/  301
+/systems/wechat/  /plugins/systems/  301
+/systems/*  /plugins/design-system-:splat  301
+
+# Templates detail: example-<folder> is the uniform new slug.
+/templates/live-otd-operations-brief/  /plugins/templates/  301
+/templates/*  /plugins/example-:splat  301
+
+# Skills detail: only these 27 have a new artifact-template equivalent.
+# 'replicate' collides with design-system-replicate -> force the section.
+/skills/replicate/  /plugins/skills/  301
+/skills/article-magazine/  /plugins/example-article-magazine/  301
+/skills/card-twitter/  /plugins/example-card-twitter/  301
+/skills/card-xiaohongshu/  /plugins/example-card-xiaohongshu/  301
+/skills/data-report/  /plugins/example-data-report/  301
+/skills/deck-guizang-editorial/  /plugins/example-deck-guizang-editorial/  301
+/skills/deck-open-slide-canvas/  /plugins/example-deck-open-slide-canvas/  301
+/skills/deck-swiss-international/  /plugins/example-deck-swiss-international/  301
+/skills/design-brief/  /plugins/example-design-brief/  301
+/skills/doc-kami-parchment/  /plugins/example-doc-kami-parchment/  301
+/skills/frame-data-chart-nyt/  /plugins/example-frame-data-chart-nyt/  301
+/skills/frame-flowchart-sticky/  /plugins/example-frame-flowchart-sticky/  301
+/skills/frame-glitch-title/  /plugins/example-frame-glitch-title/  301
+/skills/frame-light-leak-cinema/  /plugins/example-frame-light-leak-cinema/  301
+/skills/frame-liquid-bg-hero/  /plugins/example-frame-liquid-bg-hero/  301
+/skills/frame-logo-outro/  /plugins/example-frame-logo-outro/  301
+/skills/frame-macos-notification/  /plugins/example-frame-macos-notification/  301
+/skills/hatch-pet/  /plugins/example-hatch-pet/  301
+/skills/mockup-device-3d/  /plugins/example-mockup-device-3d/  301
+/skills/poster-hero/  /plugins/example-poster-hero/  301
+/skills/ppt-keynote/  /plugins/example-ppt-keynote/  301
+/skills/pptx-html-fidelity-audit/  /plugins/example-pptx-html-fidelity-audit/  301
+/skills/resume-modern/  /plugins/example-resume-modern/  301
+/skills/social-reddit-card/  /plugins/example-social-reddit-card/  301
+/skills/social-spotify-card/  /plugins/example-social-spotify-card/  301
+/skills/social-x-post-card/  /plugins/example-social-x-post-card/  301
+/skills/vfx-text-cursor/  /plugins/example-vfx-text-cursor/  301
+/skills/video-hyperframes/  /plugins/example-video-hyperframes/  301
+# Remaining ~110 instruction-only skills have no detail page -> section.
+/skills/*  /plugins/skills/  301
+
+# Bare catalog index pages (least specific -> last).
+/skills/     /plugins/skills/     301
+/systems/    /plugins/systems/    301
+/templates/  /plugins/templates/  301
+
+# Locale-prefixed variants (active LANDING_LOCALES minus en: zh zh-tw ja ko).
+# Non-en pages are sitemap-excluded; degrade to the section (no detail precision).
+/zh/skills/*     /zh/plugins/skills/     301
+/zh/systems/*    /zh/plugins/systems/    301
+/zh/templates/*  /zh/plugins/templates/  301
+/zh-tw/skills/*     /zh-tw/plugins/skills/     301
+/zh-tw/systems/*    /zh-tw/plugins/systems/    301
+/zh-tw/templates/*  /zh-tw/plugins/templates/  301
+/ja/skills/*     /ja/plugins/skills/     301
+/ja/systems/*    /ja/plugins/systems/    301
+/ja/templates/*  /ja/plugins/templates/  301
+/ko/skills/*     /ko/plugins/skills/     301
+/ko/systems/*    /ko/plugins/systems/    301
+/ko/templates/*  /ko/plugins/templates/  301

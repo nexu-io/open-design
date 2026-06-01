@@ -573,11 +573,11 @@ async function runMediaWait(rawArgs) {
   const since = Number.isFinite(Number(flags.since))
     ? Number(flags.since)
     : 0;
-  await pollUntilDoneOrBudget(daemonUrl, taskId, since);
+  await pollUntilDoneOrBudget(daemonUrl, taskId, since, { totalBudgetMs: 120_000 });
 }
 
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
-  const totalBudgetMs = 25_000;
+  const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;
   const perCallTimeoutMs = 4_000;
   const stillRunningExitCode =
     typeof options.stillRunningExitCode === 'number'
