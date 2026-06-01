@@ -83,8 +83,10 @@ export interface ProjectExportManifestArtifact {
   updatedAt: string | null;
 }
 
+export const PROJECT_EXPORT_MANIFEST_SCHEMA = 'open-design.project-export-manifest.v1' as const;
+
 export interface ProjectExportManifestResponse {
-  schema: 'open-design.project-export-manifest.v1';
+  schema: typeof PROJECT_EXPORT_MANIFEST_SCHEMA;
   projectId: string;
   projectName: string | null;
   generatedAt: string;
@@ -124,4 +126,21 @@ export interface RenameProjectFileResponse {
   file: ProjectFile;
   oldName: string;
   newName: string;
+}
+
+export function buildProjectRawFileUrl(
+  baseUrl: string,
+  projectId: string,
+  filePath: unknown,
+): string | null {
+  if (typeof filePath !== 'string' || filePath.length === 0) return null;
+  const segments = filePath
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join('/');
+  if (segments.length === 0) return null;
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  return `${normalizedBaseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments}`;
 }
