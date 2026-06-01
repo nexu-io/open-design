@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+ html,body{margin:0;} body{background:#fff;font-family:var(--uni-font-sans);color:var(--uni-text-color);padding:18px 20px;box-sizing:border-box;}
+ .tag{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--uni-text-grey-2);}
+ /* canonical uni-app button */
+ .ub{position:relative;display:inline-block;padding:0 14px;font-size:15px;line-height:2.3;border-radius:5px;text-align:center;color:#000;background:#f8f8f8;border:0;cursor:pointer;box-sizing:border-box;}
+ .ub::after{content:"";position:absolute;inset:0;border:1px solid rgba(0,0,0,.2);border-radius:5px;pointer-events:none;}
+ .ub.primary{color:#fff;background:#007aff;} .ub.primary::after{border:0;}
+ .ub.warn{color:#fff;background:#e64340;} .ub.warn::after{border:0;}
+ .ub.dis{opacity:1;color:rgba(0,0,0,.3);background:#f7f7f7;}
+ .ub.primary.dis{background:rgba(0,122,255,.6);color:rgba(255,255,255,.6);}
+ .ub.plain{background:transparent;color:#353535;} .ub.plain::after{border-color:#353535;}
+ .ub.plain.primary{color:#007aff;} .ub.plain.primary::after{border-color:#007aff;}
+ .ub.mini{font-size:13px;line-height:2;padding:0 1.34em;}
+ 
+</style></head><body>
+<div style="background:#fff;border-radius:4px;width:100%;max-width:330px;position:relative;box-shadow:inset 0 0 0 .5px #c8c7cc;">
+ <div style="position:relative;padding:10px 15px;font-size:18px;">卡片标题 Card title<div style="position:absolute;left:0;right:0;bottom:0;height:1px;background:#c8c7cc;transform:scaleY(.5);"></div></div>
+ <div style="padding:15px;font-size:15px;color:#333;line-height:1.6;">前往插件市场，数千款组件、SDK 与模板，开箱即用。</div>
+ <div style="position:relative;padding:10px 15px;font-size:13px;color:#6d6d72;"><div style="position:absolute;left:0;right:0;top:0;height:1px;background:#c8c7cc;transform:scaleY(.5);"></div>ext.dcloud.net.cn</div>
+</div></body></html>

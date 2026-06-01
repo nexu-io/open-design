@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;}
+  body{background:#fff;color:var(--uni-text-color);font-family:var(--uni-font-sans);padding:18px 20px;box-sizing:border-box;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .wrap{display:flex;flex-wrap:wrap;gap:10px;}
+  .sw{width:64px;height:64px;border-radius:6px;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);}
+  .chip{display:flex;flex-direction:column;gap:5px;font-size:11px;}
+  .chip code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--uni-text-grey-2);font-size:10.5px;}
+  .lbl{font-weight:600;color:var(--uni-text-title);font-size:12px;}
+  
+</style>
+</head>
+<body>
+<div class="wrap" style="align-items:flex-end">
+<div class="chip"><div class="sw" style="background:#000000"></div><span class="lbl">Title</span><code>#000000</code></div>
+<div class="chip"><div class="sw" style="background:#333333"></div><span class="lbl">Body</span><code>#333333</code></div>
+<div class="chip"><div class="sw" style="background:#353535"></div><span class="lbl">Plain</span><code>#353535</code></div>
+<div class="chip"><div class="sw" style="background:#8f8f94"></div><span class="lbl">Grey</span><code>#8f8f94</code></div>
+<div class="chip"><div class="sw" style="background:#999999"></div><span class="lbl">Tertiary</span><code>#999999</code></div>
+<div class="chip"><div class="sw" style="background:#b2b2b2"></div><span class="lbl">Placeholder</span><code>#b2b2b2</code></div>
+</div>
+</body>
+</html>

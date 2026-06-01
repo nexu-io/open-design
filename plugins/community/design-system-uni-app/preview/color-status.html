@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;}
+  body{background:#fff;color:var(--uni-text-color);font-family:var(--uni-font-sans);padding:18px 20px;box-sizing:border-box;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .wrap{display:flex;flex-wrap:wrap;gap:10px;}
+  .sw{width:64px;height:64px;border-radius:6px;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);}
+  .chip{display:flex;flex-direction:column;gap:5px;font-size:11px;}
+  .chip code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--uni-text-grey-2);font-size:10.5px;}
+  .lbl{font-weight:600;color:var(--uni-text-title);font-size:12px;}
+  
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="chip"><div class="sw" style="background:#4cd964"></div><span class="lbl">Success</span><code>#4cd964</code></div>
+<div class="chip"><div class="sw" style="background:#09bb07"></div><span class="lbl">Success alt</span><code>#09bb07</code></div>
+<div class="chip"><div class="sw" style="background:#f0ad4e"></div><span class="lbl">Warning</span><code>#f0ad4e</code></div>
+<div class="chip"><div class="sw" style="background:#ffb400"></div><span class="lbl">Star</span><code>#ffb400</code></div>
+<div class="chip"><div class="sw" style="background:#dd524d"></div><span class="lbl">Danger</span><code>#dd524d</code></div>
+<div class="chip"><div class="sw" style="background:#f76260"></div><span class="lbl">Danger alt</span><code>#f76260</code></div>
+<div class="chip"><div class="sw" style="background:#8a6de9"></div><span class="lbl">Royal</span><code>#8a6de9</code></div>
+</div>
+</body>
+</html>

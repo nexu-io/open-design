@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+ html,body{margin:0;} body{background:#fff;font-family:var(--uni-font-sans);color:var(--uni-text-color);padding:18px 20px;box-sizing:border-box;}
+ .tag{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--uni-text-grey-2);}
+ /* canonical uni-app button */
+ .ub{position:relative;display:inline-block;padding:0 14px;font-size:15px;line-height:2.3;border-radius:5px;text-align:center;color:#000;background:#f8f8f8;border:0;cursor:pointer;box-sizing:border-box;}
+ .ub::after{content:"";position:absolute;inset:0;border:1px solid rgba(0,0,0,.2);border-radius:5px;pointer-events:none;}
+ .ub.primary{color:#fff;background:#007aff;} .ub.primary::after{border:0;}
+ .ub.warn{color:#fff;background:#e64340;} .ub.warn::after{border:0;}
+ .ub.dis{opacity:1;color:rgba(0,0,0,.3);background:#f7f7f7;}
+ .ub.primary.dis{background:rgba(0,122,255,.6);color:rgba(255,255,255,.6);}
+ .ub.plain{background:transparent;color:#353535;} .ub.plain::after{border-color:#353535;}
+ .ub.plain.primary{color:#007aff;} .ub.plain.primary::after{border-color:#007aff;}
+ .ub.mini{font-size:13px;line-height:2;padding:0 1.34em;}
+ 
+</style></head><body>
+<div style="display:flex;flex-direction:column;gap:12px;">
+ <div style="display:flex;gap:10px;"><button class="ub plain primary">Primary plain</button><button class="ub plain">Default plain</button></div>
+ <div style="display:flex;gap:8px;align-items:center;"><button class="ub mini primary">mini</button><button class="ub mini">mini</button><button class="ub mini warn">mini</button><span class="tag">size=mini · 13px</span></div>
+</div></body></html>

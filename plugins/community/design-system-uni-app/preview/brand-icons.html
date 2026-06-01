@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uni-app iconography preview</title>
+  <link rel="stylesheet" href="../colors_and_type.css">
+  <link rel="stylesheet" href="../ui_kits/hello-uniapp/uniicons.css">
+  <style>
+    html,
+    body {
+      margin: 0;
+    }
+
+    body {
+      box-sizing: border-box;
+      background: #fff;
+      color: var(--uni-text-color);
+      font-family: var(--uni-font-sans);
+      padding: 20px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border: .5px solid var(--uni-line);
+      border-radius: var(--uni-radius-card);
+      background: var(--uni-bg-card);
+    }
+
+    .panel::after,
+    .cell::after,
+    .tabbar::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      background: var(--uni-line);
+      transform: scaleY(.5);
+      transform-origin: bottom;
+      pointer-events: none;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px 12px;
+      border-bottom: .5px solid var(--uni-line-soft);
+    }
+
+    .eyebrow {
+      margin: 0 0 5px;
+      color: var(--uni-text-grey);
+      font-size: var(--uni-text-xs);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      color: var(--uni-text-title);
+      font-size: 26px;
+      line-height: 1.25;
+    }
+
+    h2 {
+      color: var(--uni-text-title);
+      font-size: 16px;
+      line-height: 1.4;
+    }
+
+    .note {
+      margin-top: 6px;
+      color: var(--uni-text-grey);
+      font-size: var(--uni-text-sm);
+      line-height: 1.55;
+    }
+
+    .code {
+      border-radius: 3px;
+      background: var(--uni-bg-grey);
+      color: var(--uni-text-plain);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      padding: 2px 5px;
+      white-space: nowrap;
+    }
+
+    .icon-cloud {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 0;
+      padding: 0 8px 8px;
+    }
+
+    .glyph {
+      min-height: 76px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-right: .5px solid var(--uni-line-soft);
+      border-bottom: .5px solid var(--uni-line-soft);
+      color: var(--uni-text-grey);
+    }
+
+    .glyph:nth-child(8n) {
+      border-right: 0;
+    }
+
+    .glyph .uni-icon {
+      color: var(--uni-text-color);
+      font-size: 25px;
+    }
+
+    .glyph strong {
+      color: var(--uni-text-grey);
+      font-size: 10px;
+      font-weight: var(--uni-weight-normal);
+      line-height: 1;
+    }
+
+    .rules {
+      display: grid;
+      gap: 0;
+    }
+
+    .cell {
+      position: relative;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+    }
+
+    .cell:last-child::after {
+      display: none;
+    }
+
+    .cell-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--uni-radius);
+      background: var(--uni-bg-grey);
+      color: var(--uni-text-color);
+      font-size: 22px;
+    }
+
+    .cell-title {
+      color: var(--uni-text-title);
+      font-size: var(--uni-text-base);
+      font-weight: var(--uni-weight-medium);
+      line-height: 1.4;
+    }
+
+    .cell-text {
+      margin-top: 2px;
+      color: var(--uni-text-grey);
+      font-size: var(--uni-text-xs);
+      line-height: 1.45;
+    }
+
+    .status-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 16px 18px 18px;
+    }
+
+    .status {
+      min-height: 84px;
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+      align-content: center;
+      border: .5px solid var(--uni-line-soft);
+      border-radius: var(--uni-radius-card);
+      background: var(--uni-bg-card);
+      color: var(--uni-text-grey);
+      font-size: var(--uni-text-xs);
+    }
+
+    .status .uni-icon {
+      font-size: 26px;
+    }
+
+    .status.primary .uni-icon { color: var(--uni-primary); }
+    .status.success .uni-icon { color: var(--uni-success); }
+    .status.warning .uni-icon { color: var(--uni-warning-icon); }
+    .status.danger .uni-icon { color: var(--uni-danger); }
+
+    .tabbar {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: var(--uni-tabbar-bg);
+    }
+
+    .tab {
+      display: flex;
+      min-height: 54px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      color: var(--uni-tabbar-text);
+      font-size: 10px;
+      line-height: 1.1;
+    }
+
+    .tab img {
+      width: 24px;
+      height: 24px;
+      display: block;
+      object-fit: contain;
+    }
+
+    .tab.active {
+      color: var(--uni-tabbar-active);
+    }
+
+    .asset-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 14px 16px 16px;
+    }
+
+    .asset {
+      display: grid;
+      justify-items: center;
+      gap: 7px;
+      border: .5px solid var(--uni-line-soft);
+      border-radius: var(--uni-radius-card);
+      background: #fff;
+      padding: 12px 8px 10px;
+      color: var(--uni-text-grey);
+      font-size: 10px;
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    .asset-pair {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 28px;
+    }
+
+    .asset-pair img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .specimen {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    .caption {
+      padding: 10px 16px 14px;
+      color: var(--uni-text-grey-2);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.45;
+      border-top: .5px solid var(--uni-line-soft);
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding: 14px;
+      }
+
+      .hero,
+      .status-row,
+      .asset-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .icon-cloud {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .glyph:nth-child(8n) {
+        border-right: .5px solid var(--uni-line-soft);
+      }
+
+      .glyph:nth-child(4n) {
+        border-right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" aria-label="uni-app iconography summary">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Iconography</p>
+            <h1>uniicons is the default UI glyph system</h1>
+            <p class="note">Use the bundled icon font for controls, navigation, social and media actions. Keep icons monochrome in component chrome; reserve blue/status colors for active or semantic states.</p>
+          </div>
+          <span class="code">fonts/uni.ttf</span>
+        </div>
+
+        <div class="icon-cloud">
+          <div class="glyph"><i class="uni-icon uni-icon-back"></i><strong>back</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-forward"></i><strong>forward</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-search"></i><strong>search</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-close"></i><strong>close</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-clear"></i><strong>clear</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-plus"></i><strong>plus</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-checkmarkempty"></i><strong>check</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-more"></i><strong>more</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-home"></i><strong>home</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-list"></i><strong>list</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-gear"></i><strong>gear</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-paperplane"></i><strong>send</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-star"></i><strong>star</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-location"></i><strong>location</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-camera"></i><strong>camera</strong></div>
+          <div class="glyph"><i class="uni-icon uni-icon-scan"></i><strong>scan</strong></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Usage rules</p>
+            <h2>Native, flat, functional</h2>
+            <p class="note">No substitute icon set unless the glyph is missing. No emoji in product UI.</p>
+          </div>
+        </div>
+        <div class="rules">
+          <div class="cell">
+            <i class="cell-icon uni-icon uni-icon-compose"></i>
+            <div>
+              <div class="cell-title">Use glyphs as text</div>
+              <div class="cell-text"><span class="code">class="uni-icon uni-icon-search"</span> renders through the bundled font.</div>
+            </div>
+          </div>
+          <div class="cell">
+            <i class="cell-icon uni-icon uni-icon-arrowright"></i>
+            <div>
+              <div class="cell-title">List affordances stay grey</div>
+              <div class="cell-text">Chevrons and passive controls use <span class="code">#bbbbbb</span> / secondary text, not action blue.</div>
+            </div>
+          </div>
+          <div class="cell">
+            <i class="cell-icon uni-icon uni-icon-star-filled"></i>
+            <div>
+              <div class="cell-title">Semantic color is explicit</div>
+              <div class="cell-text">Active, rating, validation and destructive moments may use primary or status tokens.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="semantic icon color examples">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">State color</p>
+          <h2>Color only when the icon carries state</h2>
+        </div>
+        <span class="code">primary / success / warning / danger</span>
+      </div>
+      <div class="status-row">
+        <div class="status primary"><i class="uni-icon uni-icon-info-filled"></i><span>info · #007aff</span></div>
+        <div class="status success"><i class="uni-icon uni-icon-checkbox-filled"></i><span>success · #4cd964</span></div>
+        <div class="status warning"><i class="uni-icon uni-icon-star-filled"></i><span>rating · #ffbe00</span></div>
+        <div class="status danger"><i class="uni-icon uni-icon-close-filled"></i><span>danger · #dd524d</span></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="tabbar raster icon assets">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Raster tab icons</p>
+          <h2>Tab bar uses PNG normal / active pairs</h2>
+          <p class="note">This follows Mini-Program conventions: font icons for in-page UI, raster image pairs for bottom tabs.</p>
+        </div>
+        <span class="code">assets/tab-*.png</span>
+      </div>
+      <div class="tabbar">
+        <div class="tab active">
+          <img src="../assets/tab-component-active.png" alt="">
+          <span>内置组件</span>
+        </div>
+        <div class="tab">
+          <img src="../assets/tab-api.png" alt="">
+          <span>接口</span>
+        </div>
+        <div class="tab">
+          <img src="../assets/tab-extui.png" alt="">
+          <span>扩展组件</span>
+        </div>
+        <div class="tab">
+          <img src="../assets/tab-template.png" alt="">
+          <span>模板</span>
+        </div>
+      </div>
+      <div class="asset-grid">
+        <div class="asset">
+          <div class="asset-pair"><img src="../assets/tab-component.png" alt=""><img src="../assets/tab-component-active.png" alt=""></div>
+          <span>component</span>
+        </div>
+        <div class="asset">
+          <div class="asset-pair"><img src="../assets/tab-api.png" alt=""><img src="../assets/tab-api-active.png" alt=""></div>
+          <span>api</span>
+        </div>
+        <div class="asset">
+          <div class="asset-pair"><img src="../assets/tab-extui.png" alt=""><img src="../assets/tab-extui-active.png" alt=""></div>
+          <span>extui</span>
+        </div>
+        <div class="asset">
+          <div class="asset-pair"><img src="../assets/tab-template.png" alt=""><img src="../assets/tab-template-active.png" alt=""></div>
+          <span>template</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="complete uniicons specimen">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Complete specimen</p>
+          <h2>Original captured glyph sheet</h2>
+          <p class="note">Preserved from the imported source evidence; use as the exhaustive visual reference.</p>
+        </div>
+        <span class="code">preview/icon-specimen.png</span>
+      </div>
+      <img class="specimen" src="icon-specimen.png" alt="uniicons icon font specimen">
+      <div class="caption">Source assets are preserved byte-for-byte. Do not redraw, optimize or substitute this sheet when packaging the design system.</div>
+    </section>
+  </main>
+</body>
+</html>

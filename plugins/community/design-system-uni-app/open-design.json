@@ -1,0 +1,97 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-uni-app",
+  "title": "uni-app",
+  "version": "0.1.0",
+  "description": "DCloud uni-app / Hello uni-app design system: WeUI-style mobile components, iOS-blue action states, flat hairline structure, system typography, bundled uniicons, tab-bar assets, preview cards, and a high-fidelity Hello uni-app UI kit.",
+  "license": "MIT",
+  "author": {
+    "name": "kqwqk",
+    "url": "https://github.com/kqwqk"
+  },
+  "homepage": "https://github.com/kqwqk/design-system-uni-app",
+  "tags": [
+    "design-system",
+    "community",
+    "design",
+    "mobile",
+    "developer-tools",
+    "weui",
+    "mini-program",
+    "uni-app"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the uni-app design system. Stay faithful to its WeUI-style mobile idiom, #007aff action color, flat hairline layout, system typography, uniicons icon font, tab-bar asset rules, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用 uni-app 设计系统生成一个 {{artifactKind}}。严格遵循 DESIGN.md 中记录的 WeUI / 小程序移动端语汇、#007aff 主操作色、扁平 hairline 结构、系统字体、uniicons 图标字体、tabbar 资源规则和组件规范。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen",
+          "mobile prototype"
+        ],
+        "default": "app screen"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page or screen communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md",
+        "./README.md",
+        "./colors_and_type.css",
+        "./ui_kits/hello-uniapp/README.md",
+        "./ui_kits/hello-uniapp/kit.css",
+        "./ui_kits/hello-uniapp/uniicons.css",
+        "./NOTICE.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  },
+  "plugin": {
+    "repo": "https://github.com/kqwqk/design-system-uni-app"
+  }
+}

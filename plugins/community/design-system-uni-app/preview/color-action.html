@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;}
+  body{background:#fff;color:var(--uni-text-color);font-family:var(--uni-font-sans);padding:18px 20px;box-sizing:border-box;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .wrap{display:flex;flex-wrap:wrap;gap:10px;}
+  .sw{width:64px;height:64px;border-radius:6px;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);}
+  .chip{display:flex;flex-direction:column;gap:5px;font-size:11px;}
+  .chip code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--uni-text-grey-2);font-size:10.5px;}
+  .lbl{font-weight:600;color:var(--uni-text-title);font-size:12px;}
+  
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="chip"><div class="sw" style="background: #007aff"></div><span class="lbl">Primary</span><code> #007aff</code></div>
+<div class="chip"><div class="sw" style="background:#0062cc"></div><span class="lbl">Primary press</span><code>#0062cc</code></div>
+<div class="chip"><div class="sw" style="background:#10aeff"></div><span class="lbl">Info</span><code>#10aeff</code></div>
+<div class="chip"><div class="sw" style="background:#e64340"></div><span class="lbl">Warn btn</span><code>#e64340</code></div>
+<div class="chip"><div class="sw" style="background:#ce3c39"></div><span class="lbl">Warn press</span><code>#ce3c39</code></div>
+</div>
+</body>
+</html>
