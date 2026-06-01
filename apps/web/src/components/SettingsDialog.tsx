@@ -94,6 +94,7 @@ import { McpClientSection } from './McpClientSection';
 import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
+import { ProjectLocationsSection } from './ProjectLocationsSection';
 import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import { MemoryModelInline } from './MemoryModelInline';
@@ -135,6 +136,7 @@ export type SettingsSection =
   | 'pet'
   | 'skills'
   | 'designSystems'
+  | 'projectLocations'
   | 'memory'
   | 'privacy'
   // 'library' is consumed by the EntryShell library route — App opens it
@@ -194,6 +196,7 @@ interface Props {
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  onProjectsRefresh?: () => Promise<void> | void;
   /**
    * Notified by Settings → Skills after a successful skill registry
    * mutation (create / edit / delete). App.tsx uses this to drop preview
@@ -835,6 +838,7 @@ export function SettingsDialog({
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
+  onProjectsRefresh,
   onSkillsChanged,
   onDesignSystemsChanged,
   providerModelsCache: sharedProviderModelsCache,
@@ -2034,6 +2038,10 @@ export function SettingsDialog({
       title: t('settings.designSystems'),
       subtitle: t('settings.designSystemsHint'),
     },
+    projectLocations: {
+      title: t('settings.projectLocations'),
+      subtitle: t('settings.projectLocationsHint'),
+    },
     memory: { title: t('settings.memory'), subtitle: t('settings.memoryHint') },
     // 'library' is opened via EntryShell route — SettingsDialog doesn't
     // render it but SettingsSection must accept the token (see type def).
@@ -2463,6 +2471,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.designSystems')}</strong>
                 <small>{t('settings.designSystemsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'projectLocations' ? ' active' : ''}`}
+              onClick={() => setActiveSection('projectLocations')}
+            >
+              <Icon name="folder" size={18} />
+              <span>
+                <strong>{t('settings.projectLocations')}</strong>
+                <small>{t('settings.projectLocationsHint')}</small>
               </span>
             </button>
             <button
@@ -3662,6 +3681,10 @@ export function SettingsDialog({
               setCfg={setCfg}
               onDesignSystemsChanged={onDesignSystemsChanged}
             />
+          ) : null}
+
+          {activeSection === 'projectLocations' ? (
+            <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
           ) : null}
 
           {activeSection === 'instructions' ? (

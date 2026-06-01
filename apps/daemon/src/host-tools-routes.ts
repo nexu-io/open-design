@@ -15,6 +15,7 @@
 
 import { spawn } from 'node:child_process';
 import { access, constants as fsConstants } from 'node:fs/promises';
+import path from 'node:path';
 import type { Express } from 'express';
 import type {
   HostEditor,
@@ -159,6 +160,28 @@ function applicableForPlatform(entry: CatalogueEntry, platform: Platform): boole
   return true;
 }
 
+function projectHostOpenDir(
+  projectsRoot: string,
+  project: { id: string; metadata?: { baseDir?: unknown } | null },
+  resolveProjectDir: (
+    projectsRoot: string,
+    projectId: string,
+    metadata?: unknown,
+    opts?: { allowUnavailableSandboxImportedProject?: boolean },
+  ) => string,
+): string {
+  const importedBaseDir =
+    typeof project.metadata?.baseDir === 'string'
+      ? path.normalize(project.metadata.baseDir)
+      : '';
+  if (importedBaseDir && path.isAbsolute(importedBaseDir)) {
+    return importedBaseDir;
+  }
+  return resolveProjectDir(projectsRoot, project.id, project.metadata, {
+    allowUnavailableSandboxImportedProject: true,
+  });
+}
+
 export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
@@ -209,7 +232,11 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const resolvedDir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+      const resolvedDir = projectHostOpenDir(
+        PROJECTS_DIR,
+        project,
+        resolveProjectDir,
+      );
       const probe = await resolveEntry(entry);
       if (!probe.available || !probe.launch) {
         return sendApiError(res, 409, 'EDITOR_NOT_AVAILABLE', `${entry.label} is not installed`);

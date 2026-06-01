@@ -87,6 +87,19 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
   });
 
+  it('keeps non-sandbox NO_PROXY behavior unchanged', () => {
+    const env = createAgentRuntimeEnv(
+      { PATH: '/bin', HTTP_PROXY: 'http://127.0.0.1:9', NO_PROXY: '' },
+      'http://127.0.0.1:7456',
+      { token: 'fresh-token' },
+      '/opt/open-design/bin/node',
+    );
+
+    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:9');
+    expect(env.NO_PROXY).toBe('');
+    expect(env.no_proxy).toBeUndefined();
+  });
+
   it('passes the daemon sidecar IPC path from the explicit base env into agent wrapper sessions', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/daemon.sock' },

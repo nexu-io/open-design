@@ -23,6 +23,7 @@ const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
+const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
@@ -169,6 +170,14 @@ export function Header({
                     </span>
                   </a>
                 </li>
+                <li role='none'>
+                  <a role='menuitem' href={AMR_URL}>
+                    <span className='dropdown-name'>{productMenuCopy.amrName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.amrBlurb}
+                    </span>
+                  </a>
+                </li>
                 {/* Tutorials is a top-level nav item (see Library section
                   below). Don't list it here too — duplicating it once at
                   Product/Tutorials and again at top-level confuses users
@@ -227,15 +236,6 @@ export function Header({
                     className={linkClass('systems')}
                   >
                     <span className='dropdown-name'>{headerCopy.nav.systems}</span>
-                  </a>
-                </li>
-                <li role='none'>
-                  <a
-                    role='menuitem'
-                    href={href('/plugins/craft/')}
-                    className={linkClass('craft')}
-                  >
-                    <span className='dropdown-name'>{headerCopy.nav.craft}</span>
                   </a>
                 </li>
               </ul>
@@ -308,16 +308,18 @@ export function Header({
             </svg>
           </a>
           <a
-            className='nav-cta ghost'
-            href={REPO_RELEASES}
-            aria-label={headerCopy.downloadAria}
-            title={headerCopy.downloadTitle}
-            {...ext}
+            className='nav-amr'
+            href={AMR_URL}
+            aria-label={`${productMenuCopy.amrName}: ${productMenuCopy.amrBlurb}`}
           >
-            {headerCopy.download}
+            <img src='/amr-logo.svg' alt='' width={28} height={28} aria-hidden='true' />
+            <span className='nav-amr-copy'>
+              <span className='nav-amr-title'>AMR</span>
+              <span className='nav-amr-kicker'>{productMenuCopy.amrKicker}</span>
+            </span>
           </a>
           <a
-            className='nav-cta'
+            className='nav-cta ghost is-star'
             href={REPO}
             aria-label={headerCopy.starAria}
             title={headerCopy.starTitle}
@@ -325,6 +327,17 @@ export function Header({
           >
             {headerCopy.starPrefix} ·{' '}
             <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
+          </a>
+          <a
+            className='nav-cta is-download'
+            href={REPO_RELEASES}
+            aria-label={headerCopy.downloadAria}
+            title={headerCopy.downloadTitle}
+            data-download-cta
+            {...ext}
+          >
+            {headerCopy.download}
+            <span className='download-arch' data-download-arch hidden />
           </a>
           <span className='status-dot' aria-hidden='true' />
         </div>

@@ -158,6 +158,8 @@ describe('InlineModelSwitcher AMR row', () => {
     fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
 
     const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(within(popover).getByTestId('inline-model-switcher-open-settings')).toBeTruthy();
+    expect(within(popover).getByRole('button', { name: /settings/i })).toBeTruthy();
     const amrButton = await within(popover).findByRole('radio', {
       name: /^AMR\s+Sign in$/i,
     });

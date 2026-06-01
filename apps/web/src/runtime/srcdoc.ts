@@ -846,6 +846,21 @@ function injectSelectionBridge(
   // brackets (close the <style> tag), and newlines (defense in depth).
   var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
   function active(){ return commentEnabled || inspectEnabled; }
+  function deckSlideIndexForPayload(){
+    try {
+      var state = window.__odDeckSlideState && window.__odDeckSlideState();
+      if (state && typeof state.active === 'number' && state.count > 1) return state.active;
+    } catch (_) {}
+    return null;
+  }
+  function elementVisibleForComment(el, rect){
+    if (!el || !rect || rect.width <= 0 || rect.height <= 0) return false;
+    try {
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+    } catch (_) {}
+    return true;
+  }
   function esc(value){ try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); } catch (_) { return String(value); } }
   // Recompute the selector from elementId rather than trusting the one in
   // the inbound message — a forged selector like
@@ -1077,6 +1092,7 @@ function meaningfulDomFallbackTarget(el) {
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
     var position = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    if (!elementVisibleForComment(el, position)) return null;
     var payload = {
       type: 'od:comment-target',
       elementId: id,
@@ -1087,6 +1103,8 @@ function meaningfulDomFallbackTarget(el) {
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
+    var slideIndex = deckSlideIndexForPayload();
+    if (typeof slideIndex === 'number') payload.slideIndex = slideIndex;
     if (clickPoint) {
       payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
     }
@@ -1124,6 +1142,29 @@ function meaningfulDomFallbackTarget(el) {
   var activeCommentSelector = null;
   function previewScrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function previewScrollBy(left, top){
+    var dx = Number(left || 0);
+    var dy = Number(top || 0);
+    if (!Number.isFinite(dx)) dx = 0;
+    if (!Number.isFinite(dy)) dy = 0;
+    if (!dx && !dy) return;
+    var el = previewScrollElement();
+    if (!el) return;
+    try {
+      if (typeof el.scrollBy === 'function') el.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+      else {
+        el.scrollLeft = (el.scrollLeft || 0) + dx;
+        el.scrollTop = (el.scrollTop || 0) + dy;
+      }
+    } catch (_) {
+      try {
+        el.scrollLeft = (el.scrollLeft || 0) + dx;
+        el.scrollTop = (el.scrollTop || 0) + dy;
+      } catch (__) {}
+    }
+    schedulePostTargets();
+    schedulePostPreviewScroll();
   }
   function postPreviewScroll(){
     var el = previewScrollElement();
@@ -1322,6 +1363,11 @@ function meaningfulDomFallbackTarget(el) {
       schedulePostActiveCommentTarget();
       return;
     }
+    if (data.type === 'od:preview-scroll-by') {
+      previewScrollBy(data.left, data.top);
+      return;
+    }
+
     if (data.type === 'od:inspect-mode') {
       inspectEnabled = !!data.enabled;
       document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
@@ -1437,9 +1483,9 @@ function meaningfulDomFallbackTarget(el) {
     var pinX = Math.round(ev.clientX);
     var pinY = Math.round(ev.clientY);
     var pinId = 'pin-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
-    window.parent.postMessage({
+    var pinSlideIndex = deckSlideIndexForPayload();
+    var pinPayload = {
       type: 'od:comment-target',
-      elementId: pinId,
       // Synthetic selector / label so daemon upsert validation (which
       // requires both to be non-empty) accepts the saved free-pin.
       selector: '[data-od-pin="' + pinId + '"]',
@@ -1450,7 +1496,10 @@ function meaningfulDomFallbackTarget(el) {
       htmlHint: '',
       style: null,
       freePin: true
-    }, '*');
+    };
+    pinPayload.elementId = pinId;
+    if (typeof pinSlideIndex === 'number') pinPayload.slideIndex = pinSlideIndex;
+    window.parent.postMessage(pinPayload, '*');
   }, true);
   // Pod drawing — only active in comment mode with the 'pod' tool.
   document.addEventListener('pointerdown', function(ev){
@@ -1489,7 +1538,9 @@ function meaningfulDomFallbackTarget(el) {
     schedulePostPreviewScroll();
   }, true);
   var mo = new MutationObserver(schedulePostTargets);
-  mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+  mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
+  var textMo = new MutationObserver(schedulePostActiveCommentTarget);
+  textMo.observe(document.documentElement, { subtree: true, characterData: true });
   // Reflect the host-requested initial modes on the documentElement so
   // the cursor/hover styles match what the bridge picks up on click.
   if (commentEnabled) document.documentElement.toggleAttribute('data-od-comment-mode', true);
@@ -1505,6 +1556,7 @@ function meaningfulDomFallbackTarget(el) {
   setTimeout(requestPreviewScrollRestore, 0);
   setTimeout(requestPreviewScrollRestore, 80);
   setTimeout(requestPreviewScrollRestore, 240);
+  window.__odScheduleCommentTargets = schedulePostTargets;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
   else setTimeout(postTargets, 0);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
@@ -1875,6 +1927,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     for (var k = 0; k < n; k++) dispatchKey(key);
     setTimeout(report, 320);
   }
+  var lastCommentTargetSlideIndex = -1;
   function report(){
     try {
       var list = slides();
@@ -1896,8 +1949,18 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
         if (el.querySelector('span,.bar')) return;
         el.style.width=progressWidth;
       });
+      if (i !== lastCommentTargetSlideIndex) {
+        lastCommentTargetSlideIndex = i;
+        try {
+          if (typeof window.__odScheduleCommentTargets === 'function') window.__odScheduleCommentTargets();
+        } catch (_) {}
+      }
     } catch (e) {}
   }
+  window.__odDeckSlideState = function(){
+    var list = slides();
+    return { active: activeIndex(list), count: list.length };
+  };
   function restoreInitialSlide(){
     if (didRestoreInitialSlide) { report(); return; }
     var list = slides();

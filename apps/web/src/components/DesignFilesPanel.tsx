@@ -766,7 +766,12 @@ export function DesignFilesPanel({
               }}
             >
               <span className="df-row-name-wrap">
-                <span className="df-row-name">{currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}</span>
+                <span
+                  className="df-row-name"
+                  title={currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}
+                >
+                  {currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}
+                </span>
                 <span className="df-row-sub">{humanBytes(f.size)}</span>
               </span>
             </button>
@@ -828,7 +833,7 @@ export function DesignFilesPanel({
         <td className="df-cell-name df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
           <button type="button" className="df-row-name-btn" onClick={() => setCurrentDir(fullPath)}>
             <span className="df-row-name-wrap">
-              <span className="df-row-name">{dirName}</span>
+              <span className="df-row-name" title={dirName}>{dirName}</span>
               <span className="df-row-sub">{t('designFiles.folderCount', { n: count })}</span>
             </span>
           </button>
@@ -1240,7 +1245,9 @@ export function DesignFilesPanel({
                         ◉
                       </span>
                       <span className="df-row-name-wrap">
-                        <span className="df-row-name">{artifact.title}</span>
+                        <span className="df-row-name" title={artifact.title}>
+                          {artifact.title}
+                        </span>
                         <span className="df-row-sub">
                           <span>{t('designFiles.kindLiveArtifact')}</span>
                           <LiveArtifactBadges

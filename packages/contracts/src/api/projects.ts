@@ -115,6 +115,9 @@ export interface ProjectMetadata {
   // directly inside the user's folder. Stored as the realpath() result so
   // symlinks can't redirect writes after import time.
   baseDir?: string;
+  // Project library location that owns baseDir when the project was created
+  // under a configured project location root.
+  projectLocationId?: string;
   // PR #974: marker stamped by the daemon's HMAC-gated import handler
   // when a folder import passed the desktop-main-process trust gate.
   // Only set on folder-imported projects (`baseDir` set) and only when
@@ -195,6 +198,7 @@ export interface Conversation {
   title: string | null;
   createdAt: number;
   updatedAt: number;
+  totalDurationMs?: number;
   latestRun?: {
     status: ChatRunStatus;
     startedAt?: number;
@@ -205,6 +209,8 @@ export interface Conversation {
 
 export interface CreateProjectRequest {
   name: string;
+  /** Optional project library location id. Omit or use `default` for .od/projects. */
+  projectLocationId?: string;
   skillId?: string | null;
   designSystemId?: string | null;
   pendingPrompt?: string;
@@ -248,6 +254,39 @@ export interface ProjectDetailResponse extends ProjectResponse {
 export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
   appliedPluginSnapshotId?: string;
+}
+
+export interface ProjectLocation {
+  id: string;
+  name: string;
+  path: string;
+  builtIn?: boolean;
+}
+
+export interface ProjectLocationsResponse {
+  locations: ProjectLocation[];
+  removedProjectIds?: string[];
+}
+
+export interface UpdateProjectLocationsRequest {
+  locations: Array<{ id?: string; name?: string; path: string }>;
+}
+
+export interface ProjectManifest {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  skillId?: string | null;
+  designSystemId?: string | null;
+}
+
+export interface ScanProjectLocationsResponse {
+  scanned: number;
+  imported: Project[];
+  existing: string[];
+  skipped: Array<{ path: string; reason: string }>;
 }
 
 // POST /api/import/folder — create a project rooted at an existing local

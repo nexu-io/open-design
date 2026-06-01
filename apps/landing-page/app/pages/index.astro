@@ -226,6 +226,89 @@ const pageHtml = renderToStaticMarkup(
           return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
         };
 
+        // Best-effort OS + arch detection so the download CTAs point straight
+        // at the matching installer instead of bouncing through the releases
+        // page.
+        //
+        // Release assets are named (see the v0.x GitHub release):
+        //   open-design-<ver>-mac-arm64.dmg     Apple Silicon
+        //   open-design-<ver>-mac-x64.dmg       Intel Mac
+        //   open-design-<ver>-win-x64-setup.exe Windows
+        // There is no Linux artifact, so Linux/unknown leaves the CTA's
+        // pre-rendered releases-page href untouched.
+        //
+        // arm64 vs x64 on macOS is NOT reliably exposed to the browser
+        // (Safari hides CPU arch). We sniff the WebGL renderer for an Intel/AMD
+        // GPU and otherwise DEFAULT TO arm64, since every Mac shipped since
+        // late 2020 is Apple Silicon. Intel-Mac holdouts can still grab the x64
+        // build from the releases page.
+        const detectPlatform = () => {
+          const ua = (navigator.userAgent || '').toLowerCase();
+          const uaPlatform = (
+            (navigator.userAgentData && navigator.userAgentData.platform) ||
+            navigator.platform ||
+            ''
+          ).toLowerCase();
+          const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
+          const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
+          const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
+          if (isWindows) return { os: 'Windows', arch: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
+          if (isMac) {
+            const isIntel = (() => {
+              try {
+                const gl = document.createElement('canvas').getContext('webgl');
+                const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+                const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+                return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
+              } catch {
+                return false;
+              }
+            })();
+            const suffix = isIntel ? 'mac-x64.dmg' : 'mac-arm64.dmg';
+            const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
+            return { os: 'macOS', arch, match: (n) => n.endsWith(suffix) };
+          }
+          // Linux has no published artifact: report the OS for the label but
+          // never match an asset, so the CTA keeps its releases-page fallback.
+          if (isLinux) return { os: 'Linux', arch: '', match: () => false };
+          return null;
+        };
+
+        // Rewrite every [data-download-cta] anchor to the matching installer
+        // URL from the latest release, swap any [data-download-os] label to the
+        // detected OS, and append the arch suffix to [data-download-arch] slots
+        // (下载 -> 下载（Apple Silicon）). No-ops (keeping the releases-page
+        // fallback) when the platform is unknown or no matching asset exists.
+        const enhanceDownloadCtas = (release) => {
+          const ctas = document.querySelectorAll('[data-download-cta]');
+          if (ctas.length === 0) return;
+          const platform = detectPlatform();
+          if (!platform) return;
+          for (const slot of document.querySelectorAll('[data-download-os]')) {
+            slot.textContent = platform.os;
+          }
+          for (const slot of document.querySelectorAll('[data-download-arch]')) {
+            if (!platform.arch) continue;
+            slot.textContent = `（${platform.arch}）`;
+            slot.hidden = false;
+          }
+          const assets = Array.isArray(release?.assets) ? release.assets : [];
+          const asset = assets.find(
+            (a) =>
+              a &&
+              typeof a.name === 'string' &&
+              typeof a.browser_download_url === 'string' &&
+              platform.match(a.name),
+          );
+          if (!asset) return;
+          for (const cta of ctas) {
+            cta.href = asset.browser_download_url;
+            // A direct file download should not open a blank tab.
+            cta.removeAttribute('target');
+            cta.removeAttribute('rel');
+          }
+        };
+
         const enhanceHeader = () => {
           const chrome = document.querySelector('[data-chrome-headroom]');
           if (chrome) {
@@ -304,16 +387,19 @@ const pageHtml = renderToStaticMarkup(
           }
 
           // Latest stable release powers every "v0.x.y" badge on the page
-          // (topbar pulse, hero CTA-foot, footer download). Hits one
-          // unauthenticated API call per page view; the static fallback in
-          // each slot keeps the layout sane if the request fails or 403s.
+          // (topbar pulse, hero CTA-foot, footer download) AND the per-OS
+          // direct download CTAs. One unauthenticated API call per page view;
+          // the static fallbacks (version slot text, releases-page href) keep
+          // things sane if the request fails or 403s.
           const versionSlots = document.querySelectorAll('[data-github-version]');
-          if (versionSlots.length === 0) return;
+          const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
+          if (versionSlots.length === 0 && !hasDownloadCtas) return;
           fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
             headers: { Accept: 'application/vnd.github+json' },
           })
             .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
             .then((data) => {
+              enhanceDownloadCtas(data);
               const label = formatVersion(data);
               if (!label) return;
               for (const slot of versionSlots) slot.textContent = label;

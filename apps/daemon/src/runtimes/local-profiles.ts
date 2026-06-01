@@ -192,11 +192,11 @@ function createLocalAgentDef(
 export function readLocalAgentProfileDefs(
   baseDefs: RuntimeAgentDef[],
 ): RuntimeAgentDef[] {
+  const profilesFile = localAgentProfilesFile();
+  if (profilesFile == null) return [];
   let parsed: unknown;
   try {
-    const file = localAgentProfilesFile();
-    if (!file) return [];
-    parsed = JSON.parse(readFileSync(file, 'utf8'));
+    parsed = JSON.parse(readFileSync(profilesFile, 'utf8'));
   } catch {
     return [];
   }

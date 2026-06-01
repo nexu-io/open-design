@@ -184,6 +184,40 @@ export function PreviewDrawOverlay({
     );
   }
 
+  function canTryDirectFrameScroll(iframe: HTMLIFrameElement): boolean {
+    const sandbox = iframe.getAttribute('sandbox');
+    return sandbox === null || /\ballow-same-origin\b/.test(sandbox);
+  }
+
+  function postFrameScrollBy(win: Window, left: number, top: number): boolean {
+    try {
+      win.postMessage({ type: 'od:preview-scroll-by', left, top }, '*');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function scrollPreviewIframeBy(iframe: HTMLIFrameElement, left: number, top: number): boolean {
+    const win = iframe.contentWindow;
+    if (!win) return false;
+
+    if (canTryDirectFrameScroll(iframe)) {
+      try {
+        const scrollBy = win.scrollBy;
+        if (typeof scrollBy === 'function') {
+          win.scrollBy({ left, top, behavior: 'auto' });
+          return true;
+        }
+      } catch {
+        // Sandboxed / cross-origin frames throw on Window property reads.
+        // Fall through to the postMessage bridge injected into srcDoc previews.
+      }
+    }
+
+    return postFrameScrollBy(win, left, top);
+  }
+
   function onPointerDown(e: PointerEvent) {
     if (!active || sending) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -233,10 +267,10 @@ export function PreviewDrawOverlay({
   function onCanvasWheel(e: WheelEvent<HTMLCanvasElement>) {
     if (!active || sending) return;
     const iframe = activePreviewIframe();
-    const win = iframe?.contentWindow;
-    if (!win || typeof win.scrollBy !== 'function') return;
-    e.preventDefault();
-    win.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: 'auto' });
+    if (!iframe) return;
+    if (scrollPreviewIframeBy(iframe, e.deltaX, e.deltaY)) {
+      e.preventDefault();
+    }
   }
 
   function clearInk() {

@@ -98,6 +98,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           : undefined,
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
+        images: Array.isArray(req.body?.images) ? req.body.images : undefined,
         onProgress: (line: any) => appendTaskProgress(task, line),
         requestInit: proxyDispatcher.requestInit,
       })
