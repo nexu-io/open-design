@@ -178,7 +178,7 @@ export function ManualEditPanel({
                 type="button"
                 role="tab"
                 aria-selected={activeTab === id}
-                className={`manual-edit-tab${activeTab === id ? ' active' : ''}`}
+                className={activeTab === id ? 'selected' : ''}
                 onClick={() => setActiveTab(id)}
               >
                 {t(`manualEdit.${labelKey}`)}

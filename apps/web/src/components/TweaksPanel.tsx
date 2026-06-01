@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
+import styles from './TweaksPanel.module.css';
 
 export interface TweakVariable {
   name: string; // e.g. '--accent-hue'
@@ -123,12 +124,12 @@ export function TweaksPanel({
   if (!open) return null;
 
   return (
-    <div className="tweaks-panel" ref={rootRef} role="dialog" aria-label={t('tweaks.title')}>
-      <div className="tweaks-panel-header">
-        <span className="tweaks-panel-title">{t('tweaks.title')}</span>
+    <div className={styles.panel} ref={rootRef} role="dialog" aria-label={t('tweaks.title')}>
+      <div className={styles.header}>
+        <span className={styles.title}>{t('tweaks.title')}</span>
         <button
           type="button"
-          className="tweaks-panel-close"
+          className={styles.close}
           aria-label={t('manualEdit.closePanel')}
           onClick={onClose}
         >
@@ -136,11 +137,11 @@ export function TweaksPanel({
         </button>
       </div>
 
-      <div className="tweaks-panel-body">
+      <div className={styles.body}>
         {variables.length === 0 ? (
-          <p className="tweaks-panel-empty">{t('tweaks.noVariables')}</p>
+          <p className={styles.empty}>{t('tweaks.noVariables')}</p>
         ) : (
-          <ul className="tweaks-panel-list" role="list">
+          <ul className={styles.list} role="list">
             {variables.map((v) => {
               const parsed = parseNumericValue(v.value);
               const unit = parsed?.unit ?? '';
@@ -151,15 +152,15 @@ export function TweaksPanel({
               const displayNum = displayParsed?.num ?? currentNum;
 
               return (
-                <li key={v.name} className="tweaks-panel-item">
-                  <label className="tweaks-panel-label">
-                    <span className="tweaks-panel-var-name">{v.name}</span>
-                    <span className="tweaks-panel-var-value">{displayValue}</span>
+                <li key={v.name} className={styles.item}>
+                  <label className={styles.label}>
+                    <span className={styles.varName}>{v.name}</span>
+                    <span className={styles.varValue}>{displayValue}</span>
                   </label>
                   {parsed !== null ? (
                     <input
                       type="range"
-                      className="tweaks-panel-slider"
+                      className={styles.slider}
                       min={defaults.min}
                       max={defaults.max}
                       step={defaults.step}
@@ -170,7 +171,7 @@ export function TweaksPanel({
                   ) : (
                     <input
                       type="text"
-                      className="tweaks-panel-text-input"
+                      className={styles.textInput}
                       value={dirtyVars[v.name] ?? displayValue}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -187,22 +188,22 @@ export function TweaksPanel({
         )}
       </div>
 
-      <div className="tweaks-panel-footer">
+      <div className={styles.footer}>
         <button
           type="button"
-          className="tweaks-panel-btn-secondary"
-          onClick={handleResetAll}
-          disabled={variables.length === 0}
-        >
-          {t('tweaks.reset')}
-        </button>
-        <button
-          type="button"
-          className="tweaks-panel-btn-primary"
+          className={`${styles.btn} ${styles.btnPrimary}`}
           onClick={handleCommitAll}
           disabled={!hasChanges}
         >
           {t('tweaks.commit')}
+        </button>
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={handleResetAll}
+          disabled={variables.length === 0}
+        >
+          {t('tweaks.reset')}
         </button>
       </div>
     </div>
