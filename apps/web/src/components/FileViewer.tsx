@@ -6766,6 +6766,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       : shareLinkFeedback === 'failed'
         ? t('useEverywhere.copyFailed')
         : t('fileViewer.copyShareLink');
+  const shareMenuLabel = t('fileViewer.shareLabel');
   const deployMenuLabel = t('fileViewer.deployModalTitle') || 'Deploy';
   const deployButtonLabel =
     deployPhase === 'deploying'
@@ -7209,37 +7210,14 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     className="chrome-action chrome-action-secondary chrome-action-with-label"
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen}
-                    aria-label={deployMenuLabel}
+                    aria-label={shareMenuLabel}
                     onClick={openDeployMenu}
                   >
-                    <RemixIcon name="upload-cloud-line" size={15} />
-                    <span>{deployMenuLabel}</span>
+                    <RemixIcon name="share-forward-line" size={15} />
+                    <span>{shareMenuLabel}</span>
                   </button>
                   {deployMenuOpen ? (
                     <div className="share-menu-popover" role="menu">
-                      {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          className="share-menu-item"
-                          role="menuitem"
-                          onClick={() => {
-                            const format =
-                              option.id === 'cloudflare-pages'
-                                ? 'cloudflare_pages'
-                                : option.id === 'vercel-self'
-                                  ? 'vercel'
-                                  : 'vercel';
-                            fireShareExport(format, () => openDeployModal(option.id));
-                          }}
-                        >
-                          <span className="share-menu-icon">
-                            <RemixIcon name={deployActionIconFor(option.id)} size={15} />
-                          </span>
-                          <span>{deployActionLabelFor(option.id)}</span>
-                        </button>
-                      ))}
-                      <div className="share-menu-divider" />
                       <div className="share-menu-section-label" role="presentation">
                         {t('fileViewer.shareMenuShareLink')}
                       </div>
@@ -7310,6 +7288,32 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                           </span>
                         </button>
                       )}
+                      <div className="share-menu-divider" />
+                      <div className="share-menu-section-label" role="presentation">
+                        {t('fileViewer.shareMenuPublishOnline')}
+                      </div>
+                      {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className="share-menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            const format =
+                              option.id === 'cloudflare-pages'
+                                ? 'cloudflare_pages'
+                                : option.id === 'vercel-self'
+                                  ? 'vercel'
+                                  : 'vercel';
+                            fireShareExport(format, () => openDeployModal(option.id));
+                          }}
+                        >
+                          <span className="share-menu-icon">
+                            <RemixIcon name={deployActionIconFor(option.id)} size={15} />
+                          </span>
+                          <span>{deployActionLabelFor(option.id)}</span>
+                        </button>
+                      ))}
                     </div>
                   ) : null}
                 </div>

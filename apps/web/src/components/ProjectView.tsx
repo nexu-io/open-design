@@ -220,8 +220,8 @@ interface Props {
   onOpenSettings: (section?: SettingsSection) => void;
   onOpenAmrSettings?: () => void;
   onOpenMcpSettings?: () => void;
-  // Pet wiring remains owned by Settings / app shell. Do not expose a
-  // separate quick entry in the project chat composer.
+  // Pet wiring forwarded to the chat composer so users can adopt /
+  // wake / tuck a pet without leaving the project view.
   onAdoptPetInline?: (petId: string) => void;
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
@@ -503,6 +503,9 @@ export function ProjectView({
   onOpenSettings,
   onOpenAmrSettings,
   onOpenMcpSettings,
+  onAdoptPetInline,
+  onTogglePet,
+  onOpenPetSettings,
   onBack,
   onClearPendingPrompt,
   onTouchProject,
@@ -4513,6 +4516,10 @@ export function ProjectView({
               githubConnected={githubConnected}
               onConnectRepo={handleConnectRepo}
               composerDraftSignal={composerDraftSignal}
+              petConfig={config.pet}
+              onAdoptPet={onAdoptPetInline}
+              onTogglePet={onTogglePet}
+              onOpenPetSettings={onOpenPetSettings}
               researchAvailable={config.mode === 'daemon'}
               byokApiProtocol={config.apiProtocol}
               byokImageModel={byokImageModelOverride}

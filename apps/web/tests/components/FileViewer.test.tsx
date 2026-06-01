@@ -1154,7 +1154,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
@@ -1330,7 +1330,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -1392,7 +1392,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -1518,7 +1518,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const zoneSelect = await screen.findByRole('combobox', { name: /Domain/i });
@@ -1615,7 +1615,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     expect(screen.queryByRole('menuitem', { name: /Copy Vercel link/i })).toBeNull();
@@ -1684,7 +1684,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     fireEvent.click(copyShareLink);
@@ -1735,7 +1735,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
@@ -1791,7 +1791,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
@@ -1846,7 +1846,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     fireEvent.click(copyShareLink);
@@ -1879,10 +1879,15 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
+    expect(screen.getByText('SHARE')).toBeTruthy();
+    expect(screen.getByText('PUBLISH ONLINE')).toBeTruthy();
     const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-    expect(menuItems.slice(0, 2)).toEqual([
+    expect(menuItems.slice(0, 1)).toEqual([
+      'Publish online above to enable share ↑',
+    ]);
+    expect(menuItems.slice(1, 3)).toEqual([
       'Deploy to Vercel',
       'Deploy to Cloudflare Pages',
     ]);
@@ -1949,7 +1954,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i }) as HTMLButtonElement;
     const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
@@ -2036,7 +2041,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /deploy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
     expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(copyShareLink);
