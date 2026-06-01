@@ -385,6 +385,8 @@ docker compose up -d
 
 For advanced Docker configuration and environment variables, see [`QUICKSTART.md`](QUICKSTART.md).
 
+> **macOS users:** If the web UI shows `Authorization: Bearer <OD_API_TOKEN> required`, Docker Desktop bridge networking is the cause. See [Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos) for the fix.
+
 
 
 ### Run from source
