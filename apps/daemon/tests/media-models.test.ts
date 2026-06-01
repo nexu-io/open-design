@@ -116,6 +116,13 @@ describe('runnable model filtering', () => {
     expect(ids(response.video)).not.toContain('doubao-seedance-2-0-260128');
   });
 
+  it('keeps credential-free integrated models discoverable on empty config', () => {
+    const response = buildDaemonModelsRegistry({ providers: {} });
+    expect(ids(response.video)).toContain('hyperframes-html');
+    expect(ids(response.image)).not.toContain('gpt-image-2');
+    expect(ids(response.video)).not.toContain('doubao-seedance-2-0-260128');
+  });
+
   it('excludes models from external provider not marked configured', () => {
     const response = buildDaemonModelsRegistry({
       providers: {

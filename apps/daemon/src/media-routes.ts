@@ -12,7 +12,7 @@ import {
 } from './aihubmix.js';
 import { isSandboxModeEnabled } from './sandbox-mode.js';
 import type { ToolTokenGrant } from './tool-tokens.js';
-import type { MediaModel } from './media-models.js';
+import type { MediaModel, MediaProvider } from './media-models.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -88,7 +88,7 @@ export function buildMediaModelsResponse({
   withConfiguredCustomImageModels,
 }: {
   mediaConfig: MediaModelsResponseConfig;
-  providers: unknown;
+  providers: MediaProvider[];
   imageModels: MediaModelsResponseModel[];
   videoModels: MediaModelsResponseModel[];
   audioModelsByKind: Record<string, MediaModelsResponseModel[]>;
@@ -119,9 +119,15 @@ export function buildMediaModelsResponse({
       })
       .map(([id]) => id),
   );
+  const credentialFreeProviderIds = new Set(
+    providers
+      .filter((provider) => provider.integrated && provider.credentialsRequired === false)
+      .map((provider) => provider.id),
+  );
   const hasRunnableCustomImage = Boolean(customImageModelList || runnableProfiles.length > 0);
   const isRunnableCatalogModel = (model: MediaModelsResponseModel) =>
     (model.provider === 'custom-image' && hasRunnableCustomImage)
+    || credentialFreeProviderIds.has(model.provider)
     || configuredProviderIds.has(model.provider);
   const isRunnableNonGoogleModel = (model: MediaModelsResponseModel) =>
     model.provider !== 'google' && isRunnableCatalogModel(model);
