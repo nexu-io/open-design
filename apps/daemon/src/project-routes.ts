@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Response } from 'express';
@@ -1197,7 +1196,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 }
 
-export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts'> {}
+export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {}
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
@@ -1209,6 +1208,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { listFiles, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
+  const { projectPreviewScopes } = ctx;
   const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
   const projectPreviewCsp = [
     `sandbox ${projectPreviewIframeSandbox}`,
@@ -1379,7 +1379,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         requestedPath,
         project.metadata,
       );
-      const scope = randomUUID();
+      const scope = projectPreviewScopes.mint(project.id);
       /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
       const body = {
         url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
@@ -1414,6 +1414,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const project = getProject(db, projectId);
       if (!project) {
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      if (!projectPreviewScopes.validate(project.id, scope)) {
+        sendApiError(res, 404, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
         return;
       }
       if (req.headers.origin === 'null') {
