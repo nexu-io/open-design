@@ -1444,6 +1444,20 @@
   font-size: 12.5px;
   font-weight: 680;
   color: var(--text-strong);
+  /*
+   * Single-line truncate with ellipsis (#3274). Long project names in the
+   * "Existing projects" section of the automation project picker used to
+   * wrap across multiple lines, blowing up each row's height and making
+   * the dropdown hard to scan. The parent `.automation-popover__body`
+   * already sets `min-width: 0` so the flex child can shrink below its
+   * intrinsic content width — these three properties complete the
+   * standard truncate triad. The full name is preserved via the row's
+   * `title` attribute (set by the picker call site) so it remains
+   * discoverable via the native hover tooltip.
+   */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .automation-popover__hint {

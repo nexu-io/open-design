@@ -1808,8 +1808,8 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+      expect(screen.getByText('late@example.com')).toBeTruthy();
     });
-    expect(screen.getByText('late@example.com')).toBeTruthy();
   });
 
   it('renders the signed-in AMR account state inside Settings without leaking vela branding', async () => {

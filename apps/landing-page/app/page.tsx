@@ -27,6 +27,7 @@ import {
   imageAsset,
   PRECISE_LAZY_PLACEHOLDER,
 } from './image-assets';
+import { getPluginsCopy } from './_lib/plugins-i18n';
 
 /**
  * `<img>` wrapper for non-hero homepage images. Outputs `data-precise-src`
@@ -162,6 +163,14 @@ interface PageProps {
     /** Optional richer breakdown used by the Labs filter pills. */
     byMode?: Readonly<Record<string, number>>;
     byPlatform?: Readonly<Record<string, number>>;
+    /**
+     * Live `/plugins/templates/` category breakdown driving the Labs
+     * pills. Ordered by count desc, zero-count categories dropped.
+     */
+    templateCategories?: {
+      total: number;
+      byCategory: ReadonlyArray<{ slug: string; count: number }>;
+    };
   };
   github: {
     starsLabel: string;
@@ -201,11 +210,21 @@ export default function Page({
 }: PageProps) {
   const skills = fmt(counts.skills);
   const systems = fmt(counts.systems);
-  const deckCount = pad2(counts.byMode?.deck);
-  const prototypeCount = pad2(counts.byMode?.prototype);
-  const mobileCount = pad2(counts.byPlatform?.mobile);
   const commonCopy = getCommonCopy(locale);
   const home = getHomePageCopy(locale);
+  const pcopy = getPluginsCopy(locale);
+  // Labs pills mirror the live `/plugins/templates/` category strip: an
+  // "All" chip plus the top categories by count, labelled and counted
+  // from the same source so the homepage never drifts from the library.
+  const templateCategories = counts.templateCategories;
+  const labsPills = templateCategories
+    ? templateCategories.byCategory.slice(0, 4).map((c) => ({
+        slug: c.slug,
+        label:
+          pcopy.category[c.slug as keyof typeof pcopy.category]?.label ?? c.slug,
+        count: pad2(c.count),
+      }))
+    : [];
   const localeDef = getLocaleDefinition(locale);
   const localeOptions = LANDING_LOCALES.map((entry) => ({
     ...entry,
@@ -730,26 +749,22 @@ export default function Page({
                 </h2>
               </div>
               <div className='pills' data-reveal='right'>
-                <a className='pill active' href={href('/skills/')}>
-                  {home.labs.pills.all}
-                  <span className='count'>{skills}</span>
+                <a className='pill active' href={href('/plugins/templates/')}>
+                  {pcopy.allChip}
+                  <span className='count'>
+                    {templateCategories ? fmt(templateCategories.total) : skills}
+                  </span>
                 </a>
-                <a className='pill' href={href('/skills/mode/prototype/')}>
-                  {home.labs.pills.prototype}
-                  <span className='count'>{prototypeCount}</span>
-                </a>
-                <a className='pill' href={href('/skills/mode/deck/')}>
-                  {home.labs.pills.deck}
-                  <span className='count'>{deckCount}</span>
-                </a>
-                <a className='pill' href={href('/skills/')}>
-                  {home.labs.pills.mobile}
-                  <span className='count'>{mobileCount}</span>
-                </a>
-                <a className='pill' href={href('/skills/')}>
-                  {home.labs.pills.office}
-                  <span className='count'>—</span>
-                </a>
+                {labsPills.map((pill) => (
+                  <a
+                    key={pill.slug}
+                    className='pill'
+                    href={href(`/plugins/templates/${pill.slug}/`)}
+                  >
+                    {pill.label}
+                    <span className='count'>{pill.count}</span>
+                  </a>
+                ))}
               </div>
             </div>
             <div className='labs-meta'>
@@ -839,7 +854,7 @@ export default function Page({
                 {home.labs.foot(skills)}
                 {NBSP}·{NBSP}
                 <a
-                  href={href('/skills/')}
+                  href={href('/plugins/skills/')}
                   className='library-link'
                   style={{ color: 'var(--coral)' }}
                 >
@@ -953,7 +968,7 @@ export default function Page({
                   {home.work.titleSuffix}
                   <span className='dot'>.</span>
                 </h2>
-                <a className='work-link' href={href('/skills/')}>
+                <a className='work-link' href={href('/plugins/skills/')}>
                   {home.work.viewAll(skills)}
                 </a>
               </div>
@@ -1325,22 +1340,19 @@ export default function Page({
                 <h5>{home.footer.columns.library}</h5>
                 <ul>
                   <li>
-                    <a href={href('/skills/')}>
+                    <a href={href('/plugins/skills/')}>
                       {home.footer.libraryLinks.skills(skills)}
                     </a>
                   </li>
                   <li>
-                    <a href={href('/systems/')}>
+                    <a href={href('/plugins/systems/')}>
                       {home.footer.libraryLinks.systems(systems)}
                     </a>
                   </li>
                   <li>
-                    <a href={href('/templates/')}>
+                    <a href={href('/plugins/templates/')}>
                       {home.footer.libraryLinks.templates}
                     </a>
-                  </li>
-                  <li>
-                    <a href={href('/craft/')}>{home.footer.libraryLinks.craft}</a>
                   </li>
                   {/*
                    * Sister product: HTML Anything is the agent-driven HTML

@@ -86,6 +86,7 @@ export const gemini = requireAgent('gemini');
 export const qoder = requireAgent('qoder');
 export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
+export const grokBuild = requireAgent('grok-build');
 export const aider = requireAgent('aider');
 export const antigravity = requireAgent('antigravity');
 export const deepseekMaxPromptArgBytes = (() => {
@@ -94,6 +95,13 @@ export const deepseekMaxPromptArgBytes = (() => {
     'deepseek must define maxPromptArgBytes for argv budget tests',
   );
   return deepseek.maxPromptArgBytes;
+})();
+export const grokBuildMaxPromptArgBytes = (() => {
+  assert.ok(
+    grokBuild.maxPromptArgBytes !== undefined,
+    'grok-build must define maxPromptArgBytes for argv budget tests',
+  );
+  return grokBuild.maxPromptArgBytes;
 })();
 const originalDisablePlugins = process.env.OD_CODEX_DISABLE_PLUGINS;
 const originalPath = process.env.PATH;

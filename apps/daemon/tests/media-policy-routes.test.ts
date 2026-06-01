@@ -1,11 +1,12 @@
 import type http from 'node:http';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { memoryDir, writeMemoryConfig } from '../src/memory.js';
 
 type FakeMediaEndpoint = 'tool' | 'legacy';
 
@@ -19,6 +20,7 @@ describe('run-scoped media policy routes', () => {
   let binDir: string;
   let oldPath: string | undefined;
   let oldCapture: string | undefined;
+  let oldMemoryConfigRaw: string | null = null;
   let server: http.Server | null = null;
   let shutdown: (() => Promise<void> | void) | undefined;
 
@@ -28,6 +30,12 @@ describe('run-scoped media policy routes', () => {
     oldPath = process.env.PATH;
     oldCapture = process.env.OD_CAPTURE_MEDIA_RESPONSE;
     process.env.PATH = `${binDir}${path.delimiter}${oldPath ?? ''}`;
+    const memoryConfig = memoryConfigPath();
+    oldMemoryConfigRaw = await readFile(memoryConfig, 'utf8').catch(() => null);
+    await writeMemoryConfig(process.env.OD_DATA_DIR!, {
+      chatExtractionEnabled: false,
+      extraction: null,
+    });
   });
 
   afterEach(async () => {
@@ -41,6 +49,14 @@ describe('run-scoped media policy routes', () => {
     else process.env.PATH = oldPath;
     if (oldCapture === undefined) delete process.env.OD_CAPTURE_MEDIA_RESPONSE;
     else process.env.OD_CAPTURE_MEDIA_RESPONSE = oldCapture;
+    const memoryConfig = memoryConfigPath();
+    if (oldMemoryConfigRaw === null) {
+      await rm(memoryConfig, { force: true });
+    } else {
+      await mkdir(path.dirname(memoryConfig), { recursive: true });
+      await writeFile(memoryConfig, oldMemoryConfigRaw);
+    }
+    oldMemoryConfigRaw = null;
     await rm(tempDir, { recursive: true, force: true });
     await rm(binDir, { recursive: true, force: true });
   });
@@ -466,6 +482,10 @@ describe('run-scoped media policy routes', () => {
       projectId,
       conversationId: projectBody.conversationId,
     };
+  }
+
+  function memoryConfigPath(): string {
+    return path.join(memoryDir(process.env.OD_DATA_DIR!), '.config.json');
   }
 
   async function writeFakeAgent(

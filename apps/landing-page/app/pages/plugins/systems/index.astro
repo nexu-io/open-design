@@ -12,10 +12,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import SystemCard from '../../../_components/system-card.astro';
-import {
-  getSystemRecords,
-  getSystemCategoryIndex,
-} from '../../../_lib/catalog';
+import { getSystemRecords } from '../../../_lib/catalog';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
 import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
 
@@ -24,7 +21,6 @@ const ui = getLandingUiCopy(locale);
 const pcopy = getPluginsCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
 const systems = await getSystemRecords(locale);
-const categoryTags = await getSystemCategoryIndex(locale);
 
 const title = `${pcopy.tileSystems} · ${systems.length} · Open Design`;
 const description = pcopy.systemsLead;
@@ -53,21 +49,6 @@ const jsonLd = {
     <h1 class="display">{pcopy.systemsHeading(systems.length)}<span class="dot">.</span></h1>
     <p class="lead">{pcopy.systemsLead}</p>
   </header>
-
-  <section class="filter-strip" aria-label={ui.catalog.systems.allAria}>
-    <div class="filter-group">
-      <span class="filter-label">{ui.catalog.systems.category}</span>
-      <ul>
-        {categoryTags.map((tag) => (
-          <li>
-            <a class="chip chip-link" href={href(`/systems/category/${tag.slug}/`)}>
-              {tag.label}<span class="chip-num">{tag.count}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  </section>
 
   <section class="catalog-grid systems-grid" aria-label={ui.catalog.systems.allAria}>
     <ul>

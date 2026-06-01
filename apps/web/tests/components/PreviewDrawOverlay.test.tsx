@@ -4,9 +4,19 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PreviewDrawOverlay } from '../../src/components/PreviewDrawOverlay';
+import { requestPreviewSnapshot } from '../../src/runtime/exports';
+
+vi.mock('../../src/runtime/exports', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/runtime/exports')>();
+  return {
+    ...actual,
+    requestPreviewSnapshot: vi.fn(async () => ({ dataUrl: 'data:image/png;base64,AAAA', w: 10, h: 10 })),
+  };
+});
 
 afterEach(() => {
   cleanup();
+  vi.mocked(requestPreviewSnapshot).mockClear();
 });
 
 describe('PreviewDrawOverlay', () => {
@@ -159,5 +169,23 @@ describe('PreviewDrawOverlay', () => {
     fireEvent.click(getByRole('button', { name: 'Close' }));
 
     expect(onActiveChange).toHaveBeenCalledWith(false);
+  });
+
+  it('snapshots the srcDoc bridge iframe, not the visible URL-load frame', async () => {
+    const snapshot = vi.mocked(requestPreviewSnapshot);
+    const { getByRole } = render(
+      <PreviewDrawOverlay active captureViewport>
+        {/* URL-load frame is the visible/active one (e.g. a deck) but has no bridge */}
+        <iframe title="url" data-od-active="true" />
+        {/* srcDoc frame is mounted but hidden; it hosts the snapshot bridge */}
+        <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="false" />
+      </PreviewDrawOverlay>,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(snapshot).toHaveBeenCalled());
+    const usedIframe = snapshot.mock.calls[0]?.[0] as HTMLIFrameElement;
+    expect(usedIframe.getAttribute('data-od-render-mode')).toBe('srcdoc');
   });
 });

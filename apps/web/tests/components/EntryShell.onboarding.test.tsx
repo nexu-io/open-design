@@ -140,13 +140,15 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     const amrCloud = screen.getByRole('button', { name: /Open Design AMR/i });
     expect(amrCloud.getAttribute('aria-pressed')).toBe('true');
-    expect(amrCloud.textContent).toContain('Officially maintained');
-    expect(amrCloud.textContent).toContain('Ready to use');
-    expect(amrCloud.textContent).toContain('Many models');
-    expect(amrCloud.textContent).toContain('Better pricing');
+    expect(amrCloud.textContent).toContain('Officially recommended');
+    expect(amrCloud.textContent).toContain('No deploy needed');
+    expect(amrCloud.textContent).toContain('Supports Claude Opus 4.8');
+    expect(amrCloud.textContent).toContain('SOTA Harness');
+    expect(amrCloud.textContent).toContain('Coming soon');
+    expect(amrCloud.textContent).toContain('AMR v0.1.0');
     expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
     expect(screen.getByRole('button', { name: /Sign in to continue/i })).toBeTruthy();
-    await screen.findByText('Not signed in');
+    expect(screen.queryByText('Not signed in')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Sign in$/i })).toBeNull();
     await waitFor(() => {
       expect(props.onModeChange).toHaveBeenCalledWith('daemon');
@@ -365,7 +367,8 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding();
 
-    expect(await screen.findByText('user@example.com')).toBeTruthy();
+    expect(await screen.findByText('AMR v0.1.0')).toBeTruthy();
+    expect(screen.queryByText('user@example.com')).toBeNull();
     expect(screen.queryByText('Authorized')).toBeNull();
     expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
 

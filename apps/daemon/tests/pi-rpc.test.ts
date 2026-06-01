@@ -243,6 +243,30 @@ test('pi RPC: usage extracted from turn_end', () => {
   });
 });
 
+test('pi RPC: turn_end assistant error maps to visible error event', () => {
+  const events = simulateRpcSession([
+    { type: 'agent_start' },
+    { type: 'turn_start' },
+    {
+      type: 'turn_end',
+      message: {
+        role: 'assistant',
+        content: [],
+        api: 'openai-completions',
+        provider: 'openai-compatible-provider',
+        model: 'example-model',
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 },
+        stopReason: 'error',
+        errorMessage: 'Upstream provider rejected the request',
+      },
+    },
+  ]);
+
+  const errorEvent = events.find((e) => e.type === 'error');
+  assert.ok(errorEvent, 'turn_end stopReason=error should fail visibly instead of completing empty');
+  assert.equal(errorEvent.message, 'Upstream provider rejected the request');
+});
+
 test('pi RPC: tool execution events mapped correctly', () => {
   const events = simulateRpcSession([
     { type: 'tool_execution_start', toolCallId: 'tc-1', toolName: 'read', args: { path: 'foo.txt' } },

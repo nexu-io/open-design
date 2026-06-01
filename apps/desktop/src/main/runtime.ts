@@ -402,13 +402,13 @@ export async function pickAndImportFolder(
   });
 
   async function postOnce(): Promise<Response | { ok: false; reason: string }> {
-    const token = mint(deps.desktopAuthSecret, deps.baseDir);
+    const headerValue = mint(deps.desktopAuthSecret, deps.baseDir);
     try {
       return await fetchImpl(importUrl, {
         body: requestBody,
         headers: {
           "Content-Type": "application/json",
-          [DESKTOP_IMPORT_TOKEN_HEADER]: token,
+          [DESKTOP_IMPORT_TOKEN_HEADER]: headerValue,
         },
         method: "POST",
       });
@@ -501,13 +501,13 @@ export async function pickAndReplaceWorkingDir(
   const requestBody = JSON.stringify({ baseDir: deps.baseDir });
 
   async function postOnce(): Promise<Response | { ok: false; reason: string }> {
-    const token = mint(deps.desktopAuthSecret, deps.baseDir);
+    const headerValue = mint(deps.desktopAuthSecret, deps.baseDir);
     try {
       return await fetchImpl(workingDirUrl, {
         body: requestBody,
         headers: {
           "Content-Type": "application/json",
-          [DESKTOP_IMPORT_TOKEN_HEADER]: token,
+          [DESKTOP_IMPORT_TOKEN_HEADER]: headerValue,
         },
         method: "POST",
       });
@@ -937,12 +937,13 @@ export function hideWindowExitingFullscreen(window: WindowFullscreenSurface): vo
   window.hide();
 }
 
-// PPTX is rendered by the agent into the project folder and reaches the
-// renderer through a normal `<a download>` link to /api/projects/:id/raw/*.
-// Without this hook Electron writes the bytes straight to the OS Downloads
-// folder, so the user never gets to pick a destination. setSaveDialogOptions
-// makes Electron show the native Save As panel before the download starts.
-const SAVE_AS_EXTENSIONS = new Set([".pptx"]);
+// Some exports reach the renderer through a normal `<a download>` link
+// (server-written PPTX, browser-generated image blobs). Without this hook
+// Electron writes the bytes straight to the OS Downloads folder, so the user
+// never gets to pick a destination. setSaveDialogOptions makes Electron show
+// the native Save As panel before the download starts.
+const IMAGE_SAVE_AS_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+const SAVE_AS_EXTENSIONS = new Set([".pptx", ...IMAGE_SAVE_AS_EXTENSIONS]);
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   window.webContents.session.on("will-download", (_event, item) => {
@@ -953,10 +954,15 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
     item.setSaveDialogOptions({
       title: "Save As",
       defaultPath: filename,
-      filters: [
-        { name: "PowerPoint Presentation", extensions: ["pptx"] },
-        { name: "All Files", extensions: ["*"] },
-      ],
+      filters: IMAGE_SAVE_AS_EXTENSIONS.has(ext)
+        ? [
+            { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
+            { name: "All Files", extensions: ["*"] },
+          ]
+        : [
+            { name: "PowerPoint Presentation", extensions: ["pptx"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
     });
   });
 }
@@ -1217,6 +1223,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     minWidth: 900,
     show: true,
     title: "Open Design",
+    autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
       additionalArguments: osLocaleAdditionalArguments(options.osLocale),

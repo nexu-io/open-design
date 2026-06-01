@@ -49,11 +49,10 @@ export const grokBuildAgentDef = {
       label: 'grok-4.20-multi-agent (xAI · orchestration)',
     },
   ],
-  // Prompt delivered via stdin so Windows `spawn ENAMETOOLONG` and Linux
-  // `spawn E2BIG` can't truncate large composed prompts. `grok -p` with
-  // no positional argument reads from piped stdin.
-  buildArgs: (_prompt, _imagePaths, _extra = [], options = {}) => {
-    const args = ['-p'];
+  // Grok Build CLI v0.1.212 enforces `-p, --single <PROMPT>` as value-
+  // required — stdin piping no longer satisfies it. Inline the prompt.
+  buildArgs: (prompt, _imagePaths, _extra = [], options = {}) => {
+    const args = ['-p', prompt];
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
     }
@@ -69,7 +68,21 @@ export const grokBuildAgentDef = {
     { id: 'xhigh', label: 'xhigh' },
     { id: 'max', label: 'max' },
   ],
-  promptViaStdin: true,
+  promptViaStdin: false,
+  // Guard against prompts that would blow Windows' ~32 KB CreateProcess
+  // limit (or Linux MAX_ARG_STRLEN on extreme edges) before spawn. Same
+  // shape as the DeepSeek adapter — the previous stdin path is gone (CLI
+  // 0.1.212 enforces `-p <value>`), so the composed prompt now rides
+  // argv and a sufficiently large one — system text + history + skills/
+  // design-system content + user message — could surface as a generic
+  // spawn ENAMETOOLONG / E2BIG instead of a Grok-specific, user-
+  // actionable message. The /api/chat spawn path checks this byte
+  // budget against the composed prompt and emits AGENT_PROMPT_TOO_LARGE
+  // ("reduce skills/design-system context, or pick an adapter with
+  // stdin support") before calling `spawn`. 30_000 bytes leaves ~2.7 KB
+  // of argv headroom under the Windows command-line limit for `-p
+  // --model <id> --effort <level>` and internal quoting.
+  maxPromptArgBytes: 30_000,
   streamFormat: 'plain',
   installUrl: 'https://x.ai/cli',
   docsUrl: 'https://x.ai/cli',

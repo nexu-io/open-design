@@ -53,8 +53,8 @@ import {
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
+  downloadImageDataUrl,
   exportAsHtml,
-  exportAsImage,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
@@ -62,8 +62,11 @@ import {
   exportProjectAsZip,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
+  imageDataUrlToBlob,
   openSandboxedPreviewInNewTab,
+  prepareImageExportTarget,
   requestPreviewSnapshot,
+  type ImageExportFormat,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -140,6 +143,14 @@ export type ManualEditPendingStyleSave = {
 };
 type PreviewViewportId = 'desktop' | 'tablet' | 'mobile';
 type PreviewCanvasSize = { width: number; height: number };
+type CommentPreviewCanvasOptions = {
+  boardMode: boolean;
+  sidePanelCollapsed: boolean;
+  viewport?: PreviewViewportId;
+};
+type PreviewScaleOptions = {
+  canvasPadding?: number;
+};
 type PreviewViewportPreset = {
   id: PreviewViewportId;
   width: number | null;
@@ -147,6 +158,15 @@ type PreviewViewportPreset = {
   labelKey: keyof Dict;
   titleKey: keyof Dict;
 };
+const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
+  value: ImageExportFormat;
+  label: string;
+  extension: string;
+}> = [
+  { value: 'png', label: 'PNG', extension: '.png' },
+  { value: 'jpeg', label: 'JPEG', extension: '.jpg' },
+  { value: 'webp', label: 'WebP', extension: '.webp' },
+];
 type DeployProviderOption = {
   id: WebDeployProviderId;
   labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
@@ -202,6 +222,18 @@ const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
   },
 ];
 const EXPORT_READY_NUDGE_STORAGE_PREFIX = 'open-design:export-ready-nudge:';
+const COMMENT_SIDE_DOCK_WIDTH = 320;
+const COMMENT_SIDE_DOCK_RAIL_WIDTH = 42;
+const COMMENT_SIDE_DOCK_GAP = 12;
+const COMMENT_SIDE_DOCK_PADDING = 8;
+const COMMENT_SIDE_DOCK_NON_DESKTOP_PADDING = 24;
+const COMMENT_SIDE_DOCK_MIN_CANVAS_WIDTH = 280;
+const COMMENT_SIDE_DOCK_STACKED_PANEL_HEIGHT = 220;
+const COMMENT_SIDE_DOCK_STACKED_RAIL_HEIGHT = 48;
+const COMMENT_SIDE_DOCK_STACKED_HEIGHT_DEDUCTION =
+  (COMMENT_SIDE_DOCK_PADDING * 2) + COMMENT_SIDE_DOCK_GAP + COMMENT_SIDE_DOCK_STACKED_PANEL_HEIGHT;
+const COMMENT_SIDE_DOCK_STACKED_COLLAPSED_HEIGHT_DEDUCTION =
+  (COMMENT_SIDE_DOCK_PADDING * 2) + COMMENT_SIDE_DOCK_GAP + COMMENT_SIDE_DOCK_STACKED_RAIL_HEIGHT;
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
 // purpose — open-slide's design tokens panel only edits global tokens, so
@@ -488,10 +520,11 @@ function previewViewportStyle(
   viewport: PreviewViewportId,
   previewScale = 1,
   canvasSize?: PreviewCanvasSize,
+  options?: PreviewScaleOptions,
 ): CSSProperties & Record<string, string | number> {
   const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
   if (!preset.width) return {};
-  const effectiveScale = effectivePreviewScale(viewport, previewScale, canvasSize);
+  const effectiveScale = effectivePreviewScale(viewport, previewScale, canvasSize, options);
   return {
     '--preview-viewport-width': `${preset.width}px`,
     '--preview-viewport-height': `${preset.height}px`,
@@ -500,15 +533,54 @@ function previewViewportStyle(
   };
 }
 
+export function commentPreviewCanvasSize(
+  canvasSize: PreviewCanvasSize | undefined,
+  options: CommentPreviewCanvasOptions,
+): PreviewCanvasSize | undefined {
+  if (!canvasSize || !options.boardMode) return canvasSize;
+  const dockPadding = options.viewport && options.viewport !== 'desktop'
+    ? COMMENT_SIDE_DOCK_NON_DESKTOP_PADDING
+    : COMMENT_SIDE_DOCK_PADDING;
+  const sideDockWidth = options.sidePanelCollapsed ? COMMENT_SIDE_DOCK_RAIL_WIDTH : COMMENT_SIDE_DOCK_WIDTH;
+  const dockedWidth = canvasSize.width - (dockPadding * 2) - COMMENT_SIDE_DOCK_GAP - sideDockWidth;
+  if (usesStackedCommentSideDock(canvasSize, options)) {
+    const stackedHeightDeduction = options.sidePanelCollapsed
+      ? COMMENT_SIDE_DOCK_STACKED_COLLAPSED_HEIGHT_DEDUCTION
+      : COMMENT_SIDE_DOCK_STACKED_HEIGHT_DEDUCTION;
+    return {
+      width: Math.max(1, canvasSize.width - (COMMENT_SIDE_DOCK_PADDING * 2)),
+      height: Math.max(1, canvasSize.height - stackedHeightDeduction),
+    };
+  }
+  return {
+    width: Math.max(1, dockedWidth),
+    height: Math.max(1, canvasSize.height - (dockPadding * 2)),
+  };
+}
+
+function usesStackedCommentSideDock(
+  canvasSize: PreviewCanvasSize | undefined,
+  options: CommentPreviewCanvasOptions,
+) {
+  if (!canvasSize || !options.boardMode) return false;
+  const dockPadding = options.viewport && options.viewport !== 'desktop'
+    ? COMMENT_SIDE_DOCK_NON_DESKTOP_PADDING
+    : COMMENT_SIDE_DOCK_PADDING;
+  const sideDockWidth = options.sidePanelCollapsed ? COMMENT_SIDE_DOCK_RAIL_WIDTH : COMMENT_SIDE_DOCK_WIDTH;
+  const dockedWidth = canvasSize.width - (dockPadding * 2) - COMMENT_SIDE_DOCK_GAP - sideDockWidth;
+  return dockedWidth < COMMENT_SIDE_DOCK_MIN_CANVAS_WIDTH;
+}
+
 export function effectivePreviewScale(
   viewport: PreviewViewportId,
   previewScale: number,
   canvasSize?: PreviewCanvasSize,
+  options?: PreviewScaleOptions,
 ) {
   if (viewport === 'desktop') return previewScale;
   const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === viewport);
   if (!preset?.width || !preset.height || !canvasSize?.width || !canvasSize.height) return previewScale;
-  const canvasPadding = 48;
+  const canvasPadding = options?.canvasPadding ?? 48;
   const availableWidth = Math.max(1, canvasSize.width - canvasPadding);
   const availableHeight = Math.max(1, canvasSize.height - canvasPadding);
   const fitScale = Math.min(1, availableWidth / preset.width, availableHeight / preset.height);
@@ -661,6 +733,21 @@ function setSlideStateCached(key: string, state: SlideState) {
     const oldest = htmlPreviewSlideState.keys().next().value;
     if (oldest != null) htmlPreviewSlideState.delete(oldest);
   }
+}
+
+function waitForIframeLoadOrTimeout(iframe: HTMLIFrameElement, timeout = 750): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      iframe.removeEventListener('load', finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, timeout);
+    iframe.addEventListener('load', finish, { once: true });
+  });
 }
 
 function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path'>): string {
@@ -2059,7 +2146,6 @@ export function CommentSidePanel({
   activeCommentId,
   collapsed,
   onCollapsedChange,
-  onClose,
   onToggleSelect,
   onSelectAll,
   onClearSelection,
@@ -2075,7 +2161,6 @@ export function CommentSidePanel({
   activeCommentId: string | null;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
-  onClose: () => void;
   onToggleSelect: (commentId: string) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -2092,21 +2177,48 @@ export function CommentSidePanel({
   const selectedCount = visibleSelectedIds.size;
   const allSelected = comments.length > 0 && selectedCount === comments.length;
   const commentsLabel = t('chat.tabComments');
+  const collapsedRailRef = useRef<HTMLButtonElement | null>(null);
+  const expandedToggleRef = useRef<HTMLButtonElement | null>(null);
+  const pendingToggleFocusRef = useRef<'collapsed' | 'expanded' | null>(null);
+  const panelId = useId();
   const canCreateComment = Boolean(onCreateComment) && newCommentDraft.trim().length > 0 && !sending;
   const submitNewComment = async () => {
     if (!onCreateComment || !newCommentDraft.trim()) return;
     const saved = await onCreateComment(newCommentDraft.trim());
     if (saved) setNewCommentDraft('');
   };
+
+  useEffect(() => {
+    const target =
+      pendingToggleFocusRef.current === 'collapsed'
+        ? collapsedRailRef.current
+        : pendingToggleFocusRef.current === 'expanded'
+          ? expandedToggleRef.current
+          : null;
+    if (!target) return;
+    pendingToggleFocusRef.current = null;
+    target.focus();
+  }, [collapsed]);
+
+  const handleCollapsedChange = (
+    nextCollapsed: boolean,
+    nextFocusTarget: 'collapsed' | 'expanded',
+  ) => {
+    pendingToggleFocusRef.current = nextFocusTarget;
+    onCollapsedChange(nextCollapsed);
+  };
+
   if (collapsed) {
     return (
       <button
+        ref={collapsedRailRef}
         type="button"
         className="comment-side-rail"
         data-testid="comment-side-collapsed-rail"
         aria-label={t('preview.showSidebar', { label: commentsLabel })}
+        aria-expanded={false}
         title={t('preview.showSidebar', { label: commentsLabel })}
-        onClick={() => onCollapsedChange(false)}
+        onClick={() => handleCollapsedChange(false, 'expanded')}
       >
         <RemixIcon name="message-3-line" size={15} />
         <span>{commentsLabel}</span>
@@ -2116,7 +2228,7 @@ export function CommentSidePanel({
   }
 
   return (
-    <aside className="comment-side-panel" data-testid="comment-side-panel" aria-label={commentsLabel}>
+    <aside id={panelId} className="comment-side-panel" data-testid="comment-side-panel" aria-label={commentsLabel}>
       <div className="comment-side-header">
         <div className="comment-side-title">
           <RemixIcon name="message-3-line" size={15} />
@@ -2133,15 +2245,18 @@ export function CommentSidePanel({
               {t('chat.comments.selectAll')}
             </button>
           ) : null}
-        <button
-          type="button"
-          className="comment-side-close"
-          aria-label={t('common.close')}
-          title={t('common.close')}
-          onClick={onClose}
-        >
-          <Icon name="close" size={12} />
-        </button>
+          <button
+            ref={expandedToggleRef}
+            type="button"
+            className="comment-side-collapse"
+            aria-label={t('preview.hideSidebar', { label: commentsLabel })}
+            aria-controls={panelId}
+            aria-expanded={true}
+            title={t('preview.hideSidebar', { label: commentsLabel })}
+            onClick={() => handleCollapsedChange(true, 'collapsed')}
+          >
+            <Icon name="chevron-right" size={14} />
+          </button>
         </div>
       </div>
       <div className="comment-side-list">
@@ -2269,6 +2384,62 @@ export function CommentSidePanel({
         </form>
       ) : null}
     </aside>
+  );
+}
+
+function CommentSideDock({
+  comments,
+  selectedIds,
+  activeCommentId,
+  collapsed,
+  onCollapsedChange,
+  onToggleSelect,
+  onSelectAll,
+  onClearSelection,
+  onReply,
+  onSendSelected,
+  onCreateComment,
+  sending,
+  t,
+  composer,
+}: {
+  comments: PreviewComment[];
+  selectedIds: Set<string>;
+  activeCommentId: string | null;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+  onToggleSelect: (commentId: string) => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
+  onReply: (comment: PreviewComment) => void;
+  onSendSelected: () => void | Promise<void>;
+  onCreateComment?: (note: string) => boolean | Promise<boolean>;
+  sending: boolean;
+  t: TranslateFn;
+  composer?: ReactNode;
+}) {
+  return (
+    <div
+      className={`comment-side-dock${collapsed ? ' collapsed' : ''}`}
+      data-testid="comment-side-dock"
+    >
+      <CommentSidePanel
+        comments={comments}
+        selectedIds={selectedIds}
+        activeCommentId={activeCommentId}
+        collapsed={collapsed}
+        onCollapsedChange={onCollapsedChange}
+        onToggleSelect={onToggleSelect}
+        onSelectAll={onSelectAll}
+        onClearSelection={onClearSelection}
+        onReply={onReply}
+        onSendSelected={onSendSelected}
+        onCreateComment={onCreateComment}
+        sending={sending}
+        t={t}
+        composer={composer}
+      />
+    </div>
   );
 }
 
@@ -4226,6 +4397,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
+  const imageExportTitleId = useId();
   // Opt back into the legacy inline-asset srcDoc path via `?forceInline=1`
   // on the host page. Lets users escape-hatch around the URL-load default
   // for non-deck HTML that depends on the in-iframe localStorage shim.
@@ -4266,12 +4438,32 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
+  const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
+  const [imageExportBusy, setImageExportBusy] = useState(false);
+  const [imageExportPreparing, setImageExportPreparing] = useState(false);
+  const [imageExportError, setImageExportError] = useState<string | null>(null);
+  const [imageExportSavedToast, setImageExportSavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [imageExportPreparedBlob, setImageExportPreparedBlob] = useState<{ format: ImageExportFormat; blob: Blob } | null>(null);
+  const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
+  const imageExportPrepareIdRef = useRef(0);
   const [exportToast, setExportToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
+  const localCommentSideDockActive = commentPanelOpen && !commentPortalHost;
+  const boardPreviewCanvasSize = commentPreviewCanvasSize(previewBodySize, {
+    boardMode: localCommentSideDockActive,
+    sidePanelCollapsed: commentSidePanelCollapsed,
+    viewport: previewViewport,
+  });
+  const boardSideDockStacked = usesStackedCommentSideDock(previewBodySize, {
+    boardMode: localCommentSideDockActive,
+    sidePanelCollapsed: commentSidePanelCollapsed,
+    viewport: previewViewport,
+  });
 
   function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
@@ -4395,8 +4587,18 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [slideState, setSlideState] = useState<SlideState | null>(
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
-  const overlayPreviewTransform = previewOverlayTransform(previewViewport, previewScale, previewBodySize);
-  const overlayPreviewScale = overlayPreviewTransform.scale;
+  const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
+  const overlayPreviewScale = effectivePreviewScale(
+    previewViewport,
+    previewScale,
+    boardPreviewCanvasSize,
+    boardPreviewScaleOptions,
+  );
+  const overlayPreviewTransform: PreviewOverlayTransform = {
+    scale: overlayPreviewScale,
+    offsetX: 0,
+    offsetY: 0,
+  };
   const shareRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -4528,7 +4730,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   // arrives, switch to the final render mode and enable srcDoc-only bridges.
   const previewUsesUrlTransport = source === null || useUrlLoadPreview;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -4678,6 +4880,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
   }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  const activateSrcDocSnapshotTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    if (!srcDoc) return false;
+    const win = target?.contentWindow;
+    if (!win) return false;
+    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    return true;
+  }, [srcDoc]);
   useEffect(() => {
     if (previewUsesUrlTransport) {
       activatedSrcDocTransportHtmlRef.current = null;
@@ -4715,7 +4924,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
 
   useEffect(() => {
     restorePreviewScrollPosition();
-  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+  }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -6039,6 +6248,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       setAgentToolsOpen(false);
       return;
     }
+    capturePreviewScrollPosition();
     const activateDraw = () => {
       setCommentPanelOpen(false);
       setCommentCreateMode(false);
@@ -6239,6 +6449,110 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     markExportReadyNudgeSeen(projectId, file.name);
     setShareMenuOpen((v) => !v);
   };
+  const captureExportImageSnapshot = useCallback(async () => {
+    if (!useUrlLoadPreview) {
+      const activeIframe = iframeRef.current;
+      return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
+    }
+
+    const srcDocIframe = srcDocPreviewIframeRef.current;
+    if (!srcDocIframe) {
+      const activeIframe = iframeRef.current;
+      return activeIframe ? requestPreviewSnapshot(activeIframe) : null;
+    }
+
+    if (!srcDocShellReady) {
+      await waitForIframeLoadOrTimeout(srcDocIframe, 500);
+    }
+    const activated = activateSrcDocSnapshotTransport(srcDocIframe);
+    if (activated) {
+      await waitForIframeLoadOrTimeout(srcDocIframe);
+    }
+    return requestPreviewSnapshot(srcDocIframe);
+  }, [
+    activateSrcDocSnapshotTransport,
+    srcDocShellReady,
+    useUrlLoadPreview,
+  ]);
+
+  const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
+    const prepareId = imageExportPrepareIdRef.current + 1;
+    imageExportPrepareIdRef.current = prepareId;
+    setImageExportPreparing(true);
+    setImageExportError(null);
+    setImageExportPreparedBlob(null);
+    try {
+      let dataUrl = imageExportSnapshotDataUrlRef.current;
+      if (!dataUrl) {
+        const snap = await captureExportImageSnapshot();
+        if (!snap) throw new Error('Snapshot capture returned null');
+        dataUrl = snap.dataUrl;
+        imageExportSnapshotDataUrlRef.current = dataUrl;
+      }
+      const blob = await imageDataUrlToBlob(dataUrl, format);
+      if (blob.size <= 0) throw new Error('Snapshot capture produced an empty image');
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportPreparedBlob({ format, blob });
+      }
+    } catch (err) {
+      console.warn('[exportAsImage] failed to prepare snapshot:', err);
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportError(t('fileViewer.exportImageFailed'));
+      }
+    } finally {
+      if (imageExportPrepareIdRef.current === prepareId) {
+        setImageExportPreparing(false);
+      }
+    }
+  }, [captureExportImageSnapshot, t]);
+
+  const openImageExportModal = () => {
+    setShareMenuOpen(false);
+    setImageExportError(null);
+    setImageExportPreparedBlob(null);
+    imageExportSnapshotDataUrlRef.current = null;
+    setImageExportModalOpen(true);
+    void prepareImageExportBlob(imageExportFormat);
+  };
+
+  const changeImageExportFormat = (format: ImageExportFormat) => {
+    setImageExportFormat(format);
+    void prepareImageExportBlob(format);
+  };
+
+  async function handleImageExportSave() {
+    const prepared = imageExportPreparedBlob;
+    if (!prepared || prepared.format !== imageExportFormat) {
+      setImageExportError(t('fileViewer.exportImageFailed'));
+      return;
+    }
+    setImageExportBusy(true);
+    setImageExportError(null);
+    try {
+      const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
+      if (!target) return;
+      const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
+      if (target.method === 'download' && imageExportFormat === 'png' && preparedDataUrl) {
+        downloadImageDataUrl(preparedDataUrl, target.filename);
+      } else {
+        await target.save(prepared.blob);
+      }
+      setImageExportModalOpen(false);
+      setImageExportSavedToast({
+        message: target.method === 'picker'
+          ? t('fileViewer.exportImageSaved')
+          : t('fileViewer.exportImageDownloadStarted'),
+        details: target.method === 'picker'
+          ? target.filename
+          : t('fileViewer.exportImageDownloadDetails', { filename: target.filename }),
+      });
+    } catch (err) {
+      console.warn('[exportAsImage] failed to save snapshot:', err);
+      setImageExportError(t('fileViewer.exportImageFailed'));
+    } finally {
+      setImageExportBusy(false);
+    }
+  }
   const visibleSideComments = useMemo(
     () => previewComments
       .filter((comment) => comment.filePath === file.name && comment.status === 'open')
@@ -6353,6 +6667,12 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   };
   const boardAvailable = mode === 'preview' && source !== null;
   const showPreviewToolbarControls = mode === 'preview';
+  const commentPreviewLayoutClass = [
+    'comment-preview-layer',
+    localCommentSideDockActive ? 'comment-preview-layer-with-side-dock' : '',
+    localCommentSideDockActive && commentSidePanelCollapsed ? 'comment-preview-layer-dock-collapsed' : '',
+    boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
+  ].filter(Boolean).join(' ');
   const manualEditPanel = manualEditMode ? (
     <ManualEditPanel
       targets={manualEditTargets}
@@ -6462,19 +6782,12 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     />
   ) : null;
   const commentSidePanel = commentPanelOpen ? (
-    <CommentSidePanel
+    <CommentSideDock
       comments={visibleSideComments}
       selectedIds={selectedSideCommentIds}
       activeCommentId={activeSideCommentId}
       collapsed={commentPortalHost ? false : commentSidePanelCollapsed}
       onCollapsedChange={setCommentSidePanelCollapsed}
-      onClose={() => {
-        setCommentPanelOpen(false);
-        setCommentSidePanelCollapsed(false);
-        setCommentCreateMode(false);
-        setBoardMode(false);
-        clearBoardComposer();
-      }}
       onToggleSelect={(commentId) => {
         setSelectedSideCommentIds((current) => {
           const next = new Set(current);
@@ -6919,33 +7232,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
                     <span>{t('fileViewer.exportPptx') + '…'}</span>
                   </button>
-                  {!previewUsesUrlTransport ? (
-                    <button
-                      type="button"
-                      className="share-menu-item share-menu-subitem"
-                      role="menuitem"
-                      onClick={async () => {
-                        setShareMenuOpen(false);
-                        const iframe = iframeRef.current;
-                        if (!iframe) return;
-                        const snap = await requestPreviewSnapshot(iframe);
-                        try {
-                          if (snap) {
-                            exportAsImage(snap.dataUrl, exportTitle);
-                          } else {
-                            console.warn('[exportAsImage] snapshot capture returned null');
-                            alert(t('fileViewer.exportImageFailed'));
-                          }
-                        } catch (err) {
-                          console.warn('[exportAsImage] failed to convert snapshot:', err);
-                          alert(t('fileViewer.exportImageFailed'));
-                        }
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
-                      <span>{t('fileViewer.exportImage')}</span>
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="share-menu-item share-menu-subitem"
+                    role="menuitem"
+                    onClick={openImageExportModal}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
+                    <span>{t('fileViewer.exportImage')}</span>
+                  </button>
                   <div className="share-menu-subsection-label" role="presentation">
                     {t('fileViewer.shareMenuSourceFiles')}
                   </div>
@@ -7026,202 +7321,267 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           ) : null}
         </>)}
       <div className="viewer-body" ref={previewBodyRef}>
-        <div
-          className={`${manualEditMode ? 'manual-edit-workspace' : 'comment-preview-layer'} preview-viewport preview-viewport-${previewViewport}`}
-          style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
-          hidden={mode !== 'preview'}
-          aria-hidden={mode !== 'preview'}
-        >
+        {source === null ? (
+          <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        ) : mode === 'preview' ? (
+          <div
+            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}`}
+            data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
+            style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
+          >
             {manualEditPanel}
-            <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
-              <div
-                style={
-                  manualEditMode
-                    ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
-                    : previewScaleShellStyle(previewViewport, previewScale)
-                }
-              >
-                <PreviewDrawOverlay
-                  active={drawOverlayOpen}
-                  onActiveChange={setDrawOverlayOpen}
-                  captureTarget={null}
-                  filePath={file.name}
-                  sendDisabled={streaming}
-                  sendDisabledReason={t('chat.annotationSendDisabledReason')}
+            <div
+              className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
+              data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}
+            >
+              <div className={manualEditMode ? undefined : 'comment-frame-clip'}>
+                <div
+                  style={
+                    manualEditMode
+                      ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
+                      : previewScaleShellStyle(previewViewport, previewScale)
+                  }
                 >
-                  <div className="artifact-preview-transport-stack">
-                    {OD_PREVIEW_KEEP_ALIVE ? (
-                      <PooledIframe
-                        ref={urlPreviewIframeRef}
-                        cacheKey={urlPreviewKeepAliveKey}
-                        data-testid={previewUsesUrlTransport ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
-                        data-od-render-mode="url-load"
-                        data-od-active={previewUsesUrlTransport ? 'true' : 'false'}
-                        aria-hidden={previewUsesUrlTransport ? undefined : true}
-                        tabIndex={previewUsesUrlTransport ? 0 : -1}
-                        title={file.name}
-                        sandbox="allow-scripts allow-downloads"
-                        src={urlTransportSrc}
-                        onLoad={() => {
-                          const frame = urlPreviewIframeRef.current;
-                          if (previewUsesUrlTransport) iframeRef.current = frame;
-                          dcViewportRestoreAtRef.current = Date.now();
-                          frame?.contentWindow?.postMessage({
-                            type: '__dc_set_viewport',
-                            ...dcViewportRef.current,
-                          }, '*');
-                          syncBridgeModes(frame);
-                          if (previewUsesUrlTransport) restorePreviewScrollPosition();
-                        }}
-                      />
-                    ) : (
+                  <PreviewDrawOverlay
+                    active={drawOverlayOpen}
+                    onActiveChange={setDrawOverlayOpen}
+                    captureTarget={null}
+                    filePath={file.name}
+                    sendDisabled={streaming}
+                    sendDisabledReason={t('chat.annotationSendDisabledReason')}
+                  >
+                    <div className="artifact-preview-transport-stack">
+                      {OD_PREVIEW_KEEP_ALIVE ? (
+                        <PooledIframe
+                          ref={urlPreviewIframeRef}
+                          cacheKey={urlPreviewKeepAliveKey}
+                          data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
+                          data-od-render-mode="url-load"
+                          data-od-active={useUrlLoadPreview ? 'true' : 'false'}
+                          aria-hidden={useUrlLoadPreview ? undefined : true}
+                          tabIndex={useUrlLoadPreview ? 0 : -1}
+                          title={file.name}
+                          sandbox="allow-scripts allow-downloads"
+                          src={urlTransportSrc}
+                          onLoad={() => {
+                            const frame = urlPreviewIframeRef.current;
+                            if (useUrlLoadPreview) iframeRef.current = frame;
+                            dcViewportRestoreAtRef.current = Date.now();
+                            frame?.contentWindow?.postMessage({
+                              type: '__dc_set_viewport',
+                              ...dcViewportRef.current,
+                            }, '*');
+                            syncBridgeModes(frame);
+                            if (useUrlLoadPreview) restorePreviewScrollPosition();
+                          }}
+                        />
+                      ) : (
+                        <iframe
+                          ref={urlPreviewIframeRef}
+                          data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
+                          data-od-render-mode="url-load"
+                          data-od-active={useUrlLoadPreview ? 'true' : 'false'}
+                          aria-hidden={useUrlLoadPreview ? undefined : true}
+                          tabIndex={useUrlLoadPreview ? 0 : -1}
+                          title={file.name}
+                          sandbox="allow-scripts allow-downloads"
+                          src={urlTransportSrc}
+                          onLoad={() => {
+                            const frame = urlPreviewIframeRef.current;
+                            if (useUrlLoadPreview) iframeRef.current = frame;
+                            dcViewportRestoreAtRef.current = Date.now();
+                            frame?.contentWindow?.postMessage({
+                              type: '__dc_set_viewport',
+                              ...dcViewportRef.current,
+                            }, '*');
+                            syncBridgeModes(frame);
+                            if (useUrlLoadPreview) restorePreviewScrollPosition();
+                          }}
+                        />
+                      )}
                       <iframe
-                        ref={urlPreviewIframeRef}
-                        data-testid={previewUsesUrlTransport ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
-                        data-od-render-mode="url-load"
-                        data-od-active={previewUsesUrlTransport ? 'true' : 'false'}
-                        aria-hidden={previewUsesUrlTransport ? undefined : true}
-                        tabIndex={previewUsesUrlTransport ? 0 : -1}
+                        key={srcDocTransportResetKey}
+                        ref={srcDocPreviewIframeRef}
+                        data-testid={useUrlLoadPreview ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
+                        data-od-render-mode="srcdoc"
+                        data-od-active={useUrlLoadPreview ? 'false' : 'true'}
+                        aria-hidden={useUrlLoadPreview ? true : undefined}
+                        tabIndex={useUrlLoadPreview ? -1 : 0}
                         title={file.name}
                         sandbox="allow-scripts allow-downloads"
-                        src={urlTransportSrc}
+                        srcDoc={srcDocTransportContent}
                         onLoad={() => {
-                          const frame = urlPreviewIframeRef.current;
-                          if (previewUsesUrlTransport) iframeRef.current = frame;
+                          const frame = srcDocPreviewIframeRef.current;
+                          if (!useUrlLoadPreview) iframeRef.current = frame;
+                          // Reset the activation dedupe exactly ONCE per
+                          // freshly mounted iframe DOM node, never on the
+                          // subsequent load events that the same node
+                          // emits during normal srcDoc rendering.
+                          //
+                          // The iframe's load event fires twice for one
+                          // successful activation: once when the lazy
+                          // transport shell HTML loads, and again when
+                          // our own document.open/write/close inside the
+                          // shell finishes. PR #2699 reset the dedupe on
+                          // every load so that switching
+                          // preview -> source -> preview (which remounts
+                          // this iframe as a fresh DOM node) would
+                          // re-activate the new shell. But resetting on
+                          // every load also re-activated on the SECOND
+                          // load of a non-remounted frame, which
+                          // re-triggered document.open/write/close, which
+                          // re-fired the load event, ad infinitum. The
+                          // dedupe ref oscillated between null and the
+                          // current srcDoc thousands of times per render
+                          // and each iteration restarted every CSS
+                          // animation from its `from` keyframe. Designs
+                          // using `animation-fill-mode: both` with
+                          // `from { opacity: 0 }` stayed at opacity 0
+                          // forever and the preview read as blank.
+                          // That is issue #2361.
+                          //
+                          // Tracking the last frame we reset for lets us
+                          // keep PR #2699's "remount after Source toggle"
+                          // fix while breaking the loop on plain renders.
+                          if (frame && srcDocFrameDedupeResetForRef.current !== frame) {
+                            srcDocFrameDedupeResetForRef.current = frame;
+                            activatedSrcDocTransportHtmlRef.current = null;
+                          }
+                          if (useLazySrcDocTransport) setSrcDocShellReady(true);
+                          activateLoadedSrcDocTransport(frame);
                           dcViewportRestoreAtRef.current = Date.now();
                           frame?.contentWindow?.postMessage({
                             type: '__dc_set_viewport',
                             ...dcViewportRef.current,
                           }, '*');
+                          replayInspectOverridesToIframe(frame);
                           syncBridgeModes(frame);
-                          if (previewUsesUrlTransport) restorePreviewScrollPosition();
+                          if (!useUrlLoadPreview) restorePreviewScrollPosition();
                         }}
                       />
-                    )}
-                    <iframe
-                      key={srcDocTransportResetKey}
-                      ref={srcDocPreviewIframeRef}
-                      data-testid={previewUsesUrlTransport ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
-                      data-od-render-mode="srcdoc"
-                      data-od-active={previewUsesUrlTransport ? 'false' : 'true'}
-                      aria-hidden={previewUsesUrlTransport ? true : undefined}
-                      tabIndex={previewUsesUrlTransport ? -1 : 0}
-                      title={file.name}
-                      sandbox="allow-scripts allow-downloads"
-                      srcDoc={srcDocTransportContent}
-                      onLoad={() => {
-                        const frame = srcDocPreviewIframeRef.current;
-                        if (!useUrlLoadPreview) iframeRef.current = frame;
-                        // Reset the activation dedupe exactly ONCE per
-                        // freshly mounted iframe DOM node, never on the
-                        // subsequent load events that the same node
-                        // emits during normal srcDoc rendering.
-                        //
-                        // The iframe's load event fires twice for one
-                        // successful activation: once when the lazy
-                        // transport shell HTML loads, and again when
-                        // our own document.open/write/close inside the
-                        // shell finishes. PR #2699 reset the dedupe on
-                        // every load so that switching
-                        // preview -> source -> preview (which remounts
-                        // this iframe as a fresh DOM node) would
-                        // re-activate the new shell. But resetting on
-                        // every load also re-activated on the SECOND
-                        // load of a non-remounted frame, which
-                        // re-triggered document.open/write/close, which
-                        // re-fired the load event, ad infinitum. The
-                        // dedupe ref oscillated between null and the
-                        // current srcDoc thousands of times per render
-                        // and each iteration restarted every CSS
-                        // animation from its `from` keyframe. Designs
-                        // using `animation-fill-mode: both` with
-                        // `from { opacity: 0 }` stayed at opacity 0
-                        // forever and the preview read as blank.
-                        // That is issue #2361.
-                        //
-                        // Tracking the last frame we reset for lets us
-                        // keep PR #2699's "remount after Source toggle"
-                        // fix while breaking the loop on plain renders.
-                        if (frame && srcDocFrameDedupeResetForRef.current !== frame) {
-                          srcDocFrameDedupeResetForRef.current = frame;
-                          activatedSrcDocTransportHtmlRef.current = null;
-                        }
-                        if (useLazySrcDocTransport) setSrcDocShellReady(true);
-                        activateLoadedSrcDocTransport(frame);
-                        dcViewportRestoreAtRef.current = Date.now();
-                        frame?.contentWindow?.postMessage({
-                          type: '__dc_set_viewport',
-                          ...dcViewportRef.current,
-                        }, '*');
-                        replayInspectOverridesToIframe(frame);
-                        syncBridgeModes(frame);
-                        if (!previewUsesUrlTransport) restorePreviewScrollPosition();
-                      }}
-                    />
-                  </div>
-                </PreviewDrawOverlay>
+                    </div>
+                  </PreviewDrawOverlay>
+                </div>
               </div>
+              {boardMode ? (
+                <CommentPreviewOverlays
+                  comments={commentCreateMode ? visibleSideComments : []}
+                  liveTargets={liveCommentTargets}
+                  hoveredTarget={hoveredCommentTarget}
+                  hoveredPodMemberId={hoveredPodMemberId}
+                  activeTarget={activeCommentTarget}
+                  boardTool={boardTool}
+                  showActivePin={commentCreateMode}
+                  scale={overlayPreviewScale}
+                  offsetX={overlayPreviewTransform.offsetX}
+                  offsetY={overlayPreviewTransform.offsetY}
+                  strokePoints={strokePoints}
+                  onOpenComment={(comment, snapshot) => {
+                    setCommentPanelOpen(true);
+                    setCommentSidePanelCollapsed(false);
+                    setCommentCreateMode(true);
+                    setBoardMode(true);
+                    setActiveCommentTarget(snapshot);
+                    setHoveredCommentTarget(snapshot);
+                    setActivePreviewCommentId(comment.id);
+                    setCommentDraft(comment.note);
+                    setQueuedBoardNotes([]);
+                  }}
+                />
+              ) : null}
+              {exportToast ? (
+                <div className="comment-toast-anchor">
+                  <Toast
+                    message={exportToast}
+                    ttlMs={2200}
+                    onDismiss={() => setExportToast(null)}
+                  />
+                </div>
+              ) : null}
+              {commentSavedToast ? (
+                <div className="comment-toast-anchor">
+                  <Toast
+                    message={commentSavedToast}
+                    ttlMs={2200}
+                    onDismiss={() => setCommentSavedToast(null)}
+                  />
+                </div>
+              ) : null}
+              {templateSavedToast ? (
+                <div className="comment-toast-anchor">
+                  <Toast
+                    message={templateSavedToast}
+                    ttlMs={2200}
+                    onDismiss={() => setTemplateSavedToast(null)}
+                  />
+                </div>
+              ) : null}
+              {commentComposer}
+              {boardMode && !commentCreateMode && hoveredCommentTarget && (!activeCommentTarget || commentPortalHost) ? (
+                <AnnotationHoverPopover target={hoveredCommentTarget} scale={overlayPreviewScale} />
+              ) : null}
+              {/*
+                Hint banner for Inspect / Picker modes. The bridge in
+                `apps/web/src/runtime/srcdoc.ts` posts `od:comment-targets`
+                with every element annotated with `data-od-id` /
+                `data-screen-label`, so `liveCommentTargets.size` is the
+                authoritative annotation count for the current artifact.
+
+                Two states:
+                - "has targets": the existing copy ("Click any element with
+                  `data-od-id` to tune its style.") for users who just don't
+                  see the crosshair cursor.
+                - "no targets" (issue #890): a freeform-generated artifact
+                  (e.g. PRD → HTML through a Claude-Code-compatible CLI
+                  without a skill) ships zero `data-od-id` annotations. The
+                  bridge's click handler walks up to <html>, finds nothing,
+                  and bails — clicks no-op silently. The static copy made
+                  this look broken; the empty-state copy explains what's
+                  missing and how to fix it. Mirrored across Inspect and
+                  element-pick annotation mode because the failure surface is identical.
+              */}
+              {inspectMode
+                && openHintBox
+                && !activeInspectTarget
+                && !activeCommentTarget ? (
+                <div
+                  className="inspect-empty-hint-container"
+                  data-testid="inspect-empty-hint-container"
+                >
+                  {liveCommentTargets.size === 0 ? (
+                    <div
+                      className="inspect-empty-hint"
+                      data-testid="inspect-empty-hint-no-targets"
+                    >
+                      {inspectMode
+                        ? t('chat.inspect.noEditableTargets')
+                        : t('chat.inspect.noCommentTargets')}
+                    </div>
+                  ) : (
+                    <div
+                      className="inspect-empty-hint"
+                      data-testid="inspect-empty-hint"
+                    >
+                      {inspectMode ? t('chat.inspect.editHint') : t('chat.inspect.commentHint')}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    title="Close Inspect Hint"
+                    aria-label="Close Inspect Hint"
+                    onClick={() => setOpenHintBox(false)}
+                    className="orbit-artifact-ghost"
+                  >
+                    <Icon className="" name="close" size={12} />
+                  </button>
+                </div>
+              ) : null}
             </div>
-            {boardMode ? (
-              <CommentPreviewOverlays
-                comments={commentCreateMode ? visibleSideComments : []}
-                liveTargets={liveCommentTargets}
-                hoveredTarget={hoveredCommentTarget}
-                hoveredPodMemberId={hoveredPodMemberId}
-                activeTarget={activeCommentTarget}
-                boardTool={boardTool}
-                showActivePin={commentCreateMode}
-                scale={overlayPreviewScale}
-                offsetX={overlayPreviewTransform.offsetX}
-                offsetY={overlayPreviewTransform.offsetY}
-                strokePoints={strokePoints}
-                onOpenComment={(comment, snapshot) => {
-                  setCommentPanelOpen(true);
-                  setCommentSidePanelCollapsed(false);
-                  setCommentCreateMode(true);
-                  setBoardMode(true);
-                  setActiveCommentTarget(snapshot);
-                  setHoveredCommentTarget(snapshot);
-                  setActivePreviewCommentId(comment.id);
-                  setCommentDraft(comment.note);
-                  setQueuedBoardNotes([]);
-                }}
-              />
-            ) : null}
-            {exportToast ? (
-              <div className="comment-toast-anchor">
-                <Toast
-                  message={exportToast}
-                  ttlMs={2200}
-                  onDismiss={() => setExportToast(null)}
-                />
-              </div>
-            ) : null}
-            {commentSavedToast ? (
-              <div className="comment-toast-anchor">
-                <Toast
-                  message={commentSavedToast}
-                  ttlMs={2200}
-                  onDismiss={() => setCommentSavedToast(null)}
-                />
-              </div>
-            ) : null}
-            {templateSavedToast ? (
-              <div className="comment-toast-anchor">
-                <Toast
-                  message={templateSavedToast}
-                  ttlMs={2200}
-                  onDismiss={() => setTemplateSavedToast(null)}
-                />
-              </div>
-            ) : null}
-            {commentComposer}
-            {boardMode && !commentCreateMode && hoveredCommentTarget && (!activeCommentTarget || commentPortalHost) ? (
-              <AnnotationHoverPopover target={hoveredCommentTarget} scale={overlayPreviewScale} />
-            ) : null}
             {commentPortalHost && commentSidePanel
               ? createPortal(commentSidePanel, commentPortalHost)
-              : commentSidePanel}
+              : commentPortalId
+                ? null
+                : commentSidePanel}
             {inspectMode && activeInspectTarget ? (
               <InspectPanel
                 target={activeInspectTarget}
@@ -7259,65 +7619,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 error={inspectError}
               />
             ) : null}
-            {/*
-              Hint banner for Inspect / Picker modes. The bridge in
-              `apps/web/src/runtime/srcdoc.ts` posts `od:comment-targets`
-              with every element annotated with `data-od-id` /
-              `data-screen-label`, so `liveCommentTargets.size` is the
-              authoritative annotation count for the current artifact.
-
-              Two states:
-              - "has targets": the existing copy ("Click any element with
-                `data-od-id` to tune its style.") for users who just don't
-                see the crosshair cursor.
-              - "no targets" (issue #890): a freeform-generated artifact
-                (e.g. PRD → HTML through a Claude-Code-compatible CLI
-                without a skill) ships zero `data-od-id` annotations. The
-                bridge's click handler walks up to <html>, finds nothing,
-                and bails — clicks no-op silently. The static copy made
-                this look broken; the empty-state copy explains what's
-                missing and how to fix it. Mirrored across Inspect and
-                element-pick annotation mode because the failure surface is identical.
-            */}
-            {inspectMode
-              && openHintBox
-              && !activeInspectTarget
-              && !activeCommentTarget ? (
-              <div
-                className={`inspect-empty-hint-container${
-                  commentPanelOpen && !commentSidePanelCollapsed ? ' comment-side-panel-open' : ''
-                }`}
-                data-testid="inspect-empty-hint-container"
-              >
-                {liveCommentTargets.size === 0 ? (
-                  <div
-                    className="inspect-empty-hint"
-                    data-testid="inspect-empty-hint-no-targets"
-                  >
-                    {inspectMode
-                      ? t('chat.inspect.noEditableTargets')
-                      : t('chat.inspect.noCommentTargets')}
-                  </div>
-                ) : (
-                  <div
-                    className="inspect-empty-hint"
-                    data-testid="inspect-empty-hint"
-                  >
-                    {inspectMode ? t('chat.inspect.editHint') : t('chat.inspect.commentHint')}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  title="Close Inspect Hint"
-                  aria-label="Close Inspect Hint"
-                  onClick={() => setOpenHintBox(false)}
-                  className="orbit-artifact-ghost"
-                >
-                  <Icon className="" name="close" size={12} />
-                </button>
-              </div>
-            ) : null}
           </div>
+        ) : null}
         {mode === 'preview' ? null : source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : (
@@ -7352,6 +7655,74 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               srcDoc={srcDoc}
             />
           )}
+        </div>
+      ) : null}
+      {imageExportModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal deploy-modal image-export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={imageExportTitleId}
+          >
+            <div className="modal-head">
+              <div className="kicker">IMAGE</div>
+              <h2 id={imageExportTitleId}>{t('fileViewer.exportImage')}</h2>
+              <p className="subtitle">{t('fileViewer.exportImageModalSubtitle')}</p>
+            </div>
+            <div className="deploy-form image-export-form">
+              <fieldset className="image-export-format-field" disabled={imageExportBusy}>
+                <legend>{t('fileViewer.exportImageFormatLabel')}</legend>
+                <div className="image-export-format-options">
+                  {IMAGE_EXPORT_FORMAT_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className={`image-export-format-option${imageExportFormat === option.value ? ' active' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="image-export-format"
+                        value={option.value}
+                        aria-label={option.label}
+                        checked={imageExportFormat === option.value}
+                        onChange={() => changeImageExportFormat(option.value)}
+                      />
+                      <span className="image-export-format-text">
+                        <strong>{option.label}</strong>
+                        <span aria-hidden="true">{option.extension}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {imageExportError ? (
+                <p className="deploy-error" role="alert">{imageExportError}</p>
+              ) : null}
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                disabled={imageExportBusy}
+                onClick={() => {
+                  setImageExportModalOpen(false);
+                  setImageExportError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                disabled={imageExportBusy || imageExportPreparing || !imageExportPreparedBlob}
+                onClick={() => {
+                  void handleImageExportSave();
+                }}
+              >
+                {imageExportBusy || imageExportPreparing ? t('fileViewer.exportImageSaving') : t('common.save')}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {templateModalOpen ? (
@@ -7681,6 +8052,16 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           placement="top"
           ttlMs={3600}
           onDismiss={() => setDeploySavedToast(null)}
+        />
+      ) : null}
+      {imageExportSavedToast ? (
+        <Toast
+          message={imageExportSavedToast.message}
+          details={imageExportSavedToast.details}
+          tone="success"
+          placement="top"
+          ttlMs={3600}
+          onDismiss={() => setImageExportSavedToast(null)}
         />
       ) : null}
     </div>

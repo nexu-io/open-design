@@ -50,6 +50,7 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
   Project,
+  ProjectLocationPrefs,
   ProjectPlatform,
   PreviewCommentMember,
   PreviewAnnotationStyle,
@@ -86,6 +87,7 @@ export type {
   ChatCommentSelectionKind,
   OrbitRunSummary,
   OrbitStatusResponse,
+  ProjectLocation,
   PreviewCommentMember,
   PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
@@ -174,6 +176,7 @@ export interface MediaProviderCredentials {
   model?: string;
   apiKeyConfigured?: boolean;
   apiKeyTail?: string;
+  source?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -368,6 +371,8 @@ export interface AppConfig {
   // PrivacySection persist it through `syncConfigToDaemon`.
   telemetry?: TelemetryConfig;
   customInstructions?: string;
+  projectLocations?: ProjectLocationPrefs[];
+  defaultProjectLocationId?: string | null;
 }
 
 export interface TelemetryConfig {
