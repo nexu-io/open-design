@@ -1958,7 +1958,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getAllByText(/Share after generation completes/i).length).toBeGreaterThan(0);
   });
 
-  it('does not show deploy or download buttons for non-shareable artifacts', () => {
+  it('shows markdown export without exposing deploy actions for markdown artifacts', async () => {
     const file = baseFile({
       name: 'notes.md',
       path: 'notes.md',
@@ -1973,11 +1973,21 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['md'],
       },
     });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/notes.md') {
+        return new Response('# Notes\n\nKeep this as markdown.');
+      }
+      return new Response('', { status: 404 });
+    }));
 
     render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     expect(screen.queryByRole('button', { name: /^deploy$/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^download$/i })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /^download$/i }));
+
+    expect(screen.getByRole('menuitem', { name: /Export as Markdown/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
   });
 
   it('shows failed copy feedback when deployed link copying is blocked', async () => {
