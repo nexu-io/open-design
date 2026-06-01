@@ -159,12 +159,22 @@ deploy_from_source() {
   if [ -d "$OD_HOME/.git" ]; then
     ok "Updating existing checkout at $OD_HOME"
     git -C "$OD_HOME" pull --ff-only || note "git pull failed; using existing checkout"
-  elif [ -n "$OD_REF" ]; then
-    ok "Cloning $OD_REPO ($OD_REF)"
-    git clone --depth 1 --branch "$OD_REF" "$OD_REPO" "$OD_HOME"
   else
-    ok "Cloning $OD_REPO"
-    git clone --depth 1 "$OD_REPO" "$OD_HOME"
+    # Refuse to clone into a non-empty dir that isn't our checkout: it may hold
+    # unrelated user data (git clone would fatal anyway). Never delete it.
+    if [ -d "$OD_HOME" ] && [ -n "$(ls -A "$OD_HOME" 2>/dev/null)" ]; then
+      err "$OD_HOME exists and is not an Open Design checkout."
+      note "It contains other files. Re-run with a different OD_HOME, e.g.:"
+      note "  OD_HOME=\"\$HOME/.open-design-src\" $0 $AGENT"
+      exit 1
+    fi
+    if [ -n "$OD_REF" ]; then
+      ok "Cloning $OD_REPO ($OD_REF)"
+      git clone --depth 1 --branch "$OD_REF" "$OD_REPO" "$OD_HOME"
+    else
+      ok "Cloning $OD_REPO"
+      git clone --depth 1 "$OD_REPO" "$OD_HOME"
+    fi
   fi
 
   (
