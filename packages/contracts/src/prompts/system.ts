@@ -226,6 +226,13 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  const isMediaSurfaceEarly =
+    skillMode === 'image' ||
+    skillMode === 'video' ||
+    skillMode === 'audio' ||
+    metadata?.kind === 'image' ||
+    metadata?.kind === 'video' ||
+    metadata?.kind === 'audio';
 
   // API/BYOK mode (streamFormat === 'plain'): no tools are wired through
   // to the model, but the discovery layer + base prompt below still tell
@@ -251,11 +258,11 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  parts.push(
-    DISCOVERY_AND_PHILOSOPHY,
-    '\n\n---\n\n# Identity and workflow charter (background)\n\n',
-    BASE_SYSTEM_PROMPT,
-  );
+  if (!isMediaSurfaceEarly) {
+    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+  }
+
+  parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
   // keep both copies of this preamble in sync so a CLI chat and a BYOK
@@ -347,14 +354,7 @@ export function composeSystemPrompt({
     );
   }
 
-  const isMediaSurface =
-    skillMode === 'image' ||
-    skillMode === 'video' ||
-    skillMode === 'audio' ||
-    metadata?.kind === 'image' ||
-    metadata?.kind === 'video' ||
-    metadata?.kind === 'audio';
-  if (isMediaSurface) {
+  if (isMediaSurfaceEarly) {
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
