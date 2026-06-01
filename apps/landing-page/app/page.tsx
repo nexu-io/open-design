@@ -352,12 +352,12 @@ export default function Page({
                 {home.hero.lead(skills, systems)}
               </p>
               <div className='hero-actions' data-reveal>
-                <a className='btn btn-primary' href={REPO} {...ext}>
+                <a className='btn btn-ghost' href={REPO} {...ext}>
                   {home.hero.star}
                   <span className='arrow'>{arrowOut}</span>
                 </a>
                 <a
-                  className='btn btn-ghost'
+                  className='btn btn-primary'
                   href={REPO_RELEASES}
                   data-download-cta
                   {...ext}

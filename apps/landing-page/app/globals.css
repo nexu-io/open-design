@@ -723,6 +723,18 @@ body::before {
   color: var(--ink);
   font-size: 12px;
 }
+/* Download as the primary nav CTA: coral fill (matches the hero primary
+   button), carrying its own ↓ glyph regardless of the ghost/solid base. */
+.nav-cta.is-download {
+  background: var(--coral);
+  color: #fff;
+  box-shadow: 0 12px 22px -16px rgba(237, 111, 92, 1);
+  transition: background 160ms ease, transform 160ms ease;
+}
+.nav-cta.is-download:hover { background: #e25e4a; transform: translateY(-1px); }
+.nav-cta.is-download::after { content: '↓'; color: #fff; font-size: 12px; }
+/* Star demoted to the ghost/secondary slot but keeps its ★ glyph. */
+.nav-cta.ghost.is-star::after { content: '★'; color: var(--mustard); font-size: 11px; }
 .status-dot {
   width: 28px; height: 28px;
   border-radius: 50%;
