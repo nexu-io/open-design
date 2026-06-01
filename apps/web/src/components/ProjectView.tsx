@@ -4668,7 +4668,50 @@ interface HtmlArtifactLineage {
   title: string;
   artifactType: string;
   artifactGroupIdentifier: string;
-  htmlContent: string;
+  identitySignature: string;
+}
+
+/**
+ * Extract stable document identity signature from HTML content.
+ * Captures document title and local href topology, ignoring body copy changes.
+ */
+function htmlArtifactIdentitySignature(html: string): string {
+  // Extract <title> text (case-insensitive, trim/collapse whitespace)
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const rawTitle = titleMatch?.[1] ?? '';
+  const title = rawTitle.replace(/\s+/g, ' ').trim();
+
+  // Extract all href values, filter to local page links only
+  const hrefMatches = html.matchAll(/href=["']([^"']+)["']/gi);
+  const localHrefs: string[] = [];
+
+  for (const match of hrefMatches) {
+    const href = match[1];
+    if (!href) continue;
+    // Skip hash-only, external, protocol-relative, data, mailto, tel
+    if (
+      href.startsWith('#') ||
+      href.startsWith('http://') ||
+      href.startsWith('https://') ||
+      href.startsWith('//') ||
+      href.startsWith('data:') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('tel:')
+    ) {
+      continue;
+    }
+    // Keep local links, normalize and dedupe
+    const hrefWithoutHash = href.split('#')[0] ?? '';
+    const normalized = (hrefWithoutHash.split('?')[0] ?? '').trim();
+    if (normalized && !localHrefs.includes(normalized)) {
+      localHrefs.push(normalized);
+    }
+  }
+
+  // Sort for stable signature
+  localHrefs.sort();
+
+  return `title:${title}|hrefs:${localHrefs.join(',')}`;
 }
 
 function htmlArtifactLineageFor(
@@ -4682,7 +4725,7 @@ function htmlArtifactLineageFor(
     title: art.title ?? '',
     artifactType: art.artifactType ?? '',
     artifactGroupIdentifier,
-    htmlContent: art.html ?? '',
+    identitySignature: htmlArtifactIdentitySignature(art.html ?? ''),
   };
 }
 
@@ -4697,10 +4740,6 @@ function matchingHtmlArtifactLineageFileName(
   if ((art.artifactType ?? '') !== lineage.artifactType) return null;
   if (lineage.artifactGroupIdentifier === '') return null;
 
-  // Verify HTML content matches to prevent unrelated artifacts from reusing
-  // the group
-  if ((art.html ?? '') !== lineage.htmlContent) return null;
-
   // Verify the lineage file still exists and has the same group
   const lineageFile = projectFiles.find(
     (f) => f.name === lineage.fileName || f.path === lineage.fileName,
@@ -4709,6 +4748,10 @@ function matchingHtmlArtifactLineageFileName(
   const currentGroup =
     lineageFile.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
   if (currentGroup !== lineage.artifactGroupIdentifier) return null;
+
+  // Verify document identity signature matches
+  const currentSignature = htmlArtifactIdentitySignature(art.html ?? '');
+  if (currentSignature !== lineage.identitySignature) return null;
 
   return lineage.fileName;
 }
