@@ -1026,7 +1026,7 @@
   animation: chat-row-text-shimmer 1.7s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
 .chat-disclosure-body {
-  padding: 0 0 10px calc(var(--chat-row-icon) + var(--chat-row-gap));
+  padding: 0 0 4px calc(var(--chat-row-icon) + var(--chat-row-gap));
 }
 @keyframes chat-row-text-shimmer {
   to {

@@ -393,8 +393,8 @@
 .file-ops-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 3px 6px;
   border-radius: 6px;
   font-size: 12px;
   min-width: 0;
@@ -405,24 +405,26 @@
 .file-ops-row-badges {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 25px;
   flex-shrink: 0;
 }
 .file-ops-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-width: 18px;
+  gap: 2px;
+  min-width: 0;
   height: 18px;
-  padding: 0 5px;
-  border-radius: 4px;
+  padding: 0;
+  border-radius: 0;
   font-size: 9.5px;
   font-weight: 650;
   font-family: var(--mono);
   letter-spacing: 0;
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
 }
 .file-ops-badge svg {
@@ -434,19 +436,11 @@
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
 }
-.file-ops-badge--read {
-  color: color-mix(in oklab, var(--accent) 80%, var(--text));
-  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
-}
-.file-ops-badge--write {
-  color: #2e7d32;
-  border-color: color-mix(in oklab, #2e7d32 35%, var(--border));
-  background: color-mix(in oklab, #2e7d32 8%, var(--bg-subtle));
-}
-.file-ops-badge--edit {
-  color: #b26500;
-  border-color: color-mix(in oklab, #b26500 35%, var(--border));
-  background: color-mix(in oklab, #b26500 8%, var(--bg-subtle));
+.file-ops-badge--read,
+.file-ops-badge--write,
+.file-ops-badge--edit,
+.file-ops-badge--generated {
+  color: var(--text-muted);
 }
 .file-ops-row-path {
   flex: 1;
@@ -479,6 +473,29 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+.file-ops-row-size {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.file-ops-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.file-ops-row-action:hover {
+  color: var(--text);
+}
+.file-ops-row-action:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
 }
 .file-ops-row-status {
   font-size: 10.5px;
