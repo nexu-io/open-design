@@ -1090,6 +1090,13 @@
 .app .action-card:hover {
   background: none;
 }
+.app .chat-surface.action-card {
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+}
 .app .action-card-toggle {
   min-height: 36px;
   padding: 4px;
