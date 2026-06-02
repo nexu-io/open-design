@@ -9422,10 +9422,7 @@ function HtmlViewer({
         displayDev: {
           defaultArtifactName: displayDevArtifactName.trim(),
           defaultVisibility: displayDevVisibility,
-          defaultSharedWith: displayDevSharedWith
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean),
+          defaultSharedWith: displayDevDefaultSharedWithFromForm(),
           defaultShowBranding: displayDevShowBranding,
         },
       };
@@ -9436,6 +9433,27 @@ function HtmlViewer({
       teamId: teamId.trim(),
       teamSlug: teamSlug.trim(),
     };
+  }
+
+  function displayDevDefaultSharedWithFromForm() {
+    return displayDevSharedWith
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function displayDevDefaultsChanged() {
+    if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return false;
+    const config = deployConfig?.displayDev;
+    const sharedWith = displayDevDefaultSharedWithFromForm();
+    const configSharedWith = config?.defaultSharedWith || [];
+    return (
+      displayDevArtifactName.trim() !== (config?.defaultArtifactName || '') ||
+      displayDevVisibility !== (config?.defaultVisibility || 'company') ||
+      displayDevShowBranding !== (config?.defaultShowBranding || 'inherit') ||
+      sharedWith.length !== configSharedWith.length ||
+      sharedWith.some((item, index) => item !== configSharedWith[index])
+    );
   }
 
   async function loadDeployProvider(
@@ -14217,10 +14235,7 @@ function HtmlViewer({
       currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
       currentDeployment.displayDev?.mode === 'authenticated';
     const name = displayDevArtifactName.trim();
-    const sharedWith = displayDevSharedWith
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const sharedWith = displayDevDefaultSharedWithFromForm();
     if (!isAuthenticatedUpdate) {
       return {
         name,
@@ -14290,9 +14305,11 @@ function HtmlViewer({
         cloudflareHints?.lastZoneName !== deployConfig?.cloudflarePages?.lastZoneName ||
         cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
       );
+      const displayDevConfigChanged = displayDevDefaultsChanged();
       const needsConfigSave =
         hasNewToken ||
         clearsDisplayDevToken ||
+        displayDevConfigChanged ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
         cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
