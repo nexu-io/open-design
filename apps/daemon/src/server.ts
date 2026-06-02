@@ -4517,8 +4517,8 @@ export async function startServer({
     res.json({
       ok: true,
       version: versionInfo.version,
-      bindHost: process.env.OD_BIND_HOST ?? '127.0.0.1',
-      port: Number(process.env.OD_PORT ?? 7456),
+      bindHost: host,
+      port: resolvedPort,
       dataDir: RUNTIME_DATA_DIR,
       mediaConfigDir: process.env.OD_MEDIA_CONFIG_DIR ?? null,
       sandboxMode: SANDBOX_RUNTIME.enabled,

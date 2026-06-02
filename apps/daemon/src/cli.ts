@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { runDaemonCliStartup } from './daemon-startup.js';
+import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
@@ -137,9 +137,7 @@ const UI_BOOLEAN_FLAGS = new Set([
 // during module load; any const declared further down the file is
 // still in TDZ when the handler executes, so `od status` /
 // `od atoms list` / etc. would crash with `Cannot access X before
-// initialization`. The actual definitions stay further down (next
-// to their handlers); we just export the bindings up here so the
-// dispatch path always sees an initialized value.
+// initialization`.
 const DAEMON_STRING_FLAGS = new Set([
   'daemon-url', 'port', 'host',
 ]);
@@ -148,6 +146,10 @@ const DAEMON_BOOLEAN_FLAGS = new Set([
 ]);
 const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
+const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
+const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
@@ -5196,50 +5198,34 @@ function formatBytes(n) {
 }
 
 async function runDaemonStart(flags) {
-  // The headless flag implies --no-open AND auto-applies any other
-  // headless-only env defaults. Because the existing default-mode boot
-  // already handles port / host / no-open, we forward into it by
-  // mutating process.argv before re-entering the boot path.
-  // Simpler path: re-implement the boot inline, mirroring the default.
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
   const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1');
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
-  process.env.OD_BIND_HOST = host;
-  process.env.OD_PORT = String(port);
-  const { startServer: startHeadless } = await import('./server.js');
-  const started = await startHeadless({ port, host, returnServer: true });
-  const url = started.url;
-  const server = started.server;
-  const shutdown = started.shutdown;
-  const closeServer = () => new Promise((resolve) => {
-    let resolved = false;
-    const resolveOnce = () => { if (!resolved) { resolved = true; resolve(); } };
-    const idleTimer = setTimeout(() => server.closeIdleConnections?.(), 1_000);
-    const hardTimer = setTimeout(() => { server.closeAllConnections?.(); resolveOnce(); }, 5_000);
-    idleTimer.unref?.();
-    hardTimer.unref?.();
-    server.close(() => resolveOnce());
+  const runtime = await startDaemonRuntime({
+    host,
+    logListening: false,
+    openBrowser: !headless,
+    port,
   });
-  let shuttingDown = false;
-  const stop = () => {
-    if (shuttingDown) process.exit(0);
-    shuttingDown = true;
-    void Promise.allSettled([
-      Promise.resolve().then(() => shutdown?.()),
-      closeServer(),
-    ]).finally(() => process.exit(0));
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-  console.log(`[od] listening on ${url} (${headless ? 'headless' : 'desktop'})`);
-  if (!headless) {
-    const opener = process.platform === 'darwin' ? 'open'
-      : process.platform === 'win32' ? 'start'
-      : 'xdg-open';
-    import('node:child_process').then(({ spawn }) => {
-      spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
-    });
-  }
+  console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
+
+  await new Promise((resolve) => {
+    let shuttingDown = false;
+    const stop = () => {
+      if (shuttingDown) process.exit(0);
+      shuttingDown = true;
+      void runtime.stop().finally(() => {
+        cleanup();
+        resolve();
+      });
+    };
+    const cleanup = () => {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
 }
 
 async function runDaemonStatus(flags) {
@@ -5471,9 +5457,6 @@ async function runStatus(args) {
 // without driving the web UI.
 // ---------------------------------------------------------------------------
 
-const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
-const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-
 async function runDiagnostics(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -5574,9 +5557,6 @@ async function runVersion(args) {
 // without leaving the terminal. JSON values pass through unchanged;
 // scalar strings/numbers/booleans are coerced.
 // ---------------------------------------------------------------------------
-
-const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
-const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 async function runDoctor(args) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });
