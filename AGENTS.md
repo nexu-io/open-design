@@ -170,6 +170,17 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 - Never animate from `transform: scale(0)`. Start from `scale(0.9)` or higher with `opacity: 0`.
 - For elements that show conditionally, keep them mounted and toggle a CSS class (e.g. `.chat-jump-btn-active`). React unmounts skip the exit transition entirely.
 
+## Dev web HMR cache reset
+
+After editing 5+ i18n locale files in a single session, or after any change that produces a Turbopack parse error in the dev web log, run:
+
+```bash
+pnpm tools-dev stop web
+pnpm tools-dev start web
+```
+
+This clears the Next.js dev server's HMR cache. Turbopack occasionally goes into a corrupt state after a burst of locale edits, leaving the dev web serving 404 for all routes even though the source files are clean. A full restart fixes it; partial reloads (Fast Refresh) do not. Symptoms of the corrupted state: `GET / 404`, every route returning 404, but the response body still contains the React hydration scaffolding — meaning the page tries to load but Next.js has dropped into `__next_builtin__not-found.js`. Restart is the only known fix; do not waste time on individual route fixes.
+
 ## Validation strategy
 
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
