@@ -53,6 +53,7 @@ import type {
   PreviewCommentStatus,
   PreviewCommentUpsertRequest,
   CloudflarePagesDeploySelection,
+  DisplayDevDeploySelection,
   CloudflarePagesZonesResponse,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -109,9 +110,11 @@ import { PublicFilePublishError } from '../collab/public-file-publish';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const DISPLAYDEV_PROVIDER_ID = 'displaydev-self';
 export const DEPLOY_PROVIDER_IDS = [
   DEFAULT_DEPLOY_PROVIDER_ID,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  DISPLAYDEV_PROVIDER_ID,
 ] as const;
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
@@ -121,6 +124,7 @@ export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
+export type WebDisplayDevDeploySelection = DisplayDevDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
 export type WebPublicProjectFileResponse = PublicProjectFilePublication;
@@ -1821,6 +1825,7 @@ export async function deployProjectFile(
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
   cloudflarePages?: WebCloudflarePagesDeploySelection,
   target?: 'preview' | 'production',
+  displayDev?: WebDisplayDevDeploySelection,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
@@ -1828,6 +1833,7 @@ export async function deployProjectFile(
     providerId,
     ...(cloudflarePages ? { cloudflarePages } : {}),
     ...(target ? { target } : {}),
+    ...(displayDev ? { displayDev } : {}),
   };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',

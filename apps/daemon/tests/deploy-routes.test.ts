@@ -8,8 +8,10 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   cloudflarePagesProjectNameForProject,
   deployConfigPath,
+  DISPLAYDEV_PROVIDER_ID,
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
+  SAVED_DISPLAYDEV_TOKEN_MASK,
 } from '../src/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
@@ -91,7 +93,115 @@ describe('deploy provider routes', () => {
         accountId: 'account_456',
         projectName: '',
       });
+
+      const displayResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          token: 'Bearer dsp_live_secret',
+          apiUrl: 'https://api.display.test:3331/',
+          displayDev: {
+            defaultArtifactName: 'Demo',
+            defaultVisibility: 'public',
+          },
+        }),
+      });
+      expect(displayResp.status).toBe(200);
+      expect(await displayResp.json()).toMatchObject({
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_DISPLAYDEV_TOKEN_MASK,
+        apiUrl: 'https://api.display.test:3331',
+        displayDev: {
+          defaultArtifactName: 'Demo',
+          defaultVisibility: 'public',
+        },
+      });
+
+      const invalidDisplayResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          apiUrl: 'ftp://api.display.test',
+        }),
+      });
+      expect(invalidDisplayResp.status).toBe(400);
+      expect(await invalidDisplayResp.json()).toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
+        },
+      });
+
+      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+        token: 'dsp_live_secret',
+        apiUrl: 'api.display.test:3331',
+      }));
+      const invalidSavedDisplayResp = await fetch(
+        `${baseUrl}/api/deploy/config?providerId=${DISPLAYDEV_PROVIDER_ID}`,
+      );
+      expect(invalidSavedDisplayResp.status).toBe(400);
+      expect(await invalidSavedDisplayResp.json()).toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
+        },
+      });
     } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects display.dev deploys when the saved API URL is malformed', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-invalid-config-route-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = `displaydev-invalid-config-${Date.now()}`;
+      const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+      await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+        token: 'dsp_live_secret',
+        apiUrl: 'api.display.test:3331',
+      }));
+
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`unexpected external fetch: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'index.html',
+          providerId: DISPLAYDEV_PROVIDER_ID,
+        }),
+      });
+
+      expect(resp.status).toBe(400);
+      expect(await resp.json()).toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
+        },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
       await rm(stateRoot, { recursive: true, force: true });
@@ -187,7 +297,334 @@ describe('deploy provider routes', () => {
     });
   });
 
-  it('derives Cloudflare Pages project names from the OpenDesign project', async () => {
+  it('does not infer display.dev claim state when an API key is saved', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-claim-route-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `displaydev-claim-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'display.dev claim route test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.endsWith('/v1/public/artifacts') && method === 'POST') {
+          return new Response(JSON.stringify({
+            shortId: 'anon1234',
+            previewUrl: 'https://public.dsp.so/anon1234',
+            claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+            expiresAt: '2026-06-26T00:00:00.000Z',
+          }), {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === 'https://public.dsp.so/anon1234' && method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        });
+        const deployText = await deployResp.text();
+        expect(deployResp.status, deployText).toBe(200);
+        expect(JSON.parse(deployText)).toMatchObject({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          url: 'https://public.dsp.so/anon1234',
+          displayDev: {
+            mode: 'anonymous',
+            shortId: 'anon1234',
+            claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+            expiresAt: '2026-06-26T00:00:00.000Z',
+          },
+        });
+
+        const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: DISPLAYDEV_PROVIDER_ID,
+            token: 'Bearer dsp_live_secret',
+            displayDevClaim: { projectId, fileName: 'index.html' },
+          }),
+        });
+        expect(saveResp.status).toBe(200);
+
+        const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
+        expect(deploymentsResp.status).toBe(200);
+        const deploymentsBody = await deploymentsResp.json() as { deployments: Array<any> };
+        expect(deploymentsBody.deployments[0]).toMatchObject({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          displayDev: {
+            mode: 'anonymous',
+            shortId: 'anon1234',
+            claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+            expiresAt: '2026-06-26T00:00:00.000Z',
+          },
+        });
+        expect(deploymentsBody.deployments[0]).not.toHaveProperty('providerMetadata');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('omits display.dev access overrides on plain owned redeploys', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-owned-route-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `displaydev-owned-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'display.dev owned route test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          token: 'Bearer dsp_live_secret',
+          displayDev: {
+            defaultArtifactName: 'Config default',
+            defaultVisibility: 'company',
+            defaultSharedWith: ['default@example.com'],
+            defaultShowBranding: 'inherit',
+          },
+        }),
+      });
+      expect(saveResp.status).toBe(200);
+
+      const updateBodies: Array<{
+        name: unknown;
+        visibility: unknown;
+        sharedWith: unknown[];
+        clearSharedWith: unknown;
+        showBranding: unknown;
+      }> = [];
+      const createAuthHeaders: string[] = [];
+      const updateAuthHeaders: string[] = [];
+      const authHeader = (headers: RequestInit['headers'] | undefined) => {
+        if (!headers) return '';
+        if (headers instanceof Headers) return headers.get('Authorization') || '';
+        if (Array.isArray(headers)) {
+          const found = headers.find(([key]) => key?.toLowerCase() === 'authorization');
+          return typeof found?.[1] === 'string' ? found[1] : '';
+        }
+        const value = (headers as Record<string, string | undefined>).Authorization
+          || (headers as Record<string, string | undefined>).authorization;
+        return value || '';
+      };
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.endsWith('/v1/artifacts') && method === 'POST') {
+          createAuthHeaders.push(authHeader(init?.headers));
+          return new Response(JSON.stringify({
+            shortId: 'owned1234',
+            url: 'https://display.dsp.so/owned1234-demo',
+            version: 1,
+          }), {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/v1/artifacts/owned1234') && method === 'PUT') {
+          if (!(init?.body instanceof FormData)) throw new Error('Expected FormData body');
+          updateAuthHeaders.push(authHeader(init?.headers));
+          updateBodies.push({
+            name: init.body.get('name'),
+            visibility: init.body.get('visibility'),
+            sharedWith: init.body.getAll('sharedWith'),
+            clearSharedWith: init.body.get('clearSharedWith'),
+            showBranding: init.body.get('showBranding'),
+          });
+          return new Response(JSON.stringify({
+            shortId: 'owned1234',
+            url: 'https://display.dsp.so/owned1234-demo',
+            version: 2,
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === 'https://display.dsp.so/owned1234-demo' && method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const firstDeployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+            displayDev: {
+              visibility: 'private',
+              sharedWith: ['person@example.com'],
+              showBranding: 'hide',
+            },
+          }),
+        });
+        const firstDeployText = await firstDeployResp.text();
+        expect(firstDeployResp.status, firstDeployText).toBe(200);
+        expect(JSON.parse(firstDeployText)).toMatchObject({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          target: 'preview',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+        });
+
+        const secondDeployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        });
+        const secondDeployText = await secondDeployResp.text();
+        expect(secondDeployResp.status, secondDeployText).toBe(200);
+
+        expect(updateBodies).toEqual([{
+          name: null,
+          visibility: null,
+          sharedWith: [],
+          clearSharedWith: null,
+          showBranding: null,
+        }]);
+        expect(createAuthHeaders).toEqual(['Bearer dsp_live_secret']);
+        expect(updateAuthHeaders).toEqual(['Bearer dsp_live_secret']);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects display.dev deploys with referenced assets before publishing externally', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-multifile-route-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `displaydev-multifile-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><link rel="stylesheet" href="style.css"><h1>Hello</h1>',
+    );
+    await writeFile(path.join(dir, 'style.css'), 'h1 { color: rebeccapurple; }');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'display.dev multi-file route test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`No external display.dev fetch expected for multi-file rejection: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        });
+        expect(deployResp.status).toBe(400);
+        const deployBody = await deployResp.json() as {
+          error?: { message?: string; details?: { unsupportedFiles?: string[] } };
+        };
+        expect(deployBody.error?.message).toMatch(/single-file HTML previews/i);
+        expect(deployBody.error?.details?.unsupportedFiles).toEqual(['style.css']);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('derives Cloudflare Pages project names from the Open Design project', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-auto-project-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;

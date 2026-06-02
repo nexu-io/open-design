@@ -3570,12 +3570,16 @@ export const zhTW: Dict = {
   "fileViewer.deployProviderLabel": "部署平台",
   "fileViewer.vercelProvider": "Vercel",
   "fileViewer.cloudflarePagesProvider": "Cloudflare Pages",
+  "fileViewer.displayDevProvider": "display.dev",
   "fileViewer.deployTargetLabel": "目標",
   "fileViewer.deployTargetPreview": "預覽",
   "fileViewer.deployTargetProduction": "正式環境",
   "fileViewer.deployToProvider": "部署到 {provider}",
   "fileViewer.redeployToProvider": "重新部署到 {provider}",
   "fileViewer.deployingToProvider": "正在部署到 {provider}…",
+  "fileViewer.deployToDisplayDev": "部署到 display.dev",
+  "fileViewer.redeployToDisplayDev": "重新部署到 display.dev",
+  "fileViewer.deployingToDisplayDev": "正在部署到 display.dev…",
   "fileViewer.preparingPublicLink": "正在準備公開連結…",
   "fileViewer.copyDeployLink": "複製連結",
   "fileViewer.deployModalTitle": "部署",
@@ -3594,6 +3598,40 @@ export const zhTW: Dict = {
     "請先輸入並儲存 Cloudflare API 代碼。",
   "fileViewer.cloudflareApiTokenScopeHint":
     "建立 API token 時勾選 Pages Edit；自訂網域需 Zone Read / DNS Edit。",
+  "fileViewer.displayDevApiKey": "display.dev API 金鑰（選填）",
+  "fileViewer.displayDevApiKeyGetLink": "取得 display.dev API 金鑰",
+  "fileViewer.displayDevApiKeyPlaceholder": "dsp_live_...",
+  "fileViewer.displayDevShareWithPlaceholder":
+    "person@example.com, teammate@example.com",
+  "fileViewer.displayDevApiKeyBlankHint":
+    "留空即可匿名發佈，取得 30 天 URL 和認領連結。",
+  "fileViewer.displayDevApiKeyClearHint": "清空此欄位即可改為匿名發佈。",
+  "fileViewer.displayDevDeploySubtitle":
+    "將此 HTML 預覽部署到可分享的 display.dev URL。",
+  "fileViewer.displayDevDeployAnonymousHint":
+    "留空 API 金鑰即可發佈公開的 30 天預覽，並取得認領連結。",
+  "fileViewer.displayDevDeployAuthenticatedCreateHint":
+    "使用下方存取設定發佈到你的 display.dev 組織。",
+  "fileViewer.displayDevDeployAnonymousWithKeyHint":
+    "使用 API 金鑰重新部署會建立一個歸屬組織的 display.dev 預覽。現有匿名預覽不會自動認領。",
+  "fileViewer.displayDevDeployOwnedHint":
+    "重新部署會保留現有 display.dev 存取設定，除非你在此處更改。",
+  "fileViewer.displayDevArtifactName": "名稱",
+  "fileViewer.displayDevArtifactNamePlaceholder": "留空則使用檔名",
+  "fileViewer.displayDevVisibility": "可見性",
+  "fileViewer.displayDevVisibilityPublic": "公開",
+  "fileViewer.displayDevVisibilityCompany": "公司",
+  "fileViewer.displayDevVisibilityPrivate": "私有",
+  "fileViewer.displayDevShowBranding": "顯示品牌標識",
+  "fileViewer.displayDevShowBrandingInherit": "繼承",
+  "fileViewer.displayDevShowBrandingShow": "顯示",
+  "fileViewer.displayDevShowBrandingHide": "隱藏",
+  "fileViewer.displayDevShareWith": "分享給",
+  "fileViewer.displayDevClaimUrlLabel": "認領 URL",
+  "fileViewer.displayDevClaimUrlMessage":
+    "認領此 URL，即可永久保留並在 display.dev 中管理存取權限。",
+  "fileViewer.displayDevClaimUrlExpiresMessage":
+    "認領此 URL，即可永久保留並在 display.dev 中管理存取權限。到期時間：{date}。",
   "fileViewer.vercelTeamId": "團隊 ID",
   "fileViewer.vercelTeamSlug": "團隊標記",
   "fileViewer.cloudflareAccountId": "帳戶 ID",

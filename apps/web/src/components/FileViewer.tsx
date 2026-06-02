@@ -112,6 +112,7 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
+  DISPLAYDEV_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
@@ -137,6 +138,7 @@ import {
   updateDeployConfig,
   type WebDeployConfigResponse,
   type WebCloudflarePagesDeploySelection,
+  type WebDisplayDevDeploySelection,
   type WebDeploymentInfo,
   type WebDeployProjectFileResponse,
   type WebDeployProviderId,
@@ -344,17 +346,26 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
 ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  labelKey:
+    | 'fileViewer.vercelProvider'
+    | 'fileViewer.cloudflarePagesProvider'
+    | 'fileViewer.displayDevProvider';
   tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenLinkKey:
+    | 'fileViewer.vercelTokenGetLink'
+    | 'fileViewer.cloudflareApiTokenGetLink'
+    | 'fileViewer.displayDevApiKeyGetLink';
   tokenPlaceholderKey:
     | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+    | 'fileViewer.cloudflareApiTokenPlaceholder'
+    | 'fileViewer.displayDevApiKeyPlaceholder';
+  tokenReuseHintKey?: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
+  tokenRequiredKey?: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+  previewHintKey?: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
+    | 'fileViewer.cloudflareApiToken'
+    | 'fileViewer.displayDevApiKey';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -754,6 +765,7 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
     tokenRequiredKey: 'fileViewer.vercelTokenRequired',
+    previewHintKey: 'fileViewer.vercelPreviewOnly',
     tokenLabelKey: 'fileViewer.vercelToken',
   },
   {
@@ -764,9 +776,18 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
     tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
+    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+  {
+    id: DISPLAYDEV_PROVIDER_ID,
+    labelKey: 'fileViewer.displayDevProvider',
+    tokenLink: 'https://display.dev/docs',
+    tokenLinkKey: 'fileViewer.displayDevApiKeyGetLink',
+    tokenPlaceholderKey: 'fileViewer.displayDevApiKeyPlaceholder',
+    tokenLabelKey: 'fileViewer.displayDevApiKey',
   },
 ];
 
@@ -8018,6 +8039,16 @@ function HtmlViewer({
   const [cloudflareZonesError, setCloudflareZonesError] = useState<string | null>(null);
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
+  const [displayDevArtifactName, setDisplayDevArtifactName] = useState('');
+  const [displayDevVisibility, setDisplayDevVisibility] = useState<'public' | 'company' | 'private'>('company');
+  const [displayDevSharedWith, setDisplayDevSharedWith] = useState('');
+  const [displayDevShowBranding, setDisplayDevShowBranding] = useState<'inherit' | 'show' | 'hide'>('inherit');
+  const [displayDevDeployTouched, setDisplayDevDeployTouched] = useState({
+    name: false,
+    visibility: false,
+    sharedWith: false,
+    showBranding: false,
+  });
   const deployProviderLoadSeqRef = useRef(0);
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -9346,6 +9377,16 @@ function HtmlViewer({
     // match the daemon's documented default for an omitted target on POST deploy, and to match
     // pre-regression behavior.
     setDeployTarget('production');
+    setDisplayDevArtifactName(matchingConfig?.displayDev?.defaultArtifactName || '');
+    setDisplayDevVisibility(matchingConfig?.displayDev?.defaultVisibility || 'company');
+    setDisplayDevSharedWith((matchingConfig?.displayDev?.defaultSharedWith || []).join(', '));
+    setDisplayDevShowBranding(matchingConfig?.displayDev?.defaultShowBranding || 'inherit');
+    setDisplayDevDeployTouched({
+      name: false,
+      visibility: false,
+      sharedWith: false,
+      showBranding: false,
+    });
   }
 
   function cloudflareConfigHintsFromForm() {
@@ -9370,6 +9411,23 @@ function HtmlViewer({
         token,
         accountId: cloudflareAccountId.trim(),
         cloudflarePages: cloudflareConfigHintsFromForm(),
+      };
+    }
+    if (providerId === DISPLAYDEV_PROVIDER_ID) {
+      const shouldClearToken = Boolean(deployConfig?.tokenMask) && !token;
+      return {
+        providerId,
+        token,
+        ...(shouldClearToken ? { clearToken: true } : {}),
+        displayDev: {
+          defaultArtifactName: displayDevArtifactName.trim(),
+          defaultVisibility: displayDevVisibility,
+          defaultSharedWith: displayDevSharedWith
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          defaultShowBranding: displayDevShowBranding,
+        },
       };
     }
     return {
@@ -14114,6 +14172,14 @@ function HtmlViewer({
         throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       }
       syncDeployFormFromConfig(deployProviderId, config);
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deployToken.trim() && deployToken.trim() !== deployConfig?.tokenMask) {
+        const items = await fetchProjectDeployments(projectId);
+        const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
+        const current = nextDeploymentsByProvider[DISPLAYDEV_PROVIDER_ID] ?? null;
+        setDeploymentsByProvider(nextDeploymentsByProvider);
+        setDeployment(current);
+        setDeployResult(current);
+      }
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
         await loadCloudflareZones(config);
       }
@@ -14144,6 +14210,33 @@ function HtmlViewer({
     };
   }
 
+  function buildDisplayDevDeploySelection(): WebDisplayDevDeploySelection | undefined {
+    if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return undefined;
+    const currentDeployment = deployResult || deployment;
+    const isAuthenticatedUpdate =
+      currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+      currentDeployment.displayDev?.mode === 'authenticated';
+    const name = displayDevArtifactName.trim();
+    const sharedWith = displayDevSharedWith
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!isAuthenticatedUpdate) {
+      return {
+        name,
+        visibility: displayDevVisibility,
+        sharedWith,
+        showBranding: displayDevShowBranding,
+      };
+    }
+    const selection: WebDisplayDevDeploySelection = {};
+    if (displayDevDeployTouched.name && name) selection.name = name;
+    if (displayDevDeployTouched.visibility) selection.visibility = displayDevVisibility;
+    if (displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
+    if (displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
+    return Object.keys(selection).length > 0 ? selection : undefined;
+  }
+
   async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
@@ -14155,7 +14248,11 @@ function HtmlViewer({
     // distinct from the share-popover "opened" signal (artifact_export_result).
     const deployStarted = performance.now();
     const providerForTracking: TrackingDeployProvider =
-      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+      deployProviderId === DISPLAYDEV_PROVIDER_ID
+        ? 'displaydev'
+        : deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? 'cloudflare_pages'
+          : 'vercel';
     const firstConfigure = !deployConfig?.configured;
     let savedNewToken = false;
     const fireDeployResult = (
@@ -14179,9 +14276,14 @@ function HtmlViewer({
     };
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
+      const displayDevSelection = buildDisplayDevDeploySelection();
       const typedToken = deployToken.trim();
-      const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
+      const hasNewToken = Boolean(typedToken && typedToken !== deployConfig?.tokenMask);
       savedNewToken = Boolean(hasNewToken);
+      const clearsDisplayDevToken =
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        Boolean(deployConfig?.tokenMask) &&
+        !typedToken;
       const cloudflareHints = cloudflareConfigHintsFromForm();
       const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
         cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
@@ -14190,6 +14292,7 @@ function HtmlViewer({
       );
       const needsConfigSave =
         hasNewToken ||
+        clearsDisplayDevToken ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
         cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
@@ -14205,7 +14308,12 @@ function HtmlViewer({
         }
         if (!nextConfig?.configured) {
           const option = getDeployProviderOption(deployProviderId);
-          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
+          const label = t(option.labelKey);
+          throw new Error(
+            option.tokenRequiredKey
+              ? t(option.tokenRequiredKey, { provider: label })
+              : t('fileViewer.deployProviderConfigSaveFailed', { provider: label }),
+          );
         }
       }
       setDeployPhase('preparing-link');
@@ -14215,6 +14323,7 @@ function HtmlViewer({
         deployProviderId,
         cloudflarePagesSelection,
         deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
+        displayDevSelection,
         workspaceContext,
       );
       setDeploymentsByProvider((current) => ({
@@ -14237,11 +14346,13 @@ function HtmlViewer({
       }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
+      const label = t(option.labelKey);
       const message = err instanceof Error
         ? err.message
-        : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) });
-      const tokenRequired =
-        message === t(option.tokenRequiredKey, { provider: t(option.labelKey) });
+        : t('fileViewer.deployProviderFailed', { provider: label });
+      const tokenRequired = option.tokenRequiredKey
+        ? message === t(option.tokenRequiredKey, { provider: label })
+        : false;
       if (tokenRequired) {
         setDeployActionToast(message);
         deployTokenInputRef.current?.focus();
@@ -15388,6 +15499,29 @@ function HtmlViewer({
   const activeCloudflarePages = activeDeployment?.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
     ? activeDeployment.cloudflarePages
     : undefined;
+  const activeDisplayDev = activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
+    ? activeDeployment.displayDev
+    : undefined;
+  const hasDisplayDevApiKey = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployToken.trim());
+  const displayDevApiKeyHint = hasDisplayDevApiKey
+    ? t('fileViewer.displayDevApiKeyClearHint')
+    : t('fileViewer.displayDevApiKeyBlankHint');
+  const displayDevDeployHint = (() => {
+    if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return '';
+    if (activeDisplayDev?.mode === 'authenticated') {
+      return t('fileViewer.displayDevDeployOwnedHint');
+    }
+    if (activeDisplayDev?.mode === 'anonymous' && hasDisplayDevApiKey) {
+      return t('fileViewer.displayDevDeployAnonymousWithKeyHint');
+    }
+    if (hasDisplayDevApiKey) {
+      return t('fileViewer.displayDevDeployAuthenticatedCreateHint');
+    }
+    return t('fileViewer.displayDevDeployAnonymousHint');
+  })();
+  const shouldShowDisplayDevClaimUrl =
+    activeDisplayDev?.mode === 'anonymous' &&
+    Boolean(activeDisplayDev.claimUrl);
   const activeCloudflareCustomDomain = activeCloudflarePages?.customDomain;
   const deployProvider = getDeployProviderOption(deployProviderId);
   const deployProviderLabel = t(deployProvider.labelKey);
@@ -15424,26 +15558,46 @@ function HtmlViewer({
         return cards;
       })()
     : activeDeployedUrl
-      ? [{
-          id: 'default',
-          label: activeDeploymentProtected
-            ? t('fileViewer.deployLinkProtectedLabel')
-            : activeDeploymentDelayed
-              ? t('fileViewer.deployLinkPreparingLabel')
-              : t('fileViewer.deployResultLabel'),
-          url: activeDeployedUrl,
-          status: activeDeployment?.status || 'ready',
-          message: activeDeploymentProtected
-            ? t('fileViewer.deployLinkProtected')
-            : activeDeploymentDelayed
-              ? t('fileViewer.deployLinkDelayed')
-              : activeDeployment?.statusMessage,
-        }]
+      ? [
+          {
+            id: 'default',
+            label: activeDeploymentProtected
+              ? t('fileViewer.deployLinkProtectedLabel')
+              : activeDeploymentDelayed
+                ? t('fileViewer.deployLinkPreparingLabel')
+                : t('fileViewer.deployResultLabel'),
+            url: activeDeployedUrl,
+            status: activeDeployment?.status || 'ready',
+            message: activeDeploymentProtected
+              ? t('fileViewer.deployLinkProtected')
+              : activeDeploymentDelayed
+                ? t('fileViewer.deployLinkDelayed')
+                : activeDeployment?.statusMessage,
+          },
+          ...(shouldShowDisplayDevClaimUrl && activeDisplayDev?.claimUrl
+            ? [{
+                id: 'displaydev-claim',
+                label: t('fileViewer.displayDevClaimUrlLabel'),
+                url: activeDisplayDev.claimUrl,
+                status: 'ready',
+                message: activeDisplayDev.expiresAt
+                  ? t('fileViewer.displayDevClaimUrlExpiresMessage', {
+                      date: new Date(activeDisplayDev.expiresAt).toLocaleDateString(),
+                    })
+                  : t('fileViewer.displayDevClaimUrlMessage'),
+              }]
+            : []),
+        ]
       : [];
   const deployActionLabelFor = (providerId: WebDeployProviderId) => {
     const option = getDeployProviderOption(providerId);
-    const label = t(option.labelKey);
     const hasActiveDeploymentForProvider = Boolean(deploymentsByProvider[providerId]?.url?.trim());
+    if (providerId === DISPLAYDEV_PROVIDER_ID) {
+      return hasActiveDeploymentForProvider
+        ? t('fileViewer.redeployToDisplayDev')
+        : t('fileViewer.deployToDisplayDev');
+    }
+    const label = t(option.labelKey);
     return hasActiveDeploymentForProvider
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
@@ -15570,18 +15724,26 @@ function HtmlViewer({
     : deployProviderLabel;
   const deployModalTitle = isSocialShareDeployModal
     ? t('socialShare.publishPageTitle')
-    : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+    : deployProviderId === DISPLAYDEV_PROVIDER_ID
+      ? t('fileViewer.deployToDisplayDev')
+      : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
   const deployModalSubtitle = isSocialShareDeployModal
     ? t('socialShare.publishPageSubtitle')
-    : t('fileViewer.deployModalSubtitle');
+    : deployProviderId === DISPLAYDEV_PROVIDER_ID
+      ? t('fileViewer.displayDevDeploySubtitle')
+      : t('fileViewer.deployModalSubtitle');
   const deployButtonLabel =
     deployPhase === 'deploying'
-      ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
+      ? deployProviderId === DISPLAYDEV_PROVIDER_ID
+        ? t('fileViewer.deployingToDisplayDev')
+        : t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
       : deployPhase === 'preparing-link'
         ? t('fileViewer.preparingPublicLink')
         : isSocialShareDeployModal
           ? t('socialShare.publishPageTitle')
-          : deployMenuLabel;
+          : deployProviderId === DISPLAYDEV_PROVIDER_ID
+            ? deployActionLabelFor(deployProviderId)
+            : deployMenuLabel;
   const copyDeployLabel = (url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
@@ -17994,21 +18156,21 @@ function HtmlViewer({
                     </div>
                   ) : null}
                 </div>
-              <label className="deploy-provider-field">
-                <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
-                <select
-                  value={deployProviderId}
-                  onChange={(e) => {
-                    void changeDeployProvider(e.target.value as WebDeployProviderId);
-                  }}
-                >
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {t(option.labelKey)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label className="deploy-provider-field">
+                  <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
+                  <select
+                    value={deployProviderId}
+                    onChange={(e) => {
+                      void changeDeployProvider(e.target.value as WebDeployProviderId);
+                    }}
+                  >
+                    {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {t(option.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                 <label className="deploy-target-field">
                   <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
@@ -18023,15 +18185,33 @@ function HtmlViewer({
                   </select>
                 </label>
               ) : null}
-              <div className="field-label-row deploy-token-label-row">
-                <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
-                <a
-                  href={deployProvider.tokenLink}
-                  target="_blank"
-                  rel="noreferrer noopener"
+              <div className="field-label-row">
+                <label
+                  htmlFor="deploy-token"
+                  className={`deploy-field-title${deployProvider.tokenRequiredKey ? ' required' : ''}`}
                 >
-                  {t(deployProvider.tokenLinkKey)}
-                </a>
+                  {t(deployProvider.tokenLabelKey)}
+                </label>
+                <div className="field-label-note">
+                  {deployConfig?.tokenMask && deployProvider.tokenReuseHintKey ? (
+                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                  ) : null}
+                  {deployProviderId === DISPLAYDEV_PROVIDER_ID ? (
+                    <p className="hint">{displayDevApiKeyHint}</p>
+                  ) : null}
+                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                  ) : null}
+                  {deployProvider.tokenLink ? (
+                    <a
+                      href={deployProvider.tokenLink}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {t(deployProvider.tokenLinkKey)}
+                    </a>
+                  ) : null}
+                </div>
               </div>
               <div className="deploy-token-input-row">
                 <input
@@ -18053,16 +18233,6 @@ function HtmlViewer({
                   {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
                 </button>
               </div>
-              {deployConfig?.configured || deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <div className="deploy-token-hints">
-                  {deployConfig?.configured ? (
-                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
-                  ) : null}
-                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
-                </div>
-              ) : null}
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                 <>
                   <div className="deploy-field-grid single-field">
@@ -18133,6 +18303,67 @@ function HtmlViewer({
                     </p>
                   ) : null}
                 </>
+              ) : deployProviderId === DISPLAYDEV_PROVIDER_ID ? (
+                <>
+                  <div className="deploy-field-grid single-field">
+                    <label>
+                      <span>{t('fileViewer.displayDevArtifactName')}</span>
+                      <input
+                        value={displayDevArtifactName}
+                        placeholder={t('fileViewer.displayDevArtifactNamePlaceholder')}
+                        onChange={(e) => {
+                          setDisplayDevArtifactName(e.target.value);
+                          setDisplayDevDeployTouched((current) => ({ ...current, name: true }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <div className="deploy-field-grid">
+                    <label>
+                      <span>{t('fileViewer.displayDevVisibility')}</span>
+                      <select
+                        value={displayDevVisibility}
+                        onChange={(e) => {
+                          setDisplayDevVisibility(e.target.value as 'public' | 'company' | 'private');
+                          setDisplayDevDeployTouched((current) => ({ ...current, visibility: true }));
+                        }}
+                      >
+                        <option value="public">{t('fileViewer.displayDevVisibilityPublic')}</option>
+                        <option value="company">{t('fileViewer.displayDevVisibilityCompany')}</option>
+                        <option value="private">{t('fileViewer.displayDevVisibilityPrivate')}</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t('fileViewer.displayDevShowBranding')}</span>
+                      <select
+                        value={displayDevShowBranding}
+                        onChange={(e) => {
+                          setDisplayDevShowBranding(e.target.value as 'inherit' | 'show' | 'hide');
+                          setDisplayDevDeployTouched((current) => ({ ...current, showBranding: true }));
+                        }}
+                      >
+                        <option value="inherit">{t('fileViewer.displayDevShowBrandingInherit')}</option>
+                        <option value="show">{t('fileViewer.displayDevShowBrandingShow')}</option>
+                        <option value="hide">{t('fileViewer.displayDevShowBrandingHide')}</option>
+                      </select>
+                    </label>
+                  </div>
+                  {displayDevVisibility === 'private' ? (
+                    <div className="deploy-field-grid single-field">
+                      <label>
+                        <span>{t('fileViewer.displayDevShareWith')}</span>
+                        <input
+                          value={displayDevSharedWith}
+                          placeholder={t('fileViewer.displayDevShareWithPlaceholder')}
+                          onChange={(e) => {
+                            setDisplayDevSharedWith(e.target.value);
+                            setDisplayDevDeployTouched((current) => ({ ...current, sharedWith: true }));
+                          }}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="deploy-field-grid">
                   <label>
@@ -18153,6 +18384,13 @@ function HtmlViewer({
                   </label>
                 </div>
               )}
+              <p className="hint">
+                {deployProviderId === DISPLAYDEV_PROVIDER_ID
+                  ? displayDevDeployHint
+                  : deployProvider.previewHintKey
+                    ? t(deployProvider.previewHintKey)
+                    : ''}
+              </p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'

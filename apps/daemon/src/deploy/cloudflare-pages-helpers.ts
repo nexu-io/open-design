@@ -69,6 +69,20 @@ export function publicDeployment<T>(deployment: T): T;
 export function publicDeployment(deployment: unknown): unknown {
   if (!deployment || typeof deployment !== 'object') return deployment;
   const { providerMetadata: _providerMetadata, ...publicShape } = deployment as DeploymentLike;
+  const displayDev = asRecord((deployment as DeploymentLike).providerMetadata?.displayDev);
+  if (displayDev) {
+    const mode = displayDev.mode === 'authenticated' ? 'authenticated' : 'anonymous';
+    (publicShape as DeploymentLike).displayDev = {
+      ...(typeof displayDev.shortId === 'string' ? { shortId: displayDev.shortId } : {}),
+      mode,
+      ...(mode === 'anonymous' && typeof displayDev.claimUrl === 'string'
+        ? { claimUrl: displayDev.claimUrl }
+        : {}),
+      ...(mode === 'anonymous' && typeof displayDev.expiresAt === 'string'
+        ? { expiresAt: displayDev.expiresAt }
+        : {}),
+    };
+  }
   return publicShape;
 }
 

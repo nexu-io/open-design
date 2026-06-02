@@ -12,7 +12,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, DISPLAYDEV_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToDisplayDev, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
 
   /**
    * A DeployError now carries a specific `code` (MISSING_REFERENCES,
@@ -45,7 +45,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+      const status = err instanceof DeployError ? err.status : 500;
+      sendApiError(
+        res,
+        status,
+        status === 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
     }
   });
 
@@ -96,7 +102,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
+      const {
+        fileName,
+        providerId = VERCEL_PROVIDER_ID,
+        cloudflarePages,
+        displayDev,
+        target: rawTarget,
+      } = req.body || {};
       // Omitted target defaults to production; any supplied value must be exact.
       if (rawTarget !== undefined && rawTarget !== 'preview' && rawTarget !== 'production') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid target: expected "preview" or "production"');
@@ -144,7 +156,10 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: deployProject?.metadata, includeProjectFiles: true },
+        {
+          metadata: deployProject?.metadata,
+          includeProjectFiles: providerId !== DISPLAYDEV_PROVIDER_ID,
+        },
       );
       const project = getProject(db, req.params.id);
       const cloudflarePagesProjectName =
@@ -163,11 +178,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             priorMetadata: prior?.providerMetadata,
             target,
           })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+        : providerId === DISPLAYDEV_PROVIDER_ID
+          ? await deployToDisplayDev({
+              config: await readDeployConfig(DISPLAYDEV_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+              displayDev,
+              priorMetadata: prior?.providerMetadata,
+            })
+          : await deployToVercel({
+              config: await readDeployConfig(VERCEL_PROVIDER_ID),
+              files,
+              projectId: req.params.id,
+            });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -186,6 +209,8 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         providerMetadata:
           providerId === CLOUDFLARE_PAGES_PROVIDER_ID
             ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
+            : providerId === DISPLAYDEV_PROVIDER_ID
+              ? result.providerMetadata
             : prior?.providerMetadata,
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,

@@ -5847,6 +5847,946 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('keeps the anonymous display.dev claim URL visible when an API key is configured', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://public.dsp.so/demo',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'anonymous',
+                shortId: 'demo',
+                claimUrl: 'https://app.display.dev/claim?code=abc',
+                expiresAt: '2026-06-27T00:00:00.000Z',
+              },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText(/display\.dev API key/i) as HTMLInputElement).value).toBe('saved-displaydev-token');
+    });
+    expect(screen.getByText('https://public.dsp.so/demo')).toBeTruthy();
+    expect(screen.getByText('Claim URL')).toBeTruthy();
+    expect(screen.getByText('https://app.display.dev/claim?code=abc')).toBeTruthy();
+  });
+
+  it('clears a saved display.dev API key before redeploying anonymously', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    let clearedToken = false;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://app.display.dev/demo',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'authenticated',
+                shortId: 'demo',
+              },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        const body = JSON.parse(String(init?.body || '{}')) as { clearToken?: boolean; token?: string };
+        expect(body).toMatchObject({
+          providerId: 'displaydev-self',
+          token: '',
+          clearToken: true,
+        });
+        clearedToken = true;
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: '',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        return new Response(JSON.stringify(clearedToken
+          ? {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://public.dsp.so/demo-anon',
+              deploymentCount: 2,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'anonymous',
+                shortId: 'demo-anon',
+                claimUrl: 'https://app.display.dev/claim?code=anon',
+                expiresAt: '2026-06-27T00:00:00.000Z',
+              },
+              createdAt: 1,
+              updatedAt: 3,
+            }
+          : {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://app.display.dev/demo',
+              deploymentCount: 2,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'authenticated',
+                shortId: 'demo',
+              },
+              createdAt: 1,
+              updatedAt: 3,
+            }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+
+    const apiKeyInput = await screen.findByLabelText(/display\.dev API key/i);
+    await waitFor(() => {
+      expect((apiKeyInput as HTMLInputElement).value).toBe('saved-displaydev-token');
+    });
+    fireEvent.change(apiKeyInput, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(clearedToken).toBe(true);
+    });
+    expect(await screen.findByText('https://public.dsp.so/demo-anon')).toBeTruthy();
+    expect(screen.getByText('Claim URL')).toBeTruthy();
+    expect(screen.getByText('https://app.display.dev/claim?code=anon')).toBeTruthy();
+  });
+
+  it('saves a typed display.dev API key before publishing an authenticated preview', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const configRequest: { body?: Record<string, unknown> } = {};
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: false,
+          tokenMask: '',
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        configRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultArtifactName: '',
+            defaultVisibility: 'company',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/owned-demo',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          statusMessage: 'Owned link is ready.',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 2,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Deploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+
+    const apiKeyInput = await screen.findByLabelText(/display\.dev API key/i);
+    fireEvent.change(apiKeyInput, { target: { value: 'dsp_live_secret' } });
+    fireEvent.click(screen.getByRole('button', { name: /Deploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(configRequest.body).toBeDefined();
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(configRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      token: 'dsp_live_secret',
+    });
+    expect(deployRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      fileName: 'index.html',
+      displayDev: {
+        visibility: 'company',
+        showBranding: 'inherit',
+      },
+    });
+    expect((deployRequest.body?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
+    expect(await screen.findByText('https://app.display.dev/owned-demo')).toBeTruthy();
+    expect(screen.queryByText('Claim URL')).toBeNull();
+  });
+
+  it('persists changed display.dev defaults when deploying from the modal', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    let savedDisplayDev = {
+      defaultArtifactName: '',
+      defaultVisibility: 'company',
+      defaultSharedWith: [] as string[],
+      defaultShowBranding: 'inherit',
+    };
+    const configRequest: { body?: Record<string, unknown> } = {};
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: savedDisplayDev,
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        configRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        savedDisplayDev = {
+          defaultArtifactName: '',
+          defaultVisibility: 'private',
+          defaultSharedWith: [],
+          defaultShowBranding: 'inherit',
+        };
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: savedDisplayDev,
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/private-default',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 2,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Deploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+
+    const visibilitySelect = await screen.findByLabelText('Visibility');
+    expect((visibilitySelect as HTMLSelectElement).value).toBe('company');
+    fireEvent.change(visibilitySelect, { target: { value: 'private' } });
+    fireEvent.click(screen.getByRole('button', { name: /Deploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(configRequest.body).toBeDefined();
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(configRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        defaultVisibility: 'private',
+      },
+    });
+    expect(deployRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        visibility: 'private',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const reopenItems = await screen.findAllByRole('menuitem', { name: /display.dev/i });
+    fireEvent.click(reopenItems[0]!);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Visibility') as HTMLSelectElement).value).toBe('private');
+    });
+  });
+
+  it('omits hidden display.dev recipients when visibility changes away from private', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const configRequest: { body?: Record<string, unknown> } = {};
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultArtifactName: '',
+            defaultVisibility: 'private',
+            defaultSharedWith: ['old@example.com'],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        configRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultArtifactName: '',
+            defaultVisibility: 'company',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/company-demo',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 2,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Deploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+
+    const visibilitySelect = await screen.findByLabelText('Visibility');
+    expect((visibilitySelect as HTMLSelectElement).value).toBe('private');
+    expect((screen.getByLabelText('Share with') as HTMLInputElement).value).toBe('old@example.com');
+    fireEvent.change(visibilitySelect, { target: { value: 'company' } });
+    expect(screen.queryByLabelText('Share with')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Deploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(configRequest.body).toBeDefined();
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(configRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        defaultVisibility: 'company',
+        defaultSharedWith: [],
+      },
+    });
+    expect(deployRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        visibility: 'company',
+        showBranding: 'inherit',
+      },
+    });
+    expect((deployRequest.body?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
+  });
+
+  it('clears display.dev recipients when an owned private redeploy leaves private visibility', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const configRequest: { body?: Record<string, unknown> } = {};
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://app.display.dev/private-demo',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'authenticated',
+                shortId: 'owned1234',
+              },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultArtifactName: '',
+            defaultVisibility: 'private',
+            defaultSharedWith: ['old@example.com'],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        configRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultArtifactName: '',
+            defaultVisibility: 'company',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/company-demo',
+          deploymentCount: 2,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+
+    const visibilitySelect = await screen.findByLabelText('Visibility');
+    expect((visibilitySelect as HTMLSelectElement).value).toBe('private');
+    expect((screen.getByLabelText('Share with') as HTMLInputElement).value).toBe('old@example.com');
+    fireEvent.change(visibilitySelect, { target: { value: 'company' } });
+    expect(screen.queryByLabelText('Share with')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(configRequest.body).toBeDefined();
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(configRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        defaultVisibility: 'company',
+        defaultSharedWith: [],
+      },
+    });
+    expect(deployRequest.body?.displayDev).toEqual({
+      visibility: 'company',
+      sharedWith: [],
+    });
+  });
+
+  it('does not overwrite display.dev access settings on a plain owned redeploy', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://app.display.dev/private-demo',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'authenticated',
+                shortId: 'owned1234',
+              },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultVisibility: 'company',
+            defaultSharedWith: ['old@example.com'],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/private-demo',
+          deploymentCount: 2,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(deployRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      fileName: 'index.html',
+    });
+    expect(deployRequest.body?.displayDev).toBeUndefined();
+  });
+
+  it('sends touched display.dev access settings on an owned redeploy', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const configRequest: { body?: Record<string, unknown> } = {};
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://app.display.dev/private-demo',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'authenticated',
+                shortId: 'owned1234',
+              },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultVisibility: 'company',
+            defaultSharedWith: ['old@example.com'],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        configRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultVisibility: 'private',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/private-demo',
+          deploymentCount: 2,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText('Visibility'), { target: { value: 'private' } });
+    const shareWithInput = await screen.findByLabelText('Share with');
+    expect((shareWithInput as HTMLInputElement).value).toBe('old@example.com');
+    fireEvent.change(shareWithInput, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(configRequest.body).toBeDefined();
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(configRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        defaultVisibility: 'private',
+        defaultSharedWith: [],
+      },
+    });
+    expect(deployRequest.body?.displayDev).toEqual({
+      visibility: 'private',
+      sharedWith: [],
+    });
+  });
+
+  it('tracks display.dev Share menu deploy clicks with the displaydev export format', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: false,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Deploy to display\.dev/i });
+    expect(displayDevItems).toHaveLength(1);
+    fireEvent.click(displayDevItems[0]!);
+
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+
+    const shareClickCalls = analyticsTrackMock.mock.calls.filter(([event, props]) => (
+      event === 'ui_click'
+      && (props as { area?: string }).area === 'share_option_popover'
+    ));
+    expect(shareClickCalls).toHaveLength(1);
+    expect(shareClickCalls[0]?.[1]).toMatchObject({
+      element: 'displaydev',
+      project_id: 'project-1',
+      project_kind: 'prototype',
+    });
+
+    const exportResultCalls = analyticsTrackMock.mock.calls.filter(([event]) => (
+      event === 'artifact_export_result'
+    ));
+    expect(exportResultCalls).toHaveLength(1);
+    expect(exportResultCalls[0]?.[1]).toMatchObject({
+      export_format: 'displaydev',
+      result: 'success',
+    });
+  });
+
   it('nudges the export button once when an artifact becomes exportable', async () => {
     const file = baseFile({
       name: 'nudge.html',

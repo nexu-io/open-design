@@ -820,7 +820,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'displaydev-self';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -851,6 +851,27 @@ export interface CloudflarePagesDeploySelection {
   zoneId: string;
   zoneName: string;
   domainPrefix: string;
+}
+
+export interface DisplayDevConfigHints {
+  defaultArtifactName?: string;
+  defaultVisibility?: 'public' | 'company' | 'private';
+  defaultSharedWith?: string[];
+  defaultShowBranding?: 'inherit' | 'show' | 'hide';
+}
+
+export interface DisplayDevDeploySelection {
+  name?: string;
+  visibility?: 'public' | 'company' | 'private';
+  sharedWith?: string[];
+  showBranding?: 'inherit' | 'show' | 'hide';
+}
+
+export interface DisplayDevDeploymentInfo {
+  shortId?: string;
+  mode: 'anonymous' | 'authenticated';
+  claimUrl?: string;
+  expiresAt?: string;
 }
 
 export type DeploymentLinkStatus =
@@ -922,19 +943,24 @@ export interface DeployConfigResponse {
   teamId: string;
   teamSlug: string;
   accountId?: string;
+  apiUrl?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
+  displayDev?: DisplayDevConfigHints;
   target: 'preview' | 'production';
 }
 
 export interface UpdateDeployConfigRequest {
   providerId?: DeployProviderId;
   token?: string;
+  clearToken?: boolean;
   teamId?: string;
   teamSlug?: string;
   accountId?: string;
+  apiUrl?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
+  displayDev?: DisplayDevConfigHints;
 }
 
 export interface DeploymentInfo {
@@ -950,6 +976,7 @@ export interface DeploymentInfo {
   statusMessage?: string;
   reachableAt?: number;
   cloudflarePages?: CloudflarePagesDeploymentInfo;
+  displayDev?: DisplayDevDeploymentInfo;
   createdAt: number;
   updatedAt: number;
 }
@@ -963,6 +990,7 @@ export interface DeployProjectFileRequest {
   providerId?: DeployProviderId;
   cloudflarePages?: CloudflarePagesDeploySelection;
   target?: 'preview' | 'production';
+  displayDev?: DisplayDevDeploySelection;
 }
 
 export interface DeployProjectFileResponse extends DeploymentInfo {}

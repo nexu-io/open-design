@@ -19,7 +19,9 @@ import {
   DEPLOY_PREFLIGHT_LARGE_HTML_BYTES,
   deploymentUrlCandidates,
   deployToCloudflarePages,
+  deployToDisplayDev,
   deployConfigPath,
+  DISPLAYDEV_PROVIDER_ID,
   extractCssReferences,
   extractHtmlReferences,
   extractInlineCssReferences,
@@ -29,15 +31,18 @@ import {
   normalizeDeployHookScriptUrl,
   prepareDeployPreflight,
   publicDeployConfig,
+  readDisplayDevConfig,
   readVercelConfig,
   resolveReferencedPath,
   rewriteCssReferences,
   rewriteEntryHtmlReferences,
   SAVED_CLOUDFLARE_TOKEN_MASK,
+  SAVED_DISPLAYDEV_TOKEN_MASK,
   SAVED_TOKEN_MASK,
   VERCEL_PROVIDER_ID,
   waitForReachableDeploymentUrl,
   writeCloudflarePagesConfig,
+  writeDisplayDevConfig,
   writeVercelConfig,
 } from '../src/deploy.js';
 import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
@@ -217,6 +222,110 @@ describe('deploy config', () => {
       expect(cloudflarePagesProjectNameForProject('12345678', '中文项目')).toBe(
         'od-project-12345678',
       );
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('stores display.dev settings separately and keeps anonymous publish usable', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const empty = await readDisplayDevConfig();
+      expect(empty).toMatchObject({
+        token: '',
+        apiUrl: 'https://api.display.dev',
+      });
+
+      const saved = await writeDisplayDevConfig({
+        token: 'Bearer dsp_live_secret',
+        apiUrl: 'https://api.display.test:3331/',
+        displayDev: {
+          defaultArtifactName: 'Demo',
+          defaultVisibility: 'private',
+          defaultSharedWith: ['team@example.com'],
+          defaultShowBranding: 'hide',
+        },
+      });
+
+      expect(path.basename(deployConfigPath(DISPLAYDEV_PROVIDER_ID))).toBe('displaydev.json');
+      expect(saved).toEqual({
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        configured: true,
+        tokenMask: SAVED_DISPLAYDEV_TOKEN_MASK,
+        teamId: '',
+        teamSlug: '',
+        apiUrl: 'https://api.display.test:3331',
+        target: 'preview',
+        displayDev: {
+          defaultArtifactName: 'Demo',
+          defaultVisibility: 'private',
+          defaultSharedWith: ['team@example.com'],
+          defaultShowBranding: 'hide',
+        },
+      });
+      expect(JSON.parse(await readFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), 'utf8'))).toMatchObject({
+        token: 'dsp_live_secret',
+        apiUrl: 'https://api.display.test:3331',
+      });
+
+      const cleared = await writeDisplayDevConfig({
+        token: '',
+        clearToken: true,
+      });
+
+      expect(cleared.tokenMask).toBe('');
+      expect(await readDisplayDevConfig()).toMatchObject({
+        token: '',
+        apiUrl: 'https://api.display.test:3331',
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects malformed display.dev API URLs on write', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      await expect(writeDisplayDevConfig({
+        apiUrl: 'api.display.test:3331',
+      })).rejects.toMatchObject({
+        status: 400,
+        message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
+      });
+
+      expect(await readDisplayDevConfig()).toMatchObject({
+        token: '',
+        apiUrl: 'https://api.display.dev',
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects malformed saved display.dev API URLs on read', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+        token: 'dsp_live_secret',
+        apiUrl: 'api.display.test:3331',
+      }));
+
+      await expect(readDisplayDevConfig()).rejects.toMatchObject({
+        status: 400,
+        message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
+      });
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
       else process.env.OD_USER_STATE_DIR = priorStateRoot;
@@ -667,6 +776,409 @@ describe('deploy file set', () => {
     const startRewrite = Date.now();
     expect(rewriteCssReferences(input, 'sub')).toBe(input);
     expect(Date.now() - startRewrite).toBeLessThan(500);
+  });
+});
+
+describe('deployToDisplayDev', () => {
+  it('publishes anonymously to the public display.dev artifact endpoint', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/public/artifacts')) {
+        return new Response(JSON.stringify({
+          shortId: 'abc12345',
+          previewUrl: 'https://display.dsp.so/abc12345-demo',
+          claimUrl: 'https://api.display.dev/v1/claim/claim_123',
+          expiresAt: '2026-06-26T00:00:00.000Z',
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/abc12345-demo') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToDisplayDev({
+      config: { token: '', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+    });
+
+    expect(result).toMatchObject({
+      providerId: DISPLAYDEV_PROVIDER_ID,
+      url: 'https://display.dsp.so/abc12345-demo',
+      deploymentId: 'abc12345',
+      target: 'preview',
+      status: 'ready',
+    });
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/public/artifacts',
+      method: 'POST',
+      auth: null,
+    });
+    expect(calls[0]?.body).toBeInstanceOf(FormData);
+    expect(calls[0]?.body?.get('name')).toBeNull();
+  });
+
+  it('publishes authenticated artifacts with visibility fields', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/artifacts')) {
+        return new Response(JSON.stringify({
+          shortId: 'def67890',
+          url: 'https://display.dsp.so/def67890-demo',
+          version: 1,
+          name: 'Demo',
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/def67890-demo') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToDisplayDev({
+      config: { token: 'Bearer dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      displayDev: {
+        name: 'Demo',
+        visibility: 'private',
+        sharedWith: ['team@example.com'],
+        showBranding: 'hide',
+      },
+    });
+
+    expect(result).toMatchObject({
+      providerId: DISPLAYDEV_PROVIDER_ID,
+      url: 'https://display.dsp.so/def67890-demo',
+      deploymentId: 'def67890',
+      target: 'preview',
+      status: 'ready',
+      providerMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'def67890',
+        },
+      },
+    });
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts',
+      method: 'POST',
+      auth: 'Bearer dsp_live_secret',
+    });
+    expect(calls[0]?.body?.get('visibility')).toBe('private');
+    expect(calls[0]?.body?.get('sharedWith')).toBe('team@example.com');
+    expect(calls[0]?.body?.get('showBranding')).toBe('hide');
+  });
+
+  it('creates a new owned display.dev artifact when redeploying from an anonymous prior publish', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/artifacts')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-index',
+          version: 1,
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/owned1234-index') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToDisplayDev({
+      config: { token: 'dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      priorMetadata: {
+        displayDev: {
+          mode: 'anonymous',
+          shortId: 'anon1234',
+          claimUrl: 'https://app.display.dev/claim?code=abc',
+          expiresAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      deploymentId: 'owned1234',
+      providerMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+        },
+      },
+    });
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts',
+      method: 'POST',
+      auth: 'Bearer dsp_live_secret',
+    });
+    expect(calls[0]?.body?.get('name')).toBe('index');
+  });
+
+  it('uses the file name when authenticated display.dev publish has no explicit name', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/artifacts')) {
+        return new Response(JSON.stringify({
+          shortId: 'named123',
+          url: 'https://display.dsp.so/named123-intro',
+          version: 1,
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/named123-intro') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToDisplayDev({
+      config: { token: 'Bearer dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'slides/intro.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts',
+      method: 'POST',
+      auth: 'Bearer dsp_live_secret',
+    });
+    expect(calls[0]?.body?.get('name')).toBe('intro');
+  });
+
+  it('preserves display.dev access settings when updating an owned artifact without overrides', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-demo',
+          version: 2,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/owned1234-demo') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToDisplayDev({
+      config: {
+        token: 'Bearer dsp_live_secret',
+        apiUrl: 'https://api.display.dev',
+        displayDev: {
+          defaultArtifactName: 'Config default',
+          defaultVisibility: 'company',
+          defaultSharedWith: ['default@example.com'],
+          defaultShowBranding: 'inherit',
+        },
+      },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      priorMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+        },
+      },
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts/owned1234',
+      method: 'PUT',
+      auth: 'Bearer dsp_live_secret',
+    });
+    expect(calls[0]?.body?.get('name')).toBeNull();
+    expect(calls[0]?.body?.get('visibility')).toBeNull();
+    expect(calls[0]?.body?.get('sharedWith')).toBeNull();
+    expect(calls[0]?.body?.get('clearSharedWith')).toBeNull();
+    expect(calls[0]?.body?.get('showBranding')).toBeNull();
+  });
+
+  it('clears display.dev shared recipients when updating an owned artifact with an empty share list', async () => {
+    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      calls.push({
+        url,
+        ...(init?.method ? { method: init.method } : {}),
+        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+          ? (init.headers as Record<string, string>).Authorization ?? null
+          : null,
+        ...(init?.body instanceof FormData ? { body: init.body } : {}),
+      });
+      if (url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-demo',
+          version: 2,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://display.dsp.so/owned1234-demo') {
+        return new Response('', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToDisplayDev({
+      config: {
+        token: 'Bearer dsp_live_secret',
+        apiUrl: 'https://api.display.dev',
+        displayDev: {
+          defaultSharedWith: ['old@example.com'],
+        },
+      },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      priorMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+        },
+      },
+      displayDev: {
+        visibility: 'private',
+        sharedWith: [],
+      },
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts/owned1234',
+      method: 'PUT',
+      auth: 'Bearer dsp_live_secret',
+    });
+    expect(calls[0]?.body?.get('sharedWith')).toBeNull();
+    expect(calls[0]?.body?.get('clearSharedWith')).toBe('true');
+    expect(calls[0]?.body?.get('visibility')).toBe('private');
+    expect(calls[0]?.body?.get('showBranding')).toBeNull();
+  });
+
+  it('rejects HTML previews with referenced assets before publishing to display.dev', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><link rel="stylesheet" href="style.css"><h1>Hello</h1>',
+    );
+    await writeFile(path.join(dir, 'style.css'), 'h1 { color: rebeccapurple; }');
+    const files = await buildDeployFileSet(projectsRoot, projectId, 'index.html');
+    expect(files.map((file) => file.file)).toContain('style.css');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToDisplayDev({
+      config: { token: '', apiUrl: 'https://api.display.dev' },
+      files,
+      projectId,
+    })).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringMatching(/single-file HTML previews/i),
+      details: {
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        unsupportedFiles: ['style.css'],
+      },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
