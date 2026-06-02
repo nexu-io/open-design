@@ -606,21 +606,21 @@
 
 /* op-todo card variant (the .op-todo .todo-list rule already exists above) */
 .op-todo {
-  border-color: var(--accent-soft);
-  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 60%);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
 }
 .op-todo .op-card-head {
-  border-bottom: 1px solid color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-soft) 80%, transparent);
   background: transparent;
 }
 .op-todo .op-icon {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: transparent;
+  color: var(--text-muted);
 }
 .op-todo .op-title {
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 12.5px;
   color: var(--text-strong);
 }
 .op-todo .op-meta {
@@ -733,17 +733,18 @@
   display: inline-flex;
   align-items: center;
   margin: 6px 10px 6px 0;
-  padding: 2px 12px;
+  min-height: 28px;
+  padding: 2px 0;
   font-size: 11px;
   font-weight: 500;
-  border: 1px solid var(--green-border);
-  border-radius: var(--radius-pill);
-  background: var(--green-bg);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--green);
   cursor: pointer;
 }
 .op-todo .op-todo-done:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
 }
 .op-todo-collapsed .op-card-head {
   border-bottom-color: transparent;

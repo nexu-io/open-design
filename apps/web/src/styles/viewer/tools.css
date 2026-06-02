@@ -5,7 +5,10 @@
  * the turn) the card locks into a read only state: chips remain visible
  * but unclickable so the user can see what was asked.
  */
-.op-ask-question .op-card-head { padding-bottom: 4px; }
+.op-ask-question.chat-surface {
+  background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+}
+.op-ask-question > .chat-surface-head { padding-bottom: 4px; }
 .op-ask-question-body {
   display: flex;
   flex-direction: column;
@@ -39,21 +42,29 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 7px 11px;
-  border: none;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 0;
   border-radius: 8px;
-  background: var(--bg-fill-tertiary);
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
   color: var(--text);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: background 120ms ease;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 72%, transparent);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.op-ask-question-option:hover { background: var(--bg-fill-secondary); }
+.op-ask-question-option:hover {
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-subtle));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, var(--border));
+}
 .op-ask-question-option.on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-subtle));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 44%, var(--border));
 }
 .op-ask-question-option:disabled {
   cursor: default;
@@ -102,12 +113,14 @@
  * would wipe the selected state and the card would look unanswered.
  */
 .op-ask-question-locked .op-ask-question-option:not(.on) {
-  background: var(--bg-fill-tertiary);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-soft) 80%, transparent);
   color: var(--text-muted);
   opacity: 0.6;
 }
 .op-ask-question-locked .op-ask-question-option.on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-subtle));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, var(--border));
   color: var(--accent);
   cursor: default;
 }

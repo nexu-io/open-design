@@ -322,19 +322,17 @@ function AskUserQuestionCard({
     : !locked
       ? t('tool.askQuestionPending')
       : null;
-  // Use the awaiting variant instead of `op-status-running`: pending input
-  // is a steady waiting state, not active work, so the global pulsing
-  // animation on `op-status-running` is misleading and noisy.
-  const statusClass = hasRealAnswer ? 'op-status-ok' : 'op-status-awaiting';
   return (
-    <div className={`op-card op-ask-question${locked ? ' op-ask-question-locked' : ''}`} data-testid="ask-user-question">
-      <div className="op-card-head">
-        <span className="op-icon" aria-hidden>?</span>
-        <span className="op-title">{t('tool.askQuestion')}</span>
-        {statusLabel ? (
-          <span className={`op-status ${statusClass}`}>{statusLabel}</span>
-        ) : null}
-      </div>
+    <ChatSurface
+      className={`op-card op-ask-question${locked ? ' op-ask-question-locked' : ''}`}
+      testId="ask-user-question"
+      tone={hasRealAnswer ? 'done' : !locked ? 'awaiting' : 'neutral'}
+    >
+      <ChatSurfaceHeader
+        icon="help-circle"
+        title={t('tool.askQuestion')}
+        status={statusLabel ? { label: statusLabel, tone: hasRealAnswer ? 'done' : 'awaiting' } : null}
+      />
       <div className="op-ask-question-body">
         {questions.map((q) => {
           const selected = effectiveSelections[q.question];
@@ -382,7 +380,7 @@ function AskUserQuestionCard({
           </button>
         </div>
       ) : null}
-    </div>
+    </ChatSurface>
   );
 }
 
