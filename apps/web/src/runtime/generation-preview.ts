@@ -70,6 +70,7 @@ const QUESTION_FORM_RE = /<(question-form|ask-question)\b/i;
 const WRITE_LIKE_TOOL_RE = /^(write|edit|multiedit|bash|run_terminal_cmd)$/i;
 
 const PREVIEWABLE_FILE = /\.(html?|jsx|tsx|svg|md|pdf|pptx?|key)$/i;
+const RENDERED_PREVIEW_FILE = /\.(html?|svg|pdf)$/i;
 
 export function workspaceHasPreviewSurface(input: {
   activeTab: string | null;
@@ -90,6 +91,36 @@ export function workspaceHasPreviewSurface(input: {
   }
   if (PREVIEWABLE_FILE.test(file.name)) return true;
   return file.kind === 'html' || file.kind === 'code' || file.kind === 'text';
+}
+
+export function workspaceHasRenderedPreviewSurface(input: {
+  activeTab: string | null;
+  projectFiles: ProjectFile[];
+  liveArtifacts: LiveArtifactSummary[];
+  streamingArtifactHtml?: string | null | undefined;
+}): boolean {
+  if (input.streamingArtifactHtml?.trim()) return true;
+  const active = input.activeTab;
+  if (!active) return false;
+  if (isLiveArtifactTabId(active)) {
+    return input.liveArtifacts.some((entry) => liveArtifactTabId(entry.id) === active);
+  }
+  const file = input.projectFiles.find((item) => item.name === active);
+  if (!file) return false;
+  if (
+    file.kind === 'html' ||
+    file.kind === 'image' ||
+    file.kind === 'video' ||
+    file.kind === 'audio' ||
+    file.kind === 'sketch' ||
+    file.kind === 'pdf' ||
+    file.kind === 'document' ||
+    file.kind === 'presentation' ||
+    file.kind === 'spreadsheet'
+  ) {
+    return true;
+  }
+  return RENDERED_PREVIEW_FILE.test(file.name);
 }
 
 export function deriveGenerationPreviewModel(input: {
@@ -129,6 +160,12 @@ export function buildGenerationPreviewState(input: {
     liveArtifacts: input.liveArtifacts,
     streamingArtifactHtml: input.artifactHtml,
   });
+  const hasRenderedPreviewSurface = workspaceHasRenderedPreviewSurface({
+    activeTab: input.activeTab,
+    projectFiles: input.projectFiles,
+    liveArtifacts: input.liveArtifacts,
+    streamingArtifactHtml: input.artifactHtml,
+  });
 
   const latestAssistant = [...input.messages]
     .reverse()
@@ -158,12 +195,12 @@ export function buildGenerationPreviewState(input: {
     return null;
   }
 
-  // Once the user has something previewable, the workspace should stay on
-  // that concrete preview. Failed-run recovery belongs in the chat transcript;
-  // otherwise a stale failed assistant can cover a file tab after reload and
-  // make the preview Retry action look like a render retry when it actually
-  // re-runs the agent.
-  if (hasPreviewSurface) return null;
+  // While a run is active, any open workspace surface should remain visible.
+  // Once the run fails, only hide the recovery card behind genuinely rendered
+  // preview content. Source/code/text tabs still need the minimal recovery UI:
+  // their file is useful context, but it is not a preview canvas with its own
+  // render state to preserve.
+  if (phase === 'failed' ? hasRenderedPreviewSurface : hasPreviewSurface) return null;
 
   const failed = phase === 'failed';
   const events = latestAssistant.events ?? [];

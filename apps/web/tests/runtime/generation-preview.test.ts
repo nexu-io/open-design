@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGenerationPreviewState,
   derivePrototypeGenerationSteps,
+  workspaceHasRenderedPreviewSurface,
   workspaceHasPreviewSurface,
 } from '../../src/runtime/generation-preview';
 import type { AgentEvent, ChatMessage } from '../../src/types';
@@ -21,6 +22,37 @@ describe('generation preview helpers', () => {
         projectFiles: [],
         liveArtifacts: [],
         streamingArtifactHtml: '<html><body>hi</body></html>',
+      }),
+    ).toBe(true);
+  });
+
+  it('distinguishes rendered preview surfaces from source/code tabs', () => {
+    expect(
+      workspaceHasRenderedPreviewSurface({
+        activeTab: 'README.md',
+        projectFiles: [{ name: 'README.md', size: 1, mtime: 1, kind: 'text', mime: 'text/markdown' }],
+        liveArtifacts: [],
+      }),
+    ).toBe(false);
+    expect(
+      workspaceHasRenderedPreviewSurface({
+        activeTab: 'index.ts',
+        projectFiles: [{ name: 'index.ts', size: 1, mtime: 1, kind: 'code', mime: 'text/typescript' }],
+        liveArtifacts: [],
+      }),
+    ).toBe(false);
+    expect(
+      workspaceHasRenderedPreviewSurface({
+        activeTab: 'preview.svg',
+        projectFiles: [{ name: 'preview.svg', size: 1, mtime: 1, kind: 'code', mime: 'image/svg+xml' }],
+        liveArtifacts: [],
+      }),
+    ).toBe(true);
+    expect(
+      workspaceHasRenderedPreviewSurface({
+        activeTab: 'brief.docx',
+        projectFiles: [{ name: 'brief.docx', size: 1, mtime: 1, kind: 'document', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }],
+        liveArtifacts: [],
       }),
     ).toBe(true);
   });
@@ -322,6 +354,43 @@ describe('generation preview helpers', () => {
         conversationError: 'Network error',
       }),
     ).toBeNull();
+  });
+
+  it('shows failed-run recovery over source tabs because they are not rendered previews', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      runStatus: 'failed',
+      startedAt: Date.now() - 8_000,
+      events: [{ kind: 'text', text: 'Model request failed' }],
+    };
+
+    for (const file of [
+      { name: 'README.md', kind: 'text' as const, mime: 'text/markdown' },
+      { name: 'index.ts', kind: 'code' as const, mime: 'text/typescript' },
+    ]) {
+      const state = buildGenerationPreviewState({
+        designSystemProject: false,
+        messages: [{ id: 'u1', role: 'user', content: 'Build something' }, assistant],
+        streaming: false,
+        activeTab: file.name,
+        projectFiles: [
+          {
+            name: file.name,
+            path: file.name,
+            size: 1,
+            mtime: 1,
+            kind: file.kind,
+            mime: file.mime,
+          },
+        ],
+        liveArtifacts: [],
+        conversationError: 'Network error',
+      });
+      expect(state?.phase).toBe('failed');
+      expect(state?.retryTarget).toBe(assistant);
+    }
   });
 
   it('classifies a rate-limited failure from the error event code', () => {
