@@ -71,8 +71,11 @@ export function ChatSurfaceHeader({
 }
 
 export function ChatSurfaceStatus({ status }: { status: ChatSurfaceStatus }) {
+  const tone = status.tone ?? 'neutral';
+  const legacyTone =
+    tone === 'done' ? 'ok' : tone === 'running' ? 'running' : tone === 'error' ? 'error' : tone;
   return (
-    <span className={`chat-surface-status is-${status.tone ?? 'neutral'}`}>
+    <span className={`chat-surface-status op-status op-status-${legacyTone} is-${tone}`}>
       {status.label}
     </span>
   );
@@ -86,8 +89,12 @@ export function ChatDisclosure({
   meta,
   status,
   defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
   className = '',
   tone = 'neutral',
+  testId,
+  toggleTestId,
   children,
 }: {
   title: ReactNode;
@@ -97,18 +104,32 @@ export function ChatDisclosure({
   meta?: ReactNode;
   status?: ChatSurfaceStatus | null;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   className?: string;
   tone?: ChatSurfaceTone;
+  testId?: string;
+  toggleTestId?: string;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   return (
-    <ChatSurface className={`chat-disclosure${className ? ` ${className}` : ''}`} tone={tone}>
+    <ChatSurface
+      className={`chat-disclosure${className ? ` ${className}` : ''}`}
+      tone={tone}
+      testId={testId}
+    >
       <button
         type="button"
         className="chat-disclosure-toggle"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        data-testid={toggleTestId}
+        onClick={() => setOpen(!open)}
       >
         <ChatSurfaceHeader
           icon={icon}
@@ -120,7 +141,7 @@ export function ChatDisclosure({
           disclosureOpen={open}
         />
       </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`} aria-hidden={!open}>
         <div className="accordion-collapsible-inner">
           <div className="chat-disclosure-body">{children}</div>
         </div>

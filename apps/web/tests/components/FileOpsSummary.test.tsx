@@ -42,8 +42,12 @@ describe('FileOpsSummary', () => {
     expect(screen.getByText(/Write 1/)).toBeTruthy();
     expect(screen.getByText(/Edit 3/)).toBeTruthy();
     expect(screen.getByText(/Read 2/)).toBeTruthy();
-    // While streaming we collapse the file list so the running pill stays compact.
-    expect(screen.queryByTestId('file-ops-row-a.ts')).toBeNull();
+    // While streaming we collapse the file list so the running row stays
+    // compact. The body stays mounted for exit animation, but is hidden
+    // from the accessibility tree while closed.
+    expect(
+      screen.getByTestId('file-ops-row-a.ts').closest('.accordion-collapsible')?.getAttribute('aria-hidden'),
+    ).toBe('true');
     const toggle = screen.getByTestId('file-ops-toggle');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });

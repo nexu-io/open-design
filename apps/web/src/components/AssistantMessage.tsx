@@ -42,6 +42,7 @@ import {
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
+import { ChatDisclosure } from "./chat/ChatSurface";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import {
@@ -2467,7 +2468,6 @@ function ToolGroupCard({
   onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
 
   // `claude-code -p` (headless) auto errors `AskUserQuestion` because it
   // cannot prompt the user, so the model retries the call up to ~4 times
@@ -2500,49 +2500,29 @@ function ToolGroupCard({
   const running = runStreaming && items.some((it) => !it.result);
   const hasError = items.some((it) => it.result?.isError);
   return (
-    <div className="action-card">
-      <button
-        type="button"
-        className={`action-card-toggle ${running ? "running" : ""}`}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className={`action-card-status ${running ? 'op-status-running' : hasError ? 'op-status-error' : 'op-status-ok'}`} aria-hidden>
-          {running
-            ? <Icon name="spinner" size={14} />
-            : hasError
-            ? <Icon name="close" size={14} />
-            : <Icon name="check" size={14} />
-          }
-        </span>
-        <span className={`summary${running ? ' shimmer-text' : ''}`}>
-          {summary.label}
-        </span>
-        <span className="chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="action-card-body">
-            {items.map((it, i) => (
-              <ToolCard
-                key={i}
-                use={it.use}
-                result={it.result}
-                runStreaming={runStreaming}
-                runSucceeded={runSucceeded}
-                projectFileNames={projectFileNames}
-                onRequestOpenFile={onRequestOpenFile}
-                isLast={isLast}
-                onSubmitForm={onSubmitForm}
-                onAnswerToolUse={onAnswerToolUse}
-              />
-            ))}
-          </div>
-        </div>
+    <ChatDisclosure
+      className={`action-card${running ? " is-running" : ""}${hasError ? " is-error" : ""}`}
+      iconNode={summary.icon}
+      title={summary.label}
+      tone={running ? "running" : hasError ? "error" : "done"}
+    >
+      <div className="action-card-body">
+        {items.map((it, i) => (
+          <ToolCard
+            key={i}
+            use={it.use}
+            result={it.result}
+            runStreaming={runStreaming}
+            runSucceeded={runSucceeded}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+            isLast={isLast}
+            onSubmitForm={onSubmitForm}
+            onAnswerToolUse={onAnswerToolUse}
+          />
+        ))}
       </div>
-    </div>
+    </ChatDisclosure>
   );
 }
 

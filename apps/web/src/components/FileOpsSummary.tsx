@@ -20,7 +20,7 @@ import {
   type FileOpEntry,
   type FileOpKind,
 } from '../runtime/file-ops';
-import { Icon } from './Icon';
+import { ChatDisclosure } from './chat/ChatSurface';
 
 interface Props {
   entries: FileOpEntry[];
@@ -72,31 +72,21 @@ export function FileOpsSummary({
   if (counts.read > 0) summaryParts.push(`${t('tool.read')} ${counts.read}`);
 
   return (
-    <div
+    <ChatDisclosure
       className={`file-ops${streaming ? ' is-streaming' : ''}`}
-      data-testid="file-ops-summary"
+      testId="file-ops-summary"
+      toggleTestId="file-ops-toggle"
+      icon="file"
+      title={t('assistant.producedFiles')}
+      meta={summaryParts.join(' · ')}
+      status={{ label: String(entries.length), tone: streaming ? 'running' : 'neutral' }}
+      tone={streaming ? 'running' : 'neutral'}
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setUserToggled(true);
+        setOpen(nextOpen);
+      }}
     >
-      <button
-        type="button"
-        className="file-ops-toggle"
-        onClick={() => {
-          setUserToggled(true);
-          setOpen((value) => !value);
-        }}
-        aria-expanded={open}
-        data-testid="file-ops-toggle"
-      >
-        <span className="file-ops-icon" aria-hidden>
-          <Icon name="file" size={13} />
-        </span>
-        <span className="file-ops-label">{t('assistant.producedFiles')}</span>
-        <span className="file-ops-summary-line">{summaryParts.join(' · ')}</span>
-        <span className="file-ops-count">{entries.length}</span>
-        <span className="file-ops-chev" aria-hidden>
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
-        </span>
-      </button>
-      {open ? (
         <ul className="file-ops-list" role="list">
           {entries.map((entry) => (
             <FileOpRow
@@ -107,8 +97,7 @@ export function FileOpsSummary({
             />
           ))}
         </ul>
-      ) : null}
-    </div>
+    </ChatDisclosure>
   );
 }
 

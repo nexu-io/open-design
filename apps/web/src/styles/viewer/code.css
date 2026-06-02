@@ -928,6 +928,13 @@
   font-weight: 520;
   font-variant-numeric: tabular-nums;
 }
+.chat-surface-status.op-status {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  letter-spacing: 0;
+}
 .chat-surface-status.is-running,
 .chat-surface-status.is-awaiting {
   color: var(--accent);
@@ -1150,65 +1157,19 @@
 
 /* Grouped tool / action card */
 .action-card {
-  display: flex;
-  flex-direction: column;
-  border: none;
-  border-radius: 0;
-  background: none;
-  overflow: hidden;
-  box-shadow: none;
-}
-.action-card:hover {
-  background: none;
-}
-.action-card-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   width: 100%;
-  padding: 4px;
-  background: transparent;
-  border: none;
-  text-align: left;
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-  border-radius: 8px;
-  transition: background 120ms ease;
 }
-.action-card-toggle:hover { background: var(--bg-fill-tertiary); }
-.action-card-status {
-  width: 24px; height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: var(--bg-panel);
-  flex-shrink: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.action-card-status.op-status-running { color: var(--purple); }
-.action-card-status.op-status-ok { color: var(--green); }
-.action-card-status.op-status-error { color: var(--red); }
-.action-card-toggle .summary {
-  font-weight: 500;
-  font-size: 13px;
-  color: var(--text-muted);
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.action-card-toggle .chev { color: var(--text-faint); font-size: 10px; flex-shrink: 0; transition: transform 120ms ease; }
+.action-card.is-running .chat-surface-icon { color: var(--accent); }
+.action-card.is-error .chat-surface-icon { color: var(--red); }
 .action-card-body {
-  padding: 8px 0 8px 32px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border-top: none;
+  gap: 6px;
 }
-.action-card-body > .op-card { border-color: transparent; box-shadow: none; padding: 4px 0; }
-.action-card-body > .op-card .op-card-head { padding: 6px 0; }
+.action-card-body > .op-card.chat-surface {
+  box-shadow: none;
+  background: transparent;
+}
 
 /* Tool / operation cards — single, ungrouped */
 .op-card {
