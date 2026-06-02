@@ -1017,7 +1017,7 @@
   color: var(--text);
 }
 .app .msg.assistant .assistant-flow {
-  gap: 14px;
+  gap: 4px;
 }
 .app .msg.assistant .prose-block {
   max-width: 68ch;
@@ -1095,7 +1095,6 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-}
 }
 .app .action-card-toggle {
   min-height: 36px;

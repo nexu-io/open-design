@@ -507,7 +507,7 @@
 .assistant-flow {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 4px;
   min-width: 0;
 }
 .prose-block {
@@ -887,7 +887,7 @@
   gap: var(--chat-row-gap);
   width: fit-content;
   max-width: 100%;
-  min-height: 40px;
+  min-height: 28px;
   min-width: 0;
   font-size: 12.5px;
   line-height: 1.35;
@@ -975,7 +975,7 @@
 .chat-disclosure-toggle {
   width: fit-content;
   max-width: 100%;
-  min-height: 40px;
+  min-height: 28px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -1076,7 +1076,8 @@
   align-items: center;
   gap: 6px;
   max-width: 100%;
-  padding: 4px;
+  min-height: 24px;
+  padding: 2px 0;
   background: transparent;
   border: none;
   text-align: left;
