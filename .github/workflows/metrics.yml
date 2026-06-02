@@ -1,7 +1,8 @@
 name: github-metrics
 
 on:
-  # Manual-only: avoid recurring bot PRs for docs/assets/github-metrics.svg.
+  schedule:
+    - cron: '15 0 * * *'
   workflow_dispatch:
 
 permissions:
@@ -9,7 +10,7 @@ permissions:
 
 jobs:
   metrics:
-    name: Generate repository metrics SVG
+    name: Generate issue and PR activity SVG
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
@@ -22,24 +23,23 @@ jobs:
           owner: nexu-io
           repositories: open-design
           permission-administration: read
-          permission-contents: write
+          permission-contents: read
           permission-issues: read
-          permission-pull-requests: write
+          permission-pull-requests: read
 
-      - name: Generate GitHub repository metrics
+      - name: Generate issue and PR activity
         uses: lowlighter/metrics@latest
         with:
-          # Output path; manual runs open/update a PR when this file changes.
-          # Requires manual review to merge. If metrics unchanged, no PR is created.
-          filename: docs/assets/github-metrics.svg
+          # Render into the action workspace only. The upload step publishes the
+          # SVG to repository-assets R2 so generated metrics never write back to
+          # the git history.
+          filename: github-metrics.svg
 
-          # Auth: use the Open Design GitHub App so generated commits and pull
-          # requests come from open-design-bot[bot] and trigger normal PR CI.
+          # Auth: use the Open Design GitHub App for follow-up metrics
+          # that need private repository API access, but do not grant write
+          # permissions because this workflow publishes to R2 instead of git.
           token: ${{ steps.open-design-bot-token.outputs.token }}
-          committer_token: ${{ steps.open-design-bot-token.outputs.token }}
-          committer_message: Update ${filename}
-          output_action: pull-request
-          output_condition: data-changed
+          output_action: none
 
           # Use the repository template (per-repo metrics, not user metrics).
           # Organization-owned repositories must be targeted explicitly, otherwise
@@ -49,26 +49,73 @@ jobs:
           user: nexu-io
           repo: open-design
 
-          # Plugins. Anything that requires a personal token will silently no-op
-          # without METRICS_TOKEN — the rest still produce a useful SVG.
-          plugin_contributors: yes
-          plugin_contributors_categories: |
-            {
-              "Skills": "skills/**",
-              "Design systems": "design-systems/**",
-              "Web": "apps/web/**",
-              "Daemon": "apps/daemon/**",
-              "Docs": "docs/**"
-            }
+          # Keep this README image focused on the maintenance signal that is not
+          # covered elsewhere: issue and PR follow-up status. Contributors and
+          # star history have dedicated README sections, and languages are
+          # already summarized by GitHub.
           plugin_followup: yes
           plugin_followup_sections: pr, issue
-          plugin_languages: yes
-          plugin_languages_details: lines, percentage
-          plugin_languages_limit: 8
-          plugin_lines: yes
-          plugin_traffic: yes
-          plugin_stargazers: yes
-          plugin_stargazers_charts_type: chartist
 
           config_timezone: Asia/Shanghai
           config_display: large
+
+      - name: Normalize activity SVG layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          svg="/metrics_renders/github-metrics.svg"
+          if [ ! -s "$svg" ]; then
+            echo "Expected metrics SVG not found at $svg" >&2
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const svg = '/metrics_renders/github-metrics.svg';
+          let content = fs.readFileSync(svg, 'utf8');
+          content = content.replace(
+            /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="[^"]+" height="[^"]+"([^>]*)>/,
+            '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="110" viewBox="0 0 720 110"$1>'
+          );
+          content = content.replace(
+            '<span class="followup-title">Overall issues and pull requests status</span>',
+            '<span class="followup-title">Issue and pull request status</span>'
+          );
+          const layoutCss = [
+            'foreignObject>div{width:100%;display:flex;flex-direction:column;align-items:center;transform:scale(1.1);transform-origin:top center}',
+            '.field{justify-content:center}',
+            '.followup-title{text-align:center}',
+            'svg.large .largeable{width:520px}',
+            'svg.large .chart.largeable{width:504px}'
+          ].join('');
+          content = content.replace('</style>', `${layoutCss}</style>`);
+          fs.writeFileSync(svg, content);
+          NODE
+
+      - name: Publish metrics SVG to repository assets
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+          CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
+          CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_REPOSITORY_ASSETS_URL: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          svg="/metrics_renders/github-metrics.svg"
+          if [ ! -s "$svg" ]; then
+            echo "Expected metrics SVG not found at $svg" >&2
+            exit 1
+          fi
+          endpoint="${CLOUDFLARE_R2_REPOSITORY_ASSETS_URL%/}"
+          bucket="$CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET"
+          key="resources/images/github-metrics.svg"
+          aws --endpoint-url "$endpoint" s3api put-object \
+            --bucket "$bucket" \
+            --key "$key" \
+            --body "$svg" \
+            --content-type "image/svg+xml" \
+            --cache-control "public, max-age=300" \
+            --no-cli-pager
+          echo "Published ${CLOUDFLARE_R2_REPOSITORY_ASSETS_PUBLIC_ORIGIN%/}/$key"

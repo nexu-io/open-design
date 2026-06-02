@@ -12,7 +12,7 @@
 > → [**Lire l'annonce · télécharger l'installateur · rejoindre le mouvement**](https://github.com/nexu-io/open-design/discussions/1727) · s'installe à côté de votre 0.7 actuel.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design : couverture éditoriale, design avec l’agent sur votre laptop" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design : couverture éditoriale, design avec l’agent sur votre laptop" width="100%" />
 </p>
 
 <p align="center">
@@ -777,7 +777,7 @@ C’est une implémentation encore jeune, mais la boucle fermée fonctionne de b
 ## Star us
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Star Open Design on GitHub : github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub : github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Si ce projet vous a économisé trente minutes, donnez-lui une ★. Les stars ne paient pas le loyer, mais elles indiquent au prochain designer, agent ou contributeur que cette expérience mérite son attention : [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -804,11 +804,9 @@ Si vous avez livré votre première PR, bienvenue. Le label [`good-first-issue`/
 
 ## Activité du dépôt
 
-<picture>
-  <img alt="Open Design : métriques du dépôt" src="docs/assets/github-metrics.svg" />
-</picture>
-
-Le SVG ci-dessus n’est actualisé que lorsque [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) est déclenché manuellement depuis l’onglet **Actions** avec [`lowlighter/metrics`](https://github.com/lowlighter/metrics). Pour des plugins plus riches, ajoutez un secret `METRICS_TOKEN` avec un PAT fine-grained.
+<p align="center">
+  <img alt="Open Design : métriques du dépôt" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

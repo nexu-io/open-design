@@ -12,7 +12,7 @@
 > → [**공지 읽기 · 인스톨러 다운로드 · 무브먼트에 합류**](https://github.com/nexu-io/open-design/discussions/1727) · 현재 사용 중인 0.7과 나란히 설치됩니다.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — 노트북 위의 에이전트와 함께 설계하는 표지" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — 노트북 위의 에이전트와 함께 설계하는 표지" width="100%" />
 </p>
 
 <p align="center">
@@ -770,7 +770,7 @@ daemon 부팅 시 `PATH`에서 자동 감지됩니다. 설정 필요 없음. 스
 ## 스타 주세요
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="GitHub에서 Open Design에 스타 주기 — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="GitHub에서 Open Design에 스타 주기 — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 이것이 30분을 절약해줬다면 — ★를 주세요. 스타가 사용료를 대신 내지는 않지만, 다음 디자이너, 에이전트, 기여자에게 이 실험이 그들의 관심을 받을 가치가 있다는 것을 알려줍니다. 한 번의 클릭, 3초, 진짜 신호: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -797,11 +797,9 @@ Open Design을 앞으로 나아가게 도와준 모든 분께 감사드립니다
 
 ## 저장소 활동
 
-<picture>
-  <img alt="Open Design — 저장소 지표" src="docs/assets/github-metrics.svg" />
-</picture>
-
-위의 SVG는 **Actions** 탭에서 [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml)을 수동으로 트리거할 때만 [`lowlighter/metrics`](https://github.com/lowlighter/metrics)를 사용해 갱신됩니다. 더 풍부한 플러그인(traffic, follow-up time 등)을 켜려면 저장소 secrets에 fine-grained PAT를 `METRICS_TOKEN`이라는 이름으로 추가하세요.
+<p align="center">
+  <img alt="Open Design — 저장소 지표" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

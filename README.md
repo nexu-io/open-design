@@ -12,7 +12,7 @@
 > → [**Read the announcement, grab the installer, join the movement**](https://github.com/nexu-io/open-design/discussions/1727) · runs side-by-side with your current 0.7.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
 </p>
 
 <p align="center">
@@ -1020,7 +1020,7 @@ Follow **[@nexudotio](https://x.com/nexudotio)** on X for release notes, new ski
 ## Star us
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 If this saved you thirty minutes — give it a ★. Stars don't pay rent, but they tell the next designer, agent, and contributor that this experiment is worth their attention. One click, three seconds, real signal: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -1045,13 +1045,13 @@ Thanks to everyone who has helped move Open Design forward — through code, doc
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
 
-## Repository activity
+## Project pulse
 
-<picture>
-  <img alt="Open Design — repository metrics" src="docs/assets/github-metrics.svg" />
-</picture>
+A quick view of open issues and pull requests helps contributors see where the project needs attention.
 
-The SVG above is refreshed only when [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) is manually triggered from the **Actions** tab using [`lowlighter/metrics`](https://github.com/lowlighter/metrics). For richer plugins (traffic, follow-up time), add a `METRICS_TOKEN` repository secret with a fine-grained PAT.
+<p align="center">
+  <img alt="Open Design project pulse" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

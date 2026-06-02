@@ -12,7 +12,7 @@
 > → [**Lee el anuncio · descarga el instalador · únete al movimiento**](https://github.com/nexu-io/open-design/discussions/1727) · funciona en paralelo con tu 0.7 actual.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
 </p>
 
 <p align="center">
@@ -767,7 +767,7 @@ Esta es una implementación temprana: el bucle cerrado (detect → pick skill + 
 ## Danos una estrella
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Si esto te ahorró treinta minutos, dale una ★. Las estrellas no pagan la renta, pero le dicen al próximo diseñador, agente y contributor que este experimento merece atención. Un clic, tres segundos, señal real: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -794,11 +794,9 @@ Si ya enviaste tu primer PR, bienvenido. La etiqueta [`good-first-issue`](https:
 
 ## Actividad del repositorio
 
-<picture>
-  <img alt="Open Design — repository metrics" src="docs/assets/github-metrics.svg" />
-</picture>
-
-El SVG anterior solo se actualiza cuando [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) se ejecuta manualmente desde la pestaña **Actions** usando [`lowlighter/metrics`](https://github.com/lowlighter/metrics). Para plugins más ricos (traffic, follow-up time), añade un secret `METRICS_TOKEN` con un PAT fine-grained.
+<p align="center">
+  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Historial de estrellas
 

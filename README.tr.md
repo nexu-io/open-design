@@ -12,7 +12,7 @@
 > → [**Duyuruyu oku · kurulum dosyasını indir · harekete katıl**](https://github.com/nexu-io/open-design/discussions/1727) · mevcut 0.7'nin yanına paralel kurulur.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — dizüstü bilgisayarındaki agent ile tasarım yapma editoryal kapağı" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — dizüstü bilgisayarındaki agent ile tasarım yapma editoryal kapağı" width="100%" />
 </p>
 
 <p align="center">
@@ -931,7 +931,7 @@ Release note'lar, yeni skill'ler, yeni design system'ler ve arada sırada sırad
 ## Star ver
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="GitHub'da Open Design'a star ver — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="GitHub'da Open Design'a star ver — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Bu sana otuz dakika kazandırdıysa bir ★ ver. Star'lar kira ödemiyor, ama sonraki tasarımcıya, agent'a ve contributor'a bu deneyin dikkat etmeye değer olduğunu gösteriyor. Tek tık, üç saniye, gerçek sinyal: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -958,11 +958,9 @@ Open Design'ı kod, doküman, feedback, yeni skill, yeni design system veya kesk
 
 ## Repository activity
 
-<picture>
-  <img alt="Open Design — repository metrics" src="docs/assets/github-metrics.svg" />
-</picture>
-
-Yukarıdaki SVG yalnızca [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) **Actions** tab'inden manuel tetiklendiğinde [`lowlighter/metrics`](https://github.com/lowlighter/metrics) kullanılarak yenilenir. Daha zengin plugin'ler (traffic, follow-up time) için fine-grained PAT ile `METRICS_TOKEN` repository secret ekle.
+<p align="center">
+  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

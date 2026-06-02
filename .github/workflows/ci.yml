@@ -134,6 +134,76 @@ jobs:
             echo "workspace_validation_required=$workspace_validation_required"
           } >> "$GITHUB_OUTPUT"
 
+  blob_guard:
+    name: Guard changed file sizes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check changed tracked file sizes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_CHANGED_FILE_BYTES: "5242880"
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$RUNNER_TEMP/blob-guard-changed-files.txt"
+          : > "$changed_files"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            gh api --paginate \
+              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+              --jq '.[].filename' > "$changed_files"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            git diff --name-only --diff-filter=AMR \
+              "${{ github.event.merge_group.base_sha }}" \
+              "${{ github.event.merge_group.head_sha }}" > "$changed_files"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+            if [[ "$before" =~ ^0+$ ]]; then
+              git ls-files > "$changed_files"
+            else
+              git diff --name-only --diff-filter=AMR "$before" "$after" > "$changed_files"
+            fi
+          else
+            git ls-files > "$changed_files"
+          fi
+
+          oversized="$RUNNER_TEMP/blob-guard-oversized.txt"
+          : > "$oversized"
+
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            [ -f "$file" ] || continue
+            if ! git ls-files --error-unmatch -- "$file" >/dev/null 2>&1; then
+              continue
+            fi
+            size="$(wc -c < "$file" | tr -d '[:space:]')"
+            if [ "$size" -gt "$MAX_CHANGED_FILE_BYTES" ]; then
+              printf '%s\t%s\n' "$size" "$file" >> "$oversized"
+            fi
+          done < "$changed_files"
+
+          if [ -s "$oversized" ]; then
+            {
+              echo "Changed tracked files exceed the current blob guard threshold (${MAX_CHANGED_FILE_BYTES} bytes):"
+              while IFS=$'\t' read -r size file; do
+                echo "- ${size} bytes	${file}"
+              done < "$oversized"
+              echo
+              echo "Move large generated/media assets to repository-assets R2 or add a narrow, reviewed exception for source-owned runtime binaries."
+            } >&2
+            exit 1
+          fi
+
+          echo "Changed-file blob guard passed at ${MAX_CHANGED_FILE_BYTES} bytes."
+
   nix_validation:
     name: Validate Nix flake
     needs: [change_scopes]
@@ -424,6 +494,7 @@ jobs:
     name: Validate workspace
     needs:
       - change_scopes
+      - blob_guard
       - preflight
       - nix_validation
       - workspace_unit_tests
