@@ -30,6 +30,41 @@ import { homedir } from 'node:os';
 const SIDECAR_URL = process.env.DESIGN_LAB_SIDECAR_URL ?? 'http://127.0.0.1:5174';
 const TOKEN_PATH = `${homedir()}/.claude/state/design-lab/api-token`;
 
+interface CaseSummary {
+    slug?: string;
+    quotes_from_user?: string[];
+    aspects?: Array<{
+        dimension?: string;
+        verdict?: 'like' | 'dislike' | string;
+        note?: string;
+    }>;
+    tokens?: {
+        palette?: unknown;
+        fonts?: unknown;
+        [key: string]: unknown;
+    };
+}
+
+interface NeverRule {
+    id?: string;
+    rule?: string;
+    detector?: {
+        pattern?: string;
+        [key: string]: unknown;
+    };
+}
+
+interface DesignLabContext {
+    client?: unknown;
+    styleGuide?: string;
+    brandStyleGuide?: string;
+    scenarioOverride?: string;
+    cases?: CaseSummary[];
+    antiCases?: CaseSummary[];
+    neverRules?: NeverRule[];
+    retrievedFrom?: string[];
+}
+
 function readToken(): string | null {
     try {
         const token = readFileSync(TOKEN_PATH, 'utf8').trim();
@@ -51,7 +86,7 @@ async function requestContext(url: URL, token: string): Promise<Response> {
 export async function loadDesignLabContext(input: {
     client?: string;
     scenario?: string;
-}): Promise<unknown | null> {
+}): Promise<DesignLabContext | null> {
     const url = new URL('/api/context', SIDECAR_URL);
     if (input.client) url.searchParams.set('client', input.client);
     if (input.scenario) url.searchParams.set('scenario', input.scenario);
@@ -68,21 +103,53 @@ export async function loadDesignLabContext(input: {
         }
 
         if (!response.ok) return null;
-        return await response.json();
+        return await response.json() as DesignLabContext;
     } catch {
         return null;
     }
 }
+
+export function framePrompt(basePrompt: string, context: DesignLabContext | null): string {
+    if (!context) return basePrompt;
+
+    const sections: string[] = [];
+
+    // styleGuide / brandStyleGuide are follow/system guidance.
+    // scenarioOverride takes precedence over the brand guide.
+    // neverRules are HARD NEVER constraints.
+    // cases are liked references to emulate.
+    // antiCases are disliked references to avoid.
+    // Build semantic sections from trimmed strings and omit empty sections.
+
+    return sections.length > 0
+        ? [
+            basePrompt,
+            '',
+            ...sections,
+            '',
+            'Apply the brand guide + scenario override; emulate liked references; never violate the hard constraints.'
+        ].join('\n')
+        : basePrompt;
+}
 ```
+
+Bridge contract:
+
+- `styleGuide` and `brandStyleGuide` → `## Brand style guide (follow)`.
+- `scenarioOverride` → `## Scenario override (takes precedence over the brand guide)`.
+- `neverRules` → `## HARD CONSTRAINTS — NEVER violate`; include rule id, rule text, and detector pattern when present.
+- `cases` → `## Liked references — emulate these`; include slug, compact `tokens.palette` / `tokens.fonts`, user quotes, and liked aspects.
+- `antiCases` → `## Avoid — anti-patterns`; include slug, user quotes, and disliked aspects.
+- Never pass raw `/api/context` JSON into the generation prompt. The bridge frames context semantically so the model follows the brand guide, emulates liked references, and hard-avoids NEVER rules.
 
 Generation flow:
 
 ```text
 memory = await loadDesignLabContext({ client, scenario })
 if memory:
-    generate with design-lab evidence
+    prompt = framePrompt(basePrompt, memory)
 else:
-    generate normally without memory
+    prompt = basePrompt
 ```
 
 ## Failure modes (fail-soft)
