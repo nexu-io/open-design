@@ -859,7 +859,7 @@
 /* Shared chat surfaces */
 .chat-surface {
   --chat-row-icon: 22px;
-  --chat-row-gap: 10px;
+  --chat-row-gap: 5px;
   width: 100%;
   min-width: 0;
   border-radius: 0;
@@ -881,7 +881,7 @@
     minmax(0, 1fr)
     auto
     auto
-    12px;
+    8px;
   align-items: center;
   column-gap: var(--chat-row-gap);
   width: fit-content;
@@ -964,7 +964,10 @@
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
+  opacity: 0;
+  transform: translateX(-2px);
   transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
     color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -993,6 +996,12 @@
 .chat-disclosure-toggle:hover .chat-surface-title,
 .chat-disclosure-toggle:hover .chat-surface-chevron {
   color: var(--text-muted);
+}
+.chat-disclosure-toggle:hover .chat-surface-chevron,
+.chat-disclosure-toggle:focus-visible .chat-surface-chevron,
+.chat-disclosure-toggle[aria-expanded="true"] .chat-surface-chevron {
+  opacity: 1;
+  transform: translateX(0);
 }
 .chat-disclosure-toggle:focus-visible .chat-surface-title {
   text-decoration: underline;
