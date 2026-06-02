@@ -148,7 +148,7 @@ jobs:
       - name: Check changed tracked file sizes
         env:
           GH_TOKEN: ${{ github.token }}
-          MAX_CHANGED_FILE_BYTES: "5242880"
+          MAX_CHANGED_FILE_BYTES: "2097152"
         shell: bash
         run: |
           set -euo pipefail
