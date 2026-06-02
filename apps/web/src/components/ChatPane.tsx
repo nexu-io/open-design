@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -26,9 +26,11 @@ import {
   type ChatComposerHandle,
   type ChatSendMeta,
 } from './ChatComposer';
+import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
+import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -80,6 +82,9 @@ const DEFAULT_STARTER_KEYS: Array<{
     promptKey: 'chat.example3Prompt',
   },
 ];
+
+const IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT = 5;
+const IMPORTED_ARTIFACTS_REVEAL_COUNT = 5;
 
 const IMAGE_STARTERS: StarterPrompt[] = [
   {
@@ -210,6 +215,185 @@ function pickStarters(
   }));
 }
 
+function sortArtifactsByModified(files: ProjectFile[]): ProjectFile[] {
+  return [...files].sort(
+    (a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name),
+  );
+}
+
+function ImportedFolderArtifacts({
+  projectId,
+  files,
+  onOpenFile,
+  t,
+}: {
+  projectId: string | null;
+  files: ProjectFile[];
+  onOpenFile?: (name: string) => void;
+  t: TranslateFn;
+}) {
+  const [visibleCount, setVisibleCount] = useState(IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT);
+
+  useEffect(() => {
+    setVisibleCount(IMPORTED_ARTIFACTS_INITIAL_VISIBLE_COUNT);
+  }, [files]);
+
+  if (files.length === 0) {
+    return (
+      <div className="chat-design-artifacts-empty" data-testid="chat-design-artifacts-empty">
+        {t('designFiles.empty')}
+      </div>
+    );
+  }
+
+  const visibleFiles = files.slice(0, visibleCount);
+  const hiddenCount = Math.max(0, files.length - visibleFiles.length);
+  const revealCount = Math.min(IMPORTED_ARTIFACTS_REVEAL_COUNT, hiddenCount);
+
+  return (
+    <div className="chat-design-artifacts" data-testid="chat-design-artifacts">
+      {visibleFiles.map((file, index) => {
+        const openable = Boolean(onOpenFile);
+        const openLabel = `${t('designFiles.previewOpen')} ${file.name}`;
+        const openFile = () => {
+          onOpenFile?.(file.name);
+        };
+        return (
+          <div
+            key={file.name}
+            className="chat-design-artifact"
+            data-kind={file.kind}
+            data-file-name={file.name}
+            data-testid={`chat-design-artifact-${index}`}
+            role={openable ? 'button' : 'listitem'}
+            tabIndex={openable ? 0 : undefined}
+            title={openLabel}
+            aria-label={openLabel}
+            onDoubleClick={openable ? openFile : undefined}
+            onKeyDown={
+              openable
+                ? (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    openFile();
+                  }
+                : undefined
+            }
+          >
+            <div className="chat-design-artifact-preview" aria-hidden>
+              <ChatArtifactPreview projectId={projectId} file={file} />
+            </div>
+            <div className="chat-design-artifact-meta">
+              <span className="chat-design-artifact-name" title={file.name}>
+                {file.name}
+              </span>
+              <span className="chat-design-artifact-kind">
+                {chatArtifactKindLabel(file.kind, t)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          className="chat-design-artifact chat-design-artifact-more"
+          data-testid="chat-design-artifacts-more"
+          aria-label={`Show ${revealCount} more design files`}
+          title={`Show ${revealCount} more design files`}
+          onClick={() => {
+            setVisibleCount((current) =>
+              Math.min(files.length, current + IMPORTED_ARTIFACTS_REVEAL_COUNT),
+            );
+          }}
+        >
+          <span className="chat-design-artifact-more-icon" aria-hidden>
+            +
+          </span>
+          <span className="chat-design-artifact-more-count">
+            {hiddenCount} more
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ChatArtifactPreview({
+  projectId,
+  file,
+}: {
+  projectId: string | null;
+  file: ProjectFile;
+}) {
+  if (!projectId) {
+    return <ChatArtifactFallback kind={file.kind} />;
+  }
+
+  const url = `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  if (isRenderableSketchJson(file)) {
+    return <SketchPreview projectId={projectId} file={file} />;
+  }
+  if (file.kind === 'image' || file.kind === 'sketch') {
+    return <img src={url} alt="" loading="lazy" />;
+  }
+  if (file.kind === 'html') {
+    return (
+      <iframe
+        title={file.name}
+        src={url}
+        sandbox="allow-scripts allow-downloads"
+        loading="lazy"
+      />
+    );
+  }
+  if (file.kind === 'video') {
+    return <video src={url} muted playsInline preload="metadata" />;
+  }
+  return <ChatArtifactFallback kind={file.kind} />;
+}
+
+function ChatArtifactFallback({ kind }: { kind: ProjectFile['kind'] }) {
+  return (
+    <span className="chat-design-artifact-fallback">
+      <Icon name={chatArtifactIcon(kind)} size={28} />
+      <span>{chatArtifactShortKind(kind)}</span>
+    </span>
+  );
+}
+
+function chatArtifactIcon(kind: ProjectFile['kind']): IconName {
+  if (kind === 'html' || kind === 'code') return 'file-code';
+  if (kind === 'image' || kind === 'sketch') return 'image';
+  if (kind === 'video' || kind === 'audio') return 'play';
+  if (kind === 'presentation') return 'present';
+  return 'file';
+}
+
+function chatArtifactShortKind(kind: ProjectFile['kind']): string {
+  if (kind === 'html') return 'HTML';
+  if (kind === 'image') return 'IMG';
+  if (kind === 'sketch') return 'SKETCH';
+  if (kind === 'video') return 'VIDEO';
+  if (kind === 'pdf') return 'PDF';
+  if (kind === 'presentation') return 'PPT';
+  if (kind === 'document') return 'DOC';
+  return 'FILE';
+}
+
+function chatArtifactKindLabel(kind: ProjectFile['kind'], t: TranslateFn): string {
+  if (kind === 'html') return t('designFiles.kindHtml');
+  if (kind === 'image') return t('designFiles.kindImage');
+  if (kind === 'sketch') return t('designFiles.kindSketch');
+  if (kind === 'video') return 'Video';
+  if (kind === 'audio') return 'Audio';
+  if (kind === 'pdf') return t('designFiles.kindPdf');
+  if (kind === 'document') return t('designFiles.kindDocument');
+  if (kind === 'presentation') return t('designFiles.kindPresentation');
+  if (kind === 'spreadsheet') return t('designFiles.kindSpreadsheet');
+  return t('designFiles.kindBinary');
+}
+
 interface Props {
   messages: ChatMessage[];
   streaming: boolean;
@@ -221,6 +405,7 @@ interface Props {
   // without project context.
   projectKindForTracking?: TrackingProjectKind | null;
   projectFiles: ProjectFile[];
+  activeProjectFileName?: string | null;
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
@@ -355,6 +540,7 @@ export function ChatPane({
   projectId,
   projectKindForTracking = null,
   projectFiles,
+  activeProjectFileName = null,
   hasActiveDesignSystem = false,
   activeDesignSystem = null,
   projectFileNames,
@@ -483,6 +669,16 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
+  const importedFolderArtifacts = useMemo(
+    () =>
+      projectMetadata?.importedFrom === 'folder'
+        ? sortArtifactsByModified(
+            listDesignArtifactCandidates(projectFiles, projectMetadata.entryFile),
+          )
+        : [],
+    [projectFiles, projectMetadata?.entryFile, projectMetadata?.importedFrom],
+  );
+  const showImportedFolderArtifacts = projectMetadata?.importedFrom === 'folder';
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
@@ -1057,69 +1253,80 @@ export function ChatPane({
             <div className="chat-log" ref={logRef}>
               {messages.length === 0 ? (
                 <div className="chat-empty-wrap">
-                  <div className="chat-empty">
-                    <span className="chat-empty-title">
-                      {t('chat.startTitle')}
-                    </span>
-                  </div>
-                  <div className="chat-examples" role="list">
-                    {pickStarters(projectMetadata, t).map((ex, i) => (
-                      <button
-                        key={`${ex.title}-${i}`}
-                        type="button"
-                        role="listitem"
-                        className="chat-example"
-                        style={{ animationDelay: `${i * 70}ms` }}
-                        onClick={() => {
-                          trackChatPanelClick(analytics.track, {
-                            page_name: 'chat_panel',
-                            area: 'chat_panel',
-                            element: 'template_card',
-                          });
-                          composerRef.current?.setDraft(ex.prompt);
-                        }}
-                        title={t('chat.fillInputTitle')}
-                      >
-                        <span className="chat-example-icon" aria-hidden>
-                          {ex.icon}
+                  {showImportedFolderArtifacts ? (
+                    <ImportedFolderArtifacts
+                      projectId={projectId}
+                      files={importedFolderArtifacts}
+                      onOpenFile={onRequestOpenFile}
+                      t={t}
+                    />
+                  ) : (
+                    <>
+                      <div className="chat-empty">
+                        <span className="chat-empty-title">
+                          {t('chat.startTitle')}
                         </span>
-                        <span className="chat-example-body">
-                          <span className="chat-example-head">
-                            <span className="chat-example-title">{ex.title}</span>
-                            <span className="chat-example-tag">{ex.tag}</span>
+                      </div>
+                      <div className="chat-examples" role="list">
+                        {pickStarters(projectMetadata, t).map((ex, i) => (
+                          <button
+                            key={`${ex.title}-${i}`}
+                            type="button"
+                            role="listitem"
+                            className="chat-example"
+                            style={{ animationDelay: `${i * 70}ms` }}
+                            onClick={() => {
+                              trackChatPanelClick(analytics.track, {
+                                page_name: 'chat_panel',
+                                area: 'chat_panel',
+                                element: 'template_card',
+                              });
+                              composerRef.current?.setDraft(ex.prompt);
+                            }}
+                            title={t('chat.fillInputTitle')}
+                          >
+                            <span className="chat-example-icon" aria-hidden>
+                              {ex.icon}
+                            </span>
+                            <span className="chat-example-body">
+                              <span className="chat-example-head">
+                                <span className="chat-example-title">{ex.title}</span>
+                                <span className="chat-example-tag">{ex.tag}</span>
+                              </span>
+                              <span className="chat-example-prompt">{ex.prompt}</span>
+                            </span>
+                            <span className="chat-example-cta" aria-hidden>
+                              ↵
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {connectRepoNeeded ? (
+                        <div className="chat-connect-repo" role="note">
+                          <span className="chat-connect-repo-icon" aria-hidden>
+                            <Icon name="github" size={18} />
                           </span>
-                          <span className="chat-example-prompt">{ex.prompt}</span>
-                        </span>
-                        <span className="chat-example-cta" aria-hidden>
-                          ↵
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {connectRepoNeeded ? (
-                    <div className="chat-connect-repo" role="note">
-                      <span className="chat-connect-repo-icon" aria-hidden>
-                        <Icon name="github" size={18} />
-                      </span>
-                      <span className="chat-connect-repo-body">
-                        <span className="chat-connect-repo-title">
-                          {repoConnectCopy(githubConnected).cardTitle}
-                        </span>
-                        <span className="chat-connect-repo-text">
-                          {repoConnectCopy(githubConnected).cardBody}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="primary-ghost"
-                        disabled={githubConnected === undefined}
-                        onClick={() => onConnectRepo?.()}
-                      >
-                        <Icon name="github" size={13} />
-                        {repoConnectCopy(githubConnected).buttonLabel}
-                      </button>
-                    </div>
-                  ) : null}
+                          <span className="chat-connect-repo-body">
+                            <span className="chat-connect-repo-title">
+                              {repoConnectCopy(githubConnected).cardTitle}
+                            </span>
+                            <span className="chat-connect-repo-text">
+                              {repoConnectCopy(githubConnected).cardBody}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            className="primary-ghost"
+                            disabled={githubConnected === undefined}
+                            onClick={() => onConnectRepo?.()}
+                          >
+                            <Icon name="github" size={13} />
+                            {repoConnectCopy(githubConnected).buttonLabel}
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               ) : null}
               {messages.map((m, i) => {
@@ -1299,6 +1506,7 @@ export function ChatPane({
             ref={composerRef}
             projectId={projectId}
             projectFiles={projectFiles}
+            activeProjectFileName={activeProjectFileName}
             skills={skills}
             streaming={streaming}
             sendDisabled={sendDisabled}

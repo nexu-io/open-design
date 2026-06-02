@@ -71,9 +71,33 @@ const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
 
 const COMPOSER_TEXTAREA_MIN_HEIGHT = 88;
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 184;
+const ACTIVE_FILE_TEXTAREA_MIN_HEIGHT = 150;
+const ACTIVE_FILE_TEXTAREA_MAX_HEIGHT = 300;
 
-function composerTextareaMaxHeight(): number {
-  if (typeof window === 'undefined') return COMPOSER_TEXTAREA_MAX_HEIGHT;
+function lastPathSegment(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  return normalized.split('/').filter(Boolean).pop() ?? path;
+}
+
+function composerTextareaMinHeight(expanded: boolean): number {
+  if (!expanded) return COMPOSER_TEXTAREA_MIN_HEIGHT;
+  if (typeof window === 'undefined') return ACTIVE_FILE_TEXTAREA_MIN_HEIGHT;
+  return Math.max(
+    ACTIVE_FILE_TEXTAREA_MIN_HEIGHT,
+    Math.min(210, Math.round(window.innerHeight * 0.2)),
+  );
+}
+
+function composerTextareaMaxHeight(expanded: boolean): number {
+  if (typeof window === 'undefined') {
+    return expanded ? ACTIVE_FILE_TEXTAREA_MAX_HEIGHT : COMPOSER_TEXTAREA_MAX_HEIGHT;
+  }
+  if (expanded) {
+    return Math.max(
+      composerTextareaMinHeight(true),
+      Math.min(ACTIVE_FILE_TEXTAREA_MAX_HEIGHT, Math.round(window.innerHeight * 0.32)),
+    );
+  }
   return Math.max(
     COMPOSER_TEXTAREA_MIN_HEIGHT,
     Math.min(COMPOSER_TEXTAREA_MAX_HEIGHT, Math.round(window.innerHeight * 0.34)),
@@ -100,6 +124,7 @@ interface SlashCommand {
 interface Props {
   projectId: string | null;
   projectFiles: ProjectFile[];
+  activeProjectFileName?: string | null;
   streaming: boolean;
   sendDisabled?: boolean;
   initialDraft?: string;
@@ -213,6 +238,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     {
       projectId,
       projectFiles,
+      activeProjectFileName = null,
       streaming,
       sendDisabled = false,
       initialDraft,
@@ -246,6 +272,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
+    const activeFileContext =
+      projectMetadata?.importedFrom === 'folder' && activeProjectFileName
+        ? activeProjectFileName
+        : null;
+    const activeFileDisplayName = activeFileContext ? lastPathSegment(activeFileContext) : null;
     const [draft, setDraft] = useState(
       () => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "",
     );
@@ -577,11 +608,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function resizeTextarea() {
       const ta = textareaRef.current;
       if (!ta) return;
-      const maxHeight = composerTextareaMaxHeight();
+      const expanded = Boolean(activeFileContext);
+      const minHeight = composerTextareaMinHeight(expanded);
+      const maxHeight = composerTextareaMaxHeight(expanded);
       ta.style.height = 'auto';
       const scrollHeight = ta.scrollHeight;
       const nextHeight = Math.min(
-        Math.max(scrollHeight, COMPOSER_TEXTAREA_MIN_HEIGHT),
+        Math.max(scrollHeight, minHeight),
         maxHeight,
       );
       ta.style.height = `${nextHeight}px`;
@@ -610,7 +643,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           textareaResizeFrameRef.current = null;
         }
       };
-    }, [draft, composerMentionParts, staged.length, stagedSkills.length]);
+    }, [activeFileContext, draft, composerMentionParts, staged.length, stagedSkills.length]);
 
     useEffect(() => {
       function onResize() {
@@ -618,7 +651,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
       window.addEventListener('resize', onResize);
       return () => window.removeEventListener('resize', onResize);
-    }, []);
+    }, [activeFileContext]);
 
     useEffect(() => {
       setComposerScrollTop(textareaRef.current?.scrollTop ?? 0);
@@ -975,6 +1008,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
 
+    function includeActiveFileContext(attachments: ChatAttachment[]): ChatAttachment[] {
+      if (!activeFileContext) return attachments;
+      if (attachments.some((attachment) => attachment.path === activeFileContext)) {
+        return attachments;
+      }
+      return [
+        {
+          path: activeFileContext,
+          name: activeFileDisplayName ?? activeFileContext,
+          kind: 'file',
+        },
+        ...attachments,
+      ];
+    }
+
     function sendComposedTurn(
       prompt: string,
       attachments: ChatAttachment[],
@@ -983,7 +1031,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ): boolean {
       setStreamingAnnotationSendPending(false);
       if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return false;
-      onSend(prompt, attachments, nextCommentAttachments, meta);
+      onSend(prompt, includeActiveFileContext(attachments), nextCommentAttachments, meta);
       reset();
       return true;
     }
@@ -1697,7 +1745,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     return (
       <div
-        className={`composer${dragActive ? " drag-active" : ""}`}
+        className={[
+          'composer',
+          dragActive ? 'drag-active' : '',
+          activeFileContext ? 'composer-active-file-mode' : '',
+        ].filter(Boolean).join(' ')}
         data-testid="chat-composer"
         onDragOver={(e) => {
           e.preventDefault();
@@ -1740,6 +1792,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   </button>
                 </div>
               ))}
+            </div>
+          ) : null}
+          {activeFileContext ? (
+            <div
+              className="composer-active-file"
+              data-testid="composer-active-file"
+              title={activeFileContext}
+            >
+              <span className="composer-active-file__label">Editing</span>
+              <span className="composer-active-file__name">{activeFileContext}</span>
             </div>
           ) : null}
           {currentCommentAttachments().length > 0 ? (
@@ -1924,7 +1986,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 // element + subtree entirely.
                 className="ph-no-capture"
                 value={draft}
-                placeholder={t('chat.composerPlaceholder')}
+                placeholder={
+                  activeFileDisplayName
+                    ? `Ask Open Design to change ${activeFileDisplayName}...`
+                    : t('chat.composerPlaceholder')
+                }
                 spellCheck={false}
                 onChange={handleChange}
                 onPaste={handlePaste}

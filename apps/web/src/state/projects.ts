@@ -89,6 +89,37 @@ export async function createProject(input: {
   }
 }
 
+export async function pickLocalFolderPath(): Promise<string | null> {
+  const resp = await fetch('/api/dialog/open-folder', {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    let message = 'Could not open folder picker';
+    try {
+      const body = await resp.json() as { error?: unknown };
+      if (typeof body.error === 'string' && body.error.trim()) {
+        message = body.error;
+      } else if (
+        body.error
+        && typeof body.error === 'object'
+        && 'message' in body.error
+        && typeof body.error.message === 'string'
+        && body.error.message.trim()
+      ) {
+        message = body.error.message;
+      }
+    } catch { /* use default message */ }
+    throw new Error(message);
+  }
+
+  const body = await resp.json() as { path?: unknown };
+  if (body.path == null) return null;
+  if (typeof body.path !== 'string') {
+    throw new Error('Could not open folder picker');
+  }
+  return body.path.length > 0 ? body.path : null;
+}
+
 export async function importFolderProject(
   input: ImportFolderRequest,
 ): Promise<ImportFolderResponse> {

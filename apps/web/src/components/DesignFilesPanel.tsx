@@ -11,6 +11,7 @@ import {
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
+import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -35,6 +36,8 @@ interface Props {
   onNewSketch: () => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
+  preferredPreviewFile?: string | null;
+  autoPreviewDesignArtifacts?: boolean;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -195,6 +198,8 @@ export function DesignFilesPanel({
   onNewSketch,
   uploadError = null,
   onClearUploadError,
+  preferredPreviewFile = null,
+  autoPreviewDesignArtifacts = false,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
@@ -210,6 +215,7 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
+  const autoPreviewAppliedRef = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Read once at mount; projectId is stable for this component instance
   // (parent uses key={projectId} to remount on project switch).
@@ -512,6 +518,27 @@ export function DesignFilesPanel({
     () => files.find((f) => f.name === preview) ?? null,
     [preview, files],
   );
+
+  const initialPreviewFile = useMemo(
+    () =>
+      autoPreviewDesignArtifacts
+        ? selectInitialDesignPreviewFile(files, preferredPreviewFile)
+        : null,
+    [autoPreviewDesignArtifacts, files, preferredPreviewFile],
+  );
+
+  useEffect(() => {
+    if (autoPreviewAppliedRef.current) return;
+    if (!initialPreviewFile) return;
+    autoPreviewAppliedRef.current = true;
+    setPreview(initialPreviewFile.name);
+  }, [initialPreviewFile]);
+
+  useEffect(() => {
+    if (!preview) return;
+    if (files.some((f) => f.name === preview)) return;
+    setPreview(null);
+  }, [files, preview]);
 
   useEffect(() => {
     if (!menuPos) return;

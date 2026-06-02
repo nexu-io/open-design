@@ -490,6 +490,34 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.composer-active-file {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.composer-active-file__label {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-weight: 650;
+}
+.composer-active-file__name {
+  min-width: 0;
+  max-width: min(100%, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
 .composer textarea {
   min-height: 88px;
   max-height: min(184px, 34vh);
@@ -498,6 +526,10 @@
   padding: 4px 4px;
   resize: none;
   overflow-y: hidden;
+}
+.composer.composer-active-file-mode textarea {
+  min-height: clamp(150px, 20vh, 210px);
+  max-height: min(300px, 32vh);
 }
 .composer textarea:focus { outline: none; box-shadow: none; }
 .composer-input-wrap {
@@ -514,6 +546,9 @@
      Pinning the size on only one layer drifts them ~0.5px/em apart, which
      reads as the caret sitting a full character off after a mention. */
   font-size: 13px;
+}
+.composer.composer-active-file-mode .composer-textarea-layer {
+  min-height: clamp(150px, 20vh, 210px);
 }
 .composer-input-overlay {
   position: absolute;
@@ -535,6 +570,9 @@
      same points; `anywhere` here against the textarea's `break-word` can
      diverge on long unbroken tokens and drift the caret off the glyphs. */
   overflow-wrap: break-word;
+}
+.composer.composer-active-file-mode .composer-input-overlay {
+  min-height: clamp(150px, 20vh, 210px);
 }
 .composer-input-overlay-inner {
   min-height: 100%;

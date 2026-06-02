@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
@@ -52,7 +53,10 @@ function generateFiles(count: number): ProjectFile[] {
   });
 }
 
-function renderPanel(files: ProjectFile[]) {
+function renderPanel(
+  files: ProjectFile[],
+  overrides: Partial<ComponentProps<typeof DesignFilesPanel>> = {},
+) {
   const onOpenFile = vi.fn();
   const onDeleteFiles = vi.fn();
   const result = render(
@@ -70,6 +74,7 @@ function renderPanel(files: ProjectFile[]) {
       onUploadFiles={vi.fn()}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
+      {...overrides}
     />,
   );
   return { ...result, onDeleteFiles, onOpenFile };
@@ -440,6 +445,42 @@ describe('DesignFilesPanel large-list regression', () => {
 
     fireEvent.doubleClick(row.querySelector('.df-cell-time')!);
     expect(onOpenFile).toHaveBeenCalledWith('file-1.html');
+  });
+
+  it('auto-previews the imported folder entry file without opening it', async () => {
+    const { container, onOpenFile } = renderPanel(
+      [
+        file({ name: 'site/support-queue-manager.html', kind: 'html', mtime: 1 }),
+        file({ name: 'index.html', kind: 'html', mtime: 2 }),
+      ],
+      {
+        autoPreviewDesignArtifacts: true,
+        preferredPreviewFile: 'site/support-queue-manager.html',
+      },
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+        'site/support-queue-manager.html',
+      );
+    });
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('auto-previews an obvious image artifact when imported folders have no HTML entry', async () => {
+    const { container } = renderPanel(
+      [
+        file({ name: 'assets/logo.png', kind: 'image', mtime: 3 }),
+        file({ name: 'mockups/dashboard-preview.jpg', kind: 'image', mtime: 1 }),
+      ],
+      { autoPreviewDesignArtifacts: true },
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="design-file-preview"]')?.textContent).toContain(
+        'mockups/dashboard-preview.jpg',
+      );
+    });
   });
 
   it('does not preview or open files from row controls', () => {

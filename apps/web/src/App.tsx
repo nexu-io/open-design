@@ -1035,7 +1035,7 @@ function AppInner() {
     navigate({
       kind: 'project',
       projectId: result.project.id,
-      fileName: result.entryFile,
+      fileName: null,
     });
   }, []);
 
@@ -1054,7 +1054,7 @@ function AppInner() {
     navigate({
       kind: 'project',
       projectId: result.projectId,
-      fileName: result.entryFile,
+      fileName: null,
     });
   }, []);
 
