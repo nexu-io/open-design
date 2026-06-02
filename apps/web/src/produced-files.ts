@@ -4,7 +4,8 @@ import type { ProjectFile } from './types';
 // diffs. User-created sketches can change during a run, but that does not make
 // them assistant output files unless a run records them explicitly.
 export function isImplicitProducedFileCandidate(file: ProjectFile): boolean {
-  return file.kind !== 'sketch';
+  const lowerPath = (file.path ?? file.name).toLowerCase();
+  return !lowerPath.endsWith('.sketch.json');
 }
 
 export function filterImplicitProducedFiles(files: readonly ProjectFile[]): ProjectFile[] {
