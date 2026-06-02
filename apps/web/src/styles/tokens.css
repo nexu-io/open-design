@@ -56,6 +56,7 @@
   --radius: 8px;
   --radius-lg: 12px;
   --radius-pill: 999px;
+  --chat-row-gap: 3px;
 
   /* "Active option" indicator color, intentionally separate from --accent
      (brand orange used by primary CTAs like Create / Save). Use --selected

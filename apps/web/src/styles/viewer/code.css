@@ -859,7 +859,6 @@
 /* Shared chat surfaces */
 .chat-surface {
   --chat-row-icon: 14px;
-  --chat-row-gap: 3px;
   --chat-row-shimmer: linear-gradient(
     100deg,
     color-mix(in srgb, var(--text-muted) 78%, transparent) 0%,
@@ -939,6 +938,11 @@
   border-radius: 0;
   background: transparent;
   letter-spacing: 0;
+}
+.chat-surface-status.op-status::before {
+  content: "·";
+  color: var(--text-faint);
+  margin-right: var(--chat-row-gap);
 }
 .chat-surface-status.is-running,
 .chat-surface-status.is-awaiting {

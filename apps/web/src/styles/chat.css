@@ -368,7 +368,7 @@
 .assistant-identity {
   display: inline-flex;
   align-items: center;
-  column-gap: 5px;
+  column-gap: var(--chat-row-gap);
   min-width: 0;
   max-width: 100%;
   line-height: 1;
@@ -394,6 +394,7 @@
 }
 .assistant-identity-separator {
   flex: 0 0 auto;
+  color: var(--text-faint);
 }
 .msg-time {
   color: var(--text-faint);
