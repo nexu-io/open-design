@@ -25,7 +25,7 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('workspace tabs chrome styles', () => {
-  it('does not reserve hidden traffic-button space before the first tab', () => {
+  it('keeps only a small intentional inset before the first tab', () => {
     const chrome = cssDeclarations(shellCss, '.workspace-tabs-chrome.app-chrome-header');
     const traffic = cssDeclarations(shellCss, '.workspace-tabs-chrome .workspace-tabs-traffic');
     const projectChrome = cssDeclarations(
@@ -33,8 +33,8 @@ describe('workspace tabs chrome styles', () => {
       '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
     );
 
-    expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 0');
+    expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 6px');
     expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
-    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 0');
+    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 6px');
   });
 });

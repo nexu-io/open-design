@@ -53,7 +53,7 @@
   max-width: 100%;
   min-height: 38px;
   height: 38px;
-  padding: 0 8px 0 0;
+  padding: 0 8px 0 6px;
   gap: 0;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
   border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
