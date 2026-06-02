@@ -978,6 +978,9 @@
 @media (prefers-reduced-motion: reduce) {
   .thinking-label.shimmer-text {
     animation: none;
+    background: none;
+    color: var(--text-muted);
+    -webkit-text-fill-color: currentColor;
   }
 }
 
