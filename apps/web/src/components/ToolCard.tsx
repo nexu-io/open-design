@@ -301,28 +301,31 @@ function AskUserQuestionCard({
       return `${q.question}\n${answer}`;
     });
     const formatted = lines.join('\n\n');
+    const submitFollowup = () => {
+      if (!canFallbackToFollowup) return false;
+      setSubmissionState('followup');
+      onSubmitForm(formatted);
+      return true;
+    };
     // Prefer the direct tool-result route: keeps the answer scoped to the
     // open stream-json child so claude-code's `AskUserQuestion` returns
-    // without an auto error. Fall back only when there is no live route;
-    // if a live route fails, the original tool call was not answered.
+    // without an auto error. If that route races a closed run, immediately
+    // fall back to a normal follow-up message instead of freezing the card.
     if (canAnswerOriginalTool) {
       setSubmissionState('sending');
       try {
         const ok = await onAnswerToolUse(toolUseId, formatted);
         if (ok === false) {
-          setSubmissionState('failed');
+          if (!submitFollowup()) setSubmissionState('failed');
           return;
         }
         setSubmissionState('received');
       } catch {
-        setSubmissionState('failed');
+        if (!submitFollowup()) setSubmissionState('failed');
       }
       return;
     }
-    if (canFallbackToFollowup) {
-      setSubmissionState('followup');
-      onSubmitForm(formatted);
-    }
+    submitFollowup();
   }
   // Status pill driven by our own answered/pending state, not the upstream
   // tool_result. claude-code's headless auto-error would otherwise surface
@@ -594,6 +597,13 @@ function FileReadCard({
       <FileErrorDetail result={result} />
     </ChatSurface>
   );
+}
+
+function FileErrorDetail({ result }: { result?: Props['result'] }) {
+  if (!result?.isError) return null;
+  const content = result.content.trim();
+  if (!content) return null;
+  return <pre className="op-output op-file-error">{truncate(content, 1200)}</pre>;
 }
 
 function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {

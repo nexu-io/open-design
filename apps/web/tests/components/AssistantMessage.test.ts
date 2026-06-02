@@ -61,6 +61,6 @@ describe('assistantRoleLabel', () => {
       events: [{ kind: 'status', label: 'initializing', detail: 'claude-sonnet-4-6' }],
     };
 
-    expect(assistantRoleLabel(message, t)).toBe('Claude · claude-sonnet-4-6');
+    expect(assistantRoleLabel(message, t)).toBe('Claude · Claude Sonnet 4.6');
   });
 });

@@ -90,7 +90,51 @@ describe('AskUserQuestion card status', () => {
     );
   });
 
-  it('marks a rejected live tool-result submission as no answer received', async () => {
+  it('falls back to a follow-up message when the live tool-result route rejects', async () => {
+    const onAnswerToolUse = vi.fn().mockResolvedValue(false);
+    const onSubmitForm = vi.fn();
+    render(
+      <ToolCard
+        use={askUse}
+        runStreaming
+        runSucceeded={false}
+        isLast
+        onAnswerToolUse={onAnswerToolUse}
+        onSubmitForm={onSubmitForm}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /macOS Settings window/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
+
+    await waitFor(() => expect(screen.getByText('Sent as follow-up')).toBeTruthy());
+    expect(onSubmitForm).toHaveBeenCalledWith('Where next?\nmacOS Settings window');
+    expect(screen.queryByText('No answer received')).toBeNull();
+  });
+
+  it('falls back to a follow-up message when the live tool-result route throws', async () => {
+    const onAnswerToolUse = vi.fn().mockRejectedValue(new Error('run closed'));
+    const onSubmitForm = vi.fn();
+    render(
+      <ToolCard
+        use={askUse}
+        runStreaming
+        runSucceeded={false}
+        isLast
+        onAnswerToolUse={onAnswerToolUse}
+        onSubmitForm={onSubmitForm}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Leave as-is/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
+
+    await waitFor(() => expect(screen.getByText('Sent as follow-up')).toBeTruthy());
+    expect(onSubmitForm).toHaveBeenCalledWith('Where next?\nLeave as-is');
+    expect(screen.queryByText('No answer received')).toBeNull();
+  });
+
+  it('marks a rejected live tool-result submission as no answer received when no fallback exists', async () => {
     const onAnswerToolUse = vi.fn().mockResolvedValue(false);
     render(
       <ToolCard
