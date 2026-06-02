@@ -218,13 +218,10 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
   //   2. After session/set_config_option (or legacy session/set_model)
   //      succeeds — the user-selected model (e.g. `claude-opus-4-7-max`)
   //
-  // The previous `buildBlocks` dedupe SKIPPED the second event and the
-  // badge stayed stuck on the initial default, even though the running
-  // model and the conversation header were already correct. The fix
-  // updates the existing block's detail to the latest value so the badge
-  // tracks the most recent model the daemon reported.
-  it('renders the most recent detail when multiple status events share a label', () => {
-    render(
+  // The raw status used to render as a separate body badge. The header now
+  // owns provider/model identity, but it still needs the latest ACP detail.
+  it('renders the most recent ACP model detail in the assistant header', () => {
+    const { container } = render(
       <AssistantMessage
         message={baseMessage({
           events: [
@@ -239,16 +236,15 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
       />,
     );
 
-    // Latest detail should be rendered in the badge.
-    expect(screen.getByText('claude-opus-4-7-max')).toBeTruthy();
-
-    // The initial default must not be present — if it is, the stale-detail
-    // bug is back.
+    expect(container.querySelector('.assistant-identity-provider')?.textContent).toBe('Assistant');
+    expect(container.querySelector('.assistant-identity-model')?.textContent).toBe('Claude Opus 4.7 Max');
+    expect(container.querySelector('[data-status="model"]')).toBeNull();
     expect(screen.queryByText('swe-1-6-fast')).toBeNull();
+    expect(screen.queryByText('claude-opus-4-7-max')).toBeNull();
   });
 
-  it('still collapses repeated status events with the same label and detail into a single badge', () => {
-    render(
+  it('does not duplicate repeated ACP model status outside the assistant header', () => {
+    const { container } = render(
       <AssistantMessage
         message={baseMessage({
           events: [
@@ -263,8 +259,10 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
       />,
     );
 
-    const matches = screen.queryAllByText('claude-opus-4-7-max');
-    expect(matches.length).toBe(1);
+    expect(container.querySelector('.assistant-identity-provider')?.textContent).toBe('Assistant');
+    expect(container.querySelector('.assistant-identity-model')?.textContent).toBe('Claude Opus 4.7 Max');
+    expect(container.querySelector('[data-status="model"]')).toBeNull();
+    expect(screen.queryByText('claude-opus-4-7-max')).toBeNull();
   });
 
   it('renders bare URLs in status details as links', () => {
@@ -330,6 +328,29 @@ describe('AssistantMessage model identity', () => {
     expect(container.querySelector('.assistant-identity-icon')).toBeTruthy();
     expect(container.querySelector('[data-status="initializing"]')).toBeNull();
     expect(screen.queryByText('claude-opus-4-8')).toBeNull();
+  });
+
+  it('merges ACP model status into the assistant header without a duplicate pill', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          agentId: 'claude',
+          agentName: 'Claude Code',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'model', detail: 'claude-opus-4.8' } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        agents={agents}
+      />,
+    );
+
+    expect(container.querySelector('.assistant-identity')?.textContent).toBe('Claude·Claude Opus 4.8');
+    expect(container.querySelector('[data-status="model"]')).toBeNull();
+    expect(screen.queryByText('claude-opus-4.8')).toBeNull();
   });
 
   it('normalizes raw fallback model ids when registry labels are raw', () => {
