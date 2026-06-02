@@ -1244,11 +1244,27 @@
 .action-card-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 .action-card-body > .op-card.chat-surface {
   box-shadow: none;
   background: transparent;
+}
+.action-card-body > .op-card.chat-surface > .chat-surface-head {
+  display: grid;
+  grid-template-columns: var(--chat-row-icon) max-content minmax(0, 1fr) auto auto 8px;
+  column-gap: 5px;
+  width: 100%;
+  min-height: 32px;
+}
+.action-card-body > .op-card.chat-surface .chat-surface-title {
+  flex: none;
+}
+.action-card-body > .op-card.chat-surface .chat-surface-meta {
+  flex: none;
+}
+.action-card-body > .op-card.chat-surface .chat-surface-trailing {
+  justify-self: end;
 }
 
 /* Tool / operation cards — single, ungrouped */
