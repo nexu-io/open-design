@@ -74,6 +74,7 @@ describe('workspace tabs chrome styles', () => {
       '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
     );
     const projectStrip = cssDeclarations(routinesCss, '.workspace-shell .workspace-tabs-strip');
+    const sharedStrip = cssDeclarations(shellCss, '.workspace-tabs-strip');
 
     expect(ruleValue(projectTab, 'height')).toBe('32px');
     expect(ruleValue(projectTab, 'align-self')).toBe('flex-end');
@@ -84,8 +85,11 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(activeProjectTab, 'border-bottom-color')).toBe('transparent');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 0 var(--bg-panel)');
     expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('inset');
-    expect(ruleValue(projectChrome, 'overflow')).toBe('visible');
-    expect(ruleValue(projectStrip, 'overflow')).toBe('visible');
+    expect(projectChrome).not.toContain('overflow:');
+    expect(projectStrip).not.toContain('overflow:');
+    expect(projectStrip).not.toContain('overflow-x:');
+    expect(ruleValue(sharedStrip, 'overflow-x')).toBe('auto');
+    expect(ruleValue(sharedStrip, 'overflow-y')).toBe('hidden');
     expect(ruleValue(tabSeparator, 'display')).toBe('none');
     expect(ruleValue(main, 'z-index')).toBe('2');
     expect(ruleValue(preview, 'box-sizing')).toBe('border-box');

@@ -693,13 +693,11 @@
   background: var(--workspace-tab-bar-bg);
   border-bottom: 0;
   box-shadow: none;
-  overflow: visible;
 }
 .workspace-shell .workspace-tabs-strip {
   gap: 4px;
   align-items: flex-end;
   padding-top: 3px;
-  overflow: visible;
 }
 .workspace-shell .workspace-tab {
   height: 32px;
