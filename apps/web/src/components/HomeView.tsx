@@ -1478,6 +1478,9 @@ export function HomeView({
     const submittedPluginInputs = submittedActive
       ? stripArtifactFooterInputs(submittedApplyInputs)
       : defaultInputs;
+    const submittedMediaMetadataInputs = submittedActive?.mediaSurface
+      ? submittedApplyInputs
+      : null;
     const activeInputsChangedForSubmit = submittedActive
       ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
       : false;
@@ -1528,7 +1531,11 @@ export function HomeView({
     const submittedProjectKind =
       submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
     const submittedProjectMetadata = submittedActive?.mediaSurface
-      ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
+      ? metadataForHomeMediaComposer(
+          submittedActive.mediaSurface,
+          submittedMediaMetadataInputs ?? submittedActive.inputs,
+          promptTemplates,
+        )
       : homeCreateProjectMetadata(
           submittedProjectKind,
           submittedActive?.inputs ?? null,

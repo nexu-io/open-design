@@ -254,6 +254,57 @@ describe('HomeView media composer options', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it('keeps Home video and audio metadata model-less when no provider has a runnable model', () => {
+    const videoInputs = normalizeHomeMediaInputs(
+      'video',
+      { model: 'doubao-seedance-2-0-260128' },
+      PROMPT_TEMPLATES,
+      [],
+      { mediaProviders: {} },
+    );
+    const audioInputs = normalizeHomeMediaInputs(
+      'audio',
+      { audioType: 'speech', model: 'minimax-tts' },
+      PROMPT_TEMPLATES,
+      [],
+      { mediaProviders: {} },
+    );
+
+    expect(videoInputs.model).toBe('');
+    expect(metadataForHomeMediaComposer('video', videoInputs, PROMPT_TEMPLATES)).toEqual({
+      kind: 'video',
+      promptTemplate: expect.objectContaining({ id: 'video-reveal' }),
+    });
+    expect(audioInputs.model).toBe('');
+    expect(metadataForHomeMediaComposer('audio', audioInputs, PROMPT_TEMPLATES)).toEqual({
+      kind: 'audio',
+    });
+  });
+
+  it('blocks Home video and audio submit when no provider has a runnable model', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit, mediaProviders: {} });
+
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy());
+    setHomePrompt('Generate a product video.');
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await clickHomeRailChip('audio');
+    await waitFor(() => expect(screen.getByTestId('home-hero-active-type-chip')).toBeTruthy());
+    setHomePrompt('Generate product narration.');
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('hides the full selector grid for media surfaces', async () => {
     stubFetch();
     renderHome();

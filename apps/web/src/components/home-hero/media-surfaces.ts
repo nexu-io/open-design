@@ -119,13 +119,7 @@ export function normalizeHomeMediaInputs(
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       designSystem: stringValue(raw.designSystem) || 'the active project design system',
-      model: validOption(
-        stringValue(raw.model),
-        VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id),
-        DEFAULT_VIDEO_MODEL === 'hyperframes-html'
-          ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
-          : DEFAULT_VIDEO_MODEL,
-      ),
+      model: validVideoModel(stringValue(raw.model), options.mediaProviders),
       ratio,
       duration: validNumber(raw.duration, VIDEO_LENGTHS_SEC, 5),
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
@@ -148,8 +142,8 @@ export function normalizeHomeMediaInputs(
   const audioType = validOption(stringValue(raw.audioType), audioKinds(), 'speech') as AudioKind;
   const model = validOption(
     stringValue(raw.model),
-    homeAudioModels(audioType).map((m) => m.id),
-    defaultHomeAudioModel(audioType),
+    readyAudioModelIds(audioType, options.mediaProviders),
+    defaultReadyAudioModel(audioType, options.mediaProviders),
   );
   const source = audioType === 'sfx'
     ? stringValue(raw.prompt) || stringValue(raw.text) || stringValue(raw.subject) || 'a crisp product notification sound'
@@ -206,14 +200,20 @@ export function metadataForHomeMediaComposer(
     };
   }
   if (surface === 'video' || surface === 'hyperframes') {
+    const videoModel = surface === 'hyperframes' ? 'hyperframes-html' : stringValue(inputs.model);
     return {
       kind: 'video',
-      ...(surface === 'hyperframes' ? { videoModel: 'hyperframes-html' as const } : {}),
+      ...(videoModel ? { videoModel } : {}),
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
+  const audioModel = stringValue(inputs.model);
   return {
     kind: 'audio',
+    ...(audioModel ? { audioModel } : {}),
+    ...(audioModel === 'elevenlabs-v3' && stringValue(inputs.voice)
+      ? { voice: stringValue(inputs.voice) }
+      : {}),
   };
 }
 
@@ -255,7 +255,7 @@ function fieldsForSurface(
   if (surface === 'video') {
     return [
       stringField('designSystem', 'Design system', 'Design system'),
-      selectField('model', 'Model', VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id), modelLabels(VIDEO_MODELS)),
+      { ...selectField('model', 'Model', VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id), modelLabels(VIDEO_MODELS)), required: true },
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
       selectField('duration', 'Duration', VIDEO_LENGTHS_SEC.map(String), secondsLabels(VIDEO_LENGTHS_SEC)),
       selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
@@ -269,7 +269,7 @@ function fieldsForSurface(
   }
 
   const audioType = (stringValue(inputs.audioType) || 'speech') as AudioKind;
-  const model = stringValue(inputs.model) || defaultHomeAudioModel(audioType);
+  const model = stringValue(inputs.model);
   const audioModels = homeAudioModels(audioType);
   const fields: InputFieldSpec[] = [
     audioType === 'sfx'
@@ -279,7 +279,7 @@ function fieldsForSurface(
       speech: 'Speech',
       sfx: 'Sound effect',
     }),
-    selectField('model', 'Model', audioModels.map((m) => m.id), modelLabels(audioModels)),
+    { ...selectField('model', 'Model', audioModels.map((m) => m.id), modelLabels(audioModels)), required: true },
     selectField('duration', 'Duration', audioDurationsForKind(audioType).map(String), secondsLabels(audioDurationsForKind(audioType))),
   ];
   if (model === 'elevenlabs-v3') {
@@ -466,6 +466,24 @@ function validImageModel(
   return readyModelIds[0] ?? '';
 }
 
+function validVideoModel(
+  raw: string,
+  mediaProviders?: Record<string, MediaProviderCredentials>,
+): string {
+  const modelIds = VIDEO_MODELS
+    .filter((model) => model.id !== 'hyperframes-html')
+    .map((model) => model.id);
+  const readyModelIds = mediaProviders
+    ? modelIds.filter((modelId) => isMediaModelPickerReady(modelId, mediaProviders))
+    : modelIds;
+  if (readyModelIds.length === 0) return '';
+  if (readyModelIds.includes(raw)) return raw;
+  const defaultVideoModel = DEFAULT_VIDEO_MODEL === 'hyperframes-html'
+    ? VIDEO_MODELS.find((model) => model.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
+    : DEFAULT_VIDEO_MODEL;
+  return readyModelIds.includes(defaultVideoModel) ? defaultVideoModel : readyModelIds[0]!;
+}
+
 function homeAudioModels(kind: AudioKind) {
   if (kind === 'music') return [];
   const runnableProviders = new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']);
@@ -476,6 +494,26 @@ function defaultHomeAudioModel(kind: AudioKind): string {
   return homeAudioModels(kind).find((model) => model.default)?.id
     ?? homeAudioModels(kind)[0]?.id
     ?? DEFAULT_AUDIO_MODEL.speech;
+}
+
+function readyAudioModelIds(
+  kind: AudioKind,
+  mediaProviders?: Record<string, MediaProviderCredentials>,
+): string[] {
+  const modelIds = homeAudioModels(kind).map((model) => model.id);
+  return mediaProviders
+    ? modelIds.filter((modelId) => isMediaModelPickerReady(modelId, mediaProviders))
+    : modelIds;
+}
+
+function defaultReadyAudioModel(
+  kind: AudioKind,
+  mediaProviders?: Record<string, MediaProviderCredentials>,
+): string {
+  const readyModelIds = readyAudioModelIds(kind, mediaProviders);
+  if (readyModelIds.length === 0) return '';
+  const defaultModel = defaultHomeAudioModel(kind);
+  return readyModelIds.includes(defaultModel) ? defaultModel : readyModelIds[0]!;
 }
 
 function homeElevenLabsVoiceOptions(

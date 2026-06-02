@@ -2432,7 +2432,7 @@ function modelOptionIcon(value: string, label: string): ModelOptionIconSpec {
   if (normalized.includes('fish')) {
     return { label: 'Fish Audio', tone: 'fishaudio', src: '/model-icons/fishaudio.svg' };
   }
-  if (normalized.includes('minimax')) {
+  if (normalized.includes('minimax') || normalized.includes('image-01')) {
     return { label: 'MiniMax', tone: 'minimax', src: '/model-icons/minimax.svg' };
   }
   if (normalized.includes('suno')) return { label: 'Suno', tone: 'suno', src: '/model-icons/suno.svg' };
