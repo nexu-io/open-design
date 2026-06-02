@@ -2735,20 +2735,43 @@ function buildBlocks(events: AgentEvent[]): Block[] {
   for (const ev of events) {
     if (ev.kind === "tool_result") resultByToolId.set(ev.toolUseId, ev);
   }
+  let thinkingTextCandidate = false;
+  let pendingThinkingText = "";
+  const appendTextBlock = (text: string) => {
+    const last = out[out.length - 1];
+    if (last && last.kind === "text") last.text += text;
+    else out.push({ kind: "text", text });
+  };
+  const appendThinkingBlock = (text: string) => {
+    const last = out[out.length - 1];
+    if (last && last.kind === "thinking") last.text += text;
+    else out.push({ kind: "thinking", text });
+  };
+  const flushThinkingCandidateAsText = () => {
+    if (!pendingThinkingText) return;
+    appendTextBlock(pendingThinkingText);
+    pendingThinkingText = "";
+  };
+  const flushThinkingCandidateAsThinking = () => {
+    if (!pendingThinkingText) return;
+    appendThinkingBlock(pendingThinkingText);
+    pendingThinkingText = "";
+  };
   for (const ev of events) {
     if (ev.kind === "text") {
-      const last = out[out.length - 1];
-      if (last && last.kind === "text") last.text += ev.text;
-      else out.push({ kind: "text", text: ev.text });
+      if (thinkingTextCandidate) pendingThinkingText += ev.text;
+      else appendTextBlock(ev.text);
       continue;
     }
     if (ev.kind === "thinking") {
-      const last = out[out.length - 1];
-      if (last && last.kind === "thinking") last.text += ev.text;
-      else out.push({ kind: "thinking", text: ev.text });
+      flushThinkingCandidateAsText();
+      thinkingTextCandidate = true;
+      appendThinkingBlock(ev.text);
       continue;
     }
     if (ev.kind === "tool_use") {
+      flushThinkingCandidateAsThinking();
+      thinkingTextCandidate = false;
       const result = resultByToolId.get(ev.id);
       const item: ToolItem = result ? { use: ev, result } : { use: ev };
       const last = out[out.length - 1];
@@ -2764,8 +2787,12 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       }
       continue;
     }
-    if (ev.kind === "tool_result") continue;
+    if (ev.kind === "tool_result") {
+      flushThinkingCandidateAsText();
+      continue;
+    }
     if (ev.kind === "plugin_candidate") {
+      flushThinkingCandidateAsText();
       out.push({
         kind: "plugin-candidate",
         candidateId: ev.candidateId,
@@ -2777,15 +2804,24 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
     if (ev.kind === "status") {
+      if (ev.label === "thinking") {
+        flushThinkingCandidateAsText();
+        thinkingTextCandidate = true;
+        continue;
+      }
       if (
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "running" ||
         ev.label === "requesting" ||
-        ev.label === "thinking" ||
         ev.label === "empty_response"
-      )
+      ) {
+        flushThinkingCandidateAsText();
+        thinkingTextCandidate = false;
         continue;
+      }
+      flushThinkingCandidateAsText();
+      thinkingTextCandidate = false;
       const last = out[out.length - 1];
       if (last && last.kind === "status" && last.label === ev.label) {
         // Update detail to the latest value rather than skip. When an agent
@@ -2803,6 +2839,7 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
   }
+  flushThinkingCandidateAsText();
   return out;
 }
 

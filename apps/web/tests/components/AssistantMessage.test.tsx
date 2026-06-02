@@ -384,6 +384,55 @@ describe('AssistantMessage thinking blocks', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
   });
+
+  it('keeps text emitted during thinking collapsed when it leads into tool use', () => {
+    const operationalThought = "I'll inspect the provider state before editing.";
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'thinking' } as ChatMessage['events'][number],
+            { kind: 'text', text: operationalThought } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Read',
+              input: { file_path: 'settings.html' },
+            } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    const toggle = screen.getByRole('button', { name: 'Thinking' });
+    expect(screen.queryByText(operationalThought)).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(screen.getByText(operationalThought)).toBeTruthy();
+  });
+
+  it('keeps final answer text visible when thinking does not lead into a tool call', () => {
+    const finalAnswer = 'Done — Gemini now shows connected.';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'thinking' } as ChatMessage['events'][number],
+            { kind: 'text', text: finalAnswer } as ChatMessage['events'][number],
+            { kind: 'usage' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText(finalAnswer)).toBeTruthy();
+  });
 });
 
 describe('AssistantMessage question forms', () => {
