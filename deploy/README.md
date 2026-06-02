@@ -58,6 +58,20 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+If you install Codex inside an unprivileged Linux container and it fails while
+creating its `workspace-write` sandbox, opt into Codex's full-access mode for
+all Codex runs in that deployment:
+
+```bash
+OD_CODEX_SANDBOX=danger-full-access docker compose up -d --no-build
+```
+
+Only the exact value `danger-full-access` is supported; unknown values are
+ignored. Use this only for trusted, single-user deployments. It lets Codex run
+without the workspace-write sandbox, which is useful when the container host
+blocks unprivileged user namespaces, but it gives the Codex process broader
+filesystem access inside the container.
+
 ## Publish to Docker Hub
 
 ```bash

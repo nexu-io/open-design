@@ -3,6 +3,32 @@ import type { Locator, Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 
+const AGENTS = [
+  {
+    id: 'codex',
+    name: 'Codex CLI',
+    bin: 'codex',
+    available: true,
+    version: '0.134.0',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.5', label: 'GPT 5.5' },
+    ],
+  },
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    bin: 'claude',
+    available: true,
+    version: '2.1.131',
+    models: [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'sonnet', label: 'Sonnet (alias)' },
+      { id: 'opus', label: 'Opus (alias)' },
+    ],
+  },
+];
+
 const DESIGN_SYSTEMS = [
   {
     id: 'nexu-soft-tech',
@@ -42,12 +68,12 @@ test.beforeEach(async ({ page }) => {
         mode: 'daemon',
         apiKey: '',
         baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
+        model: 'default',
+        agentId: 'codex',
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
-        agentModels: {},
+        agentModels: { codex: { model: 'default' } },
       }),
     );
   }, STORAGE_KEY);
@@ -61,10 +87,11 @@ test.beforeEach(async ({ page }) => {
       json: {
         config: {
           onboardingCompleted: true,
-          agentId: 'mock',
+          mode: 'daemon',
+          agentId: 'codex',
           skillId: null,
           designSystemId: null,
-          agentModels: {},
+          agentModels: { codex: { model: 'default' } },
           agentCliEnv: {},
         },
       },
@@ -74,16 +101,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
+        agents: AGENTS,
       },
     });
   });
@@ -138,6 +156,34 @@ test('new project tabs switch visible form sections and preserve drafts', async 
   await expect(page.getByTestId('design-system-picker')).toHaveCount(0);
   await expect(page.getByText('Model', { exact: true })).toBeVisible();
   await expect(page.getByText('Aspect', { exact: true })).toBeVisible();
+});
+
+test('projects empty state create action opens the new project flow', async ({ page }) => {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({ json: { skills: TAB_SKILLS } });
+  });
+  await page.route('**/api/connectors', async (route) => {
+    await route.fulfill({ json: { connectors: [] } });
+  });
+  await page.route('**/api/connectors/status', async (route) => {
+    await route.fulfill({ json: { statuses: {} } });
+  });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/projects');
+  await expect(page.locator('.designs-empty-state')).toBeVisible();
+  await page.locator('.designs-empty-cta').click();
+
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expect(page.getByTestId('new-project-tab-prototype')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.newproj-title')).toContainText('New prototype');
 });
 
 test('design system multi-select stores primary and inspiration metadata', async ({ page }) => {
@@ -212,6 +258,141 @@ test('design system picker searches and switches the single selected system', as
   expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
+test('project detail header keeps the title, design system picker, and execution controls aligned on one row', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Header controls stay pinned');
+  await expectWorkspaceReady(page);
+  await page.setViewportSize({ width: 1365, height: 900 });
+
+  const title = page.getByTestId('project-title');
+  const dsTrigger = page.getByTestId('project-ds-picker-trigger');
+  const settingsButton = page.locator('.settings-icon-btn');
+  const handoffButton = page.getByRole('button', { name: /Choose hand-off target/i });
+
+  await expect(title).toBeVisible();
+  await expect(dsTrigger).toBeVisible();
+  await expect(settingsButton).toBeVisible();
+  await expect(handoffButton).toBeVisible();
+
+  const [titleBox, dsBox, settingsBox, handoffBox] = await Promise.all([
+    title.boundingBox(),
+    dsTrigger.boundingBox(),
+    settingsButton.boundingBox(),
+    handoffButton.boundingBox(),
+  ]);
+
+  expect(titleBox).toBeTruthy();
+  expect(dsBox).toBeTruthy();
+  expect(settingsBox).toBeTruthy();
+  expect(handoffBox).toBeTruthy();
+
+  const yValues = [titleBox!.y, dsBox!.y, settingsBox!.y, handoffBox!.y];
+  expect(Math.max(...yValues) - Math.min(...yValues)).toBeLessThan(24);
+});
+
+test('project detail header design system picker switches the active project design system', async ({ page }) => {
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Header design system switch');
+  await expectWorkspaceReady(page);
+
+  const trigger = page.getByTestId('project-ds-picker-trigger');
+  await expect(trigger).toContainText(/design system/i);
+
+  await trigger.click();
+  const popover = page.getByTestId('project-ds-picker-popover');
+  await expect(popover).toBeVisible();
+  await page.getByTestId('project-ds-picker-search').fill('editorial');
+  const patchRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === `/api/projects/${getProjectContextFromUrl(page).projectId}` && request.method() === 'PATCH';
+  });
+  await page.getByTestId('project-ds-picker-option-editorial-noir').click();
+
+  await expect(popover).toHaveCount(0);
+  await expect(trigger).toContainText(/Editorial Noir/i);
+
+  const request = await patchRequest;
+  const body = request.postDataJSON() as { designSystemId?: string | null };
+  expect(body.designSystemId).toBe('editorial-noir');
+});
+
+test('project detail header design system switch carries into the next run request', async ({ page }) => {
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/runs', async (route) => {
+    const raw = route.request().postData();
+    if (raw) {
+      try {
+        runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
+      } catch {
+        // ignore non-JSON bodies; assertion below will surface missing payloads
+      }
+    }
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"mock-run"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Header design system run context');
+  await expectWorkspaceReady(page);
+
+  const trigger = page.getByTestId('project-ds-picker-trigger');
+  await trigger.click();
+  await page.getByTestId('project-ds-picker-search').fill('editorial');
+  await page.getByTestId('project-ds-picker-option-editorial-noir').click();
+  await expect(trigger).toContainText(/Editorial Noir/i);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Use the active design system in this layout.');
+  const sendButton = page.getByTestId('chat-send');
+  await expect(sendButton).toBeEnabled();
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    sendButton.click(),
+  ]);
+
+  expect(runRequestBodies.length).toBeGreaterThan(0);
+  expect(runRequestBodies[0]?.designSystemId).toBe('editorial-noir');
+});
+
+test('project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Header agent switch');
+  await expectWorkspaceReady(page);
+
+  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
+  await trigger.click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
+  await expect(menu).toBeVisible();
+  const claudeButton = menu.getByRole('button', { name: /Claude Code/i });
+  await expect(claudeButton).toBeVisible();
+  await claudeButton.click();
+
+  await expect(claudeButton).toHaveAttribute('aria-current', 'true');
+  const modelSelect = menu.locator('.avatar-model-section .avatar-select').first();
+  await expect(modelSelect).toBeVisible();
+  await expect(modelSelect).toHaveValue('default');
+  await modelSelect.selectOption('sonnet');
+  await expect(modelSelect).toHaveValue('sonnet');
+});
+
 test('project title rename persists after reload and ignores blank titles', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Original rename title');
@@ -232,6 +413,40 @@ test('project title rename persists after reload and ignores blank titles', asyn
 
   const project = await fetchCurrentProject(page);
   expect(project.name).toBe('Renamed persistent title');
+});
+
+
+test('project header keeps the settings, handoff, and avatar controls pinned on compact desktop widths', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto('/');
+  await createProject(page, 'Header controls stay pinned');
+  await expectWorkspaceReady(page);
+
+  const handoffTrigger = page.getByTestId('handoff-trigger');
+  const avatarTrigger = page.locator('.avatar-agent-trigger');
+  await expect(page.getByTestId('project-title')).toBeVisible();
+  await expect(handoffTrigger).toBeVisible();
+  await expect(avatarTrigger).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const root = document.documentElement;
+    const handoff = document.querySelector('[data-testid="handoff-trigger"]') as HTMLElement | null;
+    const avatar = document.querySelector('.avatar-agent-trigger') as HTMLElement | null;
+    const title = document.querySelector('[data-testid="project-title"]') as HTMLElement | null;
+    const overflow = Math.max(0, root.scrollWidth - root.clientWidth);
+    return {
+      overflow,
+      handoffRight: handoff?.getBoundingClientRect().right ?? 0,
+      avatarRight: avatar?.getBoundingClientRect().right ?? 0,
+      titleRight: title?.getBoundingClientRect().right ?? 0,
+      viewportWidth: window.innerWidth,
+    };
+  });
+
+  expect(layout.overflow).toBeLessThanOrEqual(2);
+  expect(layout.handoffRight).toBeGreaterThan(layout.titleRight);
+  expect(layout.avatarRight).toBeGreaterThan(layout.handoffRight);
+  expect(layout.avatarRight).toBeLessThanOrEqual(layout.viewportWidth - 8);
 });
 
 test('canceling design file deletion keeps the file and open tab', async ({ page }) => {
@@ -258,6 +473,45 @@ test('canceling design file deletion keeps the file and open tab', async ({ page
   const { projectId } = getProjectContextFromUrl(page);
   const files = await listProjectFiles(page, projectId);
   expect(files.map((file) => file.name)).toContain(uploadedName);
+});
+
+test('project detail workspace keeps design file tabs and preview controls visible for uploaded html artifacts', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Workspace preview structure');
+  await expectWorkspaceReady(page);
+
+  const uploadedName = await uploadTinyHtml(page, 'workspace-preview.html', '<!doctype html><html><body><main><h1>Workspace Preview Structure</h1><p>Preview and code tabs stay visible.</p></main></body></html>');
+
+  const fileTab = tabBySuffix(page, uploadedName);
+  await expect(fileTab).toBeVisible();
+  await expect(fileTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'Design Files' })).toBeVisible();
+
+  await page.getByTestId('design-files-tab').click();
+  const fileRow = rowByFileName(page, uploadedName);
+  await expect(fileRow).toBeVisible();
+  await fileRow.getByRole('button').first().click();
+  const previewCard = page.getByTestId('design-file-preview');
+  await expect(previewCard).toBeVisible();
+  await previewCard.getByRole('button', { name: 'Open' }).click();
+
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+  await expect(viewModeTabs.getByRole('tab', { name: 'Preview' })).toBeVisible();
+  await expect(viewModeTabs.getByRole('tab', { name: 'Code' })).toBeVisible();
+  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Workspace Preview Structure' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /Preview viewport/i })).toBeVisible();
+
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  const sourceViewer = page.locator('pre.viewer-source');
+  await expect(sourceViewer).toBeVisible();
+  await expect(sourceViewer).toContainText('Workspace Preview Structure');
+  await expect(sourceViewer).toContainText('<!doctype html>');
+
+  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
 });
 
 test('home design card deletion supports cancel and confirm flows', async ({ page }) => {
@@ -834,11 +1088,24 @@ async function createProject(
   page: Page,
   projectName: string,
 ) {
-  await openNewProjectPanel(page);
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
-  await page.getByTestId('new-project-tab-prototype').click();
-  await page.getByTestId('new-project-name').fill(projectName);
-  await page.getByTestId('create-project').click();
+  const response = await page.request.post('/api/projects', {
+    data: {
+      id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: projectName,
+      skillId: null,
+      designSystemId: null,
+      metadata: {
+        kind: 'prototype',
+        nameSource: 'user',
+      },
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const body = (await response.json()) as {
+    project: { id: string };
+    conversationId: string;
+  };
+  await page.goto(`/projects/${body.project.id}/conversations/${body.conversationId}`);
 }
 
 async function openNewProjectPanel(page: Page) {
@@ -895,6 +1162,24 @@ async function renameProjectTitle(
   await page.keyboard.press('Enter');
 }
 
+async function uploadTinyHtml(
+  page: Page,
+  name: string,
+  content: string,
+): Promise<string> {
+  await page.getByTestId('design-files-upload-input').setInputFiles({
+    name,
+    mimeType: 'text/html',
+    buffer: Buffer.from(content),
+  });
+  await expect(page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') })).toBeVisible();
+  const { projectId } = getProjectContextFromUrl(page);
+  const files = await listProjectFiles(page, projectId);
+  const uploaded = files.find((file) => file.name.endsWith(name));
+  expect(uploaded?.name).toBeTruthy();
+  return uploaded!.name;
+}
+
 async function uploadTinyPng(
   page: Page,
   name: string,
@@ -944,12 +1229,12 @@ async function seedAdoptedPet(page: Page) {
         mode: 'daemon',
         apiKey: '',
         baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
+        model: 'default',
+        agentId: 'codex',
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
-        agentModels: {},
+        agentModels: { codex: { model: 'default' } },
         pet: {
           adopted: true,
           enabled: true,

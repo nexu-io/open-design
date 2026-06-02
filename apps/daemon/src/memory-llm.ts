@@ -865,7 +865,13 @@ async function callLocalCli(provider, system, user, options) {
   }
 
   const env = applyAgentLaunchEnv(
-    spawnEnvForAgent(def.id, { ...process.env, ...(def.env || {}) }, configuredAgentEnv),
+    spawnEnvForAgent(
+      def.id,
+      { ...process.env, ...(def.env || {}) },
+      configuredAgentEnv,
+      undefined,
+      { resolvedBin: launch.selectedPath },
+    ),
     launch,
   );
   const invocation = createCommandInvocation({

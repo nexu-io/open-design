@@ -222,9 +222,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         { label: 'Community', name: 'Discord' },
         { label: 'Documentation', name: 'GitHub README' },
         { label: 'License', name: 'Apache-2.0' },
-        { label: 'Skills catalog', name: '/skills/' },
-        { label: 'Systems catalog', name: '/systems/' },
-        { label: 'Templates catalog', name: '/templates/' },
+        { label: 'Skills catalog', name: '/plugins/skills/' },
+        { label: 'Systems catalog', name: '/plugins/systems/' },
+        { label: 'Templates catalog', name: '/plugins/templates/' },
       ],
       aliasesTitle: 'Naming & aliases',
       aliasesLead:
@@ -538,9 +538,9 @@ INFO_PAGE_COPY.zh = {
       { label: '社区', name: 'Discord' },
       { label: '文档', name: 'GitHub README' },
       { label: '许可证', name: 'Apache-2.0' },
-      { label: 'Skill 目录', name: '/skills/' },
-      { label: '系统目录', name: '/systems/' },
-      { label: '模板目录', name: '/templates/' },
+      { label: 'Skill 目录', name: '/plugins/skills/' },
+      { label: '系统目录', name: '/plugins/systems/' },
+      { label: '模板目录', name: '/plugins/templates/' },
     ],
     aliasesTitle: '命名与别名',
     aliasesLead: '不同工具、受众和语言环境里，这个项目会以几种方式被搜索和书写：',
@@ -1027,9 +1027,9 @@ const sourceNames = [
   'Discord',
   'GitHub README',
   'Apache-2.0',
-  '/skills/',
-  '/systems/',
-  '/templates/',
+  '/plugins/skills/',
+  '/plugins/systems/',
+  '/plugins/templates/',
 ] as const;
 
 const aliasLabels = [

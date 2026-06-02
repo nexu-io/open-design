@@ -53,6 +53,7 @@ export async function getProject(id: string): Promise<Project | null> {
 
 export async function createProject(input: {
   name: string;
+  projectLocationId?: string;
   skillId: string | null;
   designSystemId: string | null;
   pendingPrompt?: string;

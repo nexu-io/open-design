@@ -601,6 +601,69 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).not.toHaveBeenCalled();
   });
 
+  it('finalizes streamed output when a run ends as canceled', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stdout',
+              'data: {"chunk":"partial output"}',
+              '',
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"canceled"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('partial output');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('finalizes textless canceled runs so ProjectView can compute produced files', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: end',
+              'data: {"code":null,"signal":"SIGTERM","status":"canceled"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).toHaveBeenCalledWith('');
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
   it('still surfaces an error when the end event has a non-zero code and no status field', async () => {
     // Regression guard for the local 'succeeded' fallback at the end-event
     // handler: a compatible or older daemon may omit `status` from the end

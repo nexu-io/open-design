@@ -233,6 +233,8 @@ export function BoardComposerPopover({
   onHoverMember,
   onDeleteComment,
   sending,
+  queueOnSend = false,
+  sendDisabled = false,
   t,
   scale = 1,
   bounds,
@@ -254,6 +256,8 @@ export function BoardComposerPopover({
   onHoverMember?: (elementId: string | null) => void;
   onDeleteComment?: (commentId: string) => void | Promise<void>;
   sending: boolean;
+  queueOnSend?: boolean;
+  sendDisabled?: boolean;
   t: TranslateFn;
   scale?: number;
   bounds?: PopoverBounds;
@@ -265,7 +269,12 @@ export function BoardComposerPopover({
   const hasCommentChange = !existing || draft.trim() !== existing.note.trim();
   const podMembers = target.podMembers ?? [];
   const composingRef = useRef(false);
-  const sendDisabled = pendingCount === 0 || sending;
+  const submitDisabled = pendingCount === 0 || sending || sendDisabled;
+  const primaryLabel = sending
+    ? t('chat.comments.sending')
+    : queueOnSend
+      ? t('chat.annotationQueue')
+      : t('chat.comments.sendToChat');
   return (
     <div
       className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
@@ -354,7 +363,7 @@ export function BoardComposerPopover({
                 (event.metaKey || event.ctrlKey)
               ) {
                 event.preventDefault();
-                if (sendDisabled) return;
+                if (submitDisabled) return;
                 void onSendBatch();
               }
             }}
@@ -409,10 +418,10 @@ export function BoardComposerPopover({
                 type="button"
                 className="primary"
                 data-testid="comment-add-send"
-                disabled={sendDisabled}
+                disabled={submitDisabled}
                 onClick={() => void onSendBatch()}
               >
-                {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
+                {primaryLabel}
               </button>
             </div>
           </div>

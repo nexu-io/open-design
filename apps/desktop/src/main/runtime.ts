@@ -1223,6 +1223,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     minWidth: 900,
     show: true,
     title: "Open Design",
+    autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
       additionalArguments: osLocaleAdditionalArguments(options.osLocale),

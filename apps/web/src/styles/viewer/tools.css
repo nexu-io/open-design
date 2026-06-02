@@ -730,7 +730,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 50;
-  min-width: 240px;
+  min-width: 300px;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -767,6 +767,17 @@
   justify-content: center;
   text-align: center;
   font-size: 13px;
+}
+.share-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-menu-text small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
 }
 .share-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
 .template-share-popover {
@@ -929,6 +940,12 @@
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+.deploy-flow-modal {
+  --modal-padding: 22px;
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+}
 .image-export-modal.modal {
   width: min(430px, calc(100vw - 32px));
   gap: 0;
@@ -1045,6 +1062,16 @@
 .deploy-flow-modal .modal-foot {
   padding-top: 16px;
 }
+.deploy-flow-modal .modal-foot .viewer-action.primary {
+  justify-content: center;
+  min-width: 104px;
+}
+.deploy-flow-modal .deploy-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--modal-padding) 18px;
+  margin-top: 0;
+}
 .deploy-form {
   display: flex;
   flex-direction: column;
@@ -1056,21 +1083,66 @@
   flex-direction: column;
   gap: 6px;
 }
+.deploy-form .deploy-field-title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.deploy-form label.deploy-field-title {
+  display: inline;
+}
+.deploy-form .deploy-field-title.required::after {
+  content: ' *';
+  color: var(--accent);
+  font-weight: 700;
+}
+.deploy-token-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.deploy-token-input-row input {
+  min-width: 0;
+}
+.deploy-token-input-row .button-like {
+  min-height: 44px;
+}
+.deploy-field-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.deploy-field-inline-action {
+  border: 0;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.deploy-field-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .field-label-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
 }
-.field-label-note {
+.deploy-token-label-row {
+  margin-bottom: -2px;
+}
+.deploy-token-hints {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 4px;
-  max-width: min(420px, 70%);
-  text-align: right;
 }
-.field-label-note .hint {
+.deploy-token-hints .hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.35;

@@ -19,6 +19,12 @@ export interface OrbitConfigPrefs {
   templateSkillId?: string | null;
 }
 
+export interface ProjectLocationPrefs {
+  id: string;
+  name: string;
+  path: string;
+}
+
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
   agentId?: string | null;
@@ -40,6 +46,10 @@ export interface AppConfigPrefs {
   privacyDecisionAt?: number | null;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
+  /** External project library roots. The daemon adds its built-in .od/projects location at read time. */
+  projectLocations?: ProjectLocationPrefs[];
+  /** Project location id used for new projects when the create request does not choose one explicitly. */
+  defaultProjectLocationId?: string | null;
 }
 
 export interface AppConfigResponse {

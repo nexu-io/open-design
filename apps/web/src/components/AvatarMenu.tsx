@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import { RemixIcon } from './RemixIcon';
@@ -20,6 +21,7 @@ interface Props {
   onOpenSettings: () => void;
   onRefreshAgents: () => void;
   onBack?: () => void;
+  placement?: 'down' | 'up';
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
@@ -27,9 +29,8 @@ function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 }
 
 /**
- * Compact settings control at the right of the project header. Click opens a dropdown
- * with current execution mode, the agent picker (when in daemon mode), and
- * a Settings entry — replaces the wide AgentPicker + env-pill row.
+ * Compact runtime control. Click opens a dropdown with current execution mode
+ * and the agent picker (when in daemon mode).
  */
 export function AvatarMenu({
   config,
@@ -41,17 +42,23 @@ export function AvatarMenu({
   onOpenSettings,
   onRefreshAgents,
   onBack,
+  placement = 'down',
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target) || popoverRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -66,6 +73,61 @@ export function AvatarMenu({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const margin = 16;
+      const gap = 8;
+      const width = Math.min(320, window.innerWidth - margin * 2);
+      const left = Math.min(
+        Math.max(rect.left + rect.width / 2 - width / 2, margin),
+        window.innerWidth - width - margin,
+      );
+
+      if (placement === 'up') {
+        const available = Math.max(160, rect.top - margin - gap);
+        setPopoverStyle({
+          position: 'fixed',
+          top: 'auto',
+          bottom: Math.max(margin, window.innerHeight - rect.top + gap),
+          left,
+          right: 'auto',
+          width,
+          maxHeight: Math.min(520, available),
+          overflowY: 'auto',
+          zIndex: 1000,
+        });
+        return;
+      }
+
+      const top = rect.bottom + gap;
+      const available = Math.max(160, window.innerHeight - top - margin);
+      setPopoverStyle({
+        position: 'fixed',
+        top,
+        bottom: 'auto',
+        left,
+        right: 'auto',
+        width,
+        maxHeight: Math.min(520, available),
+        overflowY: 'auto',
+        zIndex: 1000,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, placement]);
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === config.agentId) ?? null,
@@ -88,7 +150,7 @@ export function AvatarMenu({
   )?.label;
 
   return (
-    <div className="avatar-menu" ref={wrapRef}>
+    <div className={`avatar-menu avatar-menu--${placement}`} ref={wrapRef}>
       <button
         ref={triggerRef}
         type="button"
@@ -107,8 +169,14 @@ export function AvatarMenu({
         )}
         <RemixIcon name="arrow-down-s-line" size={14} />
       </button>
-      {open ? (
-        <div className="avatar-popover" role="dialog" aria-label={t('avatar.title')}>
+      {open && popoverStyle ? createPortal(
+        <div
+          ref={popoverRef}
+          className="avatar-popover"
+          role="dialog"
+          aria-label={t('avatar.title')}
+          style={popoverStyle}
+        >
           <div className="avatar-popover-head">
             <span className="who">
               {config.mode === 'daemon'
@@ -313,22 +381,26 @@ export function AvatarMenu({
             <span>{t('avatar.settings')}</span>
             <span className="avatar-item-meta">{isMacPlatform() ? '⌘,' : 'Ctrl+,'}</span>
           </button>
+
           {onBack ? (
-            <button
-              type="button"
-              className="avatar-item"
-              onClick={() => {
-                setOpen(false);
-                onBack();
-              }}
-            >
-              <span className="avatar-item-icon" aria-hidden>
-                <RemixIcon name="arrow-left-line" size={15} />
-              </span>
-              <span>{t('avatar.backToProjects')}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="avatar-item"
+                onClick={() => {
+                  setOpen(false);
+                  onBack();
+                }}
+              >
+                <span className="avatar-item-icon" aria-hidden>
+                  <RemixIcon name="arrow-left-line" size={15} />
+                </span>
+                <span>{t('avatar.backToProjects')}</span>
+              </button>
+            </>
           ) : null}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

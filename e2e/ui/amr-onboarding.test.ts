@@ -77,12 +77,50 @@ test('onboarding recovers from a transient AMR status failure and still continue
   await expect(page.getByRole('button', { name: /Continue/i })).toBeVisible({ timeout: 12_000 });
 });
 
+
+test('onboarding AMR card lets the user pick a live runtime model before continuing', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+    amrModels: [
+      { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { id: 'glm-5.1', label: 'GLM 5.1' },
+    ],
+  });
+
+  await page.addInitScript(
+    ({ key, value }) => window.localStorage.setItem(key, JSON.stringify(value)),
+    { key: STORAGE_KEY, value: config },
+  );
+
+  await gotoOnboarding(page);
+
+  await expect(page.getByText('AMR v0.1.0')).toBeVisible();
+  const modelSelect = page.locator('.onboarding-view__model-picker select');
+  await expect(modelSelect).toHaveValue('claude-opus-4.8');
+  await modelSelect.selectOption('deepseek-v4-flash');
+  await page.getByRole('button', { name: /Continue/i }).click();
+
+  await expect
+    .poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || '{}'), STORAGE_KEY))
+    .toMatchObject({
+      agentId: 'amr',
+      agentModels: {
+        amr: {
+          model: 'deepseek-v4-flash',
+        },
+      },
+    });
+});
+
 async function wireOnboardingMocks(
   page: Page,
   options: {
     amrAvailable: boolean;
     initialLoggedIn: boolean;
     failFirstStatusPollAfterLogin?: boolean;
+    amrModels?: Array<{ id: string; label: string }>;
   },
 ): Promise<OnboardingConfig> {
   const config: OnboardingConfig = {
@@ -139,7 +177,7 @@ async function wireOnboardingMocks(
                 bin: 'vela',
                 available: true,
                 version: '1.0.0',
-                models: [{ id: 'default', label: 'Default' }],
+                models: options.amrModels ?? [{ id: 'default', label: 'Default' }],
               }]
             : []),
           {

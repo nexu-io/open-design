@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,7 +52,7 @@ describe('preview comment persistence', () => {
       .get() as { name?: string } | undefined;
 
     expect(tableColumnNames(previewColumns)).toEqual(
-      expect.arrayContaining(['selection_kind', 'member_count', 'pod_members_json']),
+      expect.arrayContaining(['selection_kind', 'member_count', 'pod_members_json', 'slide_index', 'slide_key']),
     );
     expect(critiqueTable?.name).toBe('critique_runs');
   });
@@ -74,6 +75,147 @@ describe('preview comment persistence', () => {
     expect(second.note).toBe('Make it more specific');
     expect(second.text).toBe('New title');
     expect(listPreviewComments(db, 'project-1', 'conversation-1')).toHaveLength(1);
+  });
+
+  it('keeps the same deck element on different slides as distinct comments', () => {
+    const db = seededDb();
+    const firstSlide = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Slide one title' }),
+      note: 'Fix slide one',
+    });
+    const secondSlide = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', slideIndex: 1, text: 'Slide two title' }),
+      note: 'Fix slide two',
+    });
+    const firstSlideEdit = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Updated slide one title' }),
+      note: 'Revise slide one',
+    });
+
+    expect(firstSlide).not.toBeNull();
+    expect(secondSlide).not.toBeNull();
+    expect(firstSlideEdit).not.toBeNull();
+    if (!firstSlide || !secondSlide || !firstSlideEdit) throw new Error('comment upsert failed');
+    expect(secondSlide.id).not.toBe(firstSlide.id);
+    expect(firstSlideEdit.id).toBe(firstSlide.id);
+    const comments = listPreviewComments(db, 'project-1', 'conversation-1');
+    expect(comments).toHaveLength(2);
+    expect(comments.map((comment) => comment.slideIndex).sort()).toEqual([0, 1]);
+    expect(comments.find((comment) => comment.slideIndex === 0)?.note).toBe('Revise slide one');
+    expect(comments.find((comment) => comment.slideIndex === 1)?.note).toBe('Fix slide two');
+  });
+
+  it('migrates legacy preview comments into a slide-aware conflict key', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comments-'));
+    const odDir = path.join(tempDir, '.od');
+    fs.mkdirSync(odDir, { recursive: true });
+    const legacyDb = new Database(path.join(odDir, 'app.sqlite'));
+    legacyDb.exec(`
+      CREATE TABLE projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        skill_id TEXT,
+        design_system_id TEXT,
+        pending_prompt TEXT,
+        metadata_json TEXT,
+        custom_instructions TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE conversations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE preview_comments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        element_id TEXT NOT NULL,
+        selector TEXT NOT NULL,
+        label TEXT NOT NULL,
+        text TEXT NOT NULL,
+        position_json TEXT NOT NULL,
+        html_hint TEXT NOT NULL,
+        selection_kind TEXT,
+        member_count INTEGER,
+        pod_members_json TEXT,
+        style_json TEXT,
+        slide_index INTEGER,
+        note TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(project_id, conversation_id, file_path, element_id),
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
+    `);
+    legacyDb.prepare(
+      `INSERT INTO projects
+         (id, name, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`,
+    ).run('project-1', 'Project', 1, 1);
+    legacyDb.prepare(
+      `INSERT INTO conversations
+         (id, project_id, title, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('conversation-1', 'project-1', 'Chat', 1, 1);
+    legacyDb.prepare(
+      `INSERT INTO preview_comments
+         (id, project_id, conversation_id, file_path, element_id, selector, label,
+          text, position_json, html_hint, selection_kind, slide_index, note, status,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'legacy-slide-0',
+      'project-1',
+      'conversation-1',
+      'index.html',
+      'hero-title',
+      '[data-od-id="hero-title"]',
+      'h1.hero-title',
+      'Legacy slide one',
+      JSON.stringify({ x: 10, y: 20, width: 300, height: 80 }),
+      '<h1 data-od-id="hero-title">',
+      'element',
+      0,
+      'Legacy note',
+      'open',
+      1,
+      1,
+    );
+    legacyDb.close();
+
+    const db = openDatabase(tempDir);
+    const table = db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`)
+      .get() as { sql?: string } | undefined;
+    expect(table?.sql).toMatch(/slide_key INTEGER NOT NULL DEFAULT -1/);
+    expect(table?.sql).toMatch(/UNIQUE\(project_id, conversation_id, file_path, element_id, slide_key\)/);
+    expect(listPreviewComments(db, 'project-1', 'conversation-1')[0]?.slideIndex).toBe(0);
+
+    const secondSlide = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', slideIndex: 1, text: 'Slide two title' }),
+      note: 'Fix slide two',
+    });
+    const firstSlideEdit = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Updated slide one title' }),
+      note: 'Revise slide one',
+    });
+
+    expect(secondSlide?.id).not.toBe('legacy-slide-0');
+    expect(firstSlideEdit?.id).toBe('legacy-slide-0');
+    const comments = listPreviewComments(db, 'project-1', 'conversation-1');
+    expect(comments).toHaveLength(2);
+    expect(comments.find((comment) => comment.slideIndex === 0)?.note).toBe('Revise slide one');
+    expect(comments.find((comment) => comment.slideIndex === 1)?.note).toBe('Fix slide two');
   });
 
   it('patches status and deletes comments', () => {

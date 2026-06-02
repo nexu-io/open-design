@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { closeDatabase, insertProject, openDatabase } from '../src/db.js';
-import { reconcileHtmlArtifactManifest, writeProjectFile } from '../src/projects.js';
+import { isRunTouchedProjectFile, reconcileHtmlArtifactManifest, writeProjectFile } from '../src/projects.js';
 
 const PROJECT_ID = 'reconcile-test';
 let tempDir = null;
@@ -146,6 +146,9 @@ describe('run-end artifact manifest reconciliation (#2893)', () => {
 
     // File written during the run
     await writeProjectFile(projectsRoot, PROJECT_ID, 'new-output.html', '<p>new</p>');
+    const newPath = path.join(projectsRoot, PROJECT_ID, 'new-output.html');
+    const coarseFsTime = new Date(runStartTimeMs - 500);
+    fs.utimesSync(newPath, coarseFsTime, coarseFsTime);
 
     // Simulate the close-handler reconciliation with mtime filter
     const dir = path.join(projectsRoot, PROJECT_ID);
@@ -154,7 +157,7 @@ describe('run-end artifact manifest reconciliation (#2893)', () => {
       const ext = path.extname(name).toLowerCase();
       if (ext !== '.html' && ext !== '.htm') continue;
       const st = fs.statSync(path.join(dir, name));
-      if (st.mtimeMs < runStartTimeMs) continue;
+      if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
       await reconcileHtmlArtifactManifest(projectsRoot, PROJECT_ID, name);
     }
 
