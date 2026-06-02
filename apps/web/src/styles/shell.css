@@ -75,6 +75,7 @@
   transform: scaleY(0.5);
   transform-origin: center bottom;
   pointer-events: none;
+  z-index: 0;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
@@ -126,6 +127,8 @@
   align-items: center;
   gap: 0;
   padding-left: 0;
+  position: relative;
+  z-index: 1;
   /* Horizontal scroll inside the strip — tabs keep their natural width
      and the strip itself scrolls when it overflows the chrome. This
      replaces the previous "slice to N visible + overflow chip" model
@@ -159,26 +162,37 @@
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
-  overflow: hidden;
+  overflow: visible;
   contain: layout style;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition-property: background, border-color, color, opacity, transform, box-shadow;
+  transition-duration: 100ms, 100ms, 100ms, 120ms, 150ms, 150ms;
+  transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.2, 0.8, 0.2, 1), ease;
   -webkit-app-region: no-drag;
-  cursor: grab;
+  cursor: default;
+  z-index: 1;
+  will-change: transform;
 }
 .workspace-tab.is-dragging {
-  opacity: 0.7;
-  cursor: grabbing;
+  opacity: 0.88;
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 14%, transparent);
+  cursor: default;
+  z-index: 3;
+}
+.workspace-tab.is-drag-over-before,
+.workspace-tab.is-drag-over-after {
+  background: color-mix(in srgb, var(--bg-panel) 84%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--border-strong) 42%, transparent);
+  color: var(--text);
+}
+.workspace-tab.is-drag-over-before {
+  transform: translateX(6px);
+}
+.workspace-tab.is-drag-over-after {
+  transform: translateX(-6px);
 }
 .workspace-tab + .workspace-tab::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 1px;
-  height: 14px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
-  transform: translateY(-50%);
-  pointer-events: none;
+  display: none;
 }
 .workspace-tab:hover {
   background: color-mix(in srgb, var(--bg-panel) 64%, transparent);
@@ -444,6 +458,7 @@
 .workspace-tab-preview {
   position: fixed;
   z-index: 140;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: 9px;

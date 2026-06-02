@@ -77,6 +77,36 @@ function createDataTransfer(): DataTransfer {
   } as unknown as DataTransfer;
 }
 
+function mockTabRect(element: HTMLElement, left: number, width = 100) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () =>
+      ({
+        x: left,
+        y: 0,
+        left,
+        right: left + width,
+        top: 0,
+        bottom: 32,
+        width,
+        height: 32,
+        toJSON: () => ({}),
+      }) as DOMRect,
+  });
+}
+
+function dispatchDragEvent(
+  element: HTMLElement,
+  type: 'dragover' | 'drop',
+  dataTransfer: DataTransfer,
+  clientX: number,
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { configurable: true, value: dataTransfer });
+  Object.defineProperty(event, 'clientX', { configurable: true, value: clientX });
+  fireEvent(element, event);
+}
+
 describe('WorkspaceTabsBar navigation semantics', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -246,7 +276,58 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('reorders tabs with drag and drop without changing the active route', async () => {
+  it('sizes the hover preview to the hovered tab width', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'entry:home:seed',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 1,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    const projectTab = screen.getAllByRole('tab').find((tab) =>
+      (tab.textContent ?? '').includes('Project Alpha'),
+    ) as HTMLElement;
+    mockTabRect(projectTab, 32, 148);
+    fireEvent.mouseEnter(projectTab);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 430));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.style.width).toBe('148px');
+    expect(tooltip.style.left).toBe('32px');
+  });
+
+  it('reorders tabs live from left to right while dragging without changing the active route', async () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(window.navigator, 'vibrate', {
+      configurable: true,
+      value: vibrate,
+    });
+
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
       JSON.stringify({
@@ -293,10 +374,21 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
 
     const [homeTab, alphaTab] = screen.getAllByRole('tab');
+    mockTabRect(alphaTab! as HTMLElement, 100);
     const dataTransfer = createDataTransfer();
     fireEvent.dragStart(homeTab!, { dataTransfer });
-    fireEvent.dragOver(alphaTab!, { dataTransfer });
-    fireEvent.drop(alphaTab!, { dataTransfer });
+    dispatchDragEvent(alphaTab! as HTMLElement, 'dragover', dataTransfer, 160);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+
+    dispatchDragEvent(alphaTab! as HTMLElement, 'drop', dataTransfer, 160);
     fireEvent.dragEnd(homeTab!, { dataTransfer });
 
     await waitFor(() => {
@@ -309,6 +401,8 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
 
     expect(navigate).not.toHaveBeenCalled();
+    expect(vibrate).toHaveBeenCalledWith(8);
+    expect(vibrate).toHaveBeenCalledWith(12);
     const stored = JSON.parse(window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}') as {
       activeTabId?: string;
       tabs?: Array<{ id?: string }>;
@@ -319,5 +413,67 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       'entry:home:seed',
       'project:project-beta',
     ]);
+  });
+
+  it('reorders tabs live from right to left while dragging', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+
+    const [, alphaTab, betaTab] = screen.getAllByRole('tab');
+    mockTabRect(alphaTab! as HTMLElement, 100);
+    const dataTransfer = createDataTransfer();
+    fireEvent.dragStart(betaTab!, { dataTransfer });
+    dispatchDragEvent(alphaTab! as HTMLElement, 'dragover', dataTransfer, 110);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Beta'),
+        expect.stringContaining('Project Alpha'),
+      ]);
+    });
   });
 });

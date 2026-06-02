@@ -33,10 +33,12 @@ describe('workspace tabs chrome styles', () => {
       routinesCss,
       '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
     );
+    const projectStrip = cssDeclarations(routinesCss, '.workspace-shell .workspace-tabs-strip');
 
     expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 6px');
     expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
-    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 6px');
+    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 0');
+    expect(ruleValue(projectStrip, 'align-items')).toBe('flex-end');
   });
 
   it('uses hairline dividers for the tab chrome and entry rail', () => {
@@ -59,5 +61,63 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(railDivider, 'width')).toBe('1px');
     expect(ruleValue(railDivider, 'background')).toBe(hairlineColor);
     expect(ruleValue(railDivider, 'transform')).toBe('scaleX(0.5)');
+  });
+
+  it('connects the active workspace tab to the top chrome surface', () => {
+    const projectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab');
+    const activeProjectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-active');
+    const tabSeparator = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab + .workspace-tab::before');
+    const main = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab__main');
+    const preview = cssDeclarations(shellCss, '.workspace-tab-preview');
+    const projectChrome = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
+    );
+    const projectStrip = cssDeclarations(routinesCss, '.workspace-shell .workspace-tabs-strip');
+
+    expect(ruleValue(projectTab, 'height')).toBe('32px');
+    expect(ruleValue(projectTab, 'align-self')).toBe('flex-end');
+    expect(ruleValue(projectTab, 'border-radius')).toBe('10px 10px 0 0');
+    expect(ruleValue(projectTab, 'border-bottom')).toBe('0');
+    expect(ruleValue(activeProjectTab, 'background')).toBe('var(--bg-panel)');
+    expect(ruleValue(activeProjectTab, 'border-color')).toBe('var(--workspace-active-tab-border)');
+    expect(ruleValue(activeProjectTab, 'border-bottom-color')).toBe('transparent');
+    expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('0 1px 0 var(--bg-panel)');
+    expect(ruleValue(activeProjectTab, 'box-shadow')).toContain('inset');
+    expect(ruleValue(projectChrome, 'overflow')).toBe('visible');
+    expect(ruleValue(projectStrip, 'overflow')).toBe('visible');
+    expect(ruleValue(tabSeparator, 'display')).toBe('none');
+    expect(ruleValue(main, 'z-index')).toBe('2');
+    expect(ruleValue(preview, 'box-sizing')).toBe('border-box');
+    expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::before');
+    expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::after');
+  });
+
+  it('uses a rounded highlight for inactive workspace tab hover', () => {
+    const hoverTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab:not(.is-active):hover');
+
+    expect(ruleValue(hoverTab, 'border-radius')).toBe('10px');
+    expect(ruleValue(hoverTab, 'background')).toContain('calc(100% - 2px)');
+    expect(ruleValue(hoverTab, 'border-color')).toBe('transparent');
+    expect(ruleValue(hoverTab, 'box-shadow')).toContain('inset 0 0 0 1px');
+  });
+
+  it('gives dragged tabs physical collision feedback', () => {
+    const tab = cssDeclarations(shellCss, '.workspace-tab');
+    const dragging = cssDeclarations(shellCss, '.workspace-tab.is-dragging');
+    const dragOverBefore = cssDeclarations(shellCss, '.workspace-tab.is-drag-over-before');
+    const dragOverAfter = cssDeclarations(shellCss, '.workspace-tab.is-drag-over-after');
+    const projectDragging = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-dragging');
+
+    expect(ruleValue(tab, 'cursor')).toBe('default');
+    expect(ruleValue(tab, 'transition-property')).toContain('transform');
+    expect(ruleValue(dragging, 'transform')).toBe('translateY(-2px) scale(1.015)');
+    expect(ruleValue(dragging, 'z-index')).toBe('3');
+    expect(ruleValue(dragOverBefore, 'border-color')).not.toContain('var(--accent)');
+    expect(ruleValue(dragOverBefore, 'transform')).toBe('translateX(6px)');
+    expect(ruleValue(dragOverAfter, 'transform')).toBe('translateX(-6px)');
+    expect(ruleValue(projectDragging, 'box-shadow')).toContain('0 14px 30px');
+    expect(shellCss).not.toContain('.workspace-tab.is-drag-over-before::after');
+    expect(shellCss).not.toContain('.workspace-tab.is-drag-over-after::after');
   });
 });
