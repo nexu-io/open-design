@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
-import type { ChatMessage, ProjectFile } from '../../src/types';
+import type { AgentInfo, ChatMessage, ProjectFile } from '../../src/types';
 
 beforeAll(() => {
   const store = new Map<string, string>();
@@ -289,6 +289,74 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
     const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/wallet' });
     expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/wallet');
     expect(link.classList.contains('md-link')).toBe(true);
+  });
+});
+
+describe('AssistantMessage model identity', () => {
+  const agents: AgentInfo[] = [
+    {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      models: [
+        { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+        { id: 'opus', label: 'Opus (alias)' },
+      ],
+    } as AgentInfo,
+  ];
+
+  it('merges the initializing model detail into the assistant header', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          agentId: 'claude',
+          agentName: 'Claude Code',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus-4-8' } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        agents={agents}
+      />,
+    );
+
+    const identity = container.querySelector('.assistant-identity');
+    expect(identity?.textContent).toBe('Claude·Claude Opus 4.8');
+    expect(container.querySelector('.assistant-identity-icon')).toBeTruthy();
+    expect(container.querySelector('[data-status="initializing"]')).toBeNull();
+    expect(screen.queryByText('claude-opus-4-8')).toBeNull();
+  });
+
+  it('normalizes raw fallback model ids when registry labels are raw', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          agentId: 'gemini',
+          events: [
+            { kind: 'status', label: 'initializing', detail: 'gemini-2.5-flash-lite' } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        agents={[
+          {
+            id: 'gemini',
+            name: 'Gemini CLI',
+            bin: 'gemini',
+            available: true,
+            models: [{ id: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite' }],
+          } as AgentInfo,
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.assistant-identity')?.textContent).toBe('Gemini·Gemini 2.5 Flash Lite');
+    expect(screen.queryByText('gemini-2.5-flash-lite')).toBeNull();
   });
 });
 

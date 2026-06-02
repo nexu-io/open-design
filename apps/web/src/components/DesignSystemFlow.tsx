@@ -1767,6 +1767,7 @@ export function DesignSystemDetailView({
             error={chatError}
             projectId={workspaceProjectId}
             projectFiles={workspaceProjectFiles}
+            agents={agents}
             onEnsureProject={ensureWorkspaceProject}
             onSend={(prompt, attachments, commentAttachments) => {
               void sendProjectChatMessage(prompt, attachments, commentAttachments);

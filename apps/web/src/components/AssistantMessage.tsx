@@ -50,7 +50,7 @@ import {
   type TodoItem,
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
-import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
+import { agentDisplayName, exactAgentDisplayName } from "../utils/agentLabels";
 import { AgentIcon } from "./AgentIcon";
 import {
   exactDateTime,
@@ -59,6 +59,7 @@ import {
 } from "../utils/chatTime";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
+  AgentInfo,
   AgentEvent,
   ChatMessage,
   ChatMessageFeedbackChange,
@@ -330,6 +331,7 @@ interface Props {
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
   hasDesignSystemContext?: boolean;
+  agents?: AgentInfo[];
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
@@ -409,6 +411,7 @@ function AssistantMessageImpl({
   onFeedback,
   suppressDirectionForms = false,
   hasDesignSystemContext = false,
+  agents = [],
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -536,8 +539,7 @@ function AssistantMessageImpl({
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
-  const roleName = assistantRoleName(message, t);
-  const roleIconId = agentIconId(message.agentId, message.agentName);
+  const roleIdentity = assistantRoleIdentity(message, t, agents);
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
   );
@@ -621,8 +623,17 @@ function AssistantMessageImpl({
   return (
     <div className="msg assistant">
       <div className="role">
-        <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
-        <span className="role-name">{roleName}</span>
+        <span className="assistant-identity" title={roleIdentity.title}>
+          <AgentIcon id={roleIdentity.agentIconId} size={14} className="assistant-identity-icon" />
+          <span className="assistant-identity-provider">{roleIdentity.agentLabel}</span>
+          {roleIdentity.modelLabel ? (
+            <>
+              <span className="assistant-identity-separator" aria-hidden>·</span>
+              <span className="assistant-identity-model">{roleIdentity.modelLabel}</span>
+            </>
+          ) : null}
+        </span>
+        <MessageTimestamp message={message} t={t} />
       </div>
       <div className="assistant-flow">
         {blocks.length === 0 && streaming ? (
@@ -703,6 +714,8 @@ function AssistantMessageImpl({
             );
           }
           if (b.kind === "status") {
+            if (b.label === "initializing") return null;
+            if (b.label === "model" && roleIdentity.modelLabel) return null;
             // Suppress this message's gray error pill ONLY when ChatPane is
             // rendering the top-level error card for it (the last failed run).
             // Other failed turns — older history, or once a follow-up makes
@@ -911,28 +924,126 @@ export function assistantRoleLabel(
   message: ChatMessage,
   t: TranslateFn
 ): string {
-  const model = assistantModelDetail(message);
-  const fromName = message.agentName?.trim();
-  if (fromName)
-    return appendRoleModel(exactAgentDisplayName(fromName) ?? fromName, model);
-  const fromId = agentDisplayName(message.agentId);
-  if (fromId) return appendRoleModel(fromId, model);
+  const identity = assistantRoleIdentity(message, t);
+  return appendRoleModel(identity.agentLabel, identity.modelLabel);
+}
+
+interface AssistantRoleIdentity {
+  agentId: string | null;
+  agentIconId: string;
+  agentLabel: string;
+  modelId: string | null;
+  modelLabel: string | null;
+  title: string;
+}
+
+export function assistantRoleIdentity(
+  message: ChatMessage,
+  t: TranslateFn,
+  agents: AgentInfo[] = [],
+): AssistantRoleIdentity {
   const starting = message.events?.find(
     (e) => e.kind === "status" && e.label === "starting" && e.detail
   ) as Extract<AgentEvent, { kind: "status" }> | undefined;
-  return appendRoleModel(
-    agentDisplayName(starting?.detail) ?? t("assistant.role"),
-    model
+  const savedDisplay = splitAssistantDisplayName(message.agentName);
+  const agent = resolveAssistantAgent(message, agents, starting?.detail);
+  const agentLabel =
+    agent?.name?.trim()
+    || (savedDisplay ? agentDisplayName(message.agentId, savedDisplay.agentLabel) : null)
+    || (savedDisplay ? exactAgentDisplayName(savedDisplay.agentLabel) : null)
+    || savedDisplay?.agentLabel
+    || agentDisplayName(message.agentId, message.agentName)
+    || exactAgentDisplayName(message.agentName)
+    || agentDisplayName(starting?.detail)
+    || message.agentName?.trim()
+    || t("assistant.role");
+  const modelId = assistantModelDetail(message);
+  const modelLabel = modelId ? resolveAssistantModelLabel(modelId, agent) : savedDisplay?.modelLabel ?? null;
+  const displayAgentLabel = exactAgentDisplayName(agentLabel) ?? agentLabel;
+  return {
+    agentId: agent?.id ?? message.agentId ?? null,
+    agentIconId: agent?.id ?? inferredAgentIconId(message.agentId, message.agentName, starting?.detail) ?? "assistant",
+    agentLabel: displayAgentLabel,
+    modelId,
+    modelLabel,
+    title: appendRoleModel(displayAgentLabel, modelLabel),
+  };
+}
+
+function splitAssistantDisplayName(raw: string | null | undefined): { agentLabel: string; modelLabel: string } | null {
+  if (!raw) return null;
+  const parts = raw.split(" · ").map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const modelLabel = parts.pop();
+  const agentLabel = parts.join(" · ");
+  if (!agentLabel || !modelLabel) return null;
+  return { agentLabel, modelLabel };
+}
+
+function inferredAgentIconId(...values: Array<string | null | undefined>): string | null {
+  const haystack = values.map((value) => normalizeAgentLookupKey(value ?? "")).join(" ");
+  if (haystack.includes("claude")) return "claude";
+  if (haystack.includes("codex")) return "codex";
+  if (haystack.includes("gemini")) return "gemini";
+  if (haystack.includes("opencode")) return "opencode";
+  if (haystack.includes("cursor")) return "cursor-agent";
+  if (haystack.includes("copilot")) return "copilot";
+  if (haystack.includes("qwen")) return "qwen";
+  if (haystack.includes("qoder")) return "qoder";
+  if (haystack.includes("deepseek")) return "deepseek";
+  if (haystack.includes("antigravity") || haystack.includes("agy")) return "antigravity";
+  if (haystack.includes("devin")) return "devin";
+  if (haystack.includes("aider")) return "aider";
+  if (haystack.includes("amr") || haystack.includes("vela")) return "amr";
+  return null;
+}
+
+function resolveAssistantAgent(
+  message: ChatMessage,
+  agents: AgentInfo[],
+  startingDetail?: string,
+): AgentInfo | null {
+  const candidates = [
+    message.agentId,
+    message.agentName,
+    startingDetail,
+  ].map((value) => value?.trim()).filter((value): value is string => !!value);
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeAgentLookupKey(candidate);
+    const direct = agents.find((agent) => agent.id === candidate || normalizeAgentLookupKey(agent.id) === normalizedCandidate);
+    if (direct) return direct;
+    const named = agents.find((agent) => normalizeAgentLookupKey(agent.name) === normalizedCandidate);
+    if (named) return named;
+    const known = exactAgentDisplayName(candidate);
+    if (known) {
+      const byKnownName = agents.find((agent) => exactAgentDisplayName(agent.id) === known || exactAgentDisplayName(agent.name) === known);
+      if (byKnownName) return byKnownName;
+    }
+  }
+  return null;
+}
+
+function resolveAssistantModelLabel(modelId: string | null, agent: AgentInfo | null): string | null {
+  if (!modelId) return null;
+  const normalizedModel = normalizeModelLookupKey(modelId);
+  const options = agent?.models ?? [];
+  const model = options.find((option) =>
+    normalizeModelLookupKey(option.id) === normalizedModel
+    || normalizeModelLookupKey(option.label) === normalizedModel
   );
+  if (model) return cleanModelLabel(model.label || model.id, model.id);
+  return humanModelLabel(modelId);
 }
 
 function assistantModelDetail(message: ChatMessage): string | null {
-  const initializing = message.events?.find(
-    (e) => e.kind === "status" && e.label === "initializing" && e.detail
+  const modelStatus = [...(message.events ?? [])].reverse().find(
+    (e) => {
+      if (e.kind !== "status" || (e.label !== "initializing" && e.label !== "model")) return false;
+      const detail = e.detail?.trim();
+      return !!detail && detail !== "default";
+    }
   ) as Extract<AgentEvent, { kind: "status" }> | undefined;
-  const detail = initializing?.detail?.trim();
-  if (!detail || detail === "default") return null;
-  return detail;
+  return modelStatus?.detail?.trim() ?? null;
 }
 
 function assistantFeedbackModelId(message: ChatMessage): string | null {
@@ -948,6 +1059,76 @@ function assistantFeedbackModelId(message: ChatMessage): string | null {
 function appendRoleModel(label: string, model: string | null): string {
   if (!model || label.includes(" · ")) return label;
   return `${label} · ${model}`;
+}
+
+function cleanModelLabel(label: string, id: string): string {
+  const trimmed = label.trim() || id.trim();
+  if (!trimmed || trimmed === "default") return "";
+  const parenthesizedId = new RegExp(`\\s*\\(${escapeRegExp(id)}\\)\\s*$`, "i");
+  const withoutCurrent = trimmed.replace(/\s*•\s*current\s*$/i, "");
+  if (withoutCurrent && withoutCurrent !== id && !isRawModelId(withoutCurrent)) {
+    return withoutCurrent.replace(parenthesizedId, "").trim();
+  }
+  return humanModelLabel(id);
+}
+
+function humanModelLabel(raw: string): string {
+  const value = raw.trim();
+  if (!value || value === "default") return "";
+  const unscoped = value.split("/").pop() ?? value;
+  const claude = /^claude[-_](opus|sonnet|haiku)[-_.](\d+)[-_.](\d+)(.*)$/i.exec(unscoped);
+  if (claude) {
+    const [, family, major, minor, suffix = ""] = claude;
+    return [
+      "Claude",
+      titleWord(family),
+      major && minor ? `${major}.${minor}` : "",
+      formatModelSuffix(suffix),
+    ].filter(Boolean).join(" ");
+  }
+  const gemini = /^gemini[-_](\d+(?:\.\d+)?)[-_](flash-lite|flash|pro)(.*)$/i.exec(unscoped);
+  if (gemini) {
+    const [, version, family, suffix = ""] = gemini;
+    return ["Gemini", version ?? "", titleWords(family ?? ""), formatModelSuffix(suffix)].filter(Boolean).join(" ");
+  }
+  const deepseek = /^deepseek[-_]?(.+)$/i.exec(unscoped);
+  if (deepseek) return ["DeepSeek", titleWords(deepseek[1] ?? "")].filter(Boolean).join(" ");
+  const glm = /^glm[-_](.+)$/i.exec(unscoped);
+  if (glm) return ["GLM", (glm[1] ?? "").replace(/[-_]/g, ".")].filter(Boolean).join(" ");
+  if (/^gpt[-_]/i.test(unscoped)) return unscoped.replace(/_/g, "-").replace(/^gpt/i, "GPT");
+  return titleWords(unscoped);
+}
+
+function isRawModelId(value: string): boolean {
+  return /^[a-z0-9]+(?:[._/-][a-z0-9]+)+$/i.test(value.trim());
+}
+
+function normalizeAgentLookupKey(value: string): string {
+  return value.trim().replace(/\.(cmd|exe|bat)$/i, "").replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeModelLookupKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\//g, "-").replace(/[_.]/g, "-");
+}
+
+function titleWords(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => /^[0-9.]+$/.test(word) ? word : titleWord(word))
+    .join(" ");
+}
+
+function titleWord(value: string | undefined): string {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function formatModelSuffix(value: string): string {
+  const cleaned = value.replace(/^[-_.]+/, "");
+  if (!cleaned) return "";
+  return titleWords(cleaned);
 }
 
 interface AssistantFooterProps {

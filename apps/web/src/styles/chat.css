@@ -356,7 +356,7 @@
 }
 .msg .role {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   font-size: 13.5px;
   text-transform: none;
@@ -364,6 +364,31 @@
   margin-bottom: 8px;
   letter-spacing: 0;
   font-weight: 600;
+}
+.assistant-identity {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  align-items: center;
+  column-gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.assistant-identity-icon {
+  color: currentColor;
+  opacity: 0.82;
+}
+.assistant-identity-provider,
+.assistant-identity-model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-identity-separator,
+.assistant-identity-model {
+  color: var(--text-muted);
+  font-weight: 550;
 }
 .msg-time {
   color: var(--text-faint);

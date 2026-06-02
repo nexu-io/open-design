@@ -28,7 +28,7 @@ import {
 } from '../design-system-auto-prompt';
 import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
+import type { AgentInfo, AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTime } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -238,6 +238,7 @@ interface Props {
   // without project context.
   projectKindForTracking?: TrackingProjectKind | null;
   projectFiles: ProjectFile[];
+  agents?: AgentInfo[];
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
@@ -415,6 +416,7 @@ export function ChatPane({
   onSessionModeChange,
   projectKindForTracking = null,
   projectFiles,
+  agents = [],
   hasActiveDesignSystem = false,
   activeDesignSystem = null,
   projectFileNames,
@@ -1423,6 +1425,7 @@ export function ChatPane({
                 messages={messages}
                 streaming={streaming}
                 liveToolInput={liveToolInput}
+                agents={agents}
                 projectId={projectId}
                 projectKindForTracking={projectKindForTracking}
                 activeConversationId={activeConversationId}
@@ -1699,6 +1702,7 @@ function ChatRows({
   messages,
   streaming,
   liveToolInput,
+  agents,
   projectId,
   projectKindForTracking,
   activeConversationId,
@@ -1732,6 +1736,7 @@ function ChatRows({
   messages: ChatMessage[];
   streaming: boolean;
   liveToolInput?: Record<string, { name: string; text: string }>;
+  agents: AgentInfo[];
   projectId: string | null;
   projectKindForTracking: TrackingProjectKind | null;
   activeConversationId: string | null;
@@ -1812,6 +1817,7 @@ function ChatRows({
         message={m}
         streaming={messageStreaming}
         liveToolInput={liveToolInput}
+        agents={agents}
         projectId={projectId}
         projectKind={projectKindForTracking}
         conversationId={activeConversationId}
