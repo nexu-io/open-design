@@ -429,6 +429,9 @@ export interface Dict {
   'settings.designSystemsSource': string;
   'settings.designSystemsSourceLocal': string;
   'settings.designSystemsSourceGithub': string;
+  'settings.designSystemsSourceShadcn': string;
+  'settings.designSystemsShadcnReference': string;
+  'settings.designSystemsImportShadcn': string;
   'settings.designSystemsStructure': string;
   'settings.designSystemsModeHybrid': string;
   'settings.designSystemsModeNormalized': string;
