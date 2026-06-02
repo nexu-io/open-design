@@ -2760,9 +2760,15 @@ function buildBlocks(
     appendThinkingBlock(pendingThinkingText);
     pendingThinkingText = "";
   };
-  for (const ev of events) {
+  for (let i = 0; i < events.length; i += 1) {
+    const ev = events[i]!;
     if (ev.kind === "text") {
-      if (thinkingTextCandidate) pendingThinkingText += ev.text;
+      if (
+        thinkingTextCandidate ||
+        isToolPlanningText(ev.text, nextSubstantiveEvent(events, i + 1))
+      ) {
+        pendingThinkingText += ev.text;
+      }
       else appendTextBlock(ev.text);
       continue;
     }
@@ -2848,6 +2854,28 @@ function buildBlocks(
     flushThinkingCandidateAsText();
   }
   return out;
+}
+
+function nextSubstantiveEvent(
+  events: AgentEvent[],
+  startIndex: number,
+): AgentEvent | null {
+  for (let i = startIndex; i < events.length; i += 1) {
+    const ev = events[i]!;
+    if (ev.kind === "status") continue;
+    if (ev.kind === "text" && ev.text.trim().length === 0) continue;
+    return ev;
+  }
+  return null;
+}
+
+function isToolPlanningText(text: string, nextEvent: AgentEvent | null): boolean {
+  if (nextEvent?.kind !== "tool_use") return false;
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 320) return false;
+  return /^(?:now\s+)?(?:let me|i(?:'|’)ll|i will|i need|i should|i'm going to|i am going to|need to|first(?:,)?|next(?:,)?|checking|working on)\b/i.test(
+    trimmed,
+  );
 }
 
 // Split prose into alternating plain-text and `<system-reminder>` segments.

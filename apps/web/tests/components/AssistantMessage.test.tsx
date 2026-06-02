@@ -464,6 +464,55 @@ describe('AssistantMessage thinking blocks', () => {
 
     expect(screen.getByText(finalAnswer)).toBeTruthy();
   });
+
+  it('keeps short planning text before a later tool call collapsed after completion', () => {
+    const planningText = 'Now let me look at the screenshot.';
+    const finalAnswer = 'The settings screen renders cleanly.';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Bash',
+              input: { command: 'screenshot' },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'tool-1',
+              content: 'done',
+              isError: false,
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: planningText } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'tool-2',
+              name: 'Read',
+              input: { file_path: 'settings.png' },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'tool-2',
+              content: 'done',
+              isError: false,
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: finalAnswer } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.queryByText(planningText)).toBeNull();
+    expect(screen.getByText(finalAnswer)).toBeTruthy();
+
+    const toggles = screen.getAllByRole('button', { name: 'Thinking' });
+    fireEvent.click(toggles.at(-1)!);
+    expect(screen.getByText(planningText)).toBeTruthy();
+  });
 });
 
 describe('AssistantMessage question forms', () => {
