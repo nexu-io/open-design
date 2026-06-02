@@ -776,7 +776,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
+    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, reasoning, extraBody } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(
@@ -816,6 +816,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       ),
       stream: true,
     };
+
+    // DeepSeek thinking mode support
+    if (typeof reasoning === 'string' && reasoning) {
+      const effort = (reasoning === 'low' || reasoning === 'medium') ? 'high' : reasoning;
+      payload.reasoning_effort = effort;
+      if (extraBody && typeof extraBody === 'object') {
+        payload.extra_body = extraBody;
+      } else {
+        payload.extra_body = { thinking: { type: 'enabled' } };
+      }
+    } else if (extraBody && typeof extraBody === 'object') {
+      payload.extra_body = extraBody;
+    }
 
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;

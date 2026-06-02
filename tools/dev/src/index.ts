@@ -19,7 +19,7 @@ import {
   type DesktopUpdateResult,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import { createSidecarLaunchEnv, requestJsonIpc } from "@open-design/sidecar";
+import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath, resolveLogFilePath } from "@open-design/sidecar";
 import {
   collectProcessTreePids,
   createPackageManagerInvocation,
@@ -56,11 +56,17 @@ import {
   type LogDiagnostic,
 } from "./diagnostics.js";
 import {
+  cleanupStaleIpc,
   inspectDaemonRuntime,
   inspectDesktopRuntime,
+  inspectTrayRuntime,
   inspectWebRuntime,
+  listStaleNamespaces,
+  retryWithIpcRecovery,
+  uniqueNamespace,
   waitForDaemonRuntime,
   waitForDesktopRuntime,
+  waitForTrayRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
@@ -281,6 +287,39 @@ function runtimeLookup(config: ToolDevConfig) {
   return { base: config.toolsDevRoot, namespace: config.namespace };
 }
 
+function makeUniqueNamespaceConfig(config: ToolDevConfig, uniqueNs: string): ToolDevConfig {
+  const uniqueNamespaceRoot = path.resolve(config.toolsDevRoot, uniqueNs);
+
+  function makeAppConfig(appName: ToolDevAppName): ToolDevConfig["apps"][ToolDevAppName] {
+    const base = config.apps[appName];
+    const ipcPath = resolveAppIpcPath({
+      app: appName,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace: uniqueNs,
+    });
+    const latestLogPath = resolveLogFilePath({ runtimeRoot: uniqueNamespaceRoot, app: appName, contract: OPEN_DESIGN_SIDECAR_CONTRACT });
+    return {
+      ...base,
+      app: appName,
+      ipcPath,
+      latestLogPath,
+      logDir: path.dirname(latestLogPath),
+    };
+  }
+
+  return {
+    ...config,
+    namespace: uniqueNs,
+    namespaceRoot: uniqueNamespaceRoot,
+    apps: {
+      daemon: makeAppConfig(APP_KEYS.DAEMON) as ToolDevConfig["apps"]["daemon"],
+      desktop: makeAppConfig(APP_KEYS.DESKTOP) as ToolDevConfig["apps"]["desktop"],
+      web: makeAppConfig(APP_KEYS.WEB) as ToolDevConfig["apps"]["web"],
+      tray: makeAppConfig(APP_KEYS.TRAY) as ToolDevConfig["apps"]["tray"],
+    },
+  };
+}
+
 function appConfig(config: ToolDevConfig, appName: ToolDevAppName) {
   return config.apps[appName];
 }
@@ -390,7 +429,7 @@ async function assertNoStaleActiveProcess(config: ToolDevConfig, appName: ToolDe
 }
 
 async function spawnSidecarRuntime(request: {
-  appName: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB;
+  appName: typeof APP_KEYS.DAEMON | typeof APP_KEYS.WEB | typeof APP_KEYS.TRAY;
   config: ToolDevConfig;
   env: NodeJS.ProcessEnv;
   logHandle: FileHandle;
@@ -492,6 +531,19 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
   await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
+  await runLoggedCommand({
+    args: invocation.args,
+    command: invocation.command,
+    cwd: config.workspaceRoot,
+    env: process.env,
+    logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+}
+
+async function buildTray(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  await logHandle.write(`\n[tools-dev] building @open-design/tray at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@open-design/tray", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -620,6 +672,35 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
   }
 }
 
+async function spawnTrayRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
+  const { args: stampArgs, env } = createAppStamp(config, APP_KEYS.TRAY);
+  const logHandle = await openAppLog(config, APP_KEYS.TRAY);
+
+  try {
+    await buildTray(config, logHandle);
+    await logHandle.write(`[tools-dev] launching tray at ${new Date().toISOString()}\n`);
+    const spawned = await spawnBackgroundProcess({
+      args: [config.apps.tray.sidecarEntryPath, ...stampArgs],
+      command: config.apps.tray.electronBinaryPath,
+      cwd: config.workspaceRoot,
+      detached: true,
+      env: {
+        ...process.env,
+        ...env,
+        NODE_PATH: [
+          path.join(config.workspaceRoot, "node_modules"),
+          path.join(config.workspaceRoot, "apps/tray/node_modules"),
+        ].join(path.delimiter),
+        ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+      },
+      logFd: logHandle.fd,
+    });
+    return { pid: spawned.pid };
+  } finally {
+    await logHandle.close();
+  }
+}
+
 async function startDaemon(
   config: ToolDevConfig,
   options: CliOptions,
@@ -731,6 +812,29 @@ async function startDesktop(config: ToolDevConfig, options: CliOptions) {
   }
 }
 
+async function startTray(config: ToolDevConfig, options: CliOptions) {
+  const existing = await inspectTrayRuntime(runtimeLookup(config));
+  if (existing != null) {
+    return { app: APP_KEYS.TRAY, created: false, logPath: config.apps.tray.latestLogPath, status: existing };
+  }
+  await assertNoStaleActiveProcess(config, APP_KEYS.TRAY);
+
+  const spawned = await spawnTrayRuntime(config, options);
+  try {
+    const status = await waitForTrayRuntime(runtimeLookup(config));
+    return {
+      app: APP_KEYS.TRAY,
+      created: true,
+      logPath: config.apps.tray.latestLogPath,
+      pid: spawned.pid,
+      status,
+    };
+  } catch (error) {
+    await stopApp(config, APP_KEYS.TRAY).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function startApp(
   config: ToolDevConfig,
   appName: ToolDevAppName,
@@ -782,6 +886,8 @@ async function startApp(
         log: (msg) => process.stderr.write(`${msg}\n`),
       });
       return await startDesktop(config, options);
+    case APP_KEYS.TRAY:
+      return await startTray(config, options);
   }
 }
 
@@ -851,6 +957,12 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
     return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies WebStatusSnapshot;
+  }
+  if (appName === APP_KEYS.TRAY) {
+    const status = await inspectTrayRuntime(runtimeLookup(config));
+    if (status != null) return status;
+    const active = await findAppProcessTree(config, appName);
+    return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: status?.url ?? null };
   }
 
   const status = await inspectDesktopRuntime(runtimeLookup(config));
@@ -1084,7 +1196,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 
-addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
+addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, tray, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
     assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);

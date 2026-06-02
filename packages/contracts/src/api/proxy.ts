@@ -34,6 +34,10 @@ export interface ProxyStreamRequest {
   maxTokens?: number;
   // Azure OpenAI only. Defaults at the daemon when omitted.
   apiVersion?: string;
+  // DeepSeek reasoning effort (low/medium/high/max)
+  reasoning?: string;
+  // Extra body fields for provider-specific extensions (e.g., thinking mode)
+  extraBody?: Record<string, unknown>;
 }
 
 export interface ProxyStreamStartPayload {
