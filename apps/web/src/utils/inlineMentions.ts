@@ -35,6 +35,7 @@ export function buildInlineMentionParts(
   options: { highlightUnknown?: boolean } = {},
 ): InlineMentionPart[] | null {
   if (!text) return null;
+  if (!text.includes('@')) return null;
   const highlightUnknown = options.highlightUnknown ?? true;
   const known = normalizeEntities(entities);
   const parts: InlineMentionPart[] = [];
