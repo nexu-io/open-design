@@ -263,7 +263,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   padding: 14px 14px 10px;
   display: flex;
   flex-direction: column;
@@ -277,11 +277,11 @@
 }
 .home-hero__input-card:focus-within {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 .home-hero__input-card.is-drag-active {
   border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-md);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .home-hero__active {
   display: flex;
@@ -871,7 +871,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px dashed var(--border-soft);
+  border-top: 0;
   padding-top: 8px;
 }
 .home-hero__attachments {

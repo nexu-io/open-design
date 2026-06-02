@@ -689,7 +689,7 @@
   min-height: 36px;
   padding: 0 10px 0 6px;
   background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
   box-shadow: none;
 }
 .workspace-shell .workspace-tabs-strip {

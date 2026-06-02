@@ -56,13 +56,25 @@
   padding: 0 8px 0 6px;
   gap: 0;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-bottom: 0;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-panel) 80%, transparent) inset;
   user-select: none;
   -webkit-app-region: drag;
   overflow: hidden;
   position: relative;
   z-index: 120;
+}
+.workspace-tabs-chrome.app-chrome-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 64%, transparent);
+  transform: scaleY(0.5);
+  transform-origin: center bottom;
+  pointer-events: none;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
   margin-right: var(--app-chrome-traffic-margin);
@@ -151,6 +163,11 @@
   contain: layout style;
   transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
   -webkit-app-region: no-drag;
+  cursor: grab;
+}
+.workspace-tab.is-dragging {
+  opacity: 0.7;
+  cursor: grabbing;
 }
 .workspace-tab + .workspace-tab::before {
   content: '';
@@ -195,6 +212,7 @@
   justify-content: flex-start;
   gap: 6px;
   text-align: left;
+  cursor: inherit;
 }
 .workspace-tab__main:hover:not(:disabled) {
   background: transparent;
@@ -240,6 +258,7 @@
   justify-content: center;
   opacity: 0;
   flex: 0 0 auto;
+  cursor: pointer;
 }
 .workspace-tab:hover .workspace-tab__close,
 .workspace-tab.is-active .workspace-tab__close {

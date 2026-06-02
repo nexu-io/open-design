@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { navigate, type EntryHomeView, type Route } from '../router';
@@ -210,6 +210,23 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   };
 }
 
+function reorderTabsById(
+  tabs: WorkspaceChromeTab[],
+  sourceId: string,
+  targetId: string,
+): WorkspaceChromeTab[] {
+  if (sourceId === targetId) return tabs;
+  const sourceIndex = tabs.findIndex((tab) => tab.id === sourceId);
+  const targetIndex = tabs.findIndex((tab) => tab.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return tabs;
+
+  const nextTabs = tabs.slice();
+  const [movedTab] = nextTabs.splice(sourceIndex, 1);
+  if (!movedTab) return tabs;
+  nextTabs.splice(targetIndex, 0, movedTab);
+  return nextTabs;
+}
+
 function initialTabsState(route: Route): WorkspaceTabsState {
   const fallback = tabFromRoute(route);
   if (typeof window === 'undefined') {
@@ -342,6 +359,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
+  const dragSuppressClickRef = useRef(false);
+  const draggingTabIdRef = useRef<string | null>(null);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
 
   function clearHoverTimer() {
     if (hoverTimerRef.current !== null) {
@@ -482,6 +502,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }, [tabsMenuOpen]);
 
   function openTab(tab: WorkspaceChromeTab) {
+    if (dragSuppressClickRef.current) {
+      dragSuppressClickRef.current = false;
+      return;
+    }
     setState((current) => ({
       tabs: normalizeTabsState(current).tabs.map((item) =>
         item.id === tab.id ? { ...item, lastActiveAt: Date.now() } : item,
@@ -538,6 +562,58 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     if (nextRoute) navigate(nextRoute);
   }
 
+  function reorderTab(sourceId: string, targetId: string) {
+    dismissHoverPreview();
+    setTabsMenuOpen(false);
+    setState((current) => {
+      const normalized = normalizeTabsState(current);
+      const tabs = reorderTabsById(normalized.tabs, sourceId, targetId);
+      return tabs === normalized.tabs ? normalized : { ...normalized, tabs };
+    });
+  }
+
+  function handleTabDragStart(tabId: string, event: DragEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('.workspace-tab__close')) {
+      event.preventDefault();
+      return;
+    }
+    dismissHoverPreview();
+    dragSuppressClickRef.current = true;
+    draggingTabIdRef.current = tabId;
+    setDraggingTabId(tabId);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', tabId);
+  }
+
+  function handleTabDragOver(tabId: string, event: DragEvent<HTMLDivElement>) {
+    const sourceId = draggingTabIdRef.current ?? event.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === tabId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleTabDrop(tabId: string, event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const sourceId = draggingTabIdRef.current ?? event.dataTransfer.getData('text/plain');
+    if (sourceId && sourceId !== tabId) {
+      reorderTab(sourceId, tabId);
+    }
+    draggingTabIdRef.current = null;
+    setDraggingTabId(null);
+    window.setTimeout(() => {
+      dragSuppressClickRef.current = false;
+    }, 0);
+  }
+
+  function handleTabDragEnd() {
+    draggingTabIdRef.current = null;
+    setDraggingTabId(null);
+    window.setTimeout(() => {
+      dragSuppressClickRef.current = false;
+    }, 0);
+  }
+
   return (
     <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
@@ -560,10 +636,15 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           return (
             <div
               key={tab.id}
-              className={`workspace-tab${active ? ' is-active' : ''}`}
+              className={`workspace-tab${active ? ' is-active' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}`}
               role="tab"
               aria-selected={active}
               aria-describedby={hoverPreview?.tabId === tab.id ? 'workspace-tab-preview' : undefined}
+              draggable={state.tabs.length > 1}
+              onDragStart={(event) => handleTabDragStart(tab.id, event)}
+              onDragOver={(event) => handleTabDragOver(tab.id, event)}
+              onDrop={(event) => handleTabDrop(tab.id, event)}
+              onDragEnd={handleTabDragEnd}
               onMouseEnter={(event) => scheduleHoverPreview(tab.id, event.currentTarget)}
               onMouseLeave={dismissHoverPreview}
             >

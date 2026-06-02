@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const shellCss = readFileSync(new URL('../../src/styles/shell.css', import.meta.url), 'utf8');
 const routinesCss = readFileSync(new URL('../../src/styles/viewer/routines.css', import.meta.url), 'utf8');
+const entryLayoutCss = readFileSync(new URL('../../src/styles/home/entry-layout.css', import.meta.url), 'utf8');
 
 function cssDeclarations(css: string, selector: string): string {
   const blocks: string[] = [];
@@ -36,5 +37,27 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 6px');
     expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
     expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 6px');
+  });
+
+  it('uses hairline dividers for the tab chrome and entry rail', () => {
+    const chrome = cssDeclarations(shellCss, '.workspace-tabs-chrome.app-chrome-header');
+    const chromeDivider = cssDeclarations(shellCss, '.workspace-tabs-chrome.app-chrome-header::after');
+    const projectChrome = cssDeclarations(
+      routinesCss,
+      '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
+    );
+    const rail = cssDeclarations(entryLayoutCss, '.entry-nav-rail');
+    const railDivider = cssDeclarations(entryLayoutCss, '.entry-nav-rail::after');
+
+    const hairlineColor = 'color-mix(in srgb, var(--border) 64%, transparent)';
+    expect(ruleValue(chrome, 'border-bottom')).toBe('0');
+    expect(ruleValue(projectChrome, 'border-bottom')).toBe('0');
+    expect(ruleValue(rail, 'border-right')).toBe('0');
+    expect(ruleValue(chromeDivider, 'height')).toBe('1px');
+    expect(ruleValue(chromeDivider, 'background')).toBe(hairlineColor);
+    expect(ruleValue(chromeDivider, 'transform')).toBe('scaleY(0.5)');
+    expect(ruleValue(railDivider, 'width')).toBe('1px');
+    expect(ruleValue(railDivider, 'background')).toBe(hairlineColor);
+    expect(ruleValue(railDivider, 'transform')).toBe('scaleX(0.5)');
   });
 });

@@ -34,7 +34,7 @@
 /* Left rail */
 .entry-nav-rail {
   width: var(--entry-rail-width, 64px);
-  border-right: 1px solid var(--border);
+  border-right: 0;
   background: var(--bg-panel);
   padding: 8px 0 10px;
   display: flex;
@@ -54,6 +54,18 @@
      area lets those floats appear over the scroll surface. */
   position: relative;
   z-index: 30;
+}
+.entry-nav-rail::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 64%, transparent);
+  transform: scaleX(0.5);
+  transform-origin: right center;
+  pointer-events: none;
 }
 .entry-nav-rail__group {
   display: flex;
