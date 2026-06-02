@@ -48,6 +48,10 @@ interface Props {
   // user message. Used as a fallback when no live `onAnswerToolUse` route
   // is available.
   onSubmitForm?: (text: string) => void;
+  // The user message immediately following this assistant turn, when any.
+  // AskUserQuestion fallback submissions are persisted as normal chat
+  // messages, so older cards recover their answered state from this content.
+  nextUserContent?: string;
   // When set, AskUserQuestion cards route the user's pick directly back to
   // the still-open stream-json child via /api/runs/:id/tool-result instead
   // of sending it as a fresh user message. AssistantMessage derives it
@@ -64,6 +68,7 @@ export function ToolCard({
   onRequestOpenFile,
   isLast,
   onSubmitForm,
+  nextUserContent,
   onAnswerToolUse,
 }: Props) {
   const name = use.name;
@@ -93,6 +98,7 @@ export function ToolCard({
         runSucceeded={isSucceeded}
         isLast={isLast ?? false}
         onSubmitForm={onSubmitForm}
+        nextUserContent={nextUserContent}
         onAnswerToolUse={onAnswerToolUse}
       />
     );
@@ -190,6 +196,27 @@ function parseAskUserQuestionInput(input: unknown): AuqQuestion[] {
   return result;
 }
 
+function parseAskUserQuestionAnswer(
+  content: string,
+  questions: AuqQuestion[],
+): Record<string, string | string[]> | null {
+  const out: Record<string, string | string[]> = {};
+  const pairs = content.split('\n\n');
+  for (const pair of pairs) {
+    const newlineIdx = pair.indexOf('\n');
+    if (newlineIdx === -1) continue;
+    const q = pair.slice(0, newlineIdx).trim();
+    const a = pair.slice(newlineIdx + 1).trim();
+    if (!q) continue;
+    const question = questions.find((qq) => qq.question === q);
+    if (!question) continue;
+    out[q] = question.multiSelect
+      ? a.split('\n').map((s) => s.replace(/^- /, '').trim()).filter(Boolean)
+      : a;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function AskUserQuestionCard({
   toolUseId,
   input,
@@ -198,6 +225,7 @@ function AskUserQuestionCard({
   runSucceeded,
   isLast,
   onSubmitForm,
+  nextUserContent,
   onAnswerToolUse,
 }: {
   toolUseId: string;
@@ -207,6 +235,7 @@ function AskUserQuestionCard({
   runSucceeded: boolean;
   isLast: boolean;
   onSubmitForm?: (text: string) => void;
+  nextUserContent?: string;
   onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }) {
   const t = useT();
@@ -233,48 +262,35 @@ function AskUserQuestionCard({
   // tool-result POST. Headless mode's auto error never lands in this bucket.
   const hasRealAnswer = (!!result && !result.isError) || submissionState === 'received';
   // After a page reload the locally-held `selections` is empty because
-  // useState resets, so the card would render its locked summary with no
-  // chips highlighted. The persisted answer lives on `result.content`
-  // (the tool_result the daemon wrote back into the run); parse it so the
-  // user's pick stays visible across reloads. Multi-select answers are
-  // serialized as a `- ` bullet list (one option per line) so labels
-  // containing commas round-trip exactly.
-  const answeredSelections = (() => {
-    if (!result || result.isError || !result.content) return null;
-    const out: Record<string, string | string[]> = {};
-    const pairs = result.content.split('\n\n');
-    for (const pair of pairs) {
-      const newlineIdx = pair.indexOf('\n');
-      if (newlineIdx === -1) continue;
-      const q = pair.slice(0, newlineIdx).trim();
-      const a = pair.slice(newlineIdx + 1).trim();
-      if (!q) continue;
-      const question = questions.find((qq) => qq.question === q);
-      if (!question) continue;
-      out[q] = question.multiSelect
-        ? a.split('\n').map((s) => s.replace(/^- /, '').trim()).filter(Boolean)
-        : a;
-    }
-    return out;
-  })();
+  // useState resets. Direct answers persist in `result.content`; fallback
+  // answers persist as the next user message. Parse both formats so older
+  // cards keep their truthful answered state and selected chips.
+  const directAnswerSelections = result && !result.isError
+    ? parseAskUserQuestionAnswer(result.content, questions)
+    : null;
+  const followupAnswerSelections = nextUserContent
+    ? parseAskUserQuestionAnswer(nextUserContent, questions)
+    : null;
+  const persistedSelections = directAnswerSelections ?? followupAnswerSelections;
   // While the user is actively picking (card not yet locked), the local
   // `selections` is authoritative. Once locked, prefer the persisted
   // answer if available so reloads / cached messages still highlight.
-  const effectiveSelections = hasRealAnswer && answeredSelections
-    ? answeredSelections
+  const effectiveSelections = persistedSelections
+    ? persistedSelections
     : selections;
+  const hasFollowupAnswer = !hasRealAnswer && !!followupAnswerSelections;
   const canAnswerOriginalTool = !!onAnswerToolUse && runStreaming && isLast;
   const canFallbackToFollowup = !!onSubmitForm && isLast;
   const canSubmit = canAnswerOriginalTool || canFallbackToFollowup;
   const noAnswerReceived =
-    !hasRealAnswer && (
+    !hasRealAnswer && !hasFollowupAnswer && (
       submissionState === 'failed'
       || !runStreaming
       || !isLast
       || (!canAnswerOriginalTool && !canFallbackToFollowup)
       || !!result?.isError
     );
-  const locked = hasRealAnswer || noAnswerReceived || !canSubmit || submissionState === 'sending' || submissionState === 'followup';
+  const locked = hasRealAnswer || hasFollowupAnswer || noAnswerReceived || !canSubmit || submissionState === 'sending' || submissionState === 'followup';
   const ready = questions.every((q) => {
     const v = selections[q.question];
     return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
@@ -333,7 +349,7 @@ function AskUserQuestionCard({
   const status =
     hasRealAnswer
       ? { label: t('tool.askQuestionAnswered'), tone: 'done' as const }
-      : submissionState === 'followup'
+      : submissionState === 'followup' || hasFollowupAnswer
         ? { label: t('tool.askQuestionSentFollowup'), tone: 'warning' as const }
         : noAnswerReceived
           ? { label: t('tool.askQuestionNoAnswer'), tone: 'warning' as const }

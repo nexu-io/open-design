@@ -112,6 +112,42 @@ describe('AskUserQuestion card status', () => {
     expect(screen.queryByText('No answer received')).toBeNull();
   });
 
+  it('restores a fallback answer from the next user message after remount', async () => {
+    const onAnswerToolUse = vi.fn().mockResolvedValue(false);
+    const onSubmitForm = vi.fn();
+    const { unmount } = render(
+      <ToolCard
+        use={askUse}
+        runStreaming
+        runSucceeded={false}
+        isLast
+        onAnswerToolUse={onAnswerToolUse}
+        onSubmitForm={onSubmitForm}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /macOS Settings window/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Submit/i }));
+
+    await waitFor(() => expect(onSubmitForm).toHaveBeenCalledWith('Where next?\nmacOS Settings window'));
+    unmount();
+
+    render(
+      <ToolCard
+        use={askUse}
+        runStreaming={false}
+        runSucceeded
+        isLast={false}
+        nextUserContent={'Where next?\nmacOS Settings window'}
+      />,
+    );
+
+    expect(screen.getByText('Sent as follow-up')).toBeTruthy();
+    expect(screen.queryByText('No answer received')).toBeNull();
+    expect(screen.getByRole('button', { name: /macOS Settings window/i }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByRole('button', { name: /Submit/i })).toBeNull();
+  });
+
   it('falls back to a follow-up message when the live tool-result route throws', async () => {
     const onAnswerToolUse = vi.fn().mockRejectedValue(new Error('run closed'));
     const onSubmitForm = vi.fn();

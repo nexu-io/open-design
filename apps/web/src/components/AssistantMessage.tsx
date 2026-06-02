@@ -688,6 +688,7 @@ function AssistantMessageImpl({
                 onRequestOpenFile={onRequestOpenFile}
                 isLast={!!isLast}
                 onSubmitForm={onSubmitForm}
+                nextUserContent={nextUserContent}
                 onAnswerToolUse={onAnswerToolUse}
               />
             );
@@ -2557,6 +2558,7 @@ function ToolGroupCard({
   onRequestOpenFile,
   isLast,
   onSubmitForm,
+  nextUserContent,
   onAnswerToolUse,
 }: {
   items: ToolItem[];
@@ -2566,6 +2568,7 @@ function ToolGroupCard({
   onRequestOpenFile?: (name: string) => void;
   isLast?: boolean;
   onSubmitForm?: (text: string) => void;
+  nextUserContent?: string;
   onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }) {
   const t = useT();
@@ -2592,6 +2595,7 @@ function ToolGroupCard({
         onRequestOpenFile={onRequestOpenFile}
         isLast={isLast}
         onSubmitForm={onSubmitForm}
+        nextUserContent={nextUserContent}
         onAnswerToolUse={onAnswerToolUse}
       />
     );
@@ -2620,6 +2624,7 @@ function ToolGroupCard({
             onRequestOpenFile={onRequestOpenFile}
             isLast={isLast}
             onSubmitForm={onSubmitForm}
+            nextUserContent={nextUserContent}
             onAnswerToolUse={onAnswerToolUse}
           />
         ))}

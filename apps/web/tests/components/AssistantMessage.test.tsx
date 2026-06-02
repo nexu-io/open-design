@@ -360,6 +360,45 @@ describe('AssistantMessage model identity', () => {
   });
 });
 
+describe('AssistantMessage AskUserQuestion history', () => {
+  const askQuestionEvent = {
+    kind: 'tool_use',
+    id: 'tool-1',
+    name: 'AskUserQuestion',
+    input: {
+      questions: [
+        {
+          header: 'Next move',
+          question: 'Where next?',
+          options: [
+            { label: 'macOS Settings window', description: 'Desktop variant' },
+            { label: 'Leave as-is', description: 'Stop here' },
+          ],
+        },
+      ],
+    },
+  } as ChatMessage['events'][number];
+
+  it('keeps fallback answers truthful after the assistant card remounts from history', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [askQuestionEvent],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        isLast={false}
+        nextUserContent={'Where next?\nmacOS Settings window'}
+      />,
+    );
+
+    expect(screen.getByText('Sent as follow-up')).toBeTruthy();
+    expect(screen.queryByText('No answer received')).toBeNull();
+    expect(screen.getByRole('button', { name: /macOS Settings window/i }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('AssistantMessage thinking blocks', () => {
   it('does not render an empty thinking block for whitespace-only thinking deltas', () => {
     const { container } = render(
