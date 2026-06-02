@@ -140,6 +140,23 @@ const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
 const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
+const OPENROUTER_DEFAULT_IMAGE_SIZE = '1K';
+/**
+ * Default poll ceiling for OpenRouter async video jobs.
+ * Override via `OD_OPENROUTER_VIDEO_MAX_POLL_MS` (minimum 60 000).
+ */
+export const OPENROUTER_VIDEO_DEFAULT_POLL_MS = 30 * 60 * 1000;
+/**
+ * Model slug patterns that support multi-modal output (image + text).
+ * Image-only models (Flux, Recraft, Sourceful) only accept `["image"]`.
+ * Add new patterns here when additional multi-modal models become
+ * available on OpenRouter.
+ */
+const OPENROUTER_MULTIMODAL_PATTERNS: string[] = ['gemini'];
+
+function isOpenRouterMultiModal(model: string): boolean {
+  return OPENROUTER_MULTIMODAL_PATTERNS.some((p) => model.includes(p));
+}
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -1679,8 +1696,8 @@ async function renderOpenRouterImage(
 
   // Multi-modal models (Gemini variants) accept both image and text
   // output; image-only models (Flux, Recraft, Sourceful) only accept
-  // ["image"]. We use a simple heuristic on the slug.
-  const modalities: string[] = wireModel.includes('gemini')
+  // ["image"]. See OPENROUTER_MULTIMODAL_PATTERNS.
+  const modalities: string[] = isOpenRouterMultiModal(wireModel)
     ? ['image', 'text']
     : ['image'];
 
@@ -1700,7 +1717,7 @@ async function renderOpenRouterImage(
   const aspectRatio = openRouterAspectFor(ctx.aspect);
   const imageConfig: Record<string, unknown> = {
     aspect_ratio: aspectRatio,
-    image_size: '1K',
+    image_size: OPENROUTER_DEFAULT_IMAGE_SIZE,
   };
   body.image_config = imageConfig;
 
@@ -1900,7 +1917,7 @@ async function renderOpenRouterVideo(
   const maxMs =
     Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
       ? configuredMaxMs
-      : 30 * 60 * 1000; // 30 minutes default
+      : OPENROUTER_VIDEO_DEFAULT_POLL_MS;
 
   let lastStatus = submitData?.status || 'pending';
   let videoUrls: string[] | null = null;

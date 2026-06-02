@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { generateMedia } from '../src/media.js';
+import { OPENROUTER_VIDEO_DEFAULT_POLL_MS, generateMedia } from '../src/media.js';
 
 // Tiny fake MP4 header — just enough to assert the result has bytes.
 const FAKE_MP4 = Buffer.from([
@@ -466,7 +466,10 @@ describe('openrouter video generation', () => {
     // Without OD_OPENROUTER_VIDEO_MAX_POLL_MS, the default should be 30 min.
     delete process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS;
 
-    // We use a fast-failing job so we don't actually wait 30 minutes.
+    // Direct constant assertion: the exported default must be exactly 30 min.
+    expect(OPENROUTER_VIDEO_DEFAULT_POLL_MS).toBe(30 * 60 * 1000);
+
+    // We use a fast-completing job so we don't actually wait 30 minutes.
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResp({
         id: 'job-timeout',
@@ -481,12 +484,53 @@ describe('openrouter video generation', () => {
       .mockResolvedValueOnce(mp4Resp());
     vi.stubGlobal('fetch', fetchMock);
 
-    // If the default were less than 30 min, long jobs would fail.
-    // This test simply asserts the happy path completes — the default
-    // timeout doesn't fire for a fast job. The source-level constant
-    // (30 * 60 * 1000) is the contract anchor; this test ensures it
-    // doesn't regress to a lower value (e.g. 20 min).
     await expect(generateMedia(argsWithPaths())).resolves.toBeDefined();
+  });
+
+  it('timeout error message includes the ceiling in seconds', async () => {
+    // Set a very short ceiling (minimum 60s) so the timeout fires quickly.
+    process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS = '60000';
+
+    // Make the poll loop deterministic: setTimeout resolves immediately
+    // but Date.now() tracks accumulated sleep time so the ceiling check
+    // fires after ~8 fast iterations instead of 60+ real seconds.
+    const origSetTimeout = globalThis.setTimeout;
+    const baseTime = Date.now();
+    let elapsed = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.stubGlobal('setTimeout', (fn: (...a: any[]) => void, delay?: number, ...rest: any[]) => {
+      elapsed += (typeof delay === 'number' ? delay : 0);
+      return origSetTimeout(fn, 1, ...rest);
+    });
+    vi.spyOn(Date, 'now').mockImplementation(() => baseTime + elapsed);
+
+    // Mock: submit succeeds, then polls always return 'in_progress'
+    // so the loop times out. Use mockImplementation to create a fresh
+    // Response per call — Response bodies are single-use.
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(jsonResp({
+          id: 'job-ceil',
+          polling_url: 'https://openrouter.ai/api/v1/videos/job-ceil',
+          status: 'pending',
+        }, 202));
+      }
+      return Promise.resolve(jsonResp({
+        id: 'job-ceil',
+        status: 'in_progress',
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia(argsWithPaths())).rejects.toThrow(
+      /ceiling 60s/,
+    );
+
+    vi.restoreAllMocks();
+    globalThis.setTimeout = origSetTimeout;
+    delete process.env.OD_OPENROUTER_VIDEO_MAX_POLL_MS;
   });
 });
 
