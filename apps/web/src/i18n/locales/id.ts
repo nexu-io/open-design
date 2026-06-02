@@ -2086,7 +2086,7 @@ export const id: Dict = {
   'fileViewer.exportPdf': 'Ekspor PDF',
   'fileViewer.exportPdfAllSlides': 'Ekspor PDF semua slide',
   'fileViewer.exportPptxBusy': 'Mengekspor PPTX...',
-  'fileViewer.exportPptxHint': 'Buat deck terlebih dahulu untuk mengekspor PPTX.',
+  'fileViewer.exportPptxHint': 'Unduh PPTX berbasis gambar fidelitas tinggi dari pratinjau.',
   'fileViewer.exportPptxNa': 'PPTX tidak tersedia',
   'fileViewer.exportZip': 'Ekspor ZIP',
   'fileViewer.exportHtml': 'Ekspor HTML',

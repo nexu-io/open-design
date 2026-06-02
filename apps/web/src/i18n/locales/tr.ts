@@ -2086,7 +2086,8 @@ export const tr: Dict = {
   'fileViewer.exportPdf': 'PDF olarak dışa aktar',
   'fileViewer.exportPdfAllSlides': 'PDF olarak dışa aktar (tüm slaytlar)',
   'fileViewer.exportPptxBusy': 'Güncel sıranın bitmesini bekleyin.',
-  'fileViewer.exportPptxHint': 'Bu tasarımı PPTX’e dönüştürmesi için ajana bir istek yollayın.',
+  'fileViewer.exportPptxHint':
+    'Önizlemeden yüksek doğruluklu, görüntü tabanlı bir PPTX indirin.',
   'fileViewer.exportPptxNa': 'PPTX dışa aktarma burada mevcut değil.',
   'fileViewer.exportZip': 'ZIP olarak indir',
   'fileViewer.exportHtml': 'Tekil HTML olarak dışa aktar',

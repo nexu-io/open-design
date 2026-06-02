@@ -2086,7 +2086,7 @@ export const th: Dict = {
   'fileViewer.exportPdf': 'เปลี่ยนฟอร์แมตเอาไปเป็น PDF',
   'fileViewer.exportPdfAllSlides': 'ดาวน์โหลดทั้งหน้าเป็น PDF',
   'fileViewer.exportPptxBusy': 'ต้องให้ทำระบบของปัจจุบันจนสำเร็จก่อน',
-  'fileViewer.exportPptxHint': 'ส่งข้อมูลเพื่อให้ทำการแปลเอกสารเป็น PPTX',
+  'fileViewer.exportPptxHint': 'ดาวน์โหลด PPTX แบบรูปภาพความเที่ยงตรงสูงจากตัวอย่าง',
   'fileViewer.exportPptxNa': 'งาน PPTX ไม่สามารถดึงออกในจุดนี้ได้',
   'fileViewer.exportZip': 'สูบทั้งหมดมาในรูป .zip',
   'fileViewer.exportHtml': 'เอาไปแค่รูปไฟล์ HTML',

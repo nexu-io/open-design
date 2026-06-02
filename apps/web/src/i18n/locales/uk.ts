@@ -2086,7 +2086,8 @@ export const uk: Dict = {
   'fileViewer.exportPdf': 'Експортувати як PDF',
   'fileViewer.exportPdfAllSlides': 'Експортувати як PDF (усі слайди)',
   'fileViewer.exportPptxBusy': 'Чекайте, поки поточна черга завершиться.',
-  'fileViewer.exportPptxHint': 'Надішліть запит агентові для перетворення цього дизайну на PPTX.',
+  'fileViewer.exportPptxHint':
+    'Завантажте PPTX високої точності на основі зображень із попереднього перегляду.',
   'fileViewer.exportPptxNa': 'Експорт PPTX недоступний тут.',
   'fileViewer.exportZip': 'Завантажити як .zip',
   'fileViewer.exportHtml': 'Експортувати як самостійний HTML',

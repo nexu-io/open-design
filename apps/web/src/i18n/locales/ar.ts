@@ -2086,7 +2086,8 @@ export const ar: Dict = {
   'fileViewer.exportPdf': 'تصدير كـ PDF',
   'fileViewer.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',
   'fileViewer.exportPptxBusy': 'انتظر انتهاء الدور الحالي.',
-  'fileViewer.exportPptxHint': 'أرسل طلباً للوكيل لتحويل هذا التصميم إلى PPTX.',
+  'fileViewer.exportPptxHint':
+    'نزّل PPTX عالي الدقة قائمًا على الصور من المعاينة.',
   'fileViewer.exportPptxNa': 'تصدير PPTX غير متوفر هنا.',
   'fileViewer.exportZip': 'تحميل كـ zip.',
   'fileViewer.exportHtml': 'تصدير كـ HTML مستقل',

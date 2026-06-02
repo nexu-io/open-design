@@ -2086,7 +2086,8 @@ export const fa: Dict = {
   'fileViewer.exportPdf': 'صادرکردن به PDF',
   'fileViewer.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
   'fileViewer.exportPptxBusy': 'منتظر پایان نوبت فعلی باشید.',
-  'fileViewer.exportPptxHint': 'یک درخواست به عامل برای تبدیل این طرح به PPTX ارسال کنید.',
+  'fileViewer.exportPptxHint':
+    'یک PPTX تصویرمحور با وفاداری بالا از پیش‌نمایش دانلود کنید.',
   'fileViewer.exportPptxNa': 'صادرکردن PPTX اینجا در دسترس نیست.',
   'fileViewer.exportZip': 'دانلود به صورت .zip',
   'fileViewer.exportHtml': 'صادرکردن به HTML مستقل',

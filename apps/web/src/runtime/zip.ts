@@ -1,11 +1,13 @@
 // Minimal ZIP encoder, stored mode (no compression). Big enough for the
-// "Download as ZIP" button — we only ever pack a handful of UTF-8 text files
-// (HTML/CSS/JS/Markdown) totalling well under a few MB, so skipping deflate
-// keeps the implementation small and dependency-free.
+// "Download as ZIP" button and screenshot-backed PPTX export. We only ever
+// pack a handful of text/binary files totalling well under a few MB, so
+// skipping deflate keeps the implementation small and dependency-free.
+
+export type ZipEntryContent = string | Uint8Array | ArrayBuffer;
 
 export interface ZipEntry {
   path: string;
-  content: string;
+  content: ZipEntryContent;
 }
 
 const CRC_TABLE: number[] = (() => {
@@ -40,6 +42,12 @@ function dosTime(d: Date): { time: number; date: number } {
   return { time, date };
 }
 
+function entryContentBytes(content: ZipEntryContent, enc: TextEncoder): Uint8Array {
+  if (typeof content === 'string') return enc.encode(content);
+  if (content instanceof Uint8Array) return content;
+  return new Uint8Array(content);
+}
+
 export function buildZip(entries: ZipEntry[]): Blob {
   const enc = new TextEncoder();
   const now = dosTime(new Date());
@@ -51,7 +59,7 @@ export function buildZip(entries: ZipEntry[]): Blob {
 
   for (const entry of entries) {
     const nameBytes = enc.encode(entry.path);
-    const dataBytes = enc.encode(entry.content);
+    const dataBytes = entryContentBytes(entry.content, enc);
     const crc = crc32(dataBytes);
     const size = dataBytes.length;
 

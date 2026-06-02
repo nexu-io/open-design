@@ -2086,7 +2086,7 @@ export const zhTW: Dict = {
   'fileViewer.exportPdf': '匯出為 PDF',
   'fileViewer.exportPdfAllSlides': '匯出為 PDF（全部投影片）',
   'fileViewer.exportPptxBusy': '請等待當前任務完成。',
-  'fileViewer.exportPptxHint': '請求代理將此設計轉換為 PPTX。',
+  'fileViewer.exportPptxHint': '從預覽下載高保真圖片型 PPTX。',
   'fileViewer.exportPptxNa': '此處暫不支援匯出 PPTX。',
   'fileViewer.exportZip': '下載為 .zip',
   'fileViewer.exportHtml': '匯出為獨立 HTML',

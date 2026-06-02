@@ -62,6 +62,7 @@ import {
 import type { ProjectFilePreview } from '../providers/registry';
 import {
   downloadImageDataUrl,
+  exportImagePptxFromSnapshots,
   exportAsJsx,
   exportAsMd,
   exportAsPdf,
@@ -77,6 +78,7 @@ import {
   prepareImageExportTarget,
   requestPreviewSnapshot,
   type ImageExportFormat,
+  type PreviewSnapshot,
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
@@ -920,6 +922,66 @@ async function requestPreviewSnapshotWithRetry(iframe: HTMLIFrameElement): Promi
   return null;
 }
 
+function normalizeDeckSlideState(value: unknown): SlideState | null {
+  if (!value || typeof value !== 'object') return null;
+  const state = value as { active?: unknown; count?: unknown };
+  if (typeof state.active !== 'number' || typeof state.count !== 'number') return null;
+  if (!Number.isFinite(state.active) || !Number.isFinite(state.count)) return null;
+  return { active: state.active, count: state.count };
+}
+
+function readDeckSlideState(iframe: HTMLIFrameElement): SlideState | null {
+  const win = iframe.contentWindow as (Window & { __odDeckSlideState?: () => unknown }) | null;
+  if (typeof win?.__odDeckSlideState !== 'function') return null;
+  try {
+    return normalizeDeckSlideState(win.__odDeckSlideState());
+  } catch {
+    return null;
+  }
+}
+
+function waitForDeckSlideState(
+  iframe: HTMLIFrameElement,
+  activeIndex: number | null,
+  timeout = 1200,
+): Promise<SlideState | null> {
+  const win = iframe.contentWindow;
+  if (!win) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (state: SlideState | null) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      window.clearTimeout(timer);
+      resolve(state);
+    };
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.source !== win) return;
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:slide-state') return;
+      const state = normalizeDeckSlideState(data);
+      if (!state) return;
+      if (activeIndex !== null && state.active !== activeIndex) return;
+      finish(state);
+    };
+    const timer = window.setTimeout(() => finish(null), timeout);
+    window.addEventListener('message', onMessage);
+  });
+}
+
+function waitForPreviewPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window.requestAnimationFrame !== 'function') {
+      window.setTimeout(resolve, 0);
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path'>): string {
   return `${projectId}:${file.path || file.name}`;
 }
@@ -939,7 +1001,6 @@ interface Props {
   liveHtml?: string;
   filesRefreshKey?: number;
   isDeck?: boolean;
-  onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
@@ -969,7 +1030,6 @@ export function FileViewer({
   liveHtml,
   filesRefreshKey = 0,
   isDeck,
-  onExportAsPptx,
   streaming,
   commentQueueOnSend = false,
   commentSendDisabled = false,
@@ -1013,7 +1073,6 @@ export function FileViewer({
         liveHtml={liveHtml}
         filesRefreshKey={filesRefreshKey}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
-        onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
         commentQueueOnSend={commentQueueOnSend}
         commentSendDisabled={commentSendDisabled}
@@ -4410,7 +4469,6 @@ function HtmlViewer({
   liveHtml,
   filesRefreshKey = 0,
   isDeck,
-  onExportAsPptx,
   streaming,
   commentQueueOnSend = false,
   commentSendDisabled = false,
@@ -4430,7 +4488,6 @@ function HtmlViewer({
   liveHtml?: string;
   filesRefreshKey?: number;
   isDeck: boolean;
-  onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
@@ -7150,7 +7207,7 @@ function HtmlViewer({
     rendererId === 'html';
   const canShare = source !== null && isShareableArtifact;
   const canDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
-  const canPptx = canShare && isDeckArtifact && Boolean(onExportAsPptx) && !streaming;
+  const canPptx = canShare && isDeckArtifact && !streaming;
   const showPptxExport = canShare && isDeckArtifact;
   const showMarkdownExport = source !== null && isMarkdownArtifact;
   const showImageExport = canShare;
@@ -7224,6 +7281,41 @@ function HtmlViewer({
     setDownloadMenuOpen(false);
     setDeployMenuOpen((v) => !v);
   };
+  const prepareSnapshotExportFrame = useCallback(async (): Promise<{
+    iframe: HTMLIFrameElement;
+    restore: () => void;
+  } | null> => {
+    if (!useUrlLoadPreview) {
+      const activeIframe = srcDocPreviewIframeRef.current ?? iframeRef.current;
+      if (!activeIframe) return null;
+      await waitForIframeLoadOrTimeout(activeIframe, 250);
+      await waitForAnimationFrame();
+      return { iframe: activeIframe, restore: () => {} };
+    }
+
+    const srcDocIframe = srcDocPreviewIframeRef.current;
+    if (!srcDocIframe) {
+      const activeIframe = iframeRef.current;
+      if (!activeIframe) return null;
+      return { iframe: activeIframe, restore: () => {} };
+    }
+
+    if (useLazySrcDocTransport && !srcDocShellReady) {
+      await waitForIframeLoadOrTimeout(srcDocIframe, 500);
+    }
+    if (useLazySrcDocTransport && activateSrcDocSnapshotTransport(srcDocIframe)) {
+      await waitForIframeLoadOrTimeout(srcDocIframe);
+    }
+    const restoreVisibility = temporarilyExposeIframeForSnapshot(srcDocIframe);
+    await waitForAnimationFrame();
+    return { iframe: srcDocIframe, restore: restoreVisibility };
+  }, [
+    activateSrcDocSnapshotTransport,
+    srcDocShellReady,
+    useLazySrcDocTransport,
+    useUrlLoadPreview,
+  ]);
+
   const captureExportImageSnapshot = useCallback(async () => {
     // Prefer the desktop compositor screenshot of the visible preview region:
     // it returns the real rendered pixels (fonts, external CSS, gradients,
@@ -7234,48 +7326,26 @@ function HtmlViewer({
     const hostSnapshot = await captureHostIframeSnapshot(visibleIframe);
     if (hostSnapshot) return hostSnapshot;
 
-    if (!useUrlLoadPreview) {
-      const activeIframe = srcDocPreviewIframeRef.current ?? iframeRef.current;
-      if (!activeIframe) return null;
-      await waitForIframeLoadOrTimeout(activeIframe, 250);
-      await waitForAnimationFrame();
-      return requestPreviewSnapshotWithRetry(activeIframe);
+    // URL-load previews: try the visible URL iframe first; a successful host or
+    // bridge snapshot avoids exposing the hidden srcDoc frame at all.
+    if (useUrlLoadPreview) {
+      const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
+      if (urlIframe) {
+        await waitForIframeLoadOrTimeout(urlIframe, 250);
+        await waitForAnimationFrame();
+        const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
+        if (urlSnapshot) return urlSnapshot;
+      }
     }
 
-    const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
-    if (urlIframe) {
-      await waitForIframeLoadOrTimeout(urlIframe, 250);
-      await waitForAnimationFrame();
-      const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
-      if (urlSnapshot) return urlSnapshot;
-    }
-
-    const srcDocIframe = srcDocPreviewIframeRef.current;
-    if (!srcDocIframe) {
-      const activeIframe = iframeRef.current;
-      if (!activeIframe) return null;
-      return requestPreviewSnapshotWithRetry(activeIframe);
-    }
-
-    if (useLazySrcDocTransport && !srcDocShellReady) {
-      await waitForIframeLoadOrTimeout(srcDocIframe, 500);
-    }
-    if (useLazySrcDocTransport && activateSrcDocSnapshotTransport(srcDocIframe)) {
-      await waitForIframeLoadOrTimeout(srcDocIframe);
-    }
-    const restoreVisibility = temporarilyExposeIframeForSnapshot(srcDocIframe);
+    const target = await prepareSnapshotExportFrame();
+    if (!target) return null;
     try {
-      await waitForAnimationFrame();
-      return requestPreviewSnapshotWithRetry(srcDocIframe);
+      return requestPreviewSnapshotWithRetry(target.iframe);
     } finally {
-      restoreVisibility();
+      target.restore();
     }
-  }, [
-    activateSrcDocSnapshotTransport,
-    srcDocShellReady,
-    useLazySrcDocTransport,
-    useUrlLoadPreview,
-  ]);
+  }, [prepareSnapshotExportFrame, useUrlLoadPreview]);
 
   const handleCopyScreenshot = useCallback(async () => {
     if (screenshotInFlightRef.current) return;
@@ -7307,6 +7377,44 @@ function HtmlViewer({
       screenshotInFlightRef.current = false;
     }
   }, [captureExportImageSnapshot, t]);
+
+  const capturePptxSnapshots = useCallback(async (): Promise<PreviewSnapshot[]> => {
+    const prepared = await prepareSnapshotExportFrame();
+    const target = prepared?.iframe;
+    if (!prepared || !target?.contentWindow) throw new Error('PPTX export preview is not available');
+    const cached = htmlPreviewSlideState.get(previewStateKey);
+    const resolvedSlideState =
+      slideState ?? cached ?? readDeckSlideState(target) ?? await waitForDeckSlideState(target, null);
+    const rawCount = resolvedSlideState?.count ?? 1;
+    const count = Math.max(1, Math.floor(Number.isFinite(rawCount) ? rawCount : 1));
+    const originalIndex = Math.max(0, Math.min(count - 1, resolvedSlideState?.active ?? 0));
+    const snapshots: PreviewSnapshot[] = [];
+
+    try {
+      for (let index = 0; index < count; index += 1) {
+        if (count > 1) {
+          target.contentWindow.postMessage({ type: 'od:slide', action: 'go', index }, '*');
+          await waitForDeckSlideState(target, index);
+          await waitForPreviewPaint();
+        }
+        const snap = await requestPreviewSnapshotWithRetry(target);
+        if (!snap) throw new Error('PPTX export snapshot capture failed');
+        snapshots.push(snap);
+      }
+      return snapshots;
+    } finally {
+      if (count > 1 && target.contentWindow) {
+        target.contentWindow.postMessage({ type: 'od:slide', action: 'go', index: originalIndex }, '*');
+        void waitForDeckSlideState(target, originalIndex);
+      }
+      prepared.restore();
+    }
+  }, [
+    prepareSnapshotExportFrame,
+    previewStateKey,
+    slideState?.active,
+    slideState?.count,
+  ]);
 
   const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
     const prepareId = imageExportPrepareIdRef.current + 1;
@@ -8340,16 +8448,15 @@ function HtmlViewer({
                       role="menuitem"
                       disabled={!canPptx}
                       title={
-                        onExportAsPptx
-                          ? streaming
-                            ? t('fileViewer.exportPptxBusy')
-                            : t('fileViewer.exportPptxHint')
-                          : t('fileViewer.exportPptxNa')
+                        streaming
+                          ? t('fileViewer.exportPptxBusy')
+                          : t('fileViewer.exportPptxHint')
                       }
                       onClick={() => {
                         setDownloadMenuOpen(false);
-                        fireShareExport('pptx', () => {
-                          if (onExportAsPptx) onExportAsPptx(file.name);
+                        fireShareExport('pptx', async () => {
+                          const snapshots = await capturePptxSnapshots();
+                          exportImagePptxFromSnapshots(exportTitle, snapshots);
                         });
                       }}
                     >

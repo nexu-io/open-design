@@ -2086,7 +2086,7 @@ export const zhCN: Dict = {
   'fileViewer.exportPdf': '导出为 PDF',
   'fileViewer.exportPdfAllSlides': '导出为 PDF（全部幻灯片）',
   'fileViewer.exportPptxBusy': '请等待当前任务完成。',
-  'fileViewer.exportPptxHint': '请求代理将此设计转换为 PPTX。',
+  'fileViewer.exportPptxHint': '从预览下载高保真图片型 PPTX。',
   'fileViewer.exportPptxNa': '此处暂不支持导出 PPTX。',
   'fileViewer.exportZip': '下载为 .zip',
   'fileViewer.exportHtml': '导出为独立 HTML',

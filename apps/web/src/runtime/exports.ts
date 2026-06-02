@@ -1,5 +1,5 @@
 // Client-side export helpers used by the Share menu in the HTML viewer.
-// Four of the five formats run entirely in the browser:
+// Export formats run entirely in the browser whenever possible:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
@@ -9,12 +9,13 @@
 //            windows, vault apps, etc.). No conversion is performed — the
 //            file content is the same source the Source view shows. See
 //            issue #279.
-// PPTX export is fundamentally different — it asks the agent to convert the
-// artifact server-side, so it lives in ProjectView.tsx (not here).
+//   - PPTX : capture deck preview snapshots and package them as image-backed
+//            slides. This preserves preview fidelity and intentionally avoids
+//            asking an agent to reconstruct the design.
 
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
-import { buildZip } from './zip';
+import { buildZip, type ZipEntry } from './zip';
 import { randomUUID } from '../utils/uuid';
 import {
   captureHostPage,
@@ -471,20 +472,353 @@ export async function captureHostIframeSnapshot(
   });
 }
 
-/** Convert a data-URL to a Blob without re-encoding through canvas. */
-function dataUrlToBlob(dataUrl: string): Blob {
+function dataUrlToBytes(dataUrl: string): { mime: string; bytes: Uint8Array } {
   if (!dataUrl.startsWith('data:')) {
     throw new Error('Invalid data URL');
   }
-  const [header, base64] = dataUrl.split(',');
-  const mime = header?.match(/:(.*?);/)?.[1] ?? 'image/png';
-  const bytes = atob(base64 ?? '');
-  if (bytes.length <= 0) {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex < 0) throw new Error('Invalid data URL');
+  const header = dataUrl.slice(0, commaIndex);
+  const payload = dataUrl.slice(commaIndex + 1);
+  const mime = header.match(/^data:([^;,]+)/)?.[1] ?? 'application/octet-stream';
+  const encodedBytes = /;base64(?:;|$)/i.test(header)
+    ? atob(payload)
+    : decodeURIComponent(payload);
+  if (encodedBytes.length <= 0) {
     throw new Error('Image snapshot is empty');
   }
-  const arr = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-  return new Blob([arr], { type: mime });
+  const bytes = new Uint8Array(encodedBytes.length);
+  for (let i = 0; i < encodedBytes.length; i++) bytes[i] = encodedBytes.charCodeAt(i);
+  return { mime, bytes };
+}
+
+function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const out = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(out).set(bytes);
+  return out;
+}
+
+/** Convert a data-URL to a Blob without re-encoding through canvas. */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const { mime, bytes } = dataUrlToBytes(dataUrl);
+  return new Blob([bytesToArrayBuffer(bytes)], { type: mime });
+}
+
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const PPTX_SLIDE_WIDTH_EMU = 12_192_000;
+const PPTX_MIN_SLIDE_HEIGHT_EMU = 914_400;
+
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function imagePptxSlideHeight(snapshot: PreviewSnapshot): number {
+  if (snapshot.w <= 0 || snapshot.h <= 0) throw new Error('PPTX snapshot has invalid dimensions');
+  return Math.max(PPTX_MIN_SLIDE_HEIGHT_EMU, Math.round((PPTX_SLIDE_WIDTH_EMU * snapshot.h) / snapshot.w));
+}
+
+function fitSnapshotToSlide(snapshot: PreviewSnapshot, slideWidth: number, slideHeight: number): {
+  x: number;
+  y: number;
+  cx: number;
+  cy: number;
+} {
+  if (snapshot.w <= 0 || snapshot.h <= 0) throw new Error('PPTX snapshot has invalid dimensions');
+  const scale = Math.min(slideWidth / snapshot.w, slideHeight / snapshot.h);
+  const cx = Math.round(snapshot.w * scale);
+  const cy = Math.round(snapshot.h * scale);
+  return {
+    x: Math.round((slideWidth - cx) / 2),
+    y: Math.round((slideHeight - cy) / 2),
+    cx,
+    cy,
+  };
+}
+
+function relationshipsXml(items: Array<{ id: string; type: string; target: string }>): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${items.map((item) => `  <Relationship Id="${xmlEscape(item.id)}" Type="${xmlEscape(item.type)}" Target="${xmlEscape(item.target)}"/>`).join('\n')}
+</Relationships>`;
+}
+
+function imagePptxContentTypes(slideCount: number): string {
+  const slideOverrides = Array.from({ length: slideCount }, (_, i) =>
+    `  <Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`,
+  ).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
+  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
+  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
+${slideOverrides}
+</Types>`;
+}
+
+function imagePptxPresentationXml(slideCount: number, slideWidth: number, slideHeight: number): string {
+  const slideIds = Array.from({ length: slideCount }, (_, i) =>
+    `    <p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`,
+  ).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:sldMasterIdLst>
+    <p:sldMasterId id="2147483648" r:id="rId1"/>
+  </p:sldMasterIdLst>
+  <p:sldIdLst>
+${slideIds}
+  </p:sldIdLst>
+  <p:sldSz cx="${slideWidth}" cy="${slideHeight}" type="custom"/>
+  <p:notesSz cx="6858000" cy="9144000"/>
+  <p:defaultTextStyle/>
+</p:presentation>`;
+}
+
+function imagePptxPresentationRels(slideCount: number): string {
+  return relationshipsXml([
+    {
+      id: 'rId1',
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster',
+      target: 'slideMasters/slideMaster1.xml',
+    },
+    ...Array.from({ length: slideCount }, (_, i) => ({
+      id: `rId${i + 2}`,
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide',
+      target: `slides/slide${i + 1}.xml`,
+    })),
+  ]);
+}
+
+function imagePptxSlideXml(index: number, snapshot: PreviewSnapshot, slideWidth: number, slideHeight: number): string {
+  const fit = fitSnapshotToSlide(snapshot, slideWidth, slideHeight);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:bg>
+      <p:bgPr>
+        <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+        <a:effectLst/>
+      </p:bgPr>
+    </p:bg>
+    <p:spTree>
+      <p:nvGrpSpPr>
+        <p:cNvPr id="1" name=""/>
+        <p:cNvGrpSpPr/>
+        <p:nvPr/>
+      </p:nvGrpSpPr>
+      <p:grpSpPr>
+        <a:xfrm>
+          <a:off x="0" y="0"/>
+          <a:ext cx="${slideWidth}" cy="${slideHeight}"/>
+          <a:chOff x="0" y="0"/>
+          <a:chExt cx="${slideWidth}" cy="${slideHeight}"/>
+        </a:xfrm>
+      </p:grpSpPr>
+      <p:pic>
+        <p:nvPicPr>
+          <p:cNvPr id="2" name="Slide ${index + 1} preview"/>
+          <p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>
+          <p:nvPr/>
+        </p:nvPicPr>
+        <p:blipFill>
+          <a:blip r:embed="rId1"/>
+          <a:stretch><a:fillRect/></a:stretch>
+        </p:blipFill>
+        <p:spPr>
+          <a:xfrm>
+            <a:off x="${fit.x}" y="${fit.y}"/>
+            <a:ext cx="${fit.cx}" cy="${fit.cy}"/>
+          </a:xfrm>
+          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+        </p:spPr>
+      </p:pic>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+}
+
+function imagePptxSlideRels(index: number): string {
+  return relationshipsXml([
+    {
+      id: 'rId1',
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+      target: `../media/image${index + 1}.png`,
+    },
+    {
+      id: 'rId2',
+      type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout',
+      target: '../slideLayouts/slideLayout1.xml',
+    },
+  ]);
+}
+
+function imagePptxSlideMasterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
+  <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
+  <p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>
+</p:sldMaster>`;
+}
+
+function imagePptxSlideLayoutXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">
+  <p:cSld name="Blank">
+    <p:spTree>
+      <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sldLayout>`;
+}
+
+function imagePptxThemeXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Open Design">
+  <a:themeElements>
+    <a:clrScheme name="Open Design">
+      <a:dk1><a:srgbClr val="000000"/></a:dk1>
+      <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="1F2937"/></a:dk2>
+      <a:lt2><a:srgbClr val="F9FAFB"/></a:lt2>
+      <a:accent1><a:srgbClr val="2563EB"/></a:accent1>
+      <a:accent2><a:srgbClr val="16A34A"/></a:accent2>
+      <a:accent3><a:srgbClr val="F59E0B"/></a:accent3>
+      <a:accent4><a:srgbClr val="DC2626"/></a:accent4>
+      <a:accent5><a:srgbClr val="7C3AED"/></a:accent5>
+      <a:accent6><a:srgbClr val="0891B2"/></a:accent6>
+      <a:hlink><a:srgbClr val="2563EB"/></a:hlink>
+      <a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink>
+    </a:clrScheme>
+    <a:fontScheme name="Open Design"><a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/></a:minorFont></a:fontScheme>
+    <a:fmtScheme name="Open Design"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme>
+  </a:themeElements>
+</a:theme>`;
+}
+
+function imagePptxCoreXml(title: string, timestamp: string): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${xmlEscape(title)}</dc:title>
+  <dc:creator>Open Design</dc:creator>
+  <cp:lastModifiedBy>Open Design</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${timestamp}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${timestamp}</dcterms:modified>
+</cp:coreProperties>`;
+}
+
+function imagePptxAppXml(slideCount: number): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Open Design</Application>
+  <PresentationFormat>On-screen Show</PresentationFormat>
+  <Slides>${slideCount}</Slides>
+  <ScaleCrop>false</ScaleCrop>
+  <Company>Open Design</Company>
+</Properties>`;
+}
+
+export function buildImagePptxEntries(title: string, snapshots: PreviewSnapshot[]): ZipEntry[] {
+  if (snapshots.length <= 0) throw new Error('PPTX export needs at least one snapshot');
+  const slideHeight = imagePptxSlideHeight(snapshots[0]!);
+  const imageEntries = snapshots.map((snapshot, index): ZipEntry => {
+    if (snapshot.w <= 0 || snapshot.h <= 0) throw new Error('PPTX snapshot has invalid dimensions');
+    const { mime, bytes } = dataUrlToBytes(snapshot.dataUrl);
+    if (mime !== 'image/png') throw new Error(`PPTX export expected PNG snapshots, got ${mime}`);
+    return { path: `ppt/media/image${index + 1}.png`, content: bytes };
+  });
+  const timestamp = new Date().toISOString();
+  const safeTitle = title || 'Open Design artifact';
+
+  return [
+    { path: '[Content_Types].xml', content: imagePptxContentTypes(snapshots.length) },
+    {
+      path: '_rels/.rels',
+      content: relationshipsXml([
+        {
+          id: 'rId1',
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
+          target: 'ppt/presentation.xml',
+        },
+        {
+          id: 'rId2',
+          type: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
+          target: 'docProps/core.xml',
+        },
+        {
+          id: 'rId3',
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties',
+          target: 'docProps/app.xml',
+        },
+      ]),
+    },
+    { path: 'docProps/core.xml', content: imagePptxCoreXml(safeTitle, timestamp) },
+    { path: 'docProps/app.xml', content: imagePptxAppXml(snapshots.length) },
+    { path: 'ppt/presentation.xml', content: imagePptxPresentationXml(snapshots.length, PPTX_SLIDE_WIDTH_EMU, slideHeight) },
+    { path: 'ppt/_rels/presentation.xml.rels', content: imagePptxPresentationRels(snapshots.length) },
+    { path: 'ppt/slideMasters/slideMaster1.xml', content: imagePptxSlideMasterXml() },
+    {
+      path: 'ppt/slideMasters/_rels/slideMaster1.xml.rels',
+      content: relationshipsXml([
+        {
+          id: 'rId1',
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout',
+          target: '../slideLayouts/slideLayout1.xml',
+        },
+        {
+          id: 'rId2',
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme',
+          target: '../theme/theme1.xml',
+        },
+      ]),
+    },
+    { path: 'ppt/slideLayouts/slideLayout1.xml', content: imagePptxSlideLayoutXml() },
+    {
+      path: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
+      content: relationshipsXml([
+        {
+          id: 'rId1',
+          type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster',
+          target: '../slideMasters/slideMaster1.xml',
+        },
+      ]),
+    },
+    { path: 'ppt/theme/theme1.xml', content: imagePptxThemeXml() },
+    ...snapshots.flatMap((snapshot, index): ZipEntry[] => [
+      { path: `ppt/slides/slide${index + 1}.xml`, content: imagePptxSlideXml(index, snapshot, PPTX_SLIDE_WIDTH_EMU, slideHeight) },
+      { path: `ppt/slides/_rels/slide${index + 1}.xml.rels`, content: imagePptxSlideRels(index) },
+    ]),
+    ...imageEntries,
+  ];
+}
+
+export function buildImagePptxBlob(title: string, snapshots: PreviewSnapshot[]): Blob {
+  const zip = buildZip(buildImagePptxEntries(title, snapshots));
+  return new Blob([zip], { type: PPTX_MIME });
+}
+
+export function exportImagePptxFromSnapshots(title: string, snapshots: PreviewSnapshot[]): void {
+  const blob = buildImagePptxBlob(title, snapshots);
+  triggerDownload(blob, `${safeFilename(title, 'artifact')}.pptx`);
 }
 
 type ClipboardItemCtor = new (

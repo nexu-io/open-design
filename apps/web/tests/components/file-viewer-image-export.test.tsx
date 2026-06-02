@@ -2,16 +2,19 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import type { ProjectFile } from '../../src/types';
 
 const {
   downloadImageDataUrlMock,
+  exportImagePptxFromSnapshotsMock,
   imageDataUrlToBlobMock,
   prepareImageExportTargetMock,
   requestPreviewSnapshotMock,
   saveImageBlobMock,
 } = vi.hoisted(() => ({
   downloadImageDataUrlMock: vi.fn(),
+  exportImagePptxFromSnapshotsMock: vi.fn(),
   imageDataUrlToBlobMock: vi.fn(),
   prepareImageExportTargetMock: vi.fn(),
   requestPreviewSnapshotMock: vi.fn(),
@@ -25,6 +28,7 @@ vi.mock('../../src/runtime/exports', async () => {
   return {
     ...actual,
     downloadImageDataUrl: downloadImageDataUrlMock,
+    exportImagePptxFromSnapshots: exportImagePptxFromSnapshotsMock,
     imageDataUrlToBlob: imageDataUrlToBlobMock,
     prepareImageExportTarget: prepareImageExportTargetMock,
     requestPreviewSnapshot: requestPreviewSnapshotMock,
@@ -53,19 +57,39 @@ function htmlFile(): ProjectFile {
   };
 }
 
-function renderHtmlPreview() {
+function deckFile(): ProjectFile {
+  return {
+    ...htmlFile(),
+    name: 'deck.html',
+    path: 'deck.html',
+    artifactManifest: {
+      version: 1,
+      kind: 'deck',
+      title: 'Deck',
+      entry: 'deck.html',
+      renderer: 'deck-html',
+      exports: ['html', 'pptx'],
+    },
+  };
+}
+
+function renderHtmlPreview(file: ProjectFile = htmlFile(), props: Partial<ComponentProps<typeof FileViewer>> = {}) {
   const view = render(
     <FileViewer
       projectId="project-1"
       projectKind="prototype"
-      file={htmlFile()}
+      file={file}
       liveHtml="<html><body><main>Workspace</main></body></html>"
+      {...props}
     />,
   );
   const { container } = view;
   const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-  expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
-  const srcDocFrame = container.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]');
+  if (file.artifactManifest?.renderer !== 'deck-html') {
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+  }
+  const srcDocFrame =
+    container.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]') ?? activeFrame;
   expect(srcDocFrame).toBeTruthy();
   fireEvent.load(srcDocFrame as HTMLIFrameElement);
   return { ...view, activeFrame, srcDocFrame: srcDocFrame as HTMLIFrameElement };
@@ -311,5 +335,23 @@ describe('FileViewer image export', () => {
     expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'png');
     expect(prepareImageExportTargetMock).not.toHaveBeenCalled();
     expect(saveImageBlobMock).not.toHaveBeenCalled();
+  });
+
+  it('exports deck PPTX directly from preview snapshots without sending an agent task', async () => {
+    const snapshot = {
+      dataUrl: 'data:image/png;base64,ok',
+      w: 1600,
+      h: 900,
+    };
+    requestPreviewSnapshotMock.mockResolvedValueOnce(snapshot);
+
+    const { srcDocFrame } = renderHtmlPreview(deckFile(), { isDeck: true });
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /export as pptx/i }));
+
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame);
+      expect(exportImagePptxFromSnapshotsMock).toHaveBeenCalledWith('deck', [snapshot]);
+    });
   });
 });

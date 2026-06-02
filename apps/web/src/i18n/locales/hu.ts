@@ -2086,7 +2086,8 @@ export const hu: Dict = {
   'fileViewer.exportPdf': 'Exportálás PDF-ként',
   'fileViewer.exportPdfAllSlides': 'Exportálás PDF-ként (minden dia)',
   'fileViewer.exportPptxBusy': 'Várj, amíg az aktuális kör befejeződik.',
-  'fileViewer.exportPptxHint': 'Küldj kérést az ügynöknek, hogy alakítsa át ezt a designt PPTX-szé.',
+  'fileViewer.exportPptxHint':
+    'Nagy hűségű, képalapú PPTX letöltése az előnézetből.',
   'fileViewer.exportPptxNa': 'A PPTX export itt nem elérhető.',
   'fileViewer.exportZip': 'Letöltés .zip-ként',
   'fileViewer.exportHtml': 'Exportálás önálló HTML-ként',

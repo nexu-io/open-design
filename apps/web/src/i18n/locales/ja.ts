@@ -2086,7 +2086,8 @@ export const ja: Dict = {
   'fileViewer.exportPdf': 'PDFとしてエクスポート',
   'fileViewer.exportPdfAllSlides': 'PDFとしてエクスポート（全スライド）',
   'fileViewer.exportPptxBusy': '現在のターンが終わるまでお待ちください。',
-  'fileViewer.exportPptxHint': 'エージェントにこのデザインを PPTX に変換するようリクエストを送信します。',
+  'fileViewer.exportPptxHint':
+    'プレビューから高忠実度の画像ベース PPTX をダウンロードします。',
   'fileViewer.exportPptxNa': 'ここでは PPTX エクスポートは利用できません。',
   'fileViewer.exportZip': '.zip としてダウンロード',
   'fileViewer.exportHtml': 'スタンドアロン HTML としてエクスポート',

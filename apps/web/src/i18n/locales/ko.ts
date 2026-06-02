@@ -2086,7 +2086,8 @@ export const ko: Dict = {
   'fileViewer.exportPdf': 'PDF로 내보내기',
   'fileViewer.exportPdfAllSlides': 'PDF로 내보내기 (모든 슬라이드)',
   'fileViewer.exportPptxBusy': '현재 작업이 끝날 때까지 기다려 주세요.',
-  'fileViewer.exportPptxHint': '이 디자인을 PPTX로 변환하도록 에이전트에 요청합니다.',
+  'fileViewer.exportPptxHint':
+    '미리보기에서 고충실도 이미지 기반 PPTX를 다운로드합니다.',
   'fileViewer.exportPptxNa': '이곳에서는 PPTX 내보내기를 할 수 없습니다.',
   'fileViewer.exportZip': '.zip으로 다운로드',
   'fileViewer.exportHtml': '독립 실행형 HTML로 내보내기',

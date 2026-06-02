@@ -6,6 +6,8 @@ import {
   buildDesignHandoffContent,
   buildDesignManifestContent,
   downloadImageDataUrl,
+  buildImagePptxBlob,
+  buildImagePptxEntries,
   buildSandboxedPreviewDocument,
   exportAsImage,
   exportAsMd,
@@ -747,6 +749,51 @@ describe('requestPreviewSnapshot', () => {
     const result = await promise;
     expect(result).toBeNull();
     vi.useRealTimers();
+  });
+});
+
+describe('image-based PPTX export', () => {
+  const transparentPng =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  it('builds a PPTX package that embeds one preview PNG per slide', async () => {
+    const entries = buildImagePptxEntries('Quarterly & Plan', [
+      { dataUrl: transparentPng, w: 1600, h: 900 },
+      { dataUrl: transparentPng, w: 1600, h: 900 },
+    ]);
+
+    const paths = entries.map((entry) => entry.path);
+    expect(paths).toContain('[Content_Types].xml');
+    expect(paths).toContain('ppt/presentation.xml');
+    expect(paths).toContain('ppt/slides/slide1.xml');
+    expect(paths).toContain('ppt/slides/slide2.xml');
+    expect(paths).toContain('ppt/slides/_rels/slide1.xml.rels');
+    expect(paths).toContain('ppt/media/image1.png');
+    expect(paths).toContain('ppt/media/image2.png');
+
+    const presentation = entries.find((entry) => entry.path === 'ppt/presentation.xml')?.content;
+    expect(presentation).toContain('<p:sldId id="256" r:id="rId2"/>');
+    expect(presentation).toContain('<p:sldId id="257" r:id="rId3"/>');
+
+    const slide = entries.find((entry) => entry.path === 'ppt/slides/slide1.xml')?.content;
+    expect(slide).toContain('<p:pic>');
+    expect(slide).toContain('<a:blip r:embed="rId1"/>');
+    expect(slide).toContain('<a:ext cx="12192000" cy="6858000"/>');
+
+    const rels = entries.find((entry) => entry.path === 'ppt/slides/_rels/slide1.xml.rels')?.content;
+    expect(rels).toContain('Target="../media/image1.png"');
+
+    const image = entries.find((entry) => entry.path === 'ppt/media/image1.png')?.content;
+    expect(image).toBeInstanceOf(Uint8Array);
+    expect(Array.from((image as Uint8Array).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  });
+
+  it('returns a PPTX typed Blob', () => {
+    const blob = buildImagePptxBlob('Quarterly Plan', [
+      { dataUrl: transparentPng, w: 1600, h: 900 },
+    ]);
+
+    expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation');
   });
 });
 

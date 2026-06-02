@@ -2086,7 +2086,8 @@ export const ptBR: Dict = {
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todos os slides)',
   'fileViewer.exportPptxBusy': 'Aguarde o turno atual terminar.',
-  'fileViewer.exportPptxHint': 'Envie uma solicitação ao agente para converter este design em PPTX.',
+  'fileViewer.exportPptxHint':
+    'Baixe um PPTX de alta fidelidade baseado em imagens a partir da prévia.',
   'fileViewer.exportPptxNa': 'Exportação PPTX não está disponível aqui.',
   'fileViewer.exportZip': 'Baixar como .zip',
   'fileViewer.exportHtml': 'Exportar como HTML independente',

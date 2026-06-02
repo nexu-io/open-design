@@ -109,7 +109,6 @@ interface Props {
   filesRefreshKey?: number;
   onRefreshFiles: () => Promise<void> | void;
   isDeck: boolean;
-  onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
@@ -361,7 +360,6 @@ export function FileWorkspace({
   filesRefreshKey = 0,
   onRefreshFiles,
   isDeck,
-  onExportAsPptx,
   streaming,
   commentQueueOnSend = false,
   commentSendDisabled = false,
@@ -2273,7 +2271,6 @@ export function FileWorkspace({
             file={activeFile}
             filesRefreshKey={filesRefreshKey}
             isDeck={isDeck}
-            onExportAsPptx={onExportAsPptx}
             streaming={streaming}
             commentQueueOnSend={commentQueueOnSend}
             commentSendDisabled={commentSendDisabled}
