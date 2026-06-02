@@ -137,6 +137,7 @@ import {
   mergeAttachedComments,
   removeAttachedComment,
 } from '../comments';
+import { filterImplicitProducedFiles } from '../produced-files';
 import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
@@ -2110,7 +2111,7 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
-                const diff = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+                const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 if (produced.length > 0) {
                   updateMessageById(
@@ -2669,7 +2670,7 @@ export function ProjectView({
               await persistArtifact(parsedArtifact, nextFiles);
               nextFiles = await refreshProjectFiles();
             }
-            const produced = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+            const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
@@ -4949,7 +4950,7 @@ export function computeProducedFiles(
 ): ProjectFile[] | undefined {
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
-  return next.filter((f) => !set.has(f.name));
+  return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
 }
 
 // Reattach with a recovered (on-disk) artifact must still include any
