@@ -366,15 +366,16 @@
   font-weight: 600;
 }
 .assistant-identity {
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
+  display: inline-flex;
   align-items: center;
-  column-gap: 4px;
   min-width: 0;
   max-width: 100%;
+  line-height: 1;
 }
 .assistant-identity-icon {
+  flex: 0 0 auto;
+  display: block;
+  margin-right: 6px;
   color: currentColor;
   opacity: 0.82;
 }
@@ -384,11 +385,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
 }
 .assistant-identity-separator,
 .assistant-identity-model {
   color: var(--text-muted);
   font-weight: 550;
+}
+.assistant-identity-separator {
+  flex: 0 0 auto;
+  margin: 0 5px;
 }
 .msg-time {
   color: var(--text-faint);
