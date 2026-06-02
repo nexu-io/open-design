@@ -13,7 +13,12 @@ import { useT } from '../i18n';
 import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
 import type { AgentEvent } from '../types';
-import { Icon } from './Icon';
+import {
+  ChatDisclosure,
+  ChatSurface,
+  ChatSurfaceHeader,
+  type ChatSurfaceStatus as ChatSurfaceStatusType,
+} from './chat/ChatSurface';
 
 interface Props {
   use: Extract<AgentEvent, { kind: 'tool_use' }>;
@@ -484,32 +489,22 @@ function FileWriteCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string; content?: string };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
   const baseName = file.split('/').pop() ?? file;
   const lines = typeof obj.content === 'string' ? obj.content.split('\n').length : null;
-  const isRunning = runStreaming && !result;
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-file">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.write')}</span>
-        <span className="op-meta">{baseName}{lines !== null ? ` · ${t('tool.lines', { n: lines })}` : ''}</span>
-        <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
-            <code className="op-path">{file}</code>
-            <OpenInTabButton filePath={file} ctx={ctx} />
-          </div>
-        </div>
-      </div>
+    <ChatSurface className="op-card op-file" tone={status.tone}>
+      <ChatSurfaceHeader
+        icon="plus"
+        title={t('tool.write')}
+        meta={<><span>{baseName}</span>{lines !== null ? <span>{t('tool.lines', { n: lines })}</span> : null}</>}
+        status={status}
+        trailing={<OpenInTabButton filePath={file} ctx={ctx} />}
+      />
       <FileErrorDetail result={result} />
-    </div>
+    </ChatSurface>
   );
 }
 
@@ -527,7 +522,6 @@ function FileEditCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const obj = (input ?? {}) as {
     file_path?: string;
     filePath?: string;
@@ -539,27 +533,18 @@ function FileEditCard({
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
   const baseName = file.split('/').pop() ?? file;
   const editCount = Array.isArray(obj.edits) ? obj.edits.length : 1;
-  const isRunning = runStreaming && !result;
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-file">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.edit')}</span>
-        <span className="op-meta">{baseName} · {editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span>
-        <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
-            <code className="op-path">{file}</code>
-            <OpenInTabButton filePath={file} ctx={ctx} />
-          </div>
-        </div>
-      </div>
+    <ChatSurface className="op-card op-file" tone={status.tone}>
+      <ChatSurfaceHeader
+        icon="pencil"
+        title={t('tool.edit')}
+        meta={<><span>{baseName}</span><span>{editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span></>}
+        status={status}
+        trailing={<OpenInTabButton filePath={file} ctx={ctx} />}
+      />
       <FileErrorDetail result={result} />
-    </div>
+    </ChatSurface>
   );
 }
 
@@ -577,31 +562,21 @@ function FileReadCard({
   ctx: FileToolCtx;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
   const baseName = file.split('/').pop() ?? file;
-  const isRunning = runStreaming && !result;
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-file">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.read')}</span>
-        <span className="op-meta">{baseName}</span>
-        <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
-            <code className="op-path">{file}</code>
-            <OpenInTabButton filePath={file} ctx={ctx} />
-          </div>
-        </div>
-      </div>
+    <ChatSurface className="op-card op-file" tone={status.tone}>
+      <ChatSurfaceHeader
+        icon="external-link"
+        title={t('tool.read')}
+        meta={<span>{baseName}</span>}
+        status={status}
+        trailing={<OpenInTabButton filePath={file} ctx={ctx} />}
+      />
       <FileErrorDetail result={result} />
-    </div>
+    </ChatSurface>
   );
 }
 
@@ -610,57 +585,51 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   const obj = (input ?? {}) as { command?: string; description?: string };
   const command = obj.command ?? '';
   const desc = obj.description;
-  const [open, setOpen] = useState(false);
-  const isRunning = runStreaming && !result;
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-bash">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.bash')}</span>
-        {desc ? <span className="op-meta op-desc">{desc}</span> : null}
-        <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
-            <pre className="op-command">{truncate(command, 400)}</pre>
-            {result?.content ? (
-              <pre className="op-output">{truncate(result.content, 4000)}</pre>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
+    <ChatDisclosure
+      className="op-card op-bash"
+      iconNode="$"
+      title={t('tool.bash')}
+      meta={<span className="op-desc">{desc || truncate(command, 160)}</span>}
+      status={status}
+      tone={status.tone}
+    >
+      <pre className="op-command">{truncate(command, 400)}</pre>
+      {result?.content ? <pre className="op-output">{truncate(result.content, 4000)}</pre> : null}
+    </ChatDisclosure>
   );
 }
 
 function GlobCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { pattern?: string; path?: string };
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-search">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{t('tool.glob')}</span>
-        <span className="op-meta">{obj.pattern ?? '*'}{obj.path ? ` in ${obj.path}` : ''}</span>
-      </div>
-    </div>
+    <ChatSurface className="op-card op-search" tone={status.tone}>
+      <ChatSurfaceHeader
+        icon="search"
+        title={t('tool.glob')}
+        meta={<><code className="op-path">{obj.pattern ?? '*'}</code>{obj.path ? <span>{t('tool.in', { path: obj.path })}</span> : null}</>}
+        status={status}
+      />
+    </ChatSurface>
   );
 }
 
 function GrepCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
   const obj = (input ?? {}) as { pattern?: string; path?: string; glob?: string };
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-search">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{t('tool.grep')}</span>
-        <span className="op-meta">{obj.pattern ?? ''}{obj.path ? ` in ${obj.path}` : ''}</span>
-      </div>
-    </div>
+    <ChatSurface className="op-card op-search" tone={status.tone}>
+      <ChatSurfaceHeader
+        icon="search"
+        title={t('tool.grep')}
+        meta={<><code className="op-path">{obj.pattern ?? ''}</code>{obj.path ? <span>{t('tool.in', { path: obj.path })}</span> : null}</>}
+        status={status}
+      />
+    </ChatSurface>
   );
 }
 
@@ -668,13 +637,9 @@ function WebFetchCard({ input }: { input: unknown }) {
   const t = useT();
   const obj = (input ?? {}) as { url?: string };
   return (
-    <div className="op-card op-web">
-      <div className="op-card-head">
-        <span className="op-status op-status-ok"><Icon name="check" size={14} /></span>
-        <span className="op-title">{t('tool.fetch')}</span>
-        <span className="op-meta">{obj.url ?? ''}</span>
-      </div>
-    </div>
+    <ChatSurface className="op-card op-web">
+      <ChatSurfaceHeader icon="download" title={t('tool.fetch')} meta={<code className="op-path">{obj.url ?? ''}</code>} />
+    </ChatSurface>
   );
 }
 
@@ -682,13 +647,9 @@ function WebSearchCard({ input }: { input: unknown }) {
   const t = useT();
   const obj = (input ?? {}) as { query?: string };
   return (
-    <div className="op-card op-web">
-      <div className="op-card-head">
-        <span className="op-status op-status-ok"><Icon name="check" size={14} /></span>
-        <span className="op-title">{t('tool.search')}</span>
-        <span className="op-meta">{obj.query ?? ''}</span>
-      </div>
-    </div>
+    <ChatSurface className="op-card op-web">
+      <ChatSurfaceHeader icon="search" title={t('tool.search')} meta={<code className="op-path">{obj.query ?? ''}</code>} />
+    </ChatSurface>
   );
 }
 
@@ -706,23 +667,25 @@ function GenericCard({
   runSucceeded: boolean;
 }) {
   const summary = describeInput(input);
+  const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
-    <div className="op-card op-generic">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{name}</span>
-        {summary ? <span className="op-meta">{truncate(summary, 200)}</span> : null}
-      </div>
-    </div>
+    <ChatSurface className="op-card op-generic" tone={status.tone}>
+      <ChatSurfaceHeader
+        iconNode="·"
+        title={name}
+        meta={summary ? truncate(summary, 200) : null}
+        status={status}
+      />
+    </ChatSurface>
   );
 }
 
-function ResultBadge({ result, runStreaming, runSucceeded }: { result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
+function useToolStatus(result: Props['result'] | undefined, runStreaming: boolean, runSucceeded: boolean): ChatSurfaceStatusType {
   const t = useT();
-  if (!result && runStreaming) return <span className="op-status op-status-running" title={t('tool.running')}><Icon name="spinner" size={14} /></span>;
-  if (!result && !runSucceeded) return <span className="op-status op-status-error" title={t('tool.error')}><Icon name="close" size={14} /></span>;
-  if (result?.isError) return <span className="op-status op-status-error" title={result.content || t('tool.error')}><Icon name="close" size={14} /></span>;
-  return <span className="op-status op-status-ok" title={t('tool.done')}><Icon name="check" size={14} /></span>;
+  if (!result && runStreaming) return { label: t('tool.running'), tone: 'running' };
+  if (!result && !runSucceeded) return { label: t('tool.error'), tone: 'error' };
+  if (result?.isError) return { label: t('tool.error'), tone: 'error' };
+  return { label: t('tool.done'), tone: 'done' };
 }
 
 function FileErrorDetail({ result }: { result?: Props['result'] }) {

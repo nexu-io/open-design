@@ -117,16 +117,20 @@
 .op-meta { color: var(--text-muted); font-size: 11.5px; }
 .op-desc { font-style: italic; }
 .op-path {
-  background: var(--bg-fill-tertiary);
-  padding: 1px 6px;
-  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
   font-size: 11px;
   font-family: var(--mono);
-  color: var(--text);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: min(220px, 100%);
+}
+.chat-surface-meta .op-path + span,
+.chat-surface-meta span + .op-path {
+  margin-left: 6px;
 }
 .op-status {
   width: 24px;
@@ -156,16 +160,17 @@
 }
 .op-open {
   font-size: 10.5px;
-  padding: 2px 8px;
-  border: none;
-  border-radius: 6px;
-  background: none;
+  min-height: 28px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
 }
 .op-open:hover {
-  background: var(--bg-fill-tertiary);
-  color: var(--text);
+  background: transparent;
+  color: var(--accent);
 }
 
 .produced-files {
