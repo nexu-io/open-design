@@ -79,7 +79,6 @@ export function FileOpsSummary({
       icon="file"
       title={t('assistant.producedFiles')}
       meta={summaryParts.join(' · ')}
-      status={{ label: String(entries.length), tone: streaming ? 'running' : 'neutral' }}
       tone={streaming ? 'running' : 'neutral'}
       open={open}
       onOpenChange={(nextOpen) => {

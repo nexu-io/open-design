@@ -1639,7 +1639,6 @@ function ProducedFiles({
       className="produced-files"
       icon="file"
       title={t("assistant.producedFiles")}
-      status={{ label: String(files.length), tone: "done" }}
     >
       <div className="produced-files-list">
         {files.map((f) => (

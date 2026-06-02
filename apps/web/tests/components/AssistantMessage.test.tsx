@@ -575,7 +575,7 @@ describe('AssistantMessage question forms', () => {
 
 describe('AssistantMessage recovered produced files', () => {
   it('shows files modified during a sparse completed assistant turn', () => {
-    render(
+    const { container } = render(
       <AssistantMessage
         message={baseMessage({
           content: '',
@@ -601,6 +601,8 @@ describe('AssistantMessage recovered produced files', () => {
     );
 
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
+    const producedFiles = container.querySelector('.chat-surface.produced-files');
+    expect(producedFiles?.querySelector('.chat-surface-status')).toBeNull();
   });
 
   it('does not infer user sketches as turn output files', () => {

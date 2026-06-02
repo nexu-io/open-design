@@ -28,7 +28,7 @@ describe('FileOpsSummary', () => {
   });
 
   it('starts collapsed while streaming and surfaces per-op totals in the header', () => {
-    render(
+    const { container } = render(
       <FileOpsSummary
         entries={[
           entry({ path: 'a.ts', ops: ['read'], opCounts: { read: 2, write: 0, edit: 0 }, total: 2 }),
@@ -42,6 +42,7 @@ describe('FileOpsSummary', () => {
     expect(screen.getByText(/Write 1/)).toBeTruthy();
     expect(screen.getByText(/Edit 3/)).toBeTruthy();
     expect(screen.getByText(/Read 2/)).toBeTruthy();
+    expect(container.querySelector('.chat-surface-status')).toBeNull();
     // While streaming we collapse the file list so the running row stays
     // compact. The body stays mounted for exit animation, but is hidden
     // from the accessibility tree while closed.
