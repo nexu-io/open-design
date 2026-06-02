@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { AgentEvent, ChatMessage } from '../../src/types';
@@ -91,8 +91,13 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.action-card-toggle.running')).toBeNull();
-    expect(container.querySelector('.op-status-ok, .action-card-status.op-status-ok')).not.toBeNull();
+    const group = container.querySelector('.chat-surface.action-card');
+    expect(group?.classList.contains('is-done')).toBe(true);
+    expect(group?.classList.contains('is-running')).toBe(false);
+    expect(group?.querySelector('.chat-surface-title')?.textContent).toBe('Running ×2');
+    expect(group?.querySelector('.chat-surface-title')?.textContent).not.toMatch(/done/i);
+    expect(group?.querySelector('.chat-surface-status')?.textContent).toMatch(/^done$/i);
+    expect(screen.getByRole('button', { name: /Running ×2\s*done/i })).toBeTruthy();
   });
 
   it('does not show Done when a failed run is missing a tool result', () => {

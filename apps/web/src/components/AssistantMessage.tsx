@@ -2488,7 +2488,7 @@ function ToolGroupCard({
       icon={summary.icon}
       title={summary.title}
       status={summary.status}
-      tone={running ? "running" : hasError ? "error" : "done"}
+      tone={summary.status?.tone ?? (running ? "running" : "neutral")}
     >
       <div className="action-card-body">
         {items.map((it, i) => (
