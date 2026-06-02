@@ -38,7 +38,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-ok')).not.toBeNull();
+    expect(container.querySelector('.op-status-ok')).toBeNull();
     expect(container.querySelector('.op-status-running')).toBeNull();
   });
 
@@ -63,7 +63,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-ok')).not.toBeNull();
+    expect(container.querySelector('.op-status-ok')).toBeNull();
     expect(container.querySelector('.op-status-running')).toBeNull();
   });
 
@@ -96,8 +96,8 @@ describe('AssistantMessage tool status', () => {
     expect(group?.classList.contains('is-running')).toBe(false);
     expect(group?.querySelector('.chat-surface-title')?.textContent).toBe('Running ×2');
     expect(group?.querySelector('.chat-surface-title')?.textContent).not.toMatch(/done/i);
-    expect(group?.querySelector('.chat-surface-status')?.textContent).toMatch(/^done$/i);
-    expect(screen.getByRole('button', { name: /Running ×2\s*done/i })).toBeTruthy();
+    expect(group?.querySelector('.chat-surface-status')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Running ×2$/i })).toBeTruthy();
   });
 
   it('does not show Done when a failed run is missing a tool result', () => {

@@ -72,6 +72,7 @@ export function ChatSurfaceHeader({
 
 export function ChatSurfaceStatus({ status }: { status: ChatSurfaceStatus }) {
   const tone = status.tone ?? 'neutral';
+  if (tone === 'done' && status.label.trim().toLowerCase() === 'done') return null;
   const legacyTone =
     tone === 'done' ? 'ok' : tone === 'running' ? 'running' : tone === 'error' ? 'error' : tone;
   return (

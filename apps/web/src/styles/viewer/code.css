@@ -981,14 +981,20 @@
 }
 .chat-disclosure-toggle:hover {
   background: transparent;
+  box-shadow: none;
 }
 .chat-disclosure-toggle:hover .chat-surface-title,
 .chat-disclosure-toggle:hover .chat-surface-chevron {
   color: var(--text-muted);
 }
 .chat-disclosure-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--purple) 42%, transparent);
-  outline-offset: -2px;
+  outline: 0;
+  box-shadow: none;
+}
+.chat-disclosure-toggle:focus-visible .chat-surface-title {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 .chat-surface.is-running .chat-surface-icon {
   color: var(--accent);
