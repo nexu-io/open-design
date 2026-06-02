@@ -395,11 +395,10 @@
   align-items: center;
   gap: 4px;
   padding: 3px 6px;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 12px;
   min-width: 0;
 }
-.file-ops-row:hover { background: var(--bg-subtle); }
 .file-ops-row--running { color: var(--text); }
 .file-ops-row--error { color: var(--text); }
 .file-ops-row-badges {
@@ -458,12 +457,21 @@
 .file-ops-row-path-button {
   text-align: left;
   cursor: pointer;
+  border-radius: 0;
+}
+.file-ops-row-path-button:hover,
+.file-ops-row-path-button:focus,
+.file-ops-row-path-button:focus-visible {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
 }
 .file-ops-row-path-button:hover {
   color: var(--accent);
 }
 .file-ops-row-path-button:focus-visible {
-  outline: none;
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -487,15 +495,19 @@
   width: 20px;
   height: 20px;
   color: var(--text-muted);
-  border-radius: 5px;
+  border-radius: 0;
   flex-shrink: 0;
 }
-.file-ops-row-action:hover {
-  color: var(--text);
-}
+.file-ops-row-action:hover,
+.file-ops-row-action:focus,
 .file-ops-row-action:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 2px;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+.file-ops-row-action:hover,
+.file-ops-row-action:focus-visible {
+  color: var(--text);
 }
 .file-ops-row-status {
   font-size: 10.5px;
