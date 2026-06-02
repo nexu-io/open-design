@@ -977,19 +977,22 @@
   border: 0;
   color: inherit;
   cursor: pointer;
+  outline: 0;
   text-align: left;
+  -webkit-tap-highlight-color: transparent;
 }
-.chat-disclosure-toggle:hover {
-  background: transparent;
-  box-shadow: none;
+.chat-disclosure-toggle:hover,
+.chat-disclosure-toggle:active,
+.chat-disclosure-toggle:focus,
+.chat-disclosure-toggle:focus-visible {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
 }
 .chat-disclosure-toggle:hover .chat-surface-title,
 .chat-disclosure-toggle:hover .chat-surface-chevron {
   color: var(--text-muted);
-}
-.chat-disclosure-toggle:focus-visible {
-  outline: 0;
-  box-shadow: none;
 }
 .chat-disclosure-toggle:focus-visible .chat-surface-title {
   text-decoration: underline;
