@@ -111,6 +111,12 @@ Every user-facing capability must be reachable through both the web UI **and** t
 - For bug-fix PRs, link the red-spec test that reproduces the bug and confirm it went red on `main` and green on the branch, per the `Bug follow-up workflow` section above.
 - `CONTRIBUTING.md` covers PR scope, title format, dependency policy, and the issue-first rule for non-trivial features; `docs/code-review-guidelines.md` is the reviewer-facing complement.
 
+## PR title and body language
+
+- All PR titles, descriptions, and review comments on this repository are **English-only**, matching `.github/pull_request_template.md` and the convention in the merged-PR history (`nexu-io/open-design`). Do not write PR bodies in Chinese (or any other language) even when the change touches a feature that is otherwise zh-CN-oriented in product copy — user-facing product strings stay in 19 locales, but the PR description itself stays in English so reviewers and tooling (Dependabot, CODEOWNERS, semantic-release commit parsers) can process it uniformly.
+- The exception is local commit messages, which may use the developer's working language for the subject line. PR titles on GitHub, however, must always be English.
+- When referencing internal terminology that has no clean English equivalent, use the English term the codebase uses (search `apps/` and `packages/` for prior art) and footnote the original in parentheses on first use.
+
 ## Code review guide
 
 - Use `docs/code-review-guidelines.md` as the repository-wide review standard. That document is the operational guide; this `AGENTS.md` is the source of truth when the two disagree.
