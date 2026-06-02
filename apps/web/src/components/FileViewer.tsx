@@ -9435,11 +9435,15 @@ function HtmlViewer({
     };
   }
 
-  function displayDevDefaultSharedWithFromForm() {
+  function displayDevSharedWithFromForm() {
     return displayDevSharedWith
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+  }
+
+  function displayDevDefaultSharedWithFromForm() {
+    return displayDevVisibility === 'private' ? displayDevSharedWithFromForm() : [];
   }
 
   function displayDevDefaultsChanged() {
@@ -9447,12 +9451,15 @@ function HtmlViewer({
     const config = deployConfig?.displayDev;
     const sharedWith = displayDevDefaultSharedWithFromForm();
     const configSharedWith = config?.defaultSharedWith || [];
+    const comparesSharedWith = displayDevVisibility === 'private' || config?.defaultVisibility === 'private';
     return (
       displayDevArtifactName.trim() !== (config?.defaultArtifactName || '') ||
       displayDevVisibility !== (config?.defaultVisibility || 'company') ||
       displayDevShowBranding !== (config?.defaultShowBranding || 'inherit') ||
-      sharedWith.length !== configSharedWith.length ||
-      sharedWith.some((item, index) => item !== configSharedWith[index])
+      (comparesSharedWith && (
+        sharedWith.length !== configSharedWith.length ||
+        sharedWith.some((item, index) => item !== configSharedWith[index])
+      ))
     );
   }
 
@@ -14235,19 +14242,20 @@ function HtmlViewer({
       currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
       currentDeployment.displayDev?.mode === 'authenticated';
     const name = displayDevArtifactName.trim();
-    const sharedWith = displayDevDefaultSharedWithFromForm();
+    const sharedWith = displayDevSharedWithFromForm();
     if (!isAuthenticatedUpdate) {
-      return {
+      const selection: WebDisplayDevDeploySelection = {
         name,
         visibility: displayDevVisibility,
-        sharedWith,
         showBranding: displayDevShowBranding,
       };
+      if (displayDevVisibility === 'private') selection.sharedWith = sharedWith;
+      return selection;
     }
     const selection: WebDisplayDevDeploySelection = {};
     if (displayDevDeployTouched.name && name) selection.name = name;
     if (displayDevDeployTouched.visibility) selection.visibility = displayDevVisibility;
-    if (displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
+    if (displayDevVisibility === 'private' && displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
     if (displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
     return Object.keys(selection).length > 0 ? selection : undefined;
   }
@@ -18341,7 +18349,11 @@ function HtmlViewer({
                       <select
                         value={displayDevVisibility}
                         onChange={(e) => {
-                          setDisplayDevVisibility(e.target.value as 'public' | 'company' | 'private');
+                          const nextVisibility = e.target.value as 'public' | 'company' | 'private';
+                          setDisplayDevVisibility(nextVisibility);
+                          if (nextVisibility !== 'private') {
+                            setDisplayDevSharedWith('');
+                          }
                           setDisplayDevDeployTouched((current) => ({ ...current, visibility: true }));
                         }}
                       >
