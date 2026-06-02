@@ -13,9 +13,11 @@
   .hub-cards{display:grid;grid-template-columns:repeat(3, 1fr);gap:18px;margin-top:64px;padding-top:48px;border-top:1px solid var(--line)}
   .hub-card{background:var(--bone);border:1px solid var(--line-soft);border-radius:16px;padding:36px 32px 30px;display:flex;flex-direction:column;gap:14px;text-decoration:none;color:inherit;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;position:relative;overflow:hidden;min-height:240px}
   .hub-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--coral)}
-  .hub-card .ord{font:500 12px/1 var(--mono);letter-spacing:.22em;color:var(--coral);text-transform:uppercase}
-  .hub-card h3{font:500 32px/1.05 var(--serif);letter-spacing:-.005em;color:var(--ink);margin:0}
-  .hub-card h3 em{color:var(--coral);font-style:italic}
+  .hub-card .ord{font:600 12px/1 var(--mono);letter-spacing:.22em;color:var(--coral);text-transform:uppercase}
+  .hub-card h3{font:500 44px/1 var(--serif);letter-spacing:-.01em;margin:0;background:linear-gradient(120deg, var(--ink) 0%, var(--ink) 50%, var(--coral) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hub-card h3 em{font-style:italic}
+  .hub-card .hub-sub{font:500 italic 18px/1.3 var(--serif);color:var(--ink-soft);margin:-2px 0 4px;letter-spacing:-.005em}
+  .hub-card .hub-sub em{font-style:italic;color:var(--coral)}
   .hub-card p{font:400 14.5px/1.55 var(--body);color:var(--ink-mute);margin:0;flex-grow:1}
   .hub-card .hub-arrow{font:400 22px/1 var(--serif);color:var(--ink-mute);align-self:flex-end;transition:color .15s,transform .15s}
   .hub-card:hover .hub-arrow{color:var(--coral);transform:translateX(4px)}
@@ -77,20 +79,23 @@
   <div class="wrap">
     <div class="hub-cards">
       <a class="hub-card" href="/community/contributors/">
-        <span class="ord">I · Contributors</span>
-        <h3>The hands that <em>ship</em> the work.</h3>
+        <span class="ord">I</span>
+        <h3>Contributors</h3>
+        <p class="hub-sub">The hands that <em>ship</em> the work.</p>
         <p>Maintainers, weekly leaderboards, the all-time roll, and the open issues you can claim today. Plus the zero-code path for non-coders to send their first piece into the registry.</p>
         <span class="hub-arrow">→</span>
       </a>
       <a class="hub-card" href="/community/ambassadors/">
-        <span class="ord">II · Ambassadors</span>
-        <h3>Open Design's <em>voice</em> in your city.</h3>
+        <span class="ord">II</span>
+        <h3>Ambassadors</h3>
+        <p class="hub-sub">Open Design's <em>voice</em> in your city.</p>
         <p>Open a local atelier. Convene the meetups, the demos, the late-night critiques. Backed with budget, materials, and a private channel to the core team.</p>
         <span class="hub-arrow">→</span>
       </a>
       <a class="hub-card" href="/community/moderators/">
-        <span class="ord">III · Moderators</span>
-        <h3>The room where <em>contributors</em> hang out.</h3>
+        <span class="ord">III</span>
+        <h3>Moderators</h3>
+        <p class="hub-sub">The room where <em>contributors</em> hang out.</p>
         <p>The front line of the agent-design era. Discord is where the world's sharpest AI-native designers gather. Meet the stewards keeping the room warm.</p>
         <span class="hub-arrow">→</span>
       </a>
