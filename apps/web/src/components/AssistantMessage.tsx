@@ -423,7 +423,7 @@ function AssistantMessageImpl({
   const persistedBlocks = stripTodoToolGroups(
     stripEmptyThinkingBlocks(
       suppressDuplicateQuestionForms(
-        suppressAskUserQuestionFallbackText(buildBlocks(events)),
+        suppressAskUserQuestionFallbackText(buildBlocks(events, { streaming })),
       ),
     ),
   );
@@ -2726,7 +2726,10 @@ function suppressAskUserQuestionFallbackText(blocks: Block[]): Block[] {
   return filtered;
 }
 
-function buildBlocks(events: AgentEvent[]): Block[] {
+function buildBlocks(
+  events: AgentEvent[],
+  options: { streaming?: boolean } = {},
+): Block[] {
   const out: Block[] = [];
   const resultByToolId = new Map<
     string,
@@ -2839,7 +2842,11 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
   }
-  flushThinkingCandidateAsText();
+  if (options.streaming && thinkingTextCandidate) {
+    flushThinkingCandidateAsThinking();
+  } else {
+    flushThinkingCandidateAsText();
+  }
   return out;
 }
 

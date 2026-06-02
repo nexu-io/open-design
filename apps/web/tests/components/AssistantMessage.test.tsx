@@ -387,7 +387,7 @@ describe('AssistantMessage thinking blocks', () => {
 
   it('keeps text emitted during thinking collapsed when it leads into tool use', () => {
     const operationalThought = "I'll inspect the provider state before editing.";
-    render(
+    const { container } = render(
       <AssistantMessage
         message={baseMessage({
           content: '',
@@ -407,11 +407,42 @@ describe('AssistantMessage thinking blocks', () => {
       />,
     );
 
-    const toggle = screen.getByRole('button', { name: 'Thinking' });
-    expect(screen.queryByText(operationalThought)).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Thought' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
+    expect(screen.getByText(operationalThought)).toBeTruthy();
 
     fireEvent.click(toggle);
+    expect(container.querySelector('.accordion-collapsible.open')).toBeTruthy();
     expect(screen.getByText(operationalThought)).toBeTruthy();
+  });
+
+  it('keeps pending thinking-phase text collapsed while the run is still streaming', () => {
+    const pendingThought = 'Gemini is already connected in defaults, so I need to inspect local state.';
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          runStatus: 'running',
+          endedAt: undefined,
+          events: [
+            { kind: 'status', label: 'thinking' } as ChatMessage['events'][number],
+            { kind: 'text', text: pendingThought } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    const toggle = screen.getByRole('button', { name: 'Thinking' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
+    expect(screen.getByText(pendingThought)).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(container.querySelector('.accordion-collapsible.open')).toBeTruthy();
+    expect(screen.getByText(pendingThought)).toBeTruthy();
   });
 
   it('keeps final answer text visible when thinking does not lead into a tool call', () => {
