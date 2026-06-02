@@ -14,7 +14,9 @@ Run this before handoff. P0 items must pass for the output to be usable.
   prompt preserves shape, silhouette, color, material, logo/label placement,
   visible construction details, and proportions.
 - [ ] **No redesign.** Prompts do not add, remove, relocate, recolor, or restyle
-  product features unless the user explicitly requested an edit.
+  product features. Product edit requests that change the product itself are
+  out of scope for this V1 workflow and should be deferred to a follow-up
+  workflow.
 - [ ] **Three-slot scope.** The set is limited to main, feature, and lifestyle
   unless the user explicitly requested fewer.
 - [ ] **Media dispatcher only.** Generation used
