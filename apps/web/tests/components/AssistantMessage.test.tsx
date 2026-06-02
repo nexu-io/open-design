@@ -265,6 +265,28 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
     expect(screen.queryByText('claude-opus-4-7-max')).toBeNull();
   });
 
+  it('keeps the latest non-default ACP model when a later default status arrives', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            { kind: 'status', label: 'model', detail: 'swe-1-6-fast' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'model', detail: 'claude-opus-4-7-max' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'model', detail: 'default' } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        onFeedback={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('.assistant-identity-model')?.textContent).toBe('Claude Opus 4.7 Max');
+    expect(container.querySelector('[data-status="model"]')).toBeNull();
+    expect(screen.queryByText('default')).toBeNull();
+  });
+
   it('renders bare URLs in status details as links', () => {
     render(
       <AssistantMessage
