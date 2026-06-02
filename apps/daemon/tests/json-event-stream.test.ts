@@ -241,6 +241,39 @@ test('gemini stream handles real stream-json user, tool, and error frames', () =
   ]);
 });
 
+test('gemini stream treats terminal error frames as fatal error events', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  const terminalError = {
+    type: 'error',
+    severity: 'error',
+    message: 'Maximum session turns exceeded',
+  };
+  const unknownSeverityError = {
+    type: 'error',
+    severity: 'critical',
+    error: { message: 'Invalid stream: malformed tool call' },
+  };
+
+  handler.feed(
+    JSON.stringify(terminalError) + '\n' +
+    JSON.stringify(unknownSeverityError) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Maximum session turns exceeded',
+      raw: JSON.stringify(terminalError),
+    },
+    {
+      type: 'error',
+      message: 'Invalid stream: malformed tool call',
+      raw: JSON.stringify(unknownSeverityError),
+    },
+  ]);
+});
+
 test('cursor stream emits partial text once and usage events', () => {
   const { events, handler } = collectEvents('cursor-agent');
 

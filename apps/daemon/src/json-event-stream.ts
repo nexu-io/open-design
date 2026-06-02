@@ -270,11 +270,16 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
   }
 
   if (obj.type === 'error') {
-    onEvent({
-      type: 'status',
-      label: typeof obj.severity === 'string' && obj.severity ? obj.severity : 'warning',
-      detail: extractErrorMessage(obj.message ?? obj.error, 'Gemini CLI warning'),
-    });
+    const severity = typeof obj.severity === 'string' ? obj.severity.toLowerCase() : '';
+    const message = extractErrorMessage(
+      obj.message ?? obj.error,
+      severity === 'warning' ? 'Gemini CLI warning' : 'Gemini CLI error',
+    );
+    if (severity === 'warning') {
+      onEvent({ type: 'status', label: 'warning', detail: message });
+    } else {
+      onEvent({ type: 'error', message, raw: stringifyContent(obj) });
+    }
     return true;
   }
 
