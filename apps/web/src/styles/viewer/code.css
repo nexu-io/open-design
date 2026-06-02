@@ -1008,17 +1008,17 @@
   background:
     linear-gradient(
       100deg,
-      color-mix(in srgb, currentColor 78%, transparent) 0%,
-      color-mix(in srgb, currentColor 78%, transparent) 34%,
+      color-mix(in srgb, var(--text-muted) 88%, transparent) 0%,
+      color-mix(in srgb, var(--text-muted) 88%, transparent) 34%,
       var(--text) 47%,
-      color-mix(in srgb, currentColor 82%, transparent) 60%,
-      color-mix(in srgb, currentColor 78%, transparent) 100%
+      color-mix(in srgb, var(--text-muted) 92%, transparent) 60%,
+      color-mix(in srgb, var(--text-muted) 88%, transparent) 100%
     );
   background-size: 240% 100%;
   background-position: 100% 50%;
   background-clip: text;
   -webkit-background-clip: text;
-  color: transparent;
+  color: var(--text-muted);
   -webkit-text-fill-color: transparent;
   animation: chat-row-text-shimmer 1.7s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
