@@ -862,12 +862,14 @@
   border: none;
   border-radius: 0;
   box-shadow: none;
+  width: fit-content;
+  max-width: 100%;
 }
 .thinking-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  max-width: 100%;
   padding: 4px;
   background: transparent;
   border: none;
@@ -878,6 +880,10 @@
   border-radius: 8px;
 }
 .thinking-toggle:hover { background: var(--bg-fill-tertiary); }
+.thinking-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--purple) 46%, transparent);
+  outline-offset: 3px;
+}
 .thinking-status {
   width: 24px; height: 24px;
   display: inline-flex;
@@ -901,13 +907,14 @@
   color: var(--text-faint);
   font-size: 10px;
   margin-left: auto;
-  transition: transform 120ms ease;
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .thinking-body {
   margin: 0;
   padding: 4px 8px 8px 32px;
   font-size: 13px;
   line-height: 1.7;
+  max-width: min(760px, 100%);
   color: var(--text-muted);
   overflow-wrap: anywhere;
   max-height: min(40vh, 320px);
@@ -967,6 +974,11 @@
   );
   background-size: 200% 100%;
   animation-duration: 5s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-label.shimmer-text {
+    animation: none;
+  }
 }
 
 /* Status pills */
