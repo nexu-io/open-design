@@ -100,6 +100,80 @@ describe('AssistantMessage tool status', () => {
     expect(screen.getByRole('button', { name: /^Running ×2$/i })).toBeTruthy();
   });
 
+  it('marks grouped rows as running only while at least one command is unfinished', () => {
+    const { container, rerender } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={{
+          ...messageWithEvents([
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Read',
+              input: { file_path: 'one.ts' },
+            },
+            {
+              kind: 'tool_use',
+              id: 'tool-2',
+              name: 'Read',
+              input: { file_path: 'two.ts' },
+            },
+          ]),
+          endedAt: undefined,
+          runStatus: 'running',
+        }}
+        streaming
+        projectId="project-1"
+      />,
+    );
+
+    const runningGroup = container.querySelector('.chat-surface.action-card');
+    expect(runningGroup?.classList.contains('is-running')).toBe(true);
+    expect(runningGroup?.classList.contains('is-done')).toBe(false);
+    expect(runningGroup?.querySelector('.chat-surface-title')?.textContent).toBe('Reading ×2');
+
+    rerender(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={messageWithEvents([
+          {
+            kind: 'tool_use',
+            id: 'tool-1',
+            name: 'Read',
+            input: { file_path: 'one.ts' },
+          },
+          {
+            kind: 'tool_result',
+            toolUseId: 'tool-1',
+            content: 'one',
+            isError: false,
+          },
+          {
+            kind: 'tool_use',
+            id: 'tool-2',
+            name: 'Read',
+            input: { file_path: 'two.ts' },
+          },
+          {
+            kind: 'tool_result',
+            toolUseId: 'tool-2',
+            content: 'two',
+            isError: false,
+          },
+        ])}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    const doneGroup = container.querySelector('.chat-surface.action-card');
+    expect(doneGroup?.classList.contains('is-running')).toBe(false);
+    expect(doneGroup?.classList.contains('is-done')).toBe(true);
+    expect(doneGroup?.querySelector('.chat-surface-title')?.textContent).toBe('Reading ×2');
+  });
+
   it('does not show Done when a failed run is missing a tool result', () => {
     const { container } = render(
       <AssistantMessage
