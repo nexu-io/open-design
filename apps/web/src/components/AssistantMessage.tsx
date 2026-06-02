@@ -1635,8 +1635,12 @@ function ProducedFiles({
 }) {
   const t = useT();
   return (
-    <div className="produced-files">
-      <div className="produced-files-label">{t("assistant.producedFiles")}</div>
+    <ChatDisclosure
+      className="produced-files"
+      icon="file"
+      title={t("assistant.producedFiles")}
+      status={{ label: String(files.length), tone: "done" }}
+    >
       <div className="produced-files-list">
         {files.map((f) => (
           <div key={f.name} className="produced-file">
@@ -1668,7 +1672,7 @@ function ProducedFiles({
           </div>
         ))}
       </div>
-    </div>
+    </ChatDisclosure>
   );
 }
 
@@ -2115,32 +2119,17 @@ function FormBlock({
 
 function SystemReminderBlock({ text }: { text: string }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const trimmed = text.trim();
   const preview = trimmed.split("\n")[0]?.slice(0, 120) ?? "";
   return (
-    <div className="system-reminder-block">
-      <button
-        className="system-reminder-toggle"
-        onClick={() => setOpen((o) => !o)}
-        type="button"
-      >
-        <span className="system-reminder-icon" aria-hidden>
-          <Icon name="settings" size={12} />
-        </span>
-        <span className="system-reminder-label">
-          {t("assistant.systemReminder")}
-        </span>
-        <span className="system-reminder-preview">
-          {open ? "" : preview}
-          {!open && trimmed.length > preview.length ? "…" : ""}
-        </span>
-        <span className="system-reminder-chev">
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      {open ? <pre className="system-reminder-body">{trimmed}</pre> : null}
-    </div>
+    <ChatDisclosure
+      className="system-reminder-block"
+      icon="settings"
+      title={t("assistant.systemReminder")}
+      meta={`${preview}${trimmed.length > preview.length ? "…" : ""}`}
+    >
+      <pre className="system-reminder-body">{trimmed}</pre>
+    </ChatDisclosure>
   );
 }
 

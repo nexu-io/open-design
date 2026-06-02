@@ -174,7 +174,7 @@
 }
 
 .produced-files {
-  margin-top: 6px;
+  margin-top: 4px;
   padding: 0;
   background: none;
   border: none;
@@ -193,16 +193,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: none;
-  border: none;
-  font-size: 12.5px;
-  box-shadow: none;
-  transition: background 160ms ease;
-}
-.produced-file:hover {
-  background: var(--bg-fill-tertiary);
+  padding: 5px 0;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  font-size: 12px;
 }
 .produced-file-icon { width: 22px; text-align: center; color: var(--text-muted); }
 .produced-file-name {

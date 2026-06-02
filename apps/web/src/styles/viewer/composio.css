@@ -545,38 +545,11 @@
 
 /* Collapsible system-reminder block in chat */
 .system-reminder-block {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
   margin: 6px 0;
 }
-.system-reminder-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  text-align: left;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.system-reminder-toggle:hover { background: rgba(0, 0, 0, 0.03); }
-.system-reminder-icon { color: var(--text-muted); }
-.system-reminder-label { font-weight: 500; color: var(--text); }
-.system-reminder-preview {
-  flex: 1;
-  color: var(--text-muted);
-  font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.system-reminder-chev { color: var(--text-muted); font-size: 10px; }
 .system-reminder-body {
   margin: 0;
-  padding: 0 12px 10px 12px;
+  padding: 0;
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.5;
