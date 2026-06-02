@@ -1258,6 +1258,8 @@ export const ja: Dict = {
   'tool.askQuestionSubmit': '送信',
   'tool.askQuestionPending': '回答をお待ちしています',
   'tool.askQuestionAnswered': '回答済み',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'タスクを表示',
   'tool.todosCollapse': 'タスクを非表示',
   'tool.todosDone': '完了',

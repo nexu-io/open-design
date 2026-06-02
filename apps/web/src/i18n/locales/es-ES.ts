@@ -1260,6 +1260,8 @@ export const esES: Dict = {
   'tool.askQuestionSubmit': 'Enviar',
   'tool.askQuestionPending': 'Esperando tu respuesta',
   'tool.askQuestionAnswered': 'Respondido',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Mostrar tareas',
   'tool.todosCollapse': 'Ocultar tareas',
   'tool.todosDone': 'Listo',

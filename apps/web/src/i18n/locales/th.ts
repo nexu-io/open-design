@@ -1332,6 +1332,8 @@ export const th: Dict = {
   'tool.askQuestionSubmit': 'ส่ง',
   'tool.askQuestionPending': 'รอคำตอบของคุณ',
   'tool.askQuestionAnswered': 'ตอบแล้ว',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'แสดงงาน',
   'tool.todosCollapse': 'ซ่อนงาน',
   'tool.todosDone': 'เสร็จสิ้น',

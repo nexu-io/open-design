@@ -1520,6 +1520,8 @@ export const id: Dict = {
   'tool.askQuestionSubmit': 'Kirim',
   'tool.askQuestionPending': 'Menunggu jawabanmu',
   'tool.askQuestionAnswered': 'Dijawab',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Tampilkan tugas',
   'tool.todosCollapse': 'Sembunyikan tugas',
   'tool.todosDone': 'Selesai',

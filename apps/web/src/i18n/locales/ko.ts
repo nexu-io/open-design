@@ -1371,6 +1371,8 @@ export const ko: Dict = {
   'tool.askQuestionSubmit': '제출',
   'tool.askQuestionPending': '답변 대기 중',
   'tool.askQuestionAnswered': '답변 완료',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': '할 일 표시',
   'tool.todosCollapse': '할 일 숨기기',
   'tool.todosDone': '완료',

@@ -1371,6 +1371,8 @@ export const hu: Dict = {
   'tool.askQuestionSubmit': 'Beküldés',
   'tool.askQuestionPending': 'Várjuk a válaszodat',
   'tool.askQuestionAnswered': 'Megválaszolva',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Feladatok mutatása',
   'tool.todosCollapse': 'Feladatok elrejtése',
   'tool.todosDone': 'Kész',

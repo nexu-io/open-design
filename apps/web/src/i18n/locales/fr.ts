@@ -1973,6 +1973,8 @@ export const fr: Dict = {
   'tool.askQuestionSubmit': 'Envoyer',
   'tool.askQuestionPending': 'En attente de votre réponse',
   'tool.askQuestionAnswered': 'Répondu',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Afficher les tâches',
   'tool.todosCollapse': 'Masquer les tâches',
   'tool.todosDone': 'Terminé',

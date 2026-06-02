@@ -1413,6 +1413,8 @@ export const uk: Dict = {
   'tool.askQuestionSubmit': 'Надіслати',
   'tool.askQuestionPending': 'Очікую вашої відповіді',
   'tool.askQuestionAnswered': 'Відповідь надано',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Показати завдання',
   'tool.todosCollapse': 'Сховати завдання',
   'tool.todosDone': 'Готово',

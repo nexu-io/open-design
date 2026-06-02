@@ -1259,6 +1259,8 @@ export const de: Dict = {
   'tool.askQuestionSubmit': 'Senden',
   'tool.askQuestionPending': 'Warte auf deine Antwort',
   'tool.askQuestionAnswered': 'Beantwortet',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Aufgaben einblenden',
   'tool.todosCollapse': 'Aufgaben ausblenden',
   'tool.todosDone': 'Fertig',

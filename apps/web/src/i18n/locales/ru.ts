@@ -1412,6 +1412,8 @@ export const ru: Dict = {
   'tool.askQuestionSubmit': 'Отправить',
   'tool.askQuestionPending': 'Ожидание вашего ответа',
   'tool.askQuestionAnswered': 'Отвечено',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'Показать задачи',
   'tool.todosCollapse': 'Скрыть задачи',
   'tool.todosDone': 'Готово',

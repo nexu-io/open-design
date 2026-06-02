@@ -2591,6 +2591,8 @@ export interface Dict {
   'tool.askQuestionSubmit': string;
   'tool.askQuestionPending': string;
   'tool.askQuestionAnswered': string;
+  'tool.askQuestionNoAnswer': string;
+  'tool.askQuestionSentFollowup': string;
   'tool.todosExpand': string;
   'tool.todosCollapse': string;
   'tool.todosDone': string;

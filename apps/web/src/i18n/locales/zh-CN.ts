@@ -2213,6 +2213,8 @@ export const zhCN: Dict = {
   'tool.askQuestionSubmit': '提交',
   'tool.askQuestionPending': '等待你的回答',
   'tool.askQuestionAnswered': '已回答',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': '展开任务',
   'tool.todosCollapse': '收起任务',
   'tool.todosDone': '完成',

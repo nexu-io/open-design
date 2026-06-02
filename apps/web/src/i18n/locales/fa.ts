@@ -1352,6 +1352,8 @@ export const fa: Dict = {
   'tool.askQuestionSubmit': 'ارسال',
   'tool.askQuestionPending': 'در انتظار پاسخ شما',
   'tool.askQuestionAnswered': 'پاسخ داده شد',
+  'tool.askQuestionNoAnswer': 'No answer received',
+  'tool.askQuestionSentFollowup': 'Sent as follow-up',
   'tool.todosExpand': 'نمایش وظایف',
   'tool.todosCollapse': 'پنهان کردن وظایف',
   'tool.todosDone': 'انجام شد',

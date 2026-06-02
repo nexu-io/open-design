@@ -219,16 +219,19 @@ function AskUserQuestionCard({
     for (const q of questions) seed[q.question] = q.multiSelect ? [] : '';
     return seed;
   });
-  // Track local submission so the card locks immediately on Submit. We
-  // cannot rely on `result` alone because `claude-code -p` ships an auto
-  // error tool_result that does not represent a real answer.
-  const [submitted, setSubmitted] = useState(false);
+  // Track local submission so the card locks immediately on Submit. The
+  // direct tool-result route is the only path that actually answers the
+  // original AskUserQuestion tool call; the legacy fallback sends a normal
+  // follow-up chat message instead.
+  const [submissionState, setSubmissionState] = useState<
+    'idle' | 'sending' | 'received' | 'followup' | 'failed'
+  >('idle');
   if (questions.length === 0) {
     return <GenericCard name="AskUserQuestion" input={input} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
   }
-  // Real answer == non-error upstream tool_result OR our local submit
-  // flag. Headless mode's auto error never lands in this bucket.
-  const hasRealAnswer = (!!result && !result.isError) || submitted;
+  // Real answer == non-error upstream tool_result OR a successful direct
+  // tool-result POST. Headless mode's auto error never lands in this bucket.
+  const hasRealAnswer = (!!result && !result.isError) || submissionState === 'received';
   // After a page reload the locally-held `selections` is empty because
   // useState resets, so the card would render its locked summary with no
   // chips highlighted. The persisted answer lives on `result.content`
@@ -260,12 +263,18 @@ function AskUserQuestionCard({
   const effectiveSelections = hasRealAnswer && answeredSelections
     ? answeredSelections
     : selections;
-  // We need at least one viable submit channel to be interactive: the live
-  // `onAnswerToolUse` (preferred — feeds the tool_result back into the
-  // open stream-json child) or the legacy `onSubmitForm` (fallback that
-  // sends the answer as a fresh user message).
-  const canSubmit = !!onAnswerToolUse || !!onSubmitForm;
-  const locked = hasRealAnswer || !isLast || !canSubmit;
+  const canAnswerOriginalTool = !!onAnswerToolUse && runStreaming && isLast;
+  const canFallbackToFollowup = !!onSubmitForm && isLast;
+  const canSubmit = canAnswerOriginalTool || canFallbackToFollowup;
+  const noAnswerReceived =
+    !hasRealAnswer && (
+      submissionState === 'failed'
+      || !runStreaming
+      || !isLast
+      || (!canAnswerOriginalTool && !canFallbackToFollowup)
+      || !!result?.isError
+    );
+  const locked = hasRealAnswer || noAnswerReceived || !canSubmit || submissionState === 'sending' || submissionState === 'followup';
   const ready = questions.every((q) => {
     const v = selections[q.question];
     return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
@@ -294,49 +303,50 @@ function AskUserQuestionCard({
     const formatted = lines.join('\n\n');
     // Prefer the direct tool-result route: keeps the answer scoped to the
     // open stream-json child so claude-code's `AskUserQuestion` returns
-    // without an auto error. Fall back to onSubmitForm only if no run is
-    // wired up (e.g. older messages where the run already terminated).
-    if (onAnswerToolUse) {
-      setSubmitted(true);
+    // without an auto error. Fall back only when there is no live route;
+    // if a live route fails, the original tool call was not answered.
+    if (canAnswerOriginalTool) {
+      setSubmissionState('sending');
       try {
         const ok = await onAnswerToolUse(toolUseId, formatted);
         if (ok === false) {
-          // Live route failed (run gone, stdin closed). Revert the local
-          // lock and try the legacy fallback so the user is not stuck.
-          setSubmitted(false);
-          onSubmitForm?.(formatted);
+          setSubmissionState('failed');
+          return;
         }
+        setSubmissionState('received');
       } catch {
-        setSubmitted(false);
-        onSubmitForm?.(formatted);
+        setSubmissionState('failed');
       }
       return;
     }
-    if (onSubmitForm) {
-      setSubmitted(true);
+    if (canFallbackToFollowup) {
+      setSubmissionState('followup');
       onSubmitForm(formatted);
     }
   }
   // Status pill driven by our own answered/pending state, not the upstream
   // tool_result. claude-code's headless auto-error would otherwise surface
-  // as a misleading `error` badge on what is really an open question. When
-  // the card is locked because the user moved past it without a real
-  // answer, drop the pill entirely.
-  const statusLabel = hasRealAnswer
-    ? t('tool.askQuestionAnswered')
-    : !locked
-      ? t('tool.askQuestionPending')
-      : null;
+  // as a misleading `error` badge on what is really an open question.
+  const status =
+    hasRealAnswer
+      ? { label: t('tool.askQuestionAnswered'), tone: 'done' as const }
+      : submissionState === 'followup'
+        ? { label: t('tool.askQuestionSentFollowup'), tone: 'warning' as const }
+        : noAnswerReceived
+          ? { label: t('tool.askQuestionNoAnswer'), tone: 'warning' as const }
+          : !locked
+            ? { label: t('tool.askQuestionPending'), tone: 'awaiting' as const }
+            : null;
   return (
     <ChatSurface
       className={`op-card op-ask-question${locked ? ' op-ask-question-locked' : ''}`}
       testId="ask-user-question"
-      tone={hasRealAnswer ? 'done' : !locked ? 'awaiting' : 'neutral'}
+      tone={status?.tone ?? 'neutral'}
     >
       <ChatSurfaceHeader
         icon="help-circle"
         title={t('tool.askQuestion')}
-        status={statusLabel ? { label: statusLabel, tone: hasRealAnswer ? 'done' : 'awaiting' } : null}
+        status={status}
       />
       <div className="op-ask-question-body">
         {questions.map((q) => {
