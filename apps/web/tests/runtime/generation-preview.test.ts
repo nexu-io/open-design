@@ -292,6 +292,38 @@ describe('generation preview helpers', () => {
     expect(state?.promoteAmrSwitch).toBe(false);
   });
 
+  it('keeps an open previewable file visible instead of replacing it with a failed generation card', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      runStatus: 'failed',
+      startedAt: Date.now() - 8_000,
+      events: [{ kind: 'text', text: 'Model request failed' }],
+    };
+
+    expect(
+      buildGenerationPreviewState({
+        designSystemProject: false,
+        messages: [{ id: 'u1', role: 'user', content: 'Build a settings page' }, assistant],
+        streaming: false,
+        activeTab: 'liquid-glass-settings.html',
+        projectFiles: [
+          {
+            name: 'liquid-glass-settings.html',
+            path: 'liquid-glass-settings.html',
+            size: 1,
+            mtime: 1,
+            kind: 'html',
+            mime: 'text/html',
+          },
+        ],
+        liveArtifacts: [],
+        conversationError: 'Network error',
+      }),
+    ).toBeNull();
+  });
+
   it('classifies a rate-limited failure from the error event code', () => {
     const assistant: ChatMessage = {
       id: 'a1',

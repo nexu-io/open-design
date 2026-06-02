@@ -158,10 +158,12 @@ export function buildGenerationPreviewState(input: {
     return null;
   }
 
-  // Once the user has something previewable, only the error state takes
-  // over the surface; the calmer waiting states defer to the live preview
-  // so we never hide a finished artifact behind a status card.
-  if (hasPreviewSurface && phase !== 'failed') return null;
+  // Once the user has something previewable, the workspace should stay on
+  // that concrete preview. Failed-run recovery belongs in the chat transcript;
+  // otherwise a stale failed assistant can cover a file tab after reload and
+  // make the preview Retry action look like a render retry when it actually
+  // re-runs the agent.
+  if (hasPreviewSurface) return null;
 
   const failed = phase === 'failed';
   const events = latestAssistant.events ?? [];
