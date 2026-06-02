@@ -329,6 +329,61 @@ describe('AssistantMessage thinking blocks', () => {
     expect(container.querySelector('.thinking-block')).toBeTruthy();
     expect(screen.getByText('Reading the directory listing.')).toBeTruthy();
   });
+
+  it('keeps streaming thinking collapsed behind a minimal disclosure', () => {
+    const rawThinking = 'I should inspect the files, reason about the layout, and then choose the safest design path.';
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          runStatus: 'running',
+          endedAt: undefined,
+          events: [
+            { kind: 'status', label: 'thinking' } as ChatMessage['events'][number],
+            { kind: 'thinking', text: rawThinking } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming
+        projectId="proj-1"
+      />,
+    );
+
+    const toggle = screen.getByRole('button', { name: 'Thinking' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.thinking-label.shimmer-text')).toBeTruthy();
+    expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
+    expect(screen.getByText(rawThinking)).toBeTruthy();
+  });
+
+  it('expands and collapses thinking when the user toggles it', () => {
+    const rawThinking = 'Private reasoning details stay out of the main transcript until requested.';
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'thinking', text: rawThinking } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Final answer.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    const toggle = screen.getByRole('button', { name: 'Thought' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('.accordion-collapsible.open')).toBeTruthy();
+    expect(screen.getByText(rawThinking)).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
+  });
 });
 
 describe('AssistantMessage question forms', () => {

@@ -2169,7 +2169,12 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
       : t("assistant.thought");
   return (
     <div className="thinking-block">
-      <button className="thinking-toggle" onClick={() => setOpen((o) => !o)}>
+      <button
+        className="thinking-toggle"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
         <span className={`thinking-status${isThinking ? ' op-status-running' : open ? ' thinking-status-active' : ''}`} aria-hidden>
           {isThinking
             ? <Icon name="spinner" size={14} />
