@@ -237,6 +237,61 @@ describe('chat scroll behavior', () => {
     expect(geom.scrollTop).toBe(1200);
   });
 
+  it('does not auto-scroll user-opened chat disclosures while their bodies expand', async () => {
+    const messagesWithDisclosure: ChatMessage[] = [
+      ...sampleMessages,
+      {
+        id: 'a3',
+        role: 'assistant',
+        content: '',
+        runStatus: 'succeeded',
+        createdAt: Date.now(),
+        startedAt: Date.now() - 1_000,
+        endedAt: Date.now(),
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'read-1',
+            name: 'Read',
+            input: { file_path: '/repo/a.ts' },
+          },
+          {
+            kind: 'tool_result',
+            toolUseId: 'read-1',
+            content: 'a',
+            isError: false,
+          },
+          {
+            kind: 'tool_use',
+            id: 'read-2',
+            name: 'Read',
+            input: { file_path: '/repo/b.ts' },
+          },
+          {
+            kind: 'tool_result',
+            toolUseId: 'read-2',
+            content: 'b',
+            isError: false,
+          },
+        ],
+      },
+    ];
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    renderChatPane(messagesWithDisclosure);
+    await flushFrame();
+
+    expect(geom.scrollTop).toBe(1000);
+    const disclosure = screen.getByRole('button', { name: /^Reading ×2$/i });
+
+    fireEvent.click(disclosure);
+    setGeom({ scrollHeight: 1200 });
+    await triggerResize();
+    await flushFrame();
+
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(geom.scrollTop).toBe(1000);
+  });
+
   it('lands new conversation at its own bottom when switching conversations', async () => {
     const { rerender } = render(chatPaneEl(sampleMessages, 'conv-A'));
     setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });

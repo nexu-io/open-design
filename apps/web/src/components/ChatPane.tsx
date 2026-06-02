@@ -33,6 +33,7 @@ import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong, shortTi
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
 import { AmrGuidance } from './AmrGuidance';
+import { CHAT_DISCLOSURE_TOGGLE_EVENT } from './chat/ChatSurface';
 import { AMR_RECHARGE_URL, resolveRunFailureUi } from '../runtime/amr-guidance';
 import {
   ChatComposer,
@@ -502,6 +503,7 @@ export function ChatPane({
   // 80px cutoff: scrolling ~90px up is an intentional pause that
   // shouldn't be yanked back the moment the next chunk streams in.
   const pinnedToBottomRef = useRef(true);
+  const suppressDisclosureAutoFollowUntilRef = useRef(0);
   const scrolledToFormRef = useRef<Set<string>>(new Set());
   // "Anchor the just-sent turn to the top" (ChatGPT-style). On send we pin
   // the user's message to the top of the viewport and let the reply stream
@@ -959,6 +961,14 @@ export function ChatPane({
     if (!el) return;
 
     let followFrame: number | null = null;
+    const disclosureAnimationSuppressMs = 260;
+    const isSuppressingDisclosureAutoFollow = () =>
+      typeof performance !== 'undefined' &&
+      performance.now() < suppressDisclosureAutoFollowUntilRef.current;
+    const markDisclosureResizeAsUserDriven = () => {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      suppressDisclosureAutoFollowUntilRef.current = now + disclosureAnimationSuppressMs;
+    };
     const followLatestIfPinned = () => {
       // While anchored, only shrink the tail spacer as the reply grows
       // (resize-only, never scroll) so the user message stays put without
@@ -973,10 +983,12 @@ export function ChatPane({
         return;
       }
       if (!pinnedToBottomRef.current || followFrame !== null) return;
+      if (isSuppressingDisclosureAutoFollow()) return;
       followFrame = requestAnimationFrame(() => {
         followFrame = null;
         const target = logRef.current;
         if (!target || !pinnedToBottomRef.current) return;
+        if (isSuppressingDisclosureAutoFollow()) return;
         target.scrollTop = target.scrollHeight;
         setScrolledFromBottom(false);
       });
@@ -1049,6 +1061,10 @@ export function ChatPane({
     syncObservedChildren();
     syncPinnedTodo();
     syncQueuedSendStrip();
+    el.addEventListener(
+      CHAT_DISCLOSURE_TOGGLE_EVENT,
+      markDisclosureResizeAsUserDriven,
+    );
 
     const mutationObserver =
       typeof MutationObserver !== 'undefined'
@@ -1079,6 +1095,10 @@ export function ChatPane({
 
     return () => {
       if (followFrame !== null) cancelAnimationFrame(followFrame);
+      el.removeEventListener(
+        CHAT_DISCLOSURE_TOGGLE_EVENT,
+        markDisclosureResizeAsUserDriven,
+      );
       mutationObserver?.disconnect();
       resizeObserver?.disconnect();
     };

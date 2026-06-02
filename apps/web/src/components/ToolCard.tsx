@@ -14,6 +14,7 @@ import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
 import type { AgentEvent } from '../types';
 import {
+  CHAT_DISCLOSURE_TOGGLE_EVENT,
   ChatDisclosure,
   ChatSurface,
   ChatSurfaceHeader,
@@ -423,7 +424,16 @@ export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { inp
           type="button"
           className="op-todo-toggle"
           aria-expanded={expanded}
-          onClick={() => setOverrideExpanded(!expanded)}
+          onClick={(event) => {
+            const nextExpanded = !expanded;
+            event.currentTarget.dispatchEvent(
+              new CustomEvent(CHAT_DISCLOSURE_TOGGLE_EVENT, {
+                bubbles: true,
+                detail: { open: nextExpanded },
+              }),
+            );
+            setOverrideExpanded(nextExpanded);
+          }}
           title={expanded ? t('tool.todosCollapse') : t('tool.todosExpand')}
         >
           <span className="op-icon" aria-hidden>☐</span>

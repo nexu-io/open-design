@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type MouseEvent, type ReactNode, useState } from 'react';
 import { Icon, type IconName } from '../Icon';
 
 export type ChatSurfaceTone = 'neutral' | 'running' | 'done' | 'error' | 'warning' | 'awaiting';
@@ -7,6 +7,8 @@ export interface ChatSurfaceStatus {
   label: string;
   tone?: ChatSurfaceTone;
 }
+
+export const CHAT_DISCLOSURE_TOGGLE_EVENT = 'open-design:chat-disclosure-toggle';
 
 export interface ChatSurfaceHeaderProps {
   icon?: IconName;
@@ -119,6 +121,16 @@ export function ChatDisclosure({
     if (controlledOpen === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
+  const toggleOpen = (event: MouseEvent<HTMLButtonElement>) => {
+    const nextOpen = !open;
+    event.currentTarget.dispatchEvent(
+      new CustomEvent(CHAT_DISCLOSURE_TOGGLE_EVENT, {
+        bubbles: true,
+        detail: { open: nextOpen },
+      }),
+    );
+    setOpen(nextOpen);
+  };
   return (
     <ChatSurface
       className={`chat-disclosure${className ? ` ${className}` : ''}`}
@@ -130,7 +142,7 @@ export function ChatDisclosure({
         className="chat-disclosure-toggle"
         aria-expanded={open}
         data-testid={toggleTestId}
-        onClick={() => setOpen(!open)}
+        onClick={toggleOpen}
       >
         <ChatSurfaceHeader
           icon={icon}
