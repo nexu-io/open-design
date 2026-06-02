@@ -31,7 +31,7 @@ describe('submitToolResultToRunState', () => {
     expect(run.stdinOpen).toBe(true);
   });
 
-  it('writes valid tool results and closes stdin after the final pending answer', () => {
+  it('writes valid tool results and leaves stdin open after the final pending answer', () => {
     const { run, stdin, writes } = makeRun(['tool-1']);
 
     const result = submitToolResultToRunState(run, {
@@ -43,8 +43,8 @@ describe('submitToolResultToRunState', () => {
 
     expect(result).toEqual({ ok: true });
     expect(run.pendingHostAnswers.has('tool-1')).toBe(false);
-    expect(run.stdinOpen).toBe(false);
-    expect(stdin.destroyed || stdin.writableEnded).toBe(true);
+    expect(run.stdinOpen).toBe(true);
+    expect(stdin.destroyed || stdin.writableEnded).toBe(false);
     expect(writes).toHaveLength(1);
     const [write] = writes;
     expect(JSON.parse(write!)).toMatchObject({

@@ -12,7 +12,6 @@ export type SubmitToolResultResult =
 interface WritableStdin {
   destroyed?: boolean;
   write(chunk: string, encoding?: BufferEncoding): unknown;
-  end(): unknown;
 }
 
 interface ToolResultRunState {
@@ -76,14 +75,6 @@ export function submitToolResultToRunState(
   }
 
   run.pendingHostAnswers.delete(input.toolUseId);
-  if (run.pendingHostAnswers.size === 0 && run.stdinOpen) {
-    if (!run.child.stdin.destroyed) {
-      try {
-        run.child.stdin.end();
-      } catch {}
-    }
-    run.stdinOpen = false;
-  }
 
   return { ok: true };
 }
