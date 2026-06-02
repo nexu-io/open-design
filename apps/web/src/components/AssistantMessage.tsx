@@ -631,7 +631,7 @@ function AssistantMessageImpl({
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
-              <ProseBlock
+              <MessageTextBlock
                 key={i}
                 text={b.text}
                 isLastAssistant={!!isLast}
@@ -1877,6 +1877,39 @@ function hasPluginFinalActionHint(content: string): boolean {
   );
 }
 
+
+function MessageTextBlock({
+  text,
+  isLastAssistant,
+  streaming,
+  nextUserContent,
+  locallySubmitted,
+  suppressDirectionForms,
+  onSubmitForm,
+  onRequestOpenFile,
+}: {
+  text: string;
+  isLastAssistant: boolean;
+  streaming: boolean;
+  nextUserContent?: string;
+  locallySubmitted: Set<string>;
+  suppressDirectionForms: boolean;
+  onSubmitForm: (formId: string, text: string) => void;
+  onRequestOpenFile?: (path: string) => void;
+}) {
+  return (
+    <ProseBlock
+      text={text}
+      isLastAssistant={isLastAssistant}
+      streaming={streaming}
+      nextUserContent={nextUserContent}
+      locallySubmitted={locallySubmitted}
+      suppressDirectionForms={suppressDirectionForms}
+      onSubmitForm={onSubmitForm}
+      onRequestOpenFile={onRequestOpenFile}
+    />
+  );
+}
 
 function ProseBlock({
   text,
