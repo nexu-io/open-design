@@ -60,7 +60,7 @@ export function ChatSurfaceHeader({
       <span className="chat-surface-title">{title}</span>
       {meta ? <span className="chat-surface-meta">{meta}</span> : null}
       {status ? <ChatSurfaceStatus status={status} /> : null}
-      {trailing}
+      {trailing ? <span className="chat-surface-trailing">{trailing}</span> : null}
       {typeof disclosureOpen === 'boolean' ? (
         <span className="chat-surface-chevron" aria-hidden>
           <Icon name={disclosureOpen ? 'chevron-down' : 'chevron-right'} size={11} />

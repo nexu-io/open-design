@@ -40,9 +40,9 @@ import {
   type PluginFolderCandidate,
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
-import { ChatDisclosure } from "./chat/ChatSurface";
+import { ChatDisclosure, type ChatSurfaceStatus } from "./chat/ChatSurface";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import {
@@ -2485,8 +2485,9 @@ function ToolGroupCard({
   return (
     <ChatDisclosure
       className={`action-card${running ? " is-running" : ""}${hasError ? " is-error" : ""}`}
-      iconNode={summary.icon}
-      title={summary.label}
+      icon={summary.icon}
+      title={summary.title}
+      status={summary.status}
       tone={running ? "running" : hasError ? "error" : "done"}
     >
       <div className="action-card-body">
@@ -2514,7 +2515,7 @@ function summarizeGroup(
   t: (k: keyof Dict, vars?: Record<string, string | number>) => string,
   runStreaming: boolean,
   runSucceeded: boolean
-): { label: string; icon: string } {
+): { title: string; icon: IconName; status: ChatSurfaceStatus | null } {
   // All items share a tool family because the grouper only merges by name.
   const name = items[0]?.use.name ?? "";
   const family = toolFamily(name);
@@ -2522,12 +2523,11 @@ function summarizeGroup(
   const verbs = items.map((it) =>
     verbForState(it, t, runStreaming, runSucceeded)
   );
-  // Roll the verbs into a comma-list with deduplicated last-state. So three
-  // edits whose results are all 'Done' render as "Editing ×3, Done"; mixed
-  // states render as "Editing, Reading, Done".
-  const head = countLabel(family, items.length, t);
-  const tail = lastStateLabel(verbs, t);
-  return { label: tail ? `${head}, ${tail}` : head, icon };
+  // Keep the action label pure ("Editing ×3") and render terminal state in
+  // the shared status slot so rows stay scannable and vertically aligned.
+  const title = countLabel(family, items.length, t);
+  const status = lastStateStatus(verbs, t);
+  return { title, icon, status };
 }
 
 function toolFamily(name: string): string {
@@ -2543,15 +2543,15 @@ function toolFamily(name: string): string {
   return name.toLowerCase();
 }
 
-function familyIcon(family: string): string {
-  if (family === "edit") return "✎";
-  if (family === "write") return "+";
-  if (family === "read") return "↗";
-  if (family === "glob" || family === "grep" || family === "search") return "⌕";
-  if (family === "bash") return "$";
-  if (family === "todo") return "☐";
-  if (family === "fetch") return "↬";
-  return "·";
+function familyIcon(family: string): IconName {
+  if (family === "edit") return "pencil";
+  if (family === "write") return "plus";
+  if (family === "read") return "file";
+  if (family === "glob" || family === "grep" || family === "search") return "search";
+  if (family === "bash") return "play";
+  if (family === "todo") return "check";
+  if (family === "fetch") return "download";
+  return "sparkles";
 }
 
 function countLabel(
@@ -2597,6 +2597,20 @@ function lastStateLabel(verbs: string[], t: (k: keyof Dict) => string): string {
   if (set.has(t("tool.error"))) return t("tool.error");
   if (set.has(t("assistant.verbRunning"))) return t("assistant.verbRunning");
   return verbs[verbs.length - 1] ?? "";
+}
+
+function lastStateStatus(verbs: string[], t: (k: keyof Dict) => string): ChatSurfaceStatus | null {
+  const label = lastStateLabel(verbs, t);
+  if (!label) return null;
+  const tone =
+    label === t("tool.error")
+      ? "error"
+      : label === t("assistant.verbRunning")
+      ? "running"
+      : label === t("tool.done")
+      ? "done"
+      : "neutral";
+  return { label, tone };
 }
 
 type Block =

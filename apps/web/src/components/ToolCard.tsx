@@ -587,7 +587,7 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   return (
     <ChatDisclosure
       className="op-card op-bash"
-      iconNode="$"
+      icon="play"
       title={t('tool.bash')}
       meta={<span className="op-desc">{desc || truncate(command, 160)}</span>}
       status={status}
@@ -669,7 +669,7 @@ function GenericCard({
   return (
     <ChatSurface className="op-card op-generic" tone={status.tone}>
       <ChatSurfaceHeader
-        iconNode="·"
+        icon="sparkles"
         title={name}
         meta={summary ? truncate(summary, 200) : null}
         status={status}
