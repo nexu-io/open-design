@@ -1466,7 +1466,6 @@ export const uk: Dict = {
   'assistant.continueRemaining': 'Продовжити залишкові завдання',
   'assistant.outTokens': '{n} вихід',
   'assistant.producedFiles': 'Файли з цієї черги',
-  'assistant.openFile': 'Відкрити',
   'assistant.downloadFile': 'Завантажити',
   'assistant.thinking': 'Мислення',
   'assistant.thought': 'Подумав',

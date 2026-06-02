@@ -1465,7 +1465,6 @@ export const ru: Dict = {
   'assistant.continueRemaining': 'Продолжить оставшиеся задачи',
   'assistant.outTokens': '{n} токенов вывода',
   'assistant.producedFiles': 'Файлы из этого хода',
-  'assistant.openFile': 'Открыть',
   'assistant.downloadFile': 'Скачать',
   'assistant.thinking': 'Думает',
   'assistant.thought': 'Подумал',

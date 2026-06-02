@@ -115,23 +115,27 @@ interface FileToolCtx {
   onRequestOpenFile?: ((name: string) => void) | undefined;
 }
 
-function OpenInTabButton({ filePath, ctx }: { filePath: string; ctx: FileToolCtx }) {
-  const t = useT();
+function projectFileOpenTarget(filePath: string, ctx: FileToolCtx): string | null {
   if (!ctx.onRequestOpenFile) return null;
   if (!filePath || filePath === '(unnamed)') return null;
-  // The agent uses absolute paths; the project-file API keys on basename.
   const baseName = filePath.split('/').pop() ?? filePath;
   if (!baseName) return null;
   if (ctx.projectFileNames && !ctx.projectFileNames.has(baseName)) return null;
-  const open = ctx.onRequestOpenFile;
+  return baseName;
+}
+
+function FilePathLabel({ filePath, ctx }: { filePath: string; ctx: FileToolCtx }) {
+  const t = useT();
+  const target = projectFileOpenTarget(filePath, ctx);
+  if (!target) return <code className="op-path">{filePath}</code>;
   return (
     <button
       type="button"
-      className="op-open"
-      onClick={() => open(baseName)}
-      title={t('tool.openInTab', { name: baseName })}
+      className="op-path op-path-button"
+      onClick={() => ctx.onRequestOpenFile?.(target)}
+      title={t('tool.openInTab', { name: target })}
     >
-      {t('tool.open')}
+      {filePath}
     </button>
   );
 }
@@ -489,7 +493,6 @@ function FileWriteCard({
   const t = useT();
   const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string; content?: string };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
-  const baseName = file.split('/').pop() ?? file;
   const lines = typeof obj.content === 'string' ? obj.content.split('\n').length : null;
   const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
@@ -497,9 +500,8 @@ function FileWriteCard({
       <ChatSurfaceHeader
         icon="plus"
         title={t('tool.write')}
-        meta={<><span>{baseName}</span>{lines !== null ? <span>{t('tool.lines', { n: lines })}</span> : null}</>}
+        meta={<><FilePathLabel filePath={file} ctx={ctx} />{lines !== null ? <span>{t('tool.lines', { n: lines })}</span> : null}</>}
         status={status}
-        trailing={<OpenInTabButton filePath={file} ctx={ctx} />}
       />
       <FileErrorDetail result={result} />
     </ChatSurface>
@@ -529,7 +531,6 @@ function FileEditCard({
     edits?: { old_string?: string; new_string?: string }[];
   };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
-  const baseName = file.split('/').pop() ?? file;
   const editCount = Array.isArray(obj.edits) ? obj.edits.length : 1;
   const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
@@ -537,9 +538,8 @@ function FileEditCard({
       <ChatSurfaceHeader
         icon="pencil"
         title={t('tool.edit')}
-        meta={<><span>{baseName}</span><span>{editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span></>}
+        meta={<><FilePathLabel filePath={file} ctx={ctx} /><span>{editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span></>}
         status={status}
-        trailing={<OpenInTabButton filePath={file} ctx={ctx} />}
       />
       <FileErrorDetail result={result} />
     </ChatSurface>
@@ -562,16 +562,14 @@ function FileReadCard({
   const t = useT();
   const obj = (input ?? {}) as { file_path?: string; filePath?: string; path?: string };
   const file = obj.file_path ?? obj.filePath ?? obj.path ?? '(unnamed)';
-  const baseName = file.split('/').pop() ?? file;
   const status = useToolStatus(result, runStreaming, runSucceeded);
   return (
     <ChatSurface className="op-card op-file" tone={status.tone}>
       <ChatSurfaceHeader
         icon="external-link"
         title={t('tool.read')}
-        meta={<span>{baseName}</span>}
+        meta={<FilePathLabel filePath={file} ctx={ctx} />}
         status={status}
-        trailing={<OpenInTabButton filePath={file} ctx={ctx} />}
       />
       <FileErrorDetail result={result} />
     </ChatSurface>

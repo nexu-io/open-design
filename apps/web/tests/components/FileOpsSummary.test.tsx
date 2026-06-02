@@ -87,9 +87,9 @@ describe('FileOpsSummary', () => {
     expect(screen.getByTestId('file-ops-toggle').getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('shows the open button only for files that are present in the project file set', () => {
+  it('opens project files from the path label and does not render trailing open buttons', () => {
     const onRequestOpenFile = vi.fn();
-    render(
+    const { container } = render(
       <FileOpsSummary
         entries={[
           entry({ path: 'a.ts' }),
@@ -101,10 +101,11 @@ describe('FileOpsSummary', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-ops-row-open-a.ts')).toBeTruthy();
-    expect(screen.queryByTestId('file-ops-row-open-missing.ts')).toBeNull();
+    expect(screen.getByTestId('file-ops-row-path-a.ts')).toBeTruthy();
+    expect(screen.queryByTestId('file-ops-row-path-missing.ts')).toBeNull();
+    expect(container.querySelector('.file-ops-row-open')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('file-ops-row-open-a.ts'));
+    fireEvent.click(screen.getByTestId('file-ops-row-path-a.ts'));
     expect(onRequestOpenFile).toHaveBeenCalledWith('a.ts');
   });
 

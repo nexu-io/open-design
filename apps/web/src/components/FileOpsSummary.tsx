@@ -139,9 +139,21 @@ function FileOpRow({
           );
         })}
       </div>
-      <code className="file-ops-row-path" title={entry.fullPath}>
-        {entry.path}
-      </code>
+      {canOpen ? (
+        <button
+          type="button"
+          className="file-ops-row-path file-ops-row-path-button"
+          onClick={() => onRequestOpenFile?.(entry.path)}
+          title={t('tool.openInTab', { name: entry.path })}
+          data-testid={`file-ops-row-path-${entry.path}`}
+        >
+          {entry.path}
+        </button>
+      ) : (
+        <code className="file-ops-row-path" title={entry.fullPath}>
+          {entry.path}
+        </code>
+      )}
       {entry.status === 'running' ? (
         <span className="file-ops-row-status file-ops-row-status--running">
           {t('tool.running')}
@@ -150,17 +162,6 @@ function FileOpRow({
         <span className="file-ops-row-status file-ops-row-status--error">
           {t('tool.error')}
         </span>
-      ) : null}
-      {canOpen ? (
-        <button
-          type="button"
-          className="file-ops-row-open"
-          onClick={() => onRequestOpenFile?.(entry.path)}
-          title={t('tool.openInTab', { name: entry.path })}
-          data-testid={`file-ops-row-open-${entry.path}`}
-        >
-          {t('assistant.openFile')}
-        </button>
       ) : null}
     </li>
   );

@@ -1646,20 +1646,22 @@ function ProducedFiles({
             <span className="produced-file-icon" aria-hidden>
               <Icon name={kindIconName(f.kind)} size={14} />
             </span>
-            <span className="produced-file-name" title={f.name}>
-              {f.name}
-            </span>
+            {onRequestOpenFile ? (
+              <button
+                type="button"
+                className="produced-file-name produced-file-name-button"
+                onClick={() => onRequestOpenFile(f.name)}
+                title={t("tool.openInTab", { name: f.name })}
+              >
+                {f.name}
+              </button>
+            ) : (
+              <span className="produced-file-name" title={f.name}>
+                {f.name}
+              </span>
+            )}
             <span className="produced-file-size">{humanBytes(f.size)}</span>
             <div className="produced-file-actions">
-              {onRequestOpenFile ? (
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => onRequestOpenFile(f.name)}
-                >
-                  {t("assistant.openFile")}
-                </button>
-              ) : null}
               <a
                 className="ghost-link"
                 href={projectFileUrl(projectId, f.name)}

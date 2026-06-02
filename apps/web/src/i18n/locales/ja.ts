@@ -1311,7 +1311,6 @@ export const ja: Dict = {
   'assistant.continueRemaining': '残りのタスクを続ける',
   'assistant.outTokens': '{n} 出力',
   'assistant.producedFiles': 'このターンのファイル',
-  'assistant.openFile': '開く',
   'assistant.downloadFile': 'ダウンロード',
   'assistant.thinking': '考え中',
   'assistant.thought': '思考完了',

@@ -1411,7 +1411,6 @@ export const tr: Dict = {
   'assistant.continueRemaining': 'Kalan görevleri sürdür',
   'assistant.outTokens': '{n} çıktı',
   'assistant.producedFiles': 'Bu çalışmadan dosyalar',
-  'assistant.openFile': 'Aç',
   'assistant.downloadFile': 'İndir',
   'assistant.thinking': 'Düşünüyor',
   'assistant.thought': 'Düşündü',

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
+import { ToolCard } from '../../src/components/ToolCard';
 import type { AgentEvent, ChatMessage } from '../../src/types';
 
 function messageWithEvents(events: AgentEvent[]): ChatMessage {
@@ -271,5 +272,59 @@ describe('AssistantMessage tool status', () => {
     expect(link?.getAttribute('href')).toBe('https://github.com/nexu-io/example-plugin');
     expect(link?.textContent).toBe('https://github.com/nexu-io/example-plugin');
     expect(container.querySelector('.status-detail')?.textContent).toContain('"}');
+  });
+});
+
+describe('ToolCard file opening affordances', () => {
+  afterEach(() => cleanup());
+
+  it('opens a written project file from the path label without a trailing open button', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <ToolCard
+        use={{
+          kind: 'tool_use',
+          id: 'tool-1',
+          name: 'Write',
+          input: {
+            file_path: '/Users/lucifer/Library/Application Support/Open Design/namespaces/release-stable/projects/proj-1/index.html',
+            content: '<html></html>',
+          },
+        }}
+        runStreaming={false}
+        runSucceeded
+        projectFileNames={new Set(['index.html'])}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    expect(container.querySelector('.op-open')).toBeNull();
+    const pathButton = container.querySelector<HTMLButtonElement>('button.op-path-button');
+    expect(pathButton?.textContent).toContain('/Users/lucifer/Library/Application Support/Open Design');
+
+    fireEvent.click(pathButton!);
+    expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
+  });
+
+  it('leaves file paths inert when the target is not in the project file set', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <ToolCard
+        use={{
+          kind: 'tool_use',
+          id: 'tool-1',
+          name: 'Read',
+          input: { file_path: '/tmp/outside.log' },
+        }}
+        runStreaming={false}
+        runSucceeded
+        projectFileNames={new Set(['index.html'])}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    expect(container.querySelector('button.op-path-button')).toBeNull();
+    expect(container.querySelector('code.op-path')?.textContent).toBe('/tmp/outside.log');
+    expect(container.querySelector('.op-open')).toBeNull();
   });
 });

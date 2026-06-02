@@ -132,6 +132,7 @@
 .op-path {
   background: transparent;
   padding: 0;
+  border: 0;
   border-radius: 0;
   font-size: 11px;
   font-family: var(--mono);
@@ -140,6 +141,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: min(220px, 100%);
+}
+.op-path-button {
+  display: inline-block;
+  text-align: left;
+  cursor: pointer;
+}
+.op-path-button:hover {
+  color: var(--accent);
+}
+.op-path-button:focus-visible {
+  outline: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .chat-surface-meta .op-path + span,
 .chat-surface-meta span + .op-path {
@@ -170,20 +185,6 @@
   border-radius: 6px;
   background: none;
   color: var(--text-muted);
-}
-.op-open {
-  font-size: 10.5px;
-  min-height: 28px;
-  padding: 2px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.op-open:hover {
-  background: transparent;
-  color: var(--accent);
 }
 
 .produced-files {
@@ -220,6 +221,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--mono);
+}
+.produced-file-name-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.produced-file-name-button:hover {
+  color: var(--accent);
+}
+.produced-file-name-button:focus-visible {
+  outline: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .produced-file-size {
   font-size: 10.5px;
@@ -430,7 +449,22 @@
   font-family: var(--mono);
   font-size: 11.5px;
   background: transparent;
+  color: inherit;
+  border: 0;
   padding: 0;
+}
+.file-ops-row-path-button {
+  text-align: left;
+  cursor: pointer;
+}
+.file-ops-row-path-button:hover {
+  color: var(--accent);
+}
+.file-ops-row-path-button:focus-visible {
+  outline: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .file-ops-row-count {
   font-size: 10.5px;
@@ -454,20 +488,6 @@
 .file-ops-row-status--error {
   color: #c0392b;
   background: color-mix(in oklab, #c0392b 12%, transparent);
-}
-.file-ops-row-open {
-  font-size: 11px;
-  padding: 3px 9px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.file-ops-row-open:hover {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .op-bash .op-command,

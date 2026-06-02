@@ -694,4 +694,26 @@ describe('AssistantMessage recovered produced files', () => {
 
     expect(screen.getByText('agent-sketch.sketch.json')).toBeTruthy();
   });
+
+  it('opens produced files from the file name while keeping download as the explicit action', () => {
+    const onRequestOpenFile = vi.fn();
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({ producedFiles: [producedFile('index.html')] })}
+        streaming={false}
+        projectId="proj-1"
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    const nameButton = container.querySelector<HTMLButtonElement>('.produced-file-name-button');
+    expect(nameButton).toBeTruthy();
+    expect(nameButton?.textContent).toBe('index.html');
+    expect(nameButton!.classList.contains('produced-file-name-button')).toBe(true);
+    expect(container.querySelector('.produced-file-actions .ghost')).toBeNull();
+    expect(container.querySelector('.produced-file-actions .ghost-link')?.textContent).toBe('Download');
+
+    fireEvent.click(nameButton!);
+    expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
+  });
 });

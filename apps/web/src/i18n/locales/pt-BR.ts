@@ -1465,7 +1465,6 @@ export const ptBR: Dict = {
   'assistant.continueRemaining': 'Continuar tarefas restantes',
   'assistant.outTokens': '{n} saída',
   'assistant.producedFiles': 'Arquivos deste turno',
-  'assistant.openFile': 'Abrir',
   'assistant.downloadFile': 'Baixar',
   'assistant.thinking': 'Pensando',
   'assistant.thought': 'Pensou',

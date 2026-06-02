@@ -1811,7 +1811,6 @@ export const zhTW: Dict = {
   'assistant.emptyResponseMessage': '服務商結束了請求，但沒有返回文字或設計產物。請嘗試更換模型或服務商、檢查額度，或重試。',
   'assistant.outTokens': '{n} 輸出',
   'assistant.producedFiles': '本輪產出的檔案',
-  'assistant.openFile': '開啟',
   'assistant.downloadFile': '下載',
   'assistant.unfinishedLabel': '已停止，仍有未完成任務',
   'assistant.unfinishedSummary': '剩餘 {n} 個任務',
