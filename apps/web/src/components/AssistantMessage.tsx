@@ -41,7 +41,11 @@ import {
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon, type IconName } from "./Icon";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
-import { ChatDisclosure, type ChatSurfaceStatus } from "./chat/ChatSurface";
+import {
+  CHAT_DISCLOSURE_TOGGLE_EVENT,
+  ChatDisclosure,
+  type ChatSurfaceStatus,
+} from "./chat/ChatSurface";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import {
@@ -467,8 +471,9 @@ function AssistantMessageImpl({
   );
   const displayedProducedNotCoveredByFileOps = useMemo(() => {
     if (fileOps.length === 0) return displayedProduced;
-    const touchedNames = new Set(fileOps.map((entry) => entry.path));
-    return displayedProduced.filter((file) => !touchedNames.has(file.name));
+    return displayedProduced.filter(
+      (file) => !fileOps.some((entry) => fileOpCoversProducedFile(entry, file.name)),
+    );
   }, [displayedProduced, fileOps]);
   const pluginActionFolders = useMemo(
     () =>
@@ -2246,6 +2251,22 @@ function SystemReminderBlock({ text }: { text: string }) {
   );
 }
 
+function normalizeFilePathKey(value: string): string {
+  return value.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+function fileOpCoversProducedFile(entry: FileOpEntry, producedName: string): boolean {
+  const producedKey = normalizeFilePathKey(producedName);
+  if (!producedKey) return false;
+  const opDisplayKey = normalizeFilePathKey(entry.path);
+  const opFullKey = normalizeFilePathKey(entry.fullPath);
+  return (
+    opDisplayKey === producedKey ||
+    opFullKey === producedKey ||
+    opFullKey.endsWith(`/${producedKey}`)
+  );
+}
+
 function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -2276,7 +2297,16 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
         className="thinking-toggle"
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={(event) => {
+          const nextOpen = !open;
+          event.currentTarget.dispatchEvent(
+            new CustomEvent(CHAT_DISCLOSURE_TOGGLE_EVENT, {
+              bubbles: true,
+              detail: { open: nextOpen },
+            }),
+          );
+          setOpen(nextOpen);
+        }}
       >
         <span className={`thinking-status${isThinking ? ' op-status-running' : open ? ' thinking-status-active' : ''}`} aria-hidden>
           {isThinking
@@ -2733,7 +2763,7 @@ function lastStateStatus(verbs: string[], t: (k: keyof Dict) => string): ChatSur
       : label === t("tool.done")
       ? "done"
       : "neutral";
-  return { label, tone };
+  return { label, tone, hideLabel: tone === "done" };
 }
 
 type Block =

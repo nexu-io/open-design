@@ -6,6 +6,7 @@ export type ChatSurfaceTone = 'neutral' | 'running' | 'done' | 'error' | 'warnin
 export interface ChatSurfaceStatus {
   label: string;
   tone?: ChatSurfaceTone;
+  hideLabel?: boolean;
 }
 
 export const CHAT_DISCLOSURE_TOGGLE_EVENT = 'open-design:chat-disclosure-toggle';
@@ -74,7 +75,7 @@ export function ChatSurfaceHeader({
 
 export function ChatSurfaceStatus({ status }: { status: ChatSurfaceStatus }) {
   const tone = status.tone ?? 'neutral';
-  if (tone === 'done' && status.label.trim().toLowerCase() === 'done') return null;
+  if (status.hideLabel) return null;
   const legacyTone =
     tone === 'done' ? 'ok' : tone === 'running' ? 'running' : tone === 'error' ? 'error' : tone;
   return (

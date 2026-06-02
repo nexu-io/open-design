@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
+import { CHAT_DISCLOSURE_TOGGLE_EVENT } from '../../src/components/chat/ChatSurface';
 import type { AgentInfo, ChatMessage, ProjectFile } from '../../src/types';
 
 beforeAll(() => {
@@ -455,7 +456,7 @@ describe('AssistantMessage thinking blocks', () => {
       />,
     );
 
-    const toggle = screen.getByRole('button', { name: 'Thinking' });
+    const toggle = screen.getByRole('button', { name: 'Thought' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('.thinking-label.shimmer-text')).toBeTruthy();
     expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
@@ -490,6 +491,30 @@ describe('AssistantMessage thinking blocks', () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
+  });
+
+  it('dispatches the shared disclosure event before expanding thinking', () => {
+    const rawThinking = 'Private reasoning details.';
+    const events: Array<{ open: boolean }> = [];
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [{ kind: 'thinking', text: rawThinking } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+    container.addEventListener(CHAT_DISCLOSURE_TOGGLE_EVENT, (event) => {
+      events.push((event as CustomEvent<{ open: boolean }>).detail);
+    });
+
+    const toggle = screen.getByRole('button', { name: 'Thinking' });
+    fireEvent.click(toggle);
+
+    expect(events).toEqual([{ open: true }]);
+    expect(screen.getByText(rawThinking)).toBeTruthy();
   });
 
   it('keeps text emitted during thinking collapsed when it leads into tool use', () => {
@@ -889,6 +914,38 @@ describe('AssistantMessage recovered produced files', () => {
 
     expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
     expect(container.querySelector('.produced-files')).toBeNull();
+  });
+
+  it('does not duplicate nested produced files already covered by file activity', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          producedFiles: [producedFile('plugins/foo/index.ts')],
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Write',
+              input: { file_path: '/repo/plugins/foo/index.ts', content: 'export {};' },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'tool-1',
+              content: 'ok',
+              isError: false,
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFileNames={new Set(['index.ts'])}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(screen.getByTestId('file-ops-row-index.ts')).toBeTruthy();
+    expect(screen.queryByTestId('file-ops-row-plugins/foo/index.ts')).toBeNull();
   });
 
   it('folds produced files not covered by file activity into the same file report', () => {

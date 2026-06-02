@@ -727,7 +727,7 @@ function useToolStatus(result: Props['result'] | undefined, runStreaming: boolea
   if (!result && runStreaming) return { label: t('tool.running'), tone: 'running' };
   if (!result && !runSucceeded) return { label: t('tool.error'), tone: 'error' };
   if (result?.isError) return { label: t('tool.error'), tone: 'error' };
-  return { label: t('tool.done'), tone: 'done' };
+  return { label: t('tool.done'), tone: 'done', hideLabel: true };
 }
 
 function FileErrorDetail({ result }: { result?: Props['result'] }) {
