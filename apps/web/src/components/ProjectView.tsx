@@ -866,7 +866,7 @@ export function ProjectView({
   const tabsHydratedFromSavedStateRef = useRef(false);
   const hasAppliedInitialPrimaryOpenRef = useRef(false);
   // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
-  // tool card, an attachment chip, or a produced-file chip in chat. We
+  // tool card, an attachment chip, or a file report row in chat. We
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);

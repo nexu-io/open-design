@@ -1573,7 +1573,6 @@ export const id: Dict = {
   'assistant.continueRemaining': 'Lanjutkan',
   'assistant.outTokens': '{n} keluar',
   'assistant.producedFiles': 'File yang dibuat',
-  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'Unduh file',
   'assistant.thinking': 'Berpikir...',
   'assistant.thought': 'Berpikir',

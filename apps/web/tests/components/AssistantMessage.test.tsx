@@ -601,8 +601,8 @@ describe('AssistantMessage recovered produced files', () => {
     );
 
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
-    const producedFiles = container.querySelector('.chat-surface.produced-files');
-    expect(producedFiles?.querySelector('.chat-surface-status')).toBeNull();
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(container.querySelector('.chat-surface.produced-files')).toBeNull();
   });
 
   it('does not infer user sketches as turn output files', () => {
@@ -695,7 +695,7 @@ describe('AssistantMessage recovered produced files', () => {
     expect(screen.getByText('agent-sketch.sketch.json')).toBeTruthy();
   });
 
-  it('opens produced files from the file name while keeping download as the explicit action', () => {
+  it('opens generated files from the file name while keeping download as the explicit action', () => {
     const onRequestOpenFile = vi.fn();
     const { container } = render(
       <AssistantMessage
@@ -706,12 +706,11 @@ describe('AssistantMessage recovered produced files', () => {
       />,
     );
 
-    const nameButton = container.querySelector<HTMLButtonElement>('.produced-file-name-button');
+    const nameButton = screen.getByTestId('file-ops-row-path-index.html');
     expect(nameButton).toBeTruthy();
     expect(nameButton?.textContent).toBe('index.html');
-    expect(nameButton!.classList.contains('produced-file-name-button')).toBe(true);
-    expect(container.querySelector('.produced-file-actions .ghost')).toBeNull();
-    expect(container.querySelector('.produced-file-actions .ghost-link')?.textContent).toBe('Download');
+    expect(container.querySelector('.file-ops-row-action .ghost')).toBeNull();
+    expect(screen.getByLabelText('Download index.html')).toBeTruthy();
 
     fireEvent.click(nameButton!);
     expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
@@ -785,8 +784,8 @@ describe('AssistantMessage recovered produced files', () => {
     expect(container.querySelector('.produced-files')).toBeNull();
   });
 
-  it('keeps a separate generated-files surface for produced files not covered by file activity', () => {
-    render(
+  it('folds produced files not covered by file activity into the same file report', () => {
+    const { container } = render(
       <AssistantMessage
         message={baseMessage({
           producedFiles: [producedFile('artifact.html')],
@@ -813,6 +812,8 @@ describe('AssistantMessage recovered produced files', () => {
     );
 
     expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Generated files' })).toBeTruthy();
+    expect(screen.getByTestId('file-ops-row-source.md')).toBeTruthy();
+    expect(screen.getByTestId('file-ops-row-artifact.html')).toBeTruthy();
+    expect(container.querySelector('.produced-files')).toBeNull();
   });
 });

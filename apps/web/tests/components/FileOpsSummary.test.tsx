@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileOpsSummary } from '../../src/components/FileOpsSummary';
 import type { FileOpEntry } from '../../src/runtime/file-ops';
+import type { ProjectFile } from '../../src/types';
 
 function entry(partial: Partial<FileOpEntry> & { path: string }): FileOpEntry {
   return {
@@ -17,6 +18,17 @@ function entry(partial: Partial<FileOpEntry> & { path: string }): FileOpEntry {
   };
 }
 
+function generatedFile(name: string): ProjectFile {
+  return {
+    name,
+    path: name,
+    size: 1536,
+    mtime: 1700000005,
+    kind: 'html',
+    mime: 'text/html',
+  } as ProjectFile;
+}
+
 describe('FileOpsSummary', () => {
   afterEach(() => cleanup());
 
@@ -25,6 +37,28 @@ describe('FileOpsSummary', () => {
       <FileOpsSummary entries={[]} streaming={false} />,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it('renders generated files inside the same turn report', () => {
+    const onRequestOpenFile = vi.fn();
+    render(
+      <FileOpsSummary
+        entries={[]}
+        generatedFiles={[generatedFile('artifact.html')]}
+        projectId="proj-1"
+        streaming={false}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(screen.getByText(/1 files/)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('file-ops-row-path-artifact.html'));
+    expect(onRequestOpenFile).toHaveBeenCalledWith('artifact.html');
+
+    const download = screen.getByLabelText('Download artifact.html') as HTMLAnchorElement;
+    expect(download.getAttribute('href')).toContain('/api/projects/proj-1/raw/artifact.html');
+    expect(download.getAttribute('download')).toBe('artifact.html');
   });
 
   it('starts collapsed while streaming and surfaces per-op totals in the header', () => {

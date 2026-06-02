@@ -19,6 +19,8 @@ import {
   type FileOpEntry,
   type FileOpKind,
 } from '../runtime/file-ops';
+import { projectFileUrl } from '../providers/registry';
+import type { ProjectFile } from '../types';
 import { Icon, type IconName } from './Icon';
 import { ChatDisclosure } from './chat/ChatSurface';
 
@@ -32,6 +34,8 @@ interface Props {
    *  only shows for entries whose basename is in the set. Pass undefined
    *  to opt out of the existence check (button always shown). */
   projectFileNames?: Set<string> | undefined;
+  generatedFiles?: ProjectFile[] | undefined;
+  projectId?: string | null | undefined;
   onRequestOpenFile?: ((name: string) => void) | undefined;
 }
 
@@ -51,6 +55,8 @@ export function FileOpsSummary({
   entries,
   streaming,
   projectFileNames,
+  generatedFiles = [],
+  projectId = null,
   onRequestOpenFile,
 }: Props) {
   const t = useT();
@@ -63,11 +69,13 @@ export function FileOpsSummary({
     if (!userToggled && !streaming) setOpen(true);
   }, [streaming, userToggled]);
 
-  if (entries.length === 0) return null;
+  if (entries.length === 0 && generatedFiles.length === 0) return null;
 
   const counts = countFileOps(entries);
   const summaryParts: string[] = [];
-  summaryParts.push(t('designFiles.folderCount', { n: entries.length }));
+  summaryParts.push(
+    t('designFiles.folderCount', { n: entries.length + generatedFiles.length }),
+  );
   if (counts.write > 0) summaryParts.push(`${t('tool.write')} ${counts.write}`);
   if (counts.edit > 0) summaryParts.push(`${t('tool.edit')} ${counts.edit}`);
   if (counts.read > 0) summaryParts.push(`${t('tool.read')} ${counts.read}`);
@@ -87,18 +95,94 @@ export function FileOpsSummary({
         setOpen(nextOpen);
       }}
     >
-        <ul className="file-ops-list" role="list">
-          {entries.map((entry) => (
-            <FileOpRow
-              key={entry.fullPath}
-              entry={entry}
-              projectFileNames={projectFileNames}
-              onRequestOpenFile={onRequestOpenFile}
-            />
-          ))}
-        </ul>
+      <ul className="file-ops-list" role="list">
+        {entries.map((entry) => (
+          <FileOpRow
+            key={entry.fullPath}
+            entry={entry}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ))}
+        {generatedFiles.map((file) => (
+          <GeneratedFileRow
+            key={file.name}
+            file={file}
+            projectId={projectId}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ))}
+      </ul>
     </ChatDisclosure>
   );
+}
+
+function GeneratedFileRow({
+  file,
+  projectId,
+  onRequestOpenFile,
+}: {
+  file: ProjectFile;
+  projectId?: string | null | undefined;
+  onRequestOpenFile?: ((name: string) => void) | undefined;
+}) {
+  const t = useT();
+  return (
+    <li
+      className="file-ops-row file-ops-row--done file-ops-row--generated"
+      data-testid={`file-ops-row-${file.name}`}
+    >
+      <div className="file-ops-row-badges">
+        <span
+          className="file-ops-badge file-ops-badge--generated"
+          title={t('assistant.producedFiles')}
+          aria-label={t('assistant.producedFiles')}
+        >
+          <Icon name={projectFileIconName(file.kind)} size={11} />
+        </span>
+      </div>
+      {onRequestOpenFile ? (
+        <button
+          type="button"
+          className="file-ops-row-path file-ops-row-path-button"
+          onClick={() => onRequestOpenFile(file.name)}
+          title={t('tool.openInTab', { name: file.name })}
+          data-testid={`file-ops-row-path-${file.name}`}
+        >
+          {file.name}
+        </button>
+      ) : (
+        <code className="file-ops-row-path" title={file.path ?? file.name}>
+          {file.name}
+        </code>
+      )}
+      <span className="file-ops-row-size">{humanBytes(file.size)}</span>
+      {projectId ? (
+        <a
+          className="file-ops-row-action"
+          href={projectFileUrl(projectId, file.name)}
+          download={file.name}
+          aria-label={`${t('assistant.downloadFile')} ${file.name}`}
+          title={`${t('assistant.downloadFile')} ${file.name}`}
+        >
+          <Icon name="download" size={12} />
+        </a>
+      ) : null}
+    </li>
+  );
+}
+
+function projectFileIconName(kind: ProjectFile['kind']): IconName {
+  if (kind === 'html' || kind === 'code') return 'file-code';
+  if (kind === 'image') return 'image';
+  if (kind === 'sketch') return 'pencil';
+  return 'file';
+}
+
+function humanBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function FileOpRow({

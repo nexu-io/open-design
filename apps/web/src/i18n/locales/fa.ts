@@ -1405,7 +1405,6 @@ export const fa: Dict = {
   'assistant.continueRemaining': 'ادامه وظایف باقی مانده',
   'assistant.outTokens': '{n} خروجی',
   'assistant.producedFiles': 'فایل‌های این نوبت',
-  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'دانلود',
   'assistant.thinking': 'در حال فکر کردن',
   'assistant.thought': 'فکر کرد',

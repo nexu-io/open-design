@@ -1385,7 +1385,6 @@ export const th: Dict = {
   'assistant.continueRemaining': 'สานต่อภาระหน้าที่หลงเหลือที',
   'assistant.outTokens': 'หมดการจ่ายใน {n} โทเคน',
   'assistant.producedFiles': 'ดึงงานมาจากระบบไฟล์',
-  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'สูบลงตัวเครื่อง',
   'assistant.thinking': 'ไตร่ตรอง…',
   'assistant.thought': 'คิดแล้ว',

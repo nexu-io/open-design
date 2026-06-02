@@ -268,7 +268,7 @@ interface Props {
   skills?: SkillSummary[];
   // Click-to-open chain: passes a basename up to ProjectView, which sets
   // FileWorkspace's openRequest. Tool cards, attachment chips, and
-  // produced-file chips all call this.
+  // file report rows all call this.
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginDetails?: (pluginId: string) => void;
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;

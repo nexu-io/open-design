@@ -6,7 +6,6 @@ import {
   type MarkdownLinkClickHandler,
 } from "../runtime/markdown";
 import { asInProjectFilePath } from "../runtime/in-project-link";
-import { projectFileUrl } from "../providers/registry";
 import { submitChatRunToolResult } from "../providers/daemon";
 import { useAnalytics } from "../analytics/provider";
 import {
@@ -717,18 +716,13 @@ function AssistantMessageImpl({
           }
           return null;
         })}
-        {fileOps.length > 0 ? (
+        {fileOps.length > 0 || (!streaming && displayedProducedNotCoveredByFileOps.length > 0 && projectId) ? (
           <FileOpsSummary
             entries={fileOps}
             streaming={streaming}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
-        {!streaming && displayedProducedNotCoveredByFileOps.length > 0 && projectId ? (
-          <ProducedFiles
-            files={displayedProducedNotCoveredByFileOps}
+            generatedFiles={!streaming && projectId ? displayedProducedNotCoveredByFileOps : []}
             projectId={projectId}
+            projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
@@ -1635,59 +1629,6 @@ function UnfinishedTodosPanel({
   );
 }
 
-function ProducedFiles({
-  files,
-  projectId,
-  onRequestOpenFile,
-}: {
-  files: ProjectFile[];
-  projectId: string;
-  onRequestOpenFile?: (name: string) => void;
-}) {
-  const t = useT();
-  return (
-    <ChatDisclosure
-      className="produced-files"
-      icon="file"
-      title={t("assistant.generatedFiles")}
-    >
-      <div className="produced-files-list">
-        {files.map((f) => (
-          <div key={f.name} className="produced-file">
-            <span className="produced-file-icon" aria-hidden>
-              <Icon name={kindIconName(f.kind)} size={14} />
-            </span>
-            {onRequestOpenFile ? (
-              <button
-                type="button"
-                className="produced-file-name produced-file-name-button"
-                onClick={() => onRequestOpenFile(f.name)}
-                title={t("tool.openInTab", { name: f.name })}
-              >
-                {f.name}
-              </button>
-            ) : (
-              <span className="produced-file-name" title={f.name}>
-                {f.name}
-              </span>
-            )}
-            <span className="produced-file-size">{humanBytes(f.size)}</span>
-            <div className="produced-file-actions">
-              <a
-                className="ghost-link"
-                href={projectFileUrl(projectId, f.name)}
-                download={f.name}
-              >
-                {t("assistant.downloadFile")}
-              </a>
-            </div>
-          </div>
-        ))}
-      </div>
-    </ChatDisclosure>
-  );
-}
-
 // Pure renderer. State (busyKey, notices) and the action runner live in the
 // AssistantMessage parent so they survive the panel's unmount/remount cycle
 // during install (issue #2876).
@@ -1812,22 +1753,6 @@ function PluginActionPanel({
       </div>
     </ChatDisclosure>
   );
-}
-
-function kindIconName(
-  kind: ProjectFile["kind"]
-): "file-code" | "image" | "pencil" | "file" {
-  if (kind === "html") return "file-code";
-  if (kind === "image") return "image";
-  if (kind === "sketch") return "pencil";
-  if (kind === "code") return "file-code";
-  return "file";
-}
-
-function humanBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function pluginFoldersTouchedThisTurn(

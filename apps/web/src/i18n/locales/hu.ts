@@ -1424,7 +1424,6 @@ export const hu: Dict = {
   'assistant.continueRemaining': 'Hátralévő feladatok folytatása',
   'assistant.outTokens': '{n} ki',
   'assistant.producedFiles': 'A körben létrehozott fájlok',
-  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'Letöltés',
   'assistant.thinking': 'Gondolkodik',
   'assistant.thought': 'Gondolkodott',

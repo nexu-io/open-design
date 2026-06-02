@@ -1424,7 +1424,6 @@ export const ar: Dict = {
   'assistant.continueRemaining': 'متابعة المهام المتبقية',
   'assistant.outTokens': '{n} خرج',
   'assistant.producedFiles': 'الملفات من هذا الدور',
-  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'تحميل',
   'assistant.thinking': 'تفكير',
   'assistant.thought': 'فكّر',

@@ -670,7 +670,7 @@ export function FileWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedTabs, activeTab]);
 
-  // External open requests from chat (tool cards, produced-file chips,
+  // External open requests from chat (tool cards, file report rows,
   // deep-linked URL, or the parent's auto-open after an agent Write) —
   // add the file to the open-tabs set and focus it.
   useEffect(() => {
