@@ -118,6 +118,13 @@ function validateElectronPath(path: string): void {
  *
  * The electron path is double-quoted so that paths containing spaces are
  * handled correctly without any further escaping.
+ *
+ * Implementation note: this MUST be a template literal, not `args.join(" ")`,
+ * because `join` collapses the empty-string title into a double space and
+ * produces `start  /b`. cmd then parses `/b` as the window title and the
+ * first quoted arg (`electron.exe`) is consumed as a label — the real
+ * command is never executed. The literal `""` token after `start` is the
+ * only thing cmd uses to disambiguate.
  */
 function buildRunCommand(namespace: string, ipc: string): string {
   const electronExe = resolveElectronBinary();
@@ -131,19 +138,19 @@ function buildRunCommand(namespace: string, ipc: string): string {
 
   validateElectronPath(electronExe);
 
+  // Stamp values are individually quoted so namespace/ipc that contain
+  // spaces or other cmd metacharacters survive the round-trip through
+  // `cmd /c start`. The double quotes around `""` after `start` are the
+  // explicit empty window title.
   const stamp = [
     `--od-stamp-app=${APP_KEYS.TRAY}`,
     `--od-stamp-mode=dev`,
-    `--od-stamp-namespace=${namespace}`,
-    `--od-stamp-ipc=${ipc}`,
+    `--od-stamp-namespace="${namespace}"`,
+    `--od-stamp-ipc="${ipc}"`,
     `--od-stamp-source=${SIDECAR_SOURCES.TOOLS_DEV}`,
   ];
 
-  // `start "" /b` — empty title, background (no new console)
-  // electron.exe is quoted, entry script path is quoted
-  const args = ["/c", "start", "", "/b", `"${electronExe}"`, `"${entryScript}"`, ...stamp];
-
-  return ["cmd.exe", ...args].join(" ");
+  return `cmd.exe /c start "" /b "${electronExe}" "${entryScript}" ${stamp.join(" ")}`;
 }
 
 // ─── Registry I/O ─────────────────────────────────────────────────────────────

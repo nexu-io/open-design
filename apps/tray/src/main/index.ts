@@ -436,17 +436,27 @@ if (isDirectEntry()) {
   const stamp = readProcessStamp(args, OPEN_DESIGN_SIDECAR_CONTRACT);
   if (stamp == null) {
     console.error("[tray] ERROR: no valid sidecar stamp found in args:", args);
-    process.exit(1);
+    console.error(
+      "[tray] HINT: --od-stamp-app, --od-stamp-ipc, --od-stamp-namespace, " +
+        "--od-stamp-mode, --od-stamp-source must all be present and well-formed.",
+    );
+    console.error("[tray] HINT: ipc must be an absolute path or a Windows named pipe (e.g. \\\\.\\pipe\\xxx).");
+    // Keep the process alive briefly so the error is observable in whatever
+    // launched us (Task Manager / Event Viewer at boot). Without this, an
+    // autostart failure disappears silently and the user sees no tray icon
+    // and no feedback at all.
+    setTimeout(() => process.exit(1), 5000);
+  } else {
+    console.log("[tray] stamp:", stamp);
+
+    const runtime = bootstrapSidecarRuntime(stamp, process.env, {
+      app: APP_KEYS.TRAY,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    });
+
+    void runTrayMain(runtime).catch((error: unknown) => {
+      console.error("[tray] FATAL:", error instanceof Error ? error.stack || error.message : String(error));
+      process.exit(1);
+    });
   }
-  console.log("[tray] stamp:", stamp);
-
-  const runtime = bootstrapSidecarRuntime(stamp, process.env, {
-    app: APP_KEYS.TRAY,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-  });
-
-  void runTrayMain(runtime).catch((error: unknown) => {
-    console.error("[tray] FATAL:", error instanceof Error ? error.stack || error.message : String(error));
-    process.exit(1);
-  });
 }
