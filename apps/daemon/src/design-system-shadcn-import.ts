@@ -186,7 +186,16 @@ export function parseShadcnReference(input: string): ParsedShadcnReference {
       throw badReference('reference is not a valid URL');
     }
     assertFetchableUrl(url);
-    const fragment = url.hash ? decodeURIComponent(url.hash.replace(/^#/, '')).trim() : '';
+    let fragment = '';
+    if (url.hash) {
+      // decodeURIComponent throws URIError on malformed percent-encoding (e.g.
+      // "#%E0%A4%A"); surface it as a 400, not an uncaught 500.
+      try {
+        fragment = decodeURIComponent(url.hash.replace(/^#/, '')).trim();
+      } catch {
+        throw badReference('reference fragment is not valid percent-encoding');
+      }
+    }
     const clean = `${url.origin}${url.pathname}${url.search}`;
     return { kind: 'url', url: clean, ...(fragment ? { item: fragment } : {}) };
   }
@@ -535,7 +544,7 @@ async function writeShadcnFiles(
       `shadcn registry item declares ${files.length} files, exceeding the ${MAX_FILES}-file limit`,
     );
   }
-  const used = new Set<string>();
+  const used = new Map<string, string>(); // sanitized destination -> declared source
   for (const file of files) {
     const declared =
       typeof file?.path === 'string' && file.path.trim()
@@ -553,8 +562,18 @@ async function writeShadcnFiles(
       }
       continue;
     }
-    if (used.has(relPath)) continue;
-    used.add(relPath);
+    // A duplicate sanitized destination means the registry item is ambiguous
+    // (e.g. "@/button.tsx" + "button.tsx", or two entries sharing a target).
+    // Dropping the later one would silently lose the author's intended file, so
+    // fail fast and name both sources.
+    const priorSource = used.get(relPath);
+    if (priorSource !== undefined) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        `shadcn registry files "${priorSource}" and "${declared ?? relPath}" both resolve to "${relPath}"`,
+      );
+    }
+    used.set(relPath, declared ?? relPath);
 
     let content = typeof file?.content === 'string' ? file.content : undefined;
     if (content === undefined) {

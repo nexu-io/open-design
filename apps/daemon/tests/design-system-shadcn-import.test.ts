@@ -69,6 +69,12 @@ describe('parseShadcnReference', () => {
     expect(() => parseShadcnReference('')).toThrow(/required/i);
     expect(() => parseShadcnReference('only/two')).toThrow(/<owner>\/<repo>\/<item>/);
   });
+
+  it('rejects a URL fragment with malformed percent-encoding as a bad request', () => {
+    expect(() => parseShadcnReference('https://example.com/registry.json#%E0%A4%A')).toThrow(
+      /percent-encoding|fragment/i,
+    );
+  });
 });
 
 describe('wrapShadcnColorValue', () => {
@@ -304,5 +310,24 @@ describe('importShadcnDesignSystemProject', () => {
         }),
       }),
     ).rejects.toThrow(/https/i);
+  });
+
+  it('fails the import when two declared files resolve to the same destination', async () => {
+    const url = 'https://example.com/r/dup.json';
+    await expect(
+      importShadcnDesignSystemProject(url, tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: fetchStub({
+          [url]: {
+            name: 'dup',
+            type: 'registry:component',
+            cssVars: { light: { primary: '1 2% 3%' } },
+            files: [
+              { path: 'button.tsx', type: 'registry:component', content: 'export const A = 1;' },
+              { target: '@/button.tsx', type: 'registry:component', content: 'export const B = 2;' },
+            ],
+          },
+        }),
+      }),
+    ).rejects.toThrow(/both resolve to/i);
   });
 });
