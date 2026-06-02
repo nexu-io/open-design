@@ -13,15 +13,20 @@
 //
 // Reference forms (matching the shadcn CLI `add` syntax):
 //   - `<owner>/<repo>/<item>[#<branch|tag|sha>]` — resolved against the
-//     repository's root `registry.json` on GitHub.
+//     repository's root `registry.json` on GitHub (following the `include`
+//     layout if present).
 //   - `https://…/<item>.json` — a direct registry-item document. A
 //     `registry.json` index URL is also accepted when an item is selected
 //     with a `#<item>` fragment.
-//   - `http://` is permitted only for loopback hosts (localhost /
-//     127.0.0.1 / ::1) so a self-hosted local registry can be imported and
-//     tests stay deterministic.
+//
+// Network safety: every URL we contact is validated against an egress policy
+// (see `assertFetchableUrl`) — `http://` is allowed only for loopback hosts,
+// and private / link-local / non-routable IP literals are refused for both
+// schemes. Redirects are disabled, every fetch is size- and time-bounded, and
+// the whole import shares one overall request/time budget.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import path from 'node:path';
 
 import {
@@ -32,20 +37,32 @@ import {
 } from './design-system-import.js';
 
 const FETCH_TIMEOUT_MS = 15_000;
+// Whole-import wall-clock ceiling, independent of the per-request timeout.
+const OVERALL_TIMEOUT_MS = 60_000;
 const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_FILES = 100;
 const MAX_INCLUDE_DEPTH = 4;
+const MAX_INCLUDE_BREADTH = 100;
+// Hard ceiling on total network requests across resolution + file fetches, so
+// a hostile registry can't fan out into thousands of sequential fetches.
+const MAX_TOTAL_FETCHES = 200;
 // Tried in order when the shorthand omits an explicit ref. GitHub's raw host
 // needs a concrete branch/tag/sha (it does not resolve a symbolic HEAD), and
 // these two cover virtually every default branch.
 const DEFAULT_GITHUB_REFS = ['main', 'master'] as const;
+// Registry files are materialized under this subdirectory of the temp project
+// so a hostile `files[].target` (e.g. "package.json") can never overwrite the
+// importer-generated files at the temp root.
+const SHADCN_FILES_SUBDIR = 'registry-files';
 
 export type ShadcnFetchResponse = {
   ok: boolean;
   status: number;
   statusText: string;
   text(): Promise<string>;
+  headers?: { get(name: string): string | null };
+  body?: ReadableStream<Uint8Array> | null;
 };
 
 export type ShadcnFetch = (
@@ -113,8 +130,8 @@ type ResolvedShadcnItem = {
   homepage?: string;
   /**
    * Base URL for resolving the item's relative `files[].path`: the directory of
-   * the registry.json that declared the item, so `include`d items resolve their
-   * files relative to the included file (per the shadcn spec).
+   * the registry.json (or item.json) that declared the item, so `include`d
+   * items resolve their files relative to the included file, per the shadcn spec.
    */
   rawBaseUrl?: string;
 };
@@ -125,7 +142,10 @@ export async function importShadcnDesignSystemProject(
   userDesignSystemsRoot: string,
   options: ShadcnDesignSystemImportOptions = {},
 ): Promise<LocalDesignSystemImportResult> {
-  const fetchImpl = options.fetchImpl ?? defaultShadcnFetch();
+  // One shared budget across every fetch this import makes (resolution +
+  // include recursion + file fetches): a request count cap and a wall-clock
+  // deadline, layered on top of the per-request timeout.
+  const fetchImpl = withFetchBudget(options.fetchImpl ?? defaultShadcnFetch());
   const parsed = parseShadcnReference(reference);
   const importedAt = (options.now ?? new Date()).toISOString();
   const resolved = await resolveShadcnItem(parsed, fetchImpl);
@@ -227,18 +247,80 @@ export function parseShadcnReference(input: string): ParsedShadcnReference {
   return { kind: 'github', owner, repo, item, ...(ref ? { ref } : {}) };
 }
 
+// ---------------------------------------------------------------------------
+// Egress policy (SSRF protection)
+// ---------------------------------------------------------------------------
+
+type HostClass = 'loopback' | 'blocked' | 'public';
+
+// Allow loopback over http or https (self-hosted local registry / tests).
+// Refuse private, link-local, ULA, and non-routable internal addresses for
+// both schemes. Require https for any other (public) host.
 function assertFetchableUrl(url: URL): void {
   const protocol = url.protocol.toLowerCase();
-  if (protocol === 'https:') return;
-  if (protocol === 'http:' && isLoopbackHost(url.hostname)) return;
-  throw badReference(
-    'only https:// registry URLs are supported (http:// is allowed for localhost only)',
-  );
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw badReference('only http(s) registry URLs are supported');
+  }
+  const hostClass = classifyHost(url.hostname);
+  if (hostClass === 'blocked') {
+    throw badReference(
+      `refusing to fetch "${url.hostname}": private, loopback-internal, link-local, and other non-routable addresses are not allowed`,
+    );
+  }
+  if (hostClass === 'loopback') return;
+  if (protocol !== 'https:') {
+    throw badReference(
+      'only https:// is allowed for non-loopback registry hosts (http:// is allowed for localhost only)',
+    );
+  }
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+function classifyHost(rawHost: string): HostClass {
+  let host = rawHost.trim().toLowerCase();
+  if (!host) return 'blocked';
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+
+  if (host === 'localhost' || host.endsWith('.localhost')) return 'loopback';
+  // Pure-decimal or hex hosts are obfuscated IP encodings, never real registry
+  // hostnames — refuse them rather than let the resolver normalize a bypass.
+  if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/.test(host)) return 'blocked';
+
+  const kind = isIP(host);
+  if (kind === 4) return classifyIpv4(host);
+  if (kind === 6) return classifyIpv6(host);
+  // A DNS hostname we can't classify statically. redirect:'error' plus the
+  // IP-literal denials above cover the common SSRF vectors; closing DNS
+  // rebinding fully would require socket-level IP pinning.
+  return 'public';
+}
+
+function classifyIpv4(ip: string): HostClass {
+  const parts = ip.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
+    return 'blocked';
+  }
+  const a = parts[0] as number;
+  const b = parts[1] as number;
+  if (a === 127) return 'loopback';
+  if (a === 0) return 'blocked'; // 0.0.0.0/8 "this host"
+  if (a === 10) return 'blocked'; // 10.0.0.0/8
+  if (a === 172 && b >= 16 && b <= 31) return 'blocked'; // 172.16.0.0/12
+  if (a === 192 && b === 168) return 'blocked'; // 192.168.0.0/16
+  if (a === 169 && b === 254) return 'blocked'; // 169.254.0.0/16 (incl. cloud metadata)
+  if (a === 100 && b >= 64 && b <= 127) return 'blocked'; // 100.64.0.0/10 (CGNAT)
+  return 'public';
+}
+
+function classifyIpv6(ip: string): HostClass {
+  const host = ip.toLowerCase();
+  if (host === '::1') return 'loopback';
+  if (host === '::') return 'blocked'; // unspecified
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(host);
+  if (mapped && mapped[1]) return classifyIpv4(mapped[1]);
+  const head = host.split(':')[0] ?? '';
+  if (head.startsWith('fc') || head.startsWith('fd')) return 'blocked'; // fc00::/7 ULA
+  if (/^fe[89ab]/.test(head)) return 'blocked'; // fe80::/10 link-local
+  return 'public';
 }
 
 function isShadcnSegment(value: string): boolean {
@@ -280,9 +362,12 @@ async function resolveShadcnItem(
     if (!isUsableItem(item)) {
       throw badReference('URL did not return a shadcn registry item');
     }
+    // A direct item document: its relative file paths resolve against the
+    // item document's own directory (shadcn spec).
     return {
       item,
       registryUrl: parsed.url,
+      rawBaseUrl: registryFileDir(parsed.url),
       ...(typeof item.homepage === 'string' ? { homepage: item.homepage } : {}),
     };
   }
@@ -290,7 +375,10 @@ async function resolveShadcnItem(
   const refs = parsed.ref ? [parsed.ref] : [...DEFAULT_GITHUB_REFS];
   let lastError: unknown;
   for (const ref of refs) {
-    const registryUrl = `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(ref)}/registry.json`;
+    // Encode per path segment so a valid slashed ref (e.g. "feature/foo")
+    // survives instead of becoming "feature%2Ffoo".
+    const encodedRef = ref.split('/').map(encodeURIComponent).join('/');
+    const registryUrl = `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodedRef}/registry.json`;
     let match: RegistryItemMatch | undefined;
     try {
       match = await locateItemInRegistry(registryUrl, parsed.item, fetchImpl, new Set(), 0);
@@ -344,6 +432,11 @@ async function locateItemInRegistry(
   }
 
   if (Array.isArray(registry.include)) {
+    if (registry.include.length > MAX_INCLUDE_BREADTH) {
+      throw badReference(
+        `registry at ${registryUrl} declares ${registry.include.length} includes, exceeding the ${MAX_INCLUDE_BREADTH}-include limit`,
+      );
+    }
     for (const entry of registry.include) {
       if (typeof entry !== 'string' || !entry.trim()) continue;
       let includedUrl: string;
@@ -360,8 +453,8 @@ async function locateItemInRegistry(
   return undefined;
 }
 
-// Directory URL of a registry.json (drops the trailing filename), used as the
-// base for resolving the item's relative file paths.
+// Directory URL of a registry.json / item.json (drops the trailing filename),
+// used as the base for resolving the item's relative file paths.
 function registryFileDir(url: string): string {
   try {
     return new URL('.', url).toString().replace(/\/+$/, '');
@@ -392,7 +485,7 @@ async function fetchJsonDocument(url: string, fetchImpl: ShadcnFetch): Promise<u
 async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
   // Defense in depth: validate every URL we actually contact — not just the
   // user-supplied entry point, but raw GitHub URLs, `include` targets, and raw
-  // file URLs too. Combined with redirect:error in defaultShadcnFetch, this
+  // file URLs too. Combined with redirect:'error' in defaultShadcnFetch, this
   // closes redirect- and include-based SSRF paths to disallowed hosts.
   let parsedUrl: URL;
   try {
@@ -409,6 +502,10 @@ async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
     try {
       response = await fetchImpl(url, { signal: controller.signal });
     } catch (err) {
+      if (err instanceof LocalDesignSystemImportError) throw err;
+      if (isAbortError(err)) {
+        throw new LocalDesignSystemImportError('BAD_REQUEST', `timed out fetching ${url}`);
+      }
       throw new LocalDesignSystemImportError('BAD_REQUEST', `could not fetch ${url}: ${formatError(err)}`);
     }
     if (!response.ok) {
@@ -417,12 +514,27 @@ async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
         `could not fetch ${url}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
       );
     }
-    // Keep the abort timer armed across body consumption so a server that sends
-    // headers promptly and then stalls the body cannot hang the import.
+    // Reject before reading when the server already advertises an over-cap body.
+    const declaredLength = Number(response.headers?.get('content-length') ?? '');
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_DOCUMENT_BYTES) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        `registry document at ${url} exceeds the ${MAX_DOCUMENT_BYTES}-byte limit`,
+      );
+    }
+    // The abort timer stays armed across body consumption, and the body is read
+    // with a running byte cap so a stalled or oversized body can neither hang
+    // the import nor buffer unbounded memory.
+    if (response.body && typeof response.body.getReader === 'function') {
+      return await readBoundedStream(response.body, MAX_DOCUMENT_BYTES, url);
+    }
     let text: string;
     try {
       text = await response.text();
     } catch (err) {
+      if (isAbortError(err)) {
+        throw new LocalDesignSystemImportError('BAD_REQUEST', `timed out reading ${url}`);
+      }
       throw new LocalDesignSystemImportError('BAD_REQUEST', `could not read ${url}: ${formatError(err)}`);
     }
     if (text.length > MAX_DOCUMENT_BYTES) {
@@ -435,6 +547,45 @@ async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function readBoundedStream(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  url: string,
+): Promise<string> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new LocalDesignSystemImportError(
+          'BAD_REQUEST',
+          `registry document at ${url} exceeds the ${maxBytes}-byte limit`,
+        );
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    if (err instanceof LocalDesignSystemImportError) throw err;
+    if (isAbortError(err)) {
+      throw new LocalDesignSystemImportError('BAD_REQUEST', `timed out reading ${url}`);
+    }
+    throw new LocalDesignSystemImportError('BAD_REQUEST', `could not read ${url}: ${formatError(err)}`);
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder('utf-8').decode(merged);
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +634,24 @@ export function renderShadcnSourceCss(cssVars: ShadcnCssVars | undefined): strin
 }
 
 function declaration(key: string, value: unknown): string {
-  return `  ${normalizeVarName(key)}: ${wrapShadcnColorValue(String(value))};`;
+  const name = normalizeVarName(key);
+  // Reject anything that isn't a clean custom-property ident or whose value
+  // could break out of the declaration — otherwise a hostile cssVars entry
+  // could inject extra rules or be silently dropped by the token scanner.
+  if (!/^--[A-Za-z0-9_-]+$/.test(name)) {
+    throw new LocalDesignSystemImportError(
+      'BAD_REQUEST',
+      `shadcn cssVars key "${key}" is not a valid CSS custom property name`,
+    );
+  }
+  const raw = String(value);
+  if (/[;{}]/.test(raw) || /[\r\n]/.test(raw)) {
+    throw new LocalDesignSystemImportError(
+      'BAD_REQUEST',
+      `shadcn cssVars value for "${key}" contains unsafe characters`,
+    );
+  }
+  return `  ${name}: ${wrapShadcnColorValue(raw)};`;
 }
 
 function normalizeVarName(key: string): string {
@@ -554,20 +722,21 @@ async function writeShadcnFiles(
           : undefined;
     const relPath = sanitizeShadcnFilePath(file?.target ?? file?.path);
     if (!relPath) {
-      if (declared) {
-        throw new LocalDesignSystemImportError(
-          'BAD_REQUEST',
-          `shadcn registry file "${declared}" has no safe destination path`,
-        );
-      }
-      continue;
+      // Every declared file must produce a safe destination. A `files[]` entry
+      // with a missing/blank/unsafe path or target is malformed input, not a
+      // file to silently skip.
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        declared
+          ? `shadcn registry file "${declared}" has no safe destination path`
+          : 'shadcn registry declares a file object with no path or target',
+      );
     }
-    // A duplicate sanitized destination means the registry item is ambiguous
-    // (e.g. "@/button.tsx" + "button.tsx", or two entries sharing a target).
-    // Dropping the later one would silently lose the author's intended file, so
-    // fail fast and name both sources.
     const priorSource = used.get(relPath);
     if (priorSource !== undefined) {
+      // A duplicate sanitized destination means the registry item is ambiguous
+      // (e.g. "@/button.tsx" + "button.tsx", or two entries sharing a target);
+      // dropping the later one would silently lose the author's intended file.
       throw new LocalDesignSystemImportError(
         'BAD_REQUEST',
         `shadcn registry files "${priorSource}" and "${declared ?? relPath}" both resolve to "${relPath}"`,
@@ -593,7 +762,11 @@ async function writeShadcnFiles(
       );
     }
 
-    const absPath = path.join(tempDir, relPath);
+    // Materialize under a dedicated subdir so a crafted target (e.g.
+    // "theme.css" / "package.json") cannot overwrite the importer-generated
+    // files at the temp root. The local importer scans recursively, so nested
+    // files are still picked up.
+    const absPath = path.join(tempDir, SHADCN_FILES_SUBDIR, relPath);
     await mkdir(path.dirname(absPath), { recursive: true });
     await writeFile(absPath, content, 'utf8');
   }
@@ -631,6 +804,29 @@ function sanitizeShadcnFilePath(input: string | undefined): string | undefined {
 // Small helpers
 // ---------------------------------------------------------------------------
 
+// Wrap a fetch with one shared, whole-import budget: a hard request count and
+// a wall-clock deadline. Layered on top of fetchText's per-request timeout so
+// an `include` tree or a long file list cannot run unbounded.
+function withFetchBudget(fetchImpl: ShadcnFetch): ShadcnFetch {
+  // Real wall-clock deadline (not the injected `now`, which is only for
+  // deterministic output timestamps).
+  const deadline = Date.now() + OVERALL_TIMEOUT_MS;
+  let count = 0;
+  return (url, init) => {
+    if (Date.now() > deadline) {
+      throw new LocalDesignSystemImportError('BAD_REQUEST', 'shadcn import exceeded its overall time budget');
+    }
+    count += 1;
+    if (count > MAX_TOTAL_FETCHES) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        `shadcn import exceeded its ${MAX_TOTAL_FETCHES}-request budget`,
+      );
+    }
+    return fetchImpl(url, init);
+  };
+}
+
 function defaultShadcnFetch(): ShadcnFetch {
   if (typeof fetch !== 'function') {
     throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'global fetch is not available in this runtime');
@@ -639,6 +835,10 @@ function defaultShadcnFetch(): ShadcnFetch {
   // cannot bounce the daemon to a disallowed internal http target (e.g.
   // 169.254.169.254). Every hop is re-checked by fetchText's host validation.
   return (url, init) => fetch(url, { ...init, redirect: 'error' });
+}
+
+function isAbortError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'AbortError';
 }
 
 function stringArray(value: unknown): string[] {

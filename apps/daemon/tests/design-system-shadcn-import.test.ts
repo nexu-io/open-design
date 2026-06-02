@@ -75,6 +75,26 @@ describe('parseShadcnReference', () => {
       /percent-encoding|fragment/i,
     );
   });
+
+  it('refuses https references to private / link-local / internal IPs (SSRF)', () => {
+    for (const ref of [
+      'https://169.254.169.254/latest/meta-data/x.json',
+      'https://10.0.0.5/r/x.json',
+      'https://192.168.1.10/r/x.json',
+      'https://172.16.0.1/r/x.json',
+      'https://[fd00::1]/r/x.json',
+      'https://0.0.0.0/r/x.json',
+      'https://167772161/r/x.json', // decimal form of 10.0.0.1 (URL parser canonicalizes it)
+    ]) {
+      expect(() => parseShadcnReference(ref), ref).toThrow(/not allowed|private|refus/i);
+    }
+  });
+
+  it('still allows loopback references (self-hosted local registry)', () => {
+    expect(parseShadcnReference('https://[::1]/r/x.json')).toMatchObject({ kind: 'url' });
+    expect(parseShadcnReference('http://localhost:4000/r/x.json')).toMatchObject({ kind: 'url' });
+    expect(parseShadcnReference('http://127.0.0.1:5000/r/x.json')).toMatchObject({ kind: 'url' });
+  });
 });
 
 describe('wrapShadcnColorValue', () => {
@@ -108,6 +128,18 @@ describe('renderShadcnSourceCss', () => {
   it('normalizes an already-prefixed variable name without doubling the dashes', () => {
     expect(renderShadcnSourceCss({ light: { '--primary': '262 83% 58%' } })).toContain(
       '--primary: hsl(262 83% 58%);',
+    );
+  });
+
+  it('rejects a cssVars key that is not a valid custom-property name (injection)', () => {
+    expect(() => renderShadcnSourceCss({ light: { 'x}': 'red' } })).toThrow(
+      /valid CSS custom property/i,
+    );
+  });
+
+  it('rejects a cssVars value containing declaration-breaking characters (injection)', () => {
+    expect(() => renderShadcnSourceCss({ light: { primary: 'red; --evil: stolen' } })).toThrow(
+      /unsafe characters/i,
     );
   });
 });
@@ -329,5 +361,108 @@ describe('importShadcnDesignSystemProject', () => {
         }),
       }),
     ).rejects.toThrow(/both resolve to/i);
+  });
+
+  it('refuses an include target that points at a private https host (SSRF)', async () => {
+    const root = 'https://raw.githubusercontent.com/acme/ui/main/registry.json';
+    await expect(
+      importShadcnDesignSystemProject('acme/ui/button#main', tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: fetchStub({
+          [root]: { include: ['https://169.254.169.254/registry.json'] },
+        }),
+      }),
+    ).rejects.toThrow(/not allowed|private|refus/i);
+  });
+
+  it('fails the import when a declared file object has no path or target', async () => {
+    const url = 'https://example.com/r/nodest.json';
+    await expect(
+      importShadcnDesignSystemProject(url, tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: fetchStub({
+          [url]: {
+            name: 'nodest',
+            type: 'registry:component',
+            cssVars: { light: { primary: '1 2% 3%' } },
+            files: [{ content: 'orphaned content' }],
+          },
+        }),
+      }),
+    ).rejects.toThrow(/no path or target/i);
+  });
+
+  it('does not let a crafted file target overwrite the importer-generated package.json', async () => {
+    const url = 'https://example.com/r/safe.json';
+    const result = await importShadcnDesignSystemProject(url, tmpRoot, userDesignSystemsRoot, {
+      fetchImpl: fetchStub({
+        [url]: {
+          name: 'safe',
+          type: 'registry:component',
+          title: 'Safe Theme',
+          cssVars: { light: { primary: '262 83% 58%' } },
+          files: [{ target: 'package.json', type: 'registry:file', content: '{"name":"attacker"}' }],
+        },
+      }),
+    });
+    // Display name comes from the item title, not the crafted package.json that
+    // tried to overwrite the importer's generated one.
+    expect(result.id).toBe('safe-theme');
+  });
+
+  it('resolves a slashed git ref without corrupting the raw path', async () => {
+    const registryUrl = 'https://raw.githubusercontent.com/acme/ui/feature/x/registry.json';
+    const result = await importShadcnDesignSystemProject('acme/ui/button#feature/x', tmpRoot, userDesignSystemsRoot, {
+      fetchImpl: fetchStub({
+        [registryUrl]: {
+          items: [
+            { name: 'button', type: 'registry:theme', title: 'Button', cssVars: { light: { primary: '200 80% 50%' } } },
+          ],
+        },
+      }),
+    });
+    expect(result.id).toBe('button');
+  });
+
+  it('fetches a direct-URL item path-only file relative to the item URL', async () => {
+    const url = 'https://example.com/r/button.json';
+    const fileUrl = 'https://example.com/r/button.tsx';
+    const result = await importShadcnDesignSystemProject(url, tmpRoot, userDesignSystemsRoot, {
+      fetchImpl: fetchStub({
+        [url]: {
+          name: 'button',
+          type: 'registry:component',
+          title: 'Button',
+          cssVars: { light: { primary: '1 2% 3%' } },
+          files: [{ path: 'button.tsx', type: 'registry:component' }],
+        },
+        [fileUrl]: 'export const Button = () => null;\n',
+      }),
+    });
+    expect(result.id).toBe('button');
+    expect(fs.existsSync(path.join(result.dir, 'source', 'snippets', 'button.tsx'))).toBe(true);
+  });
+
+  it('rejects a registry document whose body streams past the size cap', async () => {
+    let emitted = 0;
+    const streamingFetch: ShadcnFetch = async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => '',
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (emitted >= 64) {
+            controller.close();
+            return;
+          }
+          emitted += 1;
+          controller.enqueue(new Uint8Array(64 * 1024));
+        },
+      }),
+    });
+    await expect(
+      importShadcnDesignSystemProject('https://example.com/r/huge.json', tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: streamingFetch,
+      }),
+    ).rejects.toThrow(/exceeds/i);
   });
 });
