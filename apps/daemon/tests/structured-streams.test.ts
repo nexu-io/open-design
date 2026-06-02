@@ -89,6 +89,57 @@ describe('structured agent stream fixtures', () => {
     });
   });
 
+  it('preserves Claude Code tool input from content_block_start when no delta arrives', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: {
+          type: 'tool_use',
+          id: 'toolu-edit-1',
+          name: 'Edit',
+          input: {
+            file_path: 'C:\\Users\\Tetsu\\project\\canvas2-nodes.jsx',
+            old_string: 'const nodes = []',
+            new_string: 'const nodes = computeNodes()',
+          },
+        },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_stop', index: 0 },
+    })}\n${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [{ type: 'tool_use', id: 'toolu-edit-1', name: 'Edit', input: {} }],
+      },
+    })}\n`);
+    handler.flush();
+
+    const toolUses = events.filter((event) => typeof event === 'object' && event !== null && (event as { type?: string }).type === 'tool_use');
+
+    expect(toolUses).toEqual([
+      {
+        type: 'tool_use',
+        id: 'toolu-edit-1',
+        name: 'Edit',
+        input: {
+          file_path: 'C:\\Users\\Tetsu\\project\\canvas2-nodes.jsx',
+          old_string: 'const nodes = []',
+          new_string: 'const nodes = computeNodes()',
+        },
+      },
+    ]);
+  });
+
   it('does not duplicate streamed Claude Code text or thinking when final assistant wrapper has no id', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
@@ -316,6 +367,32 @@ describe('structured agent stream fixtures', () => {
       input: {
         todos: [{ content: 'Run QA', status: 'pending' }],
       },
+    });
+  });
+
+  it('emits GitHub Copilot CLI result usage tokens', () => {
+    const events: unknown[] = [];
+    const handler = createCopilotStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'result',
+      success: true,
+      usage: {
+        input_tokens: 21,
+        output_tokens: 8,
+        sessionDurationMs: 1234,
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'usage',
+      usage: {
+        input_tokens: 21,
+        output_tokens: 8,
+        sessionDurationMs: 1234,
+      },
+      stopReason: 'completed',
+      durationMs: 1234,
     });
   });
 });

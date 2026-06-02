@@ -451,7 +451,7 @@ describe('connectConnector', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/connectors/airtable/connect', { method: 'POST' });
   });
 
-  it('keeps the popup open with the auth config error when initialization fails', async () => {
+  it('keeps the popup open with custom auth guidance when initialization fails', async () => {
     const authWindow = {
       document: {
         title: '',
@@ -470,7 +470,7 @@ describe('connectConnector', () => {
         results: {
           canvas: {
             status: 'custom_required',
-            message: 'Default auth config not found for toolkit "canvas".',
+            message: 'Canvas requires a custom Composio auth config. Create or enable a Canvas auth config in Composio with your own OAuth credentials, then retry this connection.',
           },
         },
       }), { status: 200 })),
@@ -478,12 +478,13 @@ describe('connectConnector', () => {
 
     await expect(connectConnector('canvas')).resolves.toEqual({
       connector: null,
-      error: 'Default auth config not found for toolkit "canvas".',
+      error: 'Canvas requires a custom Composio auth config. Create or enable a Canvas auth config in Composio with your own OAuth credentials, then retry this connection.',
     });
 
     expect(authWindow.close).not.toHaveBeenCalled();
     expect(authWindow.document.title).toBe('Connection failed');
-    expect(authWindow.document.body.innerHTML).toContain('Default auth config not found for toolkit "canvas".');
+    expect(authWindow.document.body.innerHTML).toContain('Canvas requires a custom Composio auth config.');
+    expect(authWindow.document.body.innerHTML).not.toContain('Default auth config not found');
   });
 
   it('opens the system browser through the daemon when the OAuth popup is blocked', async () => {

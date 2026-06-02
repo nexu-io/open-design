@@ -7551,7 +7551,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
               data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}
             >
-              <div className={manualEditMode ? undefined : 'comment-frame-clip'}>
+              <div className={manualEditMode ? undefined : 'comment-frame-clip'} style={manualEditMode ? {height: "100%"} : undefined}>
                 <div
                   style={
                     manualEditMode

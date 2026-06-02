@@ -58,7 +58,7 @@ const og = ogImage ?? heroImage;
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
-  Header({ active, counts, github, brandHref: '/', locale }) as ReturnType<typeof createElement>,
+  Header({ active, counts, github, brandHref: '/', locale, currentPath: Astro.url.pathname }) as ReturnType<typeof createElement>,
 );
 const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 ---

@@ -25,13 +25,18 @@
   padding: 32px 0 8px;
 }
 .home-hero__brand {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
 }
 .home-hero__brand-mark {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
   width: 26px;
   height: 26px;
   border-radius: 50%;

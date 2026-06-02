@@ -12,7 +12,7 @@
 > → [**Leia o anúncio · baixe o instalador · junte-se ao movimento**](https://github.com/nexu-io/open-design/discussions/1727) · roda em paralelo com seu 0.7 atual.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — capa editorial: design com o agente no seu laptop" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — capa editorial: design com o agente no seu laptop" width="100%" />
 </p>
 
 <p align="center">
@@ -316,6 +316,70 @@ A maneira mais rápida de experimentar o Open Design é o aplicativo desktop pr�
 
 - **[open-design.ai](https://open-design.ai/)** — página oficial de downloads
 - **[Releases do GitHub](https://github.com/nexu-io/open-design/releases)**
+
+### Executar com Docker
+
+Execute o Open Design sem instalar Node.js ou pnpm localmente.
+
+#### Requisitos
+
+* Docker Desktop
+* Docker Compose v2
+
+Verifique o Docker:
+
+```bash id="70jv9o"
+docker compose version
+```
+
+#### Iniciar o Open Design
+
+1. Clone o repositório, vá para o diretório deploy e copie o modelo de ambiente:
+
+   ```bash
+   git clone https://github.com/nexu-io/open-design.git
+   cd open-design/deploy
+   cp .env.example .env
+   ```
+
+2. Gere um token seguro:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. Abra o `.env` no seu editor, encontre `OD_API_TOKEN=` e cole o token gerado.
+
+Em seguida, inicie o serviço:
+
+```bash
+docker compose up -d
+```
+
+Abra no seu navegador:
+
+```text id="4s4xeh"
+http://localhost:7456
+```
+
+#### Comandos comuns
+
+```bash id="gl95kp"
+# Ver logs
+docker compose logs -f
+
+# Reiniciar contêineres
+docker compose restart
+
+# Parar contêineres
+docker compose down
+
+# Baixar a imagem mais recente
+docker compose pull
+docker compose up -d
+```
+
+Para configuração avançada do Docker e variáveis de ambiente, consulte [`QUICKSTART.pt-BR.md`](QUICKSTART.pt-BR.md).
 
 ### Executar a partir do código-fonte
 
@@ -710,7 +774,7 @@ Esta é uma implementação inicial — o loop fechado (detectar → escolher sk
 ## Dê uma estrela
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="Dê estrela ao Open Design no GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Dê estrela ao Open Design no GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Se isso te poupou trinta minutos — dá um ★. Estrelas não pagam aluguel, mas dizem para a próxima designer, agente e contribuidora que esse experimento vale a atenção. Um clique, três segundos, sinal real: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -737,11 +801,9 @@ Se você acabou de mandar seu primeiro PR — bem-vindo. A label [`good-first-is
 
 ## Atividade do repositório
 
-<picture>
-  <img alt="Open Design — métricas do repositório" src="docs/assets/github-metrics.svg" />
-</picture>
-
-O SVG acima é regenerado diariamente por [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) usando [`lowlighter/metrics`](https://github.com/lowlighter/metrics). Dispare um refresh manual pela aba **Actions** se quiser antes; para plugins mais ricos (tráfego, follow-up time), adicione um secret de repositório `METRICS_TOKEN` com um PAT fine-grained.
+<p align="center">
+  <img alt="Open Design — métricas do repositório" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

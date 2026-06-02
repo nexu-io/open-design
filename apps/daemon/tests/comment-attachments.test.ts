@@ -313,6 +313,12 @@ describe('preview comment agent payload', () => {
     expect(hint).toContain('file: index.html');
     expect(hint).toContain('selector: [data-od-id="hero-title"]');
     expect(hint).toContain('comment: Make the headline shorter');
+    // The hard-scope sentence IS the behavior change. Assert its key phrases
+    // so a future edit that softens or drops the directive lights the suite
+    // red instead of silently re-opening the over-broad edit bug.
+    expect(hint).toContain('Hard scope: change ONLY');
+    expect(hint).toContain('Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules');
+    expect(hint).toContain('ask the user before proceeding');
   });
 
   it('renders pod attachments with grouped member context', () => {

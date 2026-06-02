@@ -12,7 +12,7 @@
 > → [**Duyuruyu oku · kurulum dosyasını indir · harekete katıl**](https://github.com/nexu-io/open-design/discussions/1727) · mevcut 0.7'nin yanına paralel kurulur.
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design — dizüstü bilgisayarındaki agent ile tasarım yapma editoryal kapağı" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design — dizüstü bilgisayarındaki agent ile tasarım yapma editoryal kapağı" width="100%" />
 </p>
 
 <p align="center">
@@ -307,6 +307,70 @@ Open Design'ı denemenin en hızlı yolu prebuilt desktop app'tir; Node yok, pnp
 
 - **[open-design.ai](https://open-design.ai/)** — resmi indirme sayfası
 - **[GitHub releases](https://github.com/nexu-io/open-design/releases)**
+
+### Docker ile çalıştır
+
+Open Design'ı Node.js veya pnpm yüklemeden çalıştırın.
+
+#### Gereksinimler
+
+* Docker Desktop
+* Docker Compose v2
+
+Docker'ı doğrulayın:
+
+```bash id="70jv9o"
+docker compose version
+```
+
+#### Open Design'ı başlatın
+
+1. Depoyu klonlayın, deploy dizinine gidin ve ortam şablonunu kopyalayın:
+
+   ```bash
+   git clone https://github.com/nexu-io/open-design.git
+   cd open-design/deploy
+   cp .env.example .env
+   ```
+
+2. Güvenli bir token oluşturun:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. `.env` dosyasını düzenleyicide açın, `OD_API_TOKEN=` satırını bulun ve oluşturduğunuz token'ı yapıştırın.
+
+Ardından servisi başlatın:
+
+```bash
+docker compose up -d
+```
+
+Tarayıcınızda açın:
+
+```text id="4s4xeh"
+http://localhost:7456
+```
+
+#### Sık kullanılan komutlar
+
+```bash id="gl95kp"
+# Günlükleri görüntüle
+docker compose logs -f
+
+# Konteynerları yeniden başlat
+docker compose restart
+
+# Konteynerları durdur
+docker compose down
+
+# En son imajı çek
+docker compose pull
+docker compose up -d
+```
+
+Gelişmiş Docker yapılandırması ve ortam değişkenleri için [`QUICKSTART.md`](QUICKSTART.md) bölümüne bakın.
 
 ### Kaynaktan çalıştır
 
@@ -867,7 +931,7 @@ Release note'lar, yeni skill'ler, yeni design system'ler ve arada sırada sırad
 ## Star ver
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="GitHub'da Open Design'a star ver — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="GitHub'da Open Design'a star ver — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Bu sana otuz dakika kazandırdıysa bir ★ ver. Star'lar kira ödemiyor, ama sonraki tasarımcıya, agent'a ve contributor'a bu deneyin dikkat etmeye değer olduğunu gösteriyor. Tek tık, üç saniye, gerçek sinyal: [github.com/nexu-io/open-design](https://github.com/nexu-io/open-design).
@@ -894,11 +958,9 @@ Open Design'ı kod, doküman, feedback, yeni skill, yeni design system veya kesk
 
 ## Repository activity
 
-<picture>
-  <img alt="Open Design — repository metrics" src="docs/assets/github-metrics.svg" />
-</picture>
-
-Yukarıdaki SVG [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) tarafından [`lowlighter/metrics`](https://github.com/lowlighter/metrics) kullanılarak günlük yenilenir. Daha erken istiyorsan **Actions** tab'inden manuel refresh tetikle; daha zengin plugin'ler (traffic, follow-up time) için fine-grained PAT ile `METRICS_TOKEN` repository secret ekle.
+<p align="center">
+  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

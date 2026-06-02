@@ -12,7 +12,7 @@
 > → [**讀公告 · 下載安裝包 · 加入這場運動**](https://github.com/nexu-io/open-design/discussions/1727) · 可與你現有的 0.7 並行安裝。
 
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Design 封面：與本地 AI 智慧體共同設計" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/banner.png" alt="Open Design 封面：與本地 AI 智慧體共同設計" width="100%" />
 </p>
 
 <p align="center">
@@ -986,7 +986,7 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 ## 給我們點個 Star
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="docs/assets/star-us.png" alt="給 Open Design 點個 Star —— github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="給 Open Design 點個 Star —— github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 如果這套東西幫你省了半小時，給它一個 ★。Star 不付房租，但它告訴下一個設計師、Agent 和貢獻者：這個實驗值得他們的注意力。一次點選、三秒鐘、真實訊號：[github.com/nexu-io/open-design](https://github.com/nexu-io/open-design)。
@@ -1013,11 +1013,9 @@ Daemon 啟動時從 `PATH` 自動檢測，無需配置。流式分發邏輯在 [
 
 ## 倉庫活躍度
 
-<picture>
-  <img alt="Open Design 倉庫指標" src="docs/assets/github-metrics.svg" />
-</picture>
-
-上面的 SVG 由 [`.github/workflows/metrics.yml`](.github/workflows/metrics.yml) 藉助 [`lowlighter/metrics`](https://github.com/lowlighter/metrics) 每天自動重新生成。想要立刻重新整理可以去 **Actions** 選項卡手動觸發；想開啟更豐富的外掛（traffic、follow-up time 等）可在倉庫 secrets 里加一個細粒度 PAT 命名為 `METRICS_TOKEN`。
+<p align="center">
+  <img alt="Open Design 倉庫指標" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" width="720" />
+</p>
 
 ## Star History
 

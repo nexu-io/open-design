@@ -1,4 +1,5 @@
 const R2_PUBLIC_ORIGIN = 'https://static.open-design.ai';
+const REPOSITORY_ASSETS_PUBLIC_ORIGIN = 'https://repo-assets.open-design.ai';
 const IMAGE_RESIZING_ORIGIN = R2_PUBLIC_ORIGIN;
 const ASSET_PREFIX = 'landing/assets';
 
@@ -9,6 +10,10 @@ type ImageOptions = {
 
 export function r2Asset(name: string): string {
   return `${R2_PUBLIC_ORIGIN}/${ASSET_PREFIX}/${name}`;
+}
+
+export function repositoryAsset(path: string): string {
+  return `${REPOSITORY_ASSETS_PUBLIC_ORIGIN}/${path}`;
 }
 
 export function imageAsset(name: string, { width, quality = 85 }: ImageOptions): string {

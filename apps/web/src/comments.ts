@@ -386,7 +386,7 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: apply the user request to the attached preview target by default. For visual marks, inspect the screenshot and modify the marked region first. Preserve unrelated elements.',
+    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
   ];
   commentAttachments.forEach((item) => {
     const position = normalizePosition(item.pagePosition);

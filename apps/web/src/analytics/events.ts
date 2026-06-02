@@ -86,6 +86,7 @@ import type {
   FeedbackSubmitResultProps,
   SettingsViewProps,
   SettingsCliTestResultProps,
+  SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
   OnboardingClickProps,
@@ -671,6 +672,13 @@ export function trackSettingsByokTestResult(
   props: SettingsByokTestResultProps,
 ): void {
   send(track, 'settings_byok_test_result', props);
+}
+
+export function trackSettingsByokModelsFetchResult(
+  track: Track,
+  props: SettingsByokModelsFetchResultProps,
+): void {
+  send(track, 'settings_byok_models_fetch_result', props);
 }
 
 export function trackSettingsConnectorAuthResult(

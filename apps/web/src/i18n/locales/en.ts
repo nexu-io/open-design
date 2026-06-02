@@ -276,6 +276,7 @@ export const en: Dict = {
   'settings.hide': 'Hide',
   'settings.model': 'Model',
   'settings.apiKeyInvalid': 'Invalid API key.',
+  'settings.apiKeyCleaned': 'Removed extra whitespace from the API key.',
   'settings.modelsLoadedFromAccount': '✓ Loaded {count} models from your account.',
   'settings.fetchModels': 'Fetch models',
   'settings.fetchModelsTitle': 'Fetch available models from this provider',

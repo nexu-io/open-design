@@ -15,6 +15,59 @@ on:
         description: "Required when channel=stable: exact validated nightly version to promote, for example 0.5.1.nightly.3."
         required: false
         type: string
+      ref:
+        description: "Optional git ref (branch/tag/SHA) to build. Empty builds the ref this workflow was dispatched on."
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      channel:
+        description: "Release channel (nightly or stable)."
+        required: false
+        type: string
+        default: nightly
+      nightly_version:
+        description: "Required when channel=stable: exact validated nightly version to promote."
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "Optional git ref (branch/tag/SHA) to build. Empty builds the caller's ref."
+        required: false
+        type: string
+        default: ""
+    outputs:
+      release_version:
+        description: "The version that was built (x.y.z.nightly.N for nightly)."
+        value: ${{ jobs.metadata.outputs.release_version }}
+      channel:
+        description: "The channel that was built."
+        value: ${{ jobs.metadata.outputs.channel }}
+      branch:
+        description: "The branch that was built."
+        value: ${{ jobs.metadata.outputs.branch }}
+      commit:
+        description: "The commit SHA that was built."
+        value: ${{ jobs.metadata.outputs.commit }}
+      previous_commit:
+        description: "Commit SHA of the previously published nightly (changelog baseline); empty on cold start."
+        value: ${{ jobs.metadata.outputs.previous_commit }}
+      version_metadata_url:
+        description: "Public R2 URL of this build's version metadata.json."
+        value: ${{ jobs.publish.outputs.version_metadata_url }}
+      mac_arm64_url:
+        description: "macOS arm64 dmg download URL."
+        value: ${{ jobs.publish.outputs.mac_arm64_url }}
+      mac_intel_url:
+        description: "macOS x64 (Intel) dmg download URL."
+        value: ${{ jobs.publish.outputs.mac_intel_url }}
+      win_url:
+        description: "Windows x64 installer download URL."
+        value: ${{ jobs.publish.outputs.win_url }}
+      linux_url:
+        description: "Linux x64 AppImage download URL (empty if linux disabled)."
+        value: ${{ jobs.publish.outputs.linux_url }}
 
 permissions:
   actions: write
@@ -63,6 +116,7 @@ jobs:
       namespace: ${{ steps.stable.outputs.namespace }}
       nightly_number: ${{ steps.stable.outputs.nightly_number }}
       previous_stable: ${{ steps.stable.outputs.previous_stable }}
+      previous_commit: ${{ steps.prev.outputs.previous_commit }}
       release_name: ${{ steps.stable.outputs.release_name }}
       release_version: ${{ steps.stable.outputs.release_version }}
       stable_version: ${{ steps.stable.outputs.stable_version }}
@@ -73,6 +127,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -80,8 +135,29 @@ jobs:
         with:
           node-version: 24
 
+      # Under workflow_call the runner's GITHUB_SHA/GITHUB_REF_NAME describe the
+      # caller's ref (e.g. main for the scheduled daily build), not the ref we
+      # actually checked out. Resolve the real built HEAD so the published
+      # metadata.json records the branch we built, not the caller.
+      - name: Resolve built commit
+        run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      # Capture the previously published nightly commit BEFORE this run overwrites
+      # nightly/latest/metadata.json, so the notification can diff the changelog
+      # against the last package. Empty on cold start (HTTP 404).
+      - name: Capture previous nightly commit
+        id: prev
+        run: |
+          set -euo pipefail
+          prev="$(curl -fsSL "$OPEN_DESIGN_NIGHTLY_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
+          echo "previous nightly commit: ${prev:-<none>}"
+          echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
+
       - name: Prepare release metadata
         id: stable
+        env:
+          GITHUB_SHA: ${{ env.BUILT_SHA }}
+          GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
         run: node --experimental-strip-types ./scripts/release-stable.ts
 
       - name: Validate R2 release access
@@ -105,6 +181,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -158,6 +235,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -367,6 +445,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -439,6 +518,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -629,6 +709,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -747,8 +828,18 @@ jobs:
         (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
       }}
     runs-on: ubuntu-latest
+    outputs:
+      version_metadata_url: ${{ steps.r2.outputs.version_metadata_url }}
+      mac_arm64_url: ${{ steps.r2.outputs.mac_dmg_url }}
+      mac_intel_url: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+      win_url: ${{ steps.r2.outputs.win_installer_url }}
+      linux_url: ${{ steps.r2.outputs.linux_appimage_url }}
     env:
       GH_TOKEN: ${{ github.token }}
+      # Record the real built commit in metadata.json. Under workflow_call the
+      # runner's GITHUB_SHA is the caller's ref, so pin it to the resolved build
+      # commit; the next run reads this back as its changelog baseline.
+      GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
       AWS_DEFAULT_REGION: auto
@@ -776,6 +867,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -944,6 +1036,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Delete unpublished release asset artifacts
         env:

@@ -311,6 +311,8 @@ describe('app-config', () => {
           claude: {
             CLAUDE_CONFIG_DIR: '  ~/.claude-2  ',
             ANTHROPIC_API_KEY: '  sk-proxy-anthropic  ',
+            ANTHROPIC_AUTH_TOKEN: '  sk-proxy-token  ',
+            MMD_MODEL_ROUTES_FILE: '  ~/.config/mms/model-routes.json  ',
           },
           codex: {
             CODEX_HOME: '~/.codex-alt',
@@ -338,7 +340,7 @@ describe('app-config', () => {
       const cfg = await readAppConfig(dataDir);
 
       expect(cfg.agentCliEnv).toEqual({
-        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_API_KEY: 'sk-proxy-anthropic' },
+        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_API_KEY: 'sk-proxy-anthropic', ANTHROPIC_AUTH_TOKEN: 'sk-proxy-token', MMD_MODEL_ROUTES_FILE: '~/.config/mms/model-routes.json' },
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_API_KEY: 'sk-proxy-openai' },
         amr: {
           VELA_BIN: '~/bin/vela',

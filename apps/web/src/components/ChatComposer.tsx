@@ -2,7 +2,6 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -389,6 +388,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [toolsTab, setToolsTab] = useState<ToolsTab>('plugins');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const textareaResizeFrameRef = useRef<number | null>(null);
     const composingRef = useRef(false);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -579,16 +579,37 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!ta) return;
       const maxHeight = composerTextareaMaxHeight();
       ta.style.height = 'auto';
+      const scrollHeight = ta.scrollHeight;
       const nextHeight = Math.min(
-        Math.max(ta.scrollHeight, COMPOSER_TEXTAREA_MIN_HEIGHT),
+        Math.max(scrollHeight, COMPOSER_TEXTAREA_MIN_HEIGHT),
         maxHeight,
       );
       ta.style.height = `${nextHeight}px`;
-      ta.style.overflowY = ta.scrollHeight > maxHeight ? 'auto' : 'hidden';
+      ta.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
 
-    useLayoutEffect(() => {
-      resizeTextarea();
+    useEffect(() => {
+      if (
+        typeof window === 'undefined' ||
+        typeof window.requestAnimationFrame !== 'function' ||
+        typeof window.cancelAnimationFrame !== 'function'
+      ) {
+        resizeTextarea();
+        return;
+      }
+      if (textareaResizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(textareaResizeFrameRef.current);
+      }
+      textareaResizeFrameRef.current = window.requestAnimationFrame(() => {
+        textareaResizeFrameRef.current = null;
+        resizeTextarea();
+      });
+      return () => {
+        if (textareaResizeFrameRef.current !== null) {
+          window.cancelAnimationFrame(textareaResizeFrameRef.current);
+          textareaResizeFrameRef.current = null;
+        }
+      };
     }, [draft, composerMentionParts, staged.length, stagedSkills.length]);
 
     useEffect(() => {
