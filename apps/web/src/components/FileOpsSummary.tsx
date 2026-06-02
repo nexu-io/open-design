@@ -1,11 +1,10 @@
 /**
- * "Files this turn" disclosure pinned to the top of an assistant message.
+ * "Files this turn" disclosure for one assistant message.
  *
- * While the run streams, the row appears as a compact pill with live
- * counters (Write 1 · Edit 2 · Read 3). Once the run finishes, the row
- * expands to a full file list with per-file op badges and an "Open"
- * button that lifts the basename up to ProjectView so FileWorkspace
- * focuses the matching tab.
+ * While the run streams, the row appears as a compact summary with live
+ * counters. Once the run finishes, it expands to a full file list with
+ * per-file operation badges. Openable paths are the click target, lifting
+ * the basename to ProjectView so FileWorkspace focuses the matching tab.
  *
  * The component is read-only over `events` — derivation lives in
  * `runtime/file-ops.ts` so the same logic is reachable from tests and
@@ -20,6 +19,7 @@ import {
   type FileOpEntry,
   type FileOpKind,
 } from '../runtime/file-ops';
+import { Icon, type IconName } from './Icon';
 import { ChatDisclosure } from './chat/ChatSurface';
 
 interface Props {
@@ -41,10 +41,10 @@ const OP_LABEL_KEY: Record<FileOpKind, keyof Dict> = {
   edit: 'tool.edit',
 };
 
-const OP_BADGE_GLYPH: Record<FileOpKind, string> = {
-  read: 'R',
-  write: 'W',
-  edit: 'E',
+const OP_BADGE_ICON: Record<FileOpKind, IconName> = {
+  read: 'file',
+  write: 'plus',
+  edit: 'pencil',
 };
 
 export function FileOpsSummary({
@@ -67,6 +67,7 @@ export function FileOpsSummary({
 
   const counts = countFileOps(entries);
   const summaryParts: string[] = [];
+  summaryParts.push(t('designFiles.folderCount', { n: entries.length }));
   if (counts.write > 0) summaryParts.push(`${t('tool.write')} ${counts.write}`);
   if (counts.edit > 0) summaryParts.push(`${t('tool.edit')} ${counts.edit}`);
   if (counts.read > 0) summaryParts.push(`${t('tool.read')} ${counts.read}`);
@@ -76,7 +77,7 @@ export function FileOpsSummary({
       className={`file-ops${streaming ? ' is-streaming' : ''}`}
       testId="file-ops-summary"
       toggleTestId="file-ops-toggle"
-      icon="file"
+      icon="folder"
       title={t('assistant.producedFiles')}
       meta={summaryParts.join(' · ')}
       tone={streaming ? 'running' : 'neutral'}
@@ -118,20 +119,20 @@ function FileOpRow({
       className={`file-ops-row file-ops-row--${entry.status}`}
       data-testid={`file-ops-row-${entry.path}`}
     >
-      <div className="file-ops-row-badges" aria-hidden>
+      <div className="file-ops-row-badges">
         {entry.ops.map((op) => {
           const count = entry.opCounts[op];
+          const label = count > 1
+            ? `${t(OP_LABEL_KEY[op])} ×${count}`
+            : t(OP_LABEL_KEY[op]);
           return (
             <span
               key={op}
               className={`file-ops-badge file-ops-badge--${op}`}
-              title={
-                count > 1
-                  ? `${t(OP_LABEL_KEY[op])} ×${count}`
-                  : t(OP_LABEL_KEY[op])
-              }
+              title={label}
+              aria-label={label}
             >
-              {OP_BADGE_GLYPH[op]}
+              <Icon name={OP_BADGE_ICON[op]} size={10} />
               {count > 1 ? (
                 <span className="file-ops-badge-count">×{count}</span>
               ) : null}

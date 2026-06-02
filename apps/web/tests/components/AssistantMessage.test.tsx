@@ -716,4 +716,103 @@ describe('AssistantMessage recovered produced files', () => {
     fireEvent.click(nameButton!);
     expect(onRequestOpenFile).toHaveBeenCalledWith('index.html');
   });
+
+  it('renders the file activity summary after assistant content, not pinned above the turn', () => {
+    const finalText = 'Done. Reload the preview and keep going.';
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Write',
+              input: { file_path: '/repo/settings.html', content: '<html></html>' },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'tool-1',
+              content: 'ok',
+              isError: false,
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: finalText } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFileNames={new Set(['settings.html'])}
+      />,
+    );
+
+    const flow = container.querySelector('.assistant-flow');
+    const prose = container.querySelector('.prose-block');
+    const summary = screen.getByTestId('file-ops-summary');
+    expect(flow).toBeTruthy();
+    expect(prose).toBeTruthy();
+    const children = Array.from(flow!.children);
+    expect(children.indexOf(summary)).toBeGreaterThan(children.indexOf(prose!));
+  });
+
+  it('does not render a second produced-files surface for files already covered by file activity', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          producedFiles: [producedFile('settings.html')],
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Write',
+              input: { file_path: '/repo/settings.html', content: '<html></html>' },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'tool-1',
+              content: 'ok',
+              isError: false,
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Done.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFileNames={new Set(['settings.html'])}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(container.querySelector('.produced-files')).toBeNull();
+  });
+
+  it('keeps a separate generated-files surface for produced files not covered by file activity', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          producedFiles: [producedFile('artifact.html')],
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'tool-1',
+              name: 'Read',
+              input: { file_path: '/repo/source.md' },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'tool-1',
+              content: 'ok',
+              isError: false,
+            } as ChatMessage['events'][number],
+            { kind: 'text', text: 'Generated a separate artifact.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFileNames={new Set(['source.md', 'artifact.html'])}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Generated files' })).toBeTruthy();
+  });
 });

@@ -1313,6 +1313,7 @@ export const esES: Dict = {
   'assistant.continueRemaining': 'Continuar tareas pendientes',
   'assistant.outTokens': '{n} salida',
   'assistant.producedFiles': 'Archivos de este turno',
+  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'Descargar',
   'assistant.thinking': 'Pensando',
   'assistant.thought': 'Pensó',

@@ -2266,6 +2266,7 @@ export const zhCN: Dict = {
   'assistant.continueRemaining': '继续剩余任务',
   'assistant.outTokens': '{n} 输出',
   'assistant.producedFiles': '本轮产出的文件',
+  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': '下载',
   'assistant.thinking': '思考中',
   'assistant.thought': '思考完毕',

@@ -4,9 +4,9 @@
  * The chat surface renders individual `FileReadCard` / `FileWriteCard` /
  * `FileEditCard` cards inline (and collapses runs of the same family
  * behind a `Editing ×3, Done` disclosure). This module powers the
- * complementary "files this turn" summary that lives at the top of the
- * assistant message — visible while the run streams and persisting once
- * it finishes — so users can scan every file the agent touched without
+ * complementary "files this turn" summary that lives in the assistant
+ * message flow — visible while the run streams and persisting once it
+ * finishes — so users can scan every file the agent touched without
  * expanding tool-group disclosures.
  */
 import type { AgentEvent } from '../types';

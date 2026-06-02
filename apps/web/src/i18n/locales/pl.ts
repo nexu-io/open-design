@@ -1424,6 +1424,7 @@ export const pl: Dict = {
   'assistant.continueRemaining': 'Kontynuuj pozostałe zadania',
   'assistant.outTokens': '{n} wysłano',
   'assistant.producedFiles': 'Pliki z tej tury',
+  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'Pobierz',
   'assistant.thinking': 'Myślę',
   'assistant.thought': 'Pomyślał',

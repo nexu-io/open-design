@@ -2316,6 +2316,7 @@ export const en: Dict = {
   'assistant.continueRemaining': 'Continue remaining tasks',
   'assistant.outTokens': '{n} out',
   'assistant.producedFiles': 'Files from this turn',
+  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'Download',
   'assistant.thinking': 'Thinking',
   'assistant.thought': 'Thought',

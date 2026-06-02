@@ -39,6 +39,7 @@ describe('FileOpsSummary', () => {
       />,
     );
 
+    expect(screen.getByText(/3 files/)).toBeTruthy();
     expect(screen.getByText(/Write 1/)).toBeTruthy();
     expect(screen.getByText(/Edit 3/)).toBeTruthy();
     expect(screen.getByText(/Read 2/)).toBeTruthy();
@@ -67,6 +68,9 @@ describe('FileOpsSummary', () => {
     expect(screen.getByTestId('file-ops-row-a.ts')).toBeTruthy();
     expect(screen.getByTestId('file-ops-row-b.ts')).toBeTruthy();
     expect(screen.getByTestId('file-ops-toggle').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByLabelText('Read')).toBeTruthy();
+    expect(screen.getByLabelText('Edit')).toBeTruthy();
+    expect(screen.getByLabelText('Write')).toBeTruthy();
   });
 
   it('reopens once streaming flips to false unless the user collapsed it manually', () => {

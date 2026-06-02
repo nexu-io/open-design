@@ -2645,6 +2645,7 @@ export interface Dict {
   'assistant.continueRemaining': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;
+  'assistant.generatedFiles': string;
   'assistant.downloadFile': string;
   'assistant.thinking': string;
   'assistant.thought': string;

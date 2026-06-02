@@ -463,6 +463,11 @@ function AssistantMessageImpl({
           }),
     [blocks, fileOps, message, produced, projectFiles, streaming],
   );
+  const displayedProducedNotCoveredByFileOps = useMemo(() => {
+    if (fileOps.length === 0) return displayedProduced;
+    const touchedNames = new Set(fileOps.map((entry) => entry.path));
+    return displayedProduced.filter((file) => !touchedNames.has(file.name));
+  }, [displayedProduced, fileOps]);
   const pluginActionFolders = useMemo(
     () =>
       !streaming && isLast && projectId
@@ -621,12 +626,10 @@ function AssistantMessageImpl({
         <span className="role-name">{roleName}</span>
       </div>
       <div className="assistant-flow">
-        {fileOps.length > 0 ? (
-          <FileOpsSummary
-            entries={fileOps}
-            streaming={streaming}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
+        {blocks.length === 0 && streaming ? (
+          <WaitingPill
+            startedAt={message.startedAt}
+            latestStatus={latestStatusLabel(events)}
           />
         ) : null}
         {blocks.map((b, i) => {
@@ -714,9 +717,17 @@ function AssistantMessageImpl({
           }
           return null;
         })}
-        {!streaming && displayedProduced.length > 0 && projectId ? (
+        {fileOps.length > 0 ? (
+          <FileOpsSummary
+            entries={fileOps}
+            streaming={streaming}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
+        {!streaming && displayedProducedNotCoveredByFileOps.length > 0 && projectId ? (
           <ProducedFiles
-            files={displayedProduced}
+            files={displayedProducedNotCoveredByFileOps}
             projectId={projectId}
             onRequestOpenFile={onRequestOpenFile}
           />
@@ -1638,7 +1649,7 @@ function ProducedFiles({
     <ChatDisclosure
       className="produced-files"
       icon="file"
-      title={t("assistant.producedFiles")}
+      title={t("assistant.generatedFiles")}
     >
       <div className="produced-files-list">
         {files.map((f) => (

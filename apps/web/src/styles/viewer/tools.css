@@ -393,8 +393,8 @@
 .file-ops-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 7px;
+  padding: 4px 8px;
   border-radius: 6px;
   font-size: 12px;
   min-width: 0;
@@ -402,23 +402,31 @@
 .file-ops-row:hover { background: var(--bg-subtle); }
 .file-ops-row--running { color: var(--text); }
 .file-ops-row--error { color: var(--text); }
-.file-ops-row-badges { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.file-ops-row-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
 .file-ops-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   min-width: 18px;
   height: 18px;
-  padding: 0 4px;
+  padding: 0 5px;
   border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 9.5px;
+  font-weight: 650;
   font-family: var(--mono);
   letter-spacing: 0;
   border: 1px solid var(--border);
   background: var(--bg-subtle);
   color: var(--text-muted);
+}
+.file-ops-badge svg {
+  flex-shrink: 0;
 }
 .file-ops-badge-count {
   font-size: 9px;

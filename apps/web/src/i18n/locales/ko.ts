@@ -1424,6 +1424,7 @@ export const ko: Dict = {
   'assistant.continueRemaining': '남은 작업 계속하기',
   'assistant.outTokens': '{n} 출력',
   'assistant.producedFiles': '이 턴에서 생성된 파일',
+  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': '다운로드',
   'assistant.thinking': '생각 중 (Thinking)',
   'assistant.thought': '생각 완료',

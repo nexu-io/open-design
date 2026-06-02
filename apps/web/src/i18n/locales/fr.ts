@@ -2025,6 +2025,7 @@ export const fr: Dict = {
   'assistant.continueRemaining': 'Continuer les tâches restantes',
   'assistant.outTokens': '{n} sortie',
   'assistant.producedFiles': 'Fichiers de ce tour',
+  'assistant.generatedFiles': 'Generated files',
   'assistant.downloadFile': 'Télécharger',
   'assistant.thinking': 'Réflexion',
   'assistant.thought': 'A réfléchi',
