@@ -226,6 +226,10 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     return true;
   }
 
+  if (obj.type === 'message' && obj.role === 'user') {
+    return true;
+  }
+
   if (
     obj.type === 'message' &&
     obj.role === 'assistant' &&
@@ -236,7 +240,54 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     return true;
   }
 
-  if (obj.type === 'result' && isRecord(obj.stats)) {
+  if (
+    obj.type === 'tool_use' &&
+    typeof obj.tool_id === 'string' &&
+    typeof obj.tool_name === 'string'
+  ) {
+    onEvent({
+      type: 'tool_use',
+      id: obj.tool_id,
+      name: obj.tool_name,
+      input: safeParseJson(obj.parameters) ?? obj.parameters ?? null,
+    });
+    return true;
+  }
+
+  if (obj.type === 'tool_result' && typeof obj.tool_id === 'string') {
+    const error = isRecord(obj.error) ? obj.error : null;
+    const errorMessage = error ? extractErrorMessage(error, '') : '';
+    const output = typeof obj.output === 'string'
+      ? obj.output
+      : errorMessage || stringifyContent(obj.output);
+    onEvent({
+      type: 'tool_result',
+      toolUseId: obj.tool_id,
+      content: output,
+      isError: obj.status === 'error' || Boolean(error),
+    });
+    return true;
+  }
+
+  if (obj.type === 'error') {
+    onEvent({
+      type: 'status',
+      label: typeof obj.severity === 'string' && obj.severity ? obj.severity : 'warning',
+      detail: extractErrorMessage(obj.message ?? obj.error, 'Gemini CLI warning'),
+    });
+    return true;
+  }
+
+  if (obj.type === 'result') {
+    if (obj.status === 'error' || isRecord(obj.error)) {
+      onEvent({
+        type: 'error',
+        message: extractErrorMessage(obj.error, 'Gemini CLI error'),
+        raw: stringifyContent(obj),
+      });
+      return true;
+    }
+    if (!isRecord(obj.stats)) return true;
     const usage: Usage = {};
     if (typeof obj.stats.input_tokens === 'number') usage.input_tokens = obj.stats.input_tokens;
     if (typeof obj.stats.output_tokens === 'number') usage.output_tokens = obj.stats.output_tokens;
