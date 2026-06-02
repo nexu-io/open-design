@@ -34,7 +34,8 @@ import {
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 const MAX_FILE_BYTES = 256 * 1024;
-const MAX_FILES = 30;
+const MAX_FILES = 100;
+const MAX_INCLUDE_DEPTH = 4;
 // Tried in order when the shorthand omits an explicit ref. GitHub's raw host
 // needs a concrete branch/tag/sha (it does not resolve a symbolic HEAD), and
 // these two cover virtually every default branch.
@@ -94,14 +95,27 @@ type ShadcnRegistry = {
   name?: string;
   homepage?: string;
   items?: ShadcnRegistryItem[];
+  /** Relative paths to nested registry.json files (shadcn `include` layout). */
+  include?: unknown;
+};
+
+type RegistryItemMatch = {
+  item: ShadcnRegistryItem;
+  /** URL of the registry.json that actually declared the item. */
+  declaringUrl: string;
+  homepage?: string;
 };
 
 type ResolvedShadcnItem = {
   item: ShadcnRegistryItem;
-  /** The JSON document URL that was fetched (registry.json or item.json). */
+  /** The registry entry-point URL that was fetched (registry.json or item.json). */
   registryUrl: string;
   homepage?: string;
-  /** Base URL for fetching referenced raw files (GitHub shorthand only). */
+  /**
+   * Base URL for resolving the item's relative `files[].path`: the directory of
+   * the registry.json that declared the item, so `include`d items resolve their
+   * files relative to the included file (per the shadcn spec).
+   */
   rawBaseUrl?: string;
 };
 
@@ -237,18 +251,20 @@ async function resolveShadcnItem(
   if (parsed.kind === 'url') {
     const doc = await fetchJsonDocument(parsed.url, fetchImpl);
     const registry = doc as ShadcnRegistry;
-    if (Array.isArray(registry.items)) {
+    const isIndex = Array.isArray(registry.items) || Array.isArray(registry.include);
+    if (isIndex) {
       if (!parsed.item) {
         throw badReference('that URL is a registry index; append "#<item>" to choose an item');
       }
-      const item = registry.items.find((entry) => entry?.name === parsed.item);
-      if (!item) {
+      const match = await locateItemInRegistry(parsed.url, parsed.item, fetchImpl, new Set(), 0);
+      if (!match) {
         throw badReference(`registry has no item named "${parsed.item}"`);
       }
       return {
-        item,
+        item: match.item,
         registryUrl: parsed.url,
-        ...(typeof registry.homepage === 'string' ? { homepage: registry.homepage } : {}),
+        rawBaseUrl: registryFileDir(match.declaringUrl),
+        ...(match.homepage ? { homepage: match.homepage } : {}),
       };
     }
     const item = doc as ShadcnRegistryItem;
@@ -266,33 +282,24 @@ async function resolveShadcnItem(
   let lastError: unknown;
   for (const ref of refs) {
     const registryUrl = `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(ref)}/registry.json`;
-    let doc: unknown;
+    let match: RegistryItemMatch | undefined;
     try {
-      doc = await fetchJsonDocument(registryUrl, fetchImpl);
+      match = await locateItemInRegistry(registryUrl, parsed.item, fetchImpl, new Set(), 0);
     } catch (err) {
       lastError = err;
       continue;
     }
-    const registry = doc as ShadcnRegistry;
-    if (!Array.isArray(registry.items)) {
-      lastError = badReference(`registry.json for ${parsed.owner}/${parsed.repo} has no items array`);
-      continue;
-    }
-    const item = registry.items.find((entry) => entry?.name === parsed.item);
-    if (!item) {
+    if (!match) {
       lastError = badReference(
-        `registry.json for ${parsed.owner}/${parsed.repo} has no item named "${parsed.item}"`,
+        `registry for ${parsed.owner}/${parsed.repo} has no item named "${parsed.item}"`,
       );
       continue;
     }
     return {
-      item,
+      item: match.item,
       registryUrl,
-      rawBaseUrl: `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${encodeURIComponent(ref)}`,
-      homepage:
-        typeof registry.homepage === 'string'
-          ? registry.homepage
-          : `https://github.com/${parsed.owner}/${parsed.repo}`,
+      rawBaseUrl: registryFileDir(match.declaringUrl),
+      homepage: match.homepage ?? `https://github.com/${parsed.owner}/${parsed.repo}`,
     };
   }
   if (lastError instanceof LocalDesignSystemImportError) throw lastError;
@@ -300,6 +307,58 @@ async function resolveShadcnItem(
     'BAD_REQUEST',
     `could not load registry.json for ${parsed.owner}/${parsed.repo}: ${formatError(lastError)}`,
   );
+}
+
+// Resolve an item by name from a registry document, following the shadcn
+// `include` layout (a root registry.json may delegate to nested registry.json
+// files instead of listing items inline). The item's relative file paths are
+// resolved against the registry.json that declares it, so we surface that
+// declaring URL for the caller's rawBaseUrl.
+async function locateItemInRegistry(
+  registryUrl: string,
+  itemName: string,
+  fetchImpl: ShadcnFetch,
+  visited: Set<string>,
+  depth: number,
+  inheritedHomepage?: string,
+): Promise<RegistryItemMatch | undefined> {
+  if (depth > MAX_INCLUDE_DEPTH || visited.has(registryUrl)) return undefined;
+  visited.add(registryUrl);
+
+  const registry = (await fetchJsonDocument(registryUrl, fetchImpl)) as ShadcnRegistry;
+  const homepage =
+    inheritedHomepage ?? (typeof registry.homepage === 'string' ? registry.homepage : undefined);
+
+  if (Array.isArray(registry.items)) {
+    const item = registry.items.find((entry) => entry?.name === itemName);
+    if (item) return { item, declaringUrl: registryUrl, ...(homepage ? { homepage } : {}) };
+  }
+
+  if (Array.isArray(registry.include)) {
+    for (const entry of registry.include) {
+      if (typeof entry !== 'string' || !entry.trim()) continue;
+      let includedUrl: string;
+      try {
+        includedUrl = new URL(entry, registryUrl).toString();
+      } catch {
+        continue;
+      }
+      const match = await locateItemInRegistry(includedUrl, itemName, fetchImpl, visited, depth + 1, homepage);
+      if (match) return match;
+    }
+  }
+
+  return undefined;
+}
+
+// Directory URL of a registry.json (drops the trailing filename), used as the
+// base for resolving the item's relative file paths.
+function registryFileDir(url: string): string {
+  try {
+    return new URL('.', url).toString().replace(/\/+$/, '');
+  } catch {
+    return url.replace(/\/[^/]*$/, '');
+  }
 }
 
 function isUsableItem(item: unknown): item is ShadcnRegistryItem {
@@ -322,30 +381,51 @@ async function fetchJsonDocument(url: string, fetchImpl: ShadcnFetch): Promise<u
 }
 
 async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
+  // Defense in depth: validate every URL we actually contact — not just the
+  // user-supplied entry point, but raw GitHub URLs, `include` targets, and raw
+  // file URLs too. Combined with redirect:error in defaultShadcnFetch, this
+  // closes redirect- and include-based SSRF paths to disallowed hosts.
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw badReference(`invalid registry URL: ${url}`);
+  }
+  assertFetchableUrl(parsedUrl);
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let response: ShadcnFetchResponse;
   try {
-    response = await fetchImpl(url, { signal: controller.signal });
-  } catch (err) {
-    throw new LocalDesignSystemImportError('BAD_REQUEST', `could not fetch ${url}: ${formatError(err)}`);
+    let response: ShadcnFetchResponse;
+    try {
+      response = await fetchImpl(url, { signal: controller.signal });
+    } catch (err) {
+      throw new LocalDesignSystemImportError('BAD_REQUEST', `could not fetch ${url}: ${formatError(err)}`);
+    }
+    if (!response.ok) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        `could not fetch ${url}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
+      );
+    }
+    // Keep the abort timer armed across body consumption so a server that sends
+    // headers promptly and then stalls the body cannot hang the import.
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (err) {
+      throw new LocalDesignSystemImportError('BAD_REQUEST', `could not read ${url}: ${formatError(err)}`);
+    }
+    if (text.length > MAX_DOCUMENT_BYTES) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        `registry document at ${url} exceeds the ${MAX_DOCUMENT_BYTES}-byte limit`,
+      );
+    }
+    return text;
   } finally {
     clearTimeout(timer);
   }
-  if (!response.ok) {
-    throw new LocalDesignSystemImportError(
-      'BAD_REQUEST',
-      `could not fetch ${url}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
-    );
-  }
-  const text = await response.text();
-  if (text.length > MAX_DOCUMENT_BYTES) {
-    throw new LocalDesignSystemImportError(
-      'BAD_REQUEST',
-      `registry document at ${url} exceeds the ${MAX_DOCUMENT_BYTES}-byte limit`,
-    );
-  }
-  return text;
 }
 
 // ---------------------------------------------------------------------------
@@ -445,41 +525,75 @@ async function writeShadcnFiles(
   resolved: ResolvedShadcnItem,
   fetchImpl: ShadcnFetch,
 ): Promise<void> {
-  const files = Array.isArray(item.files) ? item.files.slice(0, MAX_FILES) : [];
+  const files = Array.isArray(item.files) ? item.files : [];
+  // Fail fast instead of silently truncating: a partial design system that
+  // looks "imported" but is missing declared source material is worse than a
+  // clear error the caller can act on.
+  if (files.length > MAX_FILES) {
+    throw new LocalDesignSystemImportError(
+      'BAD_REQUEST',
+      `shadcn registry item declares ${files.length} files, exceeding the ${MAX_FILES}-file limit`,
+    );
+  }
   const used = new Set<string>();
   for (const file of files) {
+    const declared =
+      typeof file?.path === 'string' && file.path.trim()
+        ? file.path.trim()
+        : typeof file?.target === 'string' && file.target.trim()
+          ? file.target.trim()
+          : undefined;
     const relPath = sanitizeShadcnFilePath(file?.target ?? file?.path);
-    if (!relPath || used.has(relPath)) continue;
+    if (!relPath) {
+      if (declared) {
+        throw new LocalDesignSystemImportError(
+          'BAD_REQUEST',
+          `shadcn registry file "${declared}" has no safe destination path`,
+        );
+      }
+      continue;
+    }
+    if (used.has(relPath)) continue;
+    used.add(relPath);
 
     let content = typeof file?.content === 'string' ? file.content : undefined;
-    if (content === undefined && resolved.rawBaseUrl && typeof file?.path === 'string') {
-      content = await tryFetchRawFile(resolved.rawBaseUrl, file.path, fetchImpl);
+    if (content === undefined) {
+      if (resolved.rawBaseUrl && typeof file?.path === 'string' && file.path.trim()) {
+        content = await fetchRawFileContent(resolved.rawBaseUrl, file.path, fetchImpl);
+      } else {
+        throw new LocalDesignSystemImportError(
+          'BAD_REQUEST',
+          `shadcn registry file "${declared ?? relPath}" has no inline content and cannot be fetched`,
+        );
+      }
     }
-    if (content === undefined || content.length > MAX_FILE_BYTES) continue;
+    if (content.length > MAX_FILE_BYTES) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        `shadcn registry file "${declared ?? relPath}" exceeds the ${MAX_FILE_BYTES}-byte limit`,
+      );
+    }
 
-    used.add(relPath);
     const absPath = path.join(tempDir, relPath);
     await mkdir(path.dirname(absPath), { recursive: true });
     await writeFile(absPath, content, 'utf8');
   }
 }
 
-async function tryFetchRawFile(
+async function fetchRawFileContent(
   rawBaseUrl: string,
   filePath: string,
   fetchImpl: ShadcnFetch,
-): Promise<string | undefined> {
+): Promise<string> {
   const safe = filePath
     .split(/[\\/]/)
     .filter((segment) => segment && segment !== '.' && segment !== '..')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
-  if (!safe) return undefined;
-  try {
-    return await fetchText(`${rawBaseUrl}/${safe}`, fetchImpl);
-  } catch {
-    return undefined;
+  if (!safe) {
+    throw new LocalDesignSystemImportError('BAD_REQUEST', `shadcn registry file "${filePath}" has no valid path`);
   }
+  return await fetchText(`${rawBaseUrl}/${safe}`, fetchImpl);
 }
 
 function sanitizeShadcnFilePath(input: string | undefined): string | undefined {
@@ -502,7 +616,10 @@ function defaultShadcnFetch(): ShadcnFetch {
   if (typeof fetch !== 'function') {
     throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'global fetch is not available in this runtime');
   }
-  return (url, init) => fetch(url, init);
+  // redirect:'error' blocks redirect-based SSRF — a validated https registry URL
+  // cannot bounce the daemon to a disallowed internal http target (e.g.
+  // 169.254.169.254). Every hop is re-checked by fetchText's host validation.
+  return (url, init) => fetch(url, { ...init, redirect: 'error' });
 }
 
 function stringArray(value: unknown): string[] {

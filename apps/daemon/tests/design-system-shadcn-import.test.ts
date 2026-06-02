@@ -11,18 +11,17 @@ import {
   type ShadcnFetch,
 } from '../src/design-system-shadcn-import.js';
 
-// A minimal fetch stub: serve a fixed map of URL -> JSON value, 404 otherwise.
+// A minimal fetch stub: serve a fixed map of URL -> value, 404 otherwise.
+// Object values are returned as JSON (registry documents); string values are
+// returned verbatim (raw source files).
 function fetchStub(routes: Record<string, unknown>): ShadcnFetch {
   return async (url) => {
     if (!(url in routes)) {
       return { ok: false, status: 404, statusText: 'Not Found', text: async () => 'not found' };
     }
-    return {
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      text: async () => JSON.stringify(routes[url]),
-    };
+    const value = routes[url];
+    const body = typeof value === 'string' ? value : JSON.stringify(value);
+    return { ok: true, status: 200, statusText: 'OK', text: async () => body };
   };
 }
 
@@ -225,5 +224,85 @@ describe('importShadcnDesignSystemProject', () => {
         fetchImpl: fetchStub({}),
       }),
     ).rejects.toThrow(/could not fetch/i);
+  });
+
+  it('resolves an item through the registry `include` layout, relative to the including file', async () => {
+    const root = 'https://raw.githubusercontent.com/acme/ui/main/registry.json';
+    const included = 'https://raw.githubusercontent.com/acme/ui/main/registry/blocks/registry.json';
+    const buttonFile = 'https://raw.githubusercontent.com/acme/ui/main/registry/blocks/button.tsx';
+    const result = await importShadcnDesignSystemProject('acme/ui/button', tmpRoot, userDesignSystemsRoot, {
+      fetchImpl: fetchStub({
+        [root]: { name: 'ui', include: ['registry/blocks/registry.json'] },
+        [included]: {
+          items: [
+            {
+              name: 'button',
+              type: 'registry:component',
+              title: 'Button',
+              cssVars: { light: { primary: '200 80% 50%' } },
+              files: [{ path: 'button.tsx', type: 'registry:component' }],
+            },
+          ],
+        },
+        // Resolved relative to registry/blocks/ (the declaring registry.json),
+        // not the repo root.
+        [buttonFile]: 'export const Button = () => null;\n',
+      }),
+    });
+
+    expect(result.id).toBe('button');
+    expect(fs.existsSync(path.join(result.dir, 'source', 'snippets', 'button.tsx'))).toBe(true);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(manifest.source).toMatchObject({ type: 'shadcn', registryUrl: root, item: 'button' });
+  });
+
+  it('fails the import when a declared registry file 404s instead of silently dropping it', async () => {
+    const root = 'https://raw.githubusercontent.com/acme/ui/main/registry.json';
+    await expect(
+      importShadcnDesignSystemProject('acme/ui/broken#main', tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: fetchStub({
+          [root]: {
+            items: [
+              {
+                name: 'broken',
+                type: 'registry:component',
+                cssVars: { light: { primary: '1 2% 3%' } },
+                files: [{ path: 'missing.tsx', type: 'registry:component' }],
+              },
+            ],
+          },
+          // raw file URL deliberately absent -> 404
+        }),
+      }),
+    ).rejects.toThrow(/missing\.tsx|could not fetch/i);
+  });
+
+  it('fails the import when a declared inline file exceeds the size cap', async () => {
+    const url = 'https://example.com/r/big.json';
+    await expect(
+      importShadcnDesignSystemProject(url, tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: fetchStub({
+          [url]: {
+            name: 'big',
+            type: 'registry:component',
+            cssVars: { light: { primary: '1 2% 3%' } },
+            files: [{ path: 'big.tsx', type: 'registry:file', content: 'x'.repeat(300 * 1024) }],
+          },
+        }),
+      }),
+    ).rejects.toThrow(/exceeds/i);
+  });
+
+  it('rejects an include target that points at a disallowed (non-loopback http) host', async () => {
+    const root = 'https://raw.githubusercontent.com/acme/ui/main/registry.json';
+    await expect(
+      importShadcnDesignSystemProject('acme/ui/button#main', tmpRoot, userDesignSystemsRoot, {
+        fetchImpl: fetchStub({
+          [root]: { include: ['http://evil.example/registry.json'] },
+        }),
+      }),
+    ).rejects.toThrow(/https/i);
   });
 });
