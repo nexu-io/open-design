@@ -102,9 +102,54 @@ describe('FileOpsSummary', () => {
     expect(screen.getByTestId('file-ops-row-a.ts')).toBeTruthy();
     expect(screen.getByTestId('file-ops-row-b.ts')).toBeTruthy();
     expect(screen.getByTestId('file-ops-toggle').getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByLabelText('Read')).toBeTruthy();
-    expect(screen.getByLabelText('Edit')).toBeTruthy();
+    expect(screen.getByLabelText('Read · Edit')).toBeTruthy();
     expect(screen.getByLabelText('Write')).toBeTruthy();
+  });
+
+  it('keeps every file row in the shared icon, file, count, metadata, status, action grid', () => {
+    render(
+      <FileOpsSummary
+        entries={[
+          entry({
+            path: 'liquid-glass-settings.html',
+            ops: ['read', 'edit'],
+            opCounts: { read: 2, write: 0, edit: 2 },
+            total: 4,
+          }),
+        ]}
+        generatedFiles={[generatedFile('macos-liquid-glass-settings.html')]}
+        projectId="proj-1"
+        streaming={false}
+        onRequestOpenFile={vi.fn()}
+      />,
+    );
+
+    const touched = screen.getByTestId('file-ops-row-liquid-glass-settings.html');
+    expect(Array.from(touched.children).map((child) => child.className)).toEqual([
+      'file-ops-row-icon',
+      'file-ops-row-path file-ops-row-path-button',
+      'file-ops-row-count',
+      'file-ops-row-meta',
+      'file-ops-row-status',
+      'file-ops-row-action-slot',
+    ]);
+    expect(touched.children[1]?.textContent).toBe('liquid-glass-settings.html');
+    expect(touched.children[2]?.textContent).toBe('×4');
+    expect(touched.children[3]?.textContent).toBe('Read · Edit');
+
+    const generated = screen.getByTestId('file-ops-row-macos-liquid-glass-settings.html');
+    expect(Array.from(generated.children).map((child) => child.className)).toEqual([
+      'file-ops-row-icon',
+      'file-ops-row-path file-ops-row-path-button',
+      'file-ops-row-count',
+      'file-ops-row-meta',
+      'file-ops-row-status',
+      'file-ops-row-action-slot',
+    ]);
+    expect(generated.children[1]?.textContent).toBe('macos-liquid-glass-settings.html');
+    expect(generated.children[2]?.textContent).toBe('');
+    expect(generated.children[3]?.textContent).toBe('1.5 KB');
+    expect(generated.querySelector('.file-ops-row-action svg')).toBeTruthy();
   });
 
   it('reopens once streaming flips to false unless the user collapsed it manually', () => {

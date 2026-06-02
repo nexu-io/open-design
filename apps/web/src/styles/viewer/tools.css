@@ -391,9 +391,10 @@
   gap: 3px;
 }
 .file-ops-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto auto auto;
   align-items: center;
-  gap: 4px;
+  column-gap: 4px;
   padding: 3px 6px;
   border-radius: 0;
   font-size: 12px;
@@ -401,48 +402,18 @@
 }
 .file-ops-row--running { color: var(--text); }
 .file-ops-row--error { color: var(--text); }
-.file-ops-row-badges {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  min-width: 25px;
-  flex-shrink: 0;
-}
-.file-ops-badge {
-  display: inline-flex;
+.file-ops-row-icon {
+  width: 16px;
+  height: 18px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  min-width: 0;
-  height: 18px;
-  padding: 0;
-  border-radius: 0;
-  font-size: 9.5px;
-  font-weight: 650;
-  font-family: var(--mono);
-  letter-spacing: 0;
-  border: 0;
-  background: transparent;
   color: var(--text-muted);
 }
-.file-ops-badge svg {
+.file-ops-row-icon svg {
   flex-shrink: 0;
 }
-.file-ops-badge-count {
-  font-size: 9px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.85;
-}
-.file-ops-badge--read,
-.file-ops-badge--write,
-.file-ops-badge--edit,
-.file-ops-badge--generated {
-  color: var(--text-muted);
-}
 .file-ops-row-path {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -480,13 +451,22 @@
   font-size: 10.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
 }
-.file-ops-row-size {
+.file-ops-row-meta {
   font-size: 10.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-ops-row-action-slot {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .file-ops-row-action {
   display: inline-flex;
@@ -496,7 +476,6 @@
   height: 20px;
   color: var(--text-muted);
   border-radius: 0;
-  flex-shrink: 0;
 }
 .file-ops-row-action:hover,
 .file-ops-row-action:focus,
@@ -511,20 +490,18 @@
 }
 .file-ops-row-status {
   font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 8px;
-  flex-shrink: 0;
+  letter-spacing: 0;
+  font-weight: 550;
+  padding: 0;
+  border-radius: 0;
 }
 .file-ops-row-status--running {
   color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  background: transparent;
 }
 .file-ops-row-status--error {
   color: #c0392b;
-  background: color-mix(in oklab, #c0392b 12%, transparent);
+  background: transparent;
 }
 
 .op-bash .op-command,

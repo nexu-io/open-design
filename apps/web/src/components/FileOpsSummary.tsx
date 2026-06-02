@@ -3,7 +3,7 @@
  *
  * While the run streams, the row appears as a compact summary with live
  * counters. Once the run finishes, it expands to a full file list with
- * per-file operation badges. Openable paths are the click target, lifting
+ * per-file operation rows. Openable paths are the click target, lifting
  * the basename to ProjectView so FileWorkspace focuses the matching tab.
  *
  * The component is read-only over `events` — derivation lives in
@@ -11,7 +11,7 @@
  * future surfaces (sidebar, log export, etc.) without coupling to
  * AssistantMessage's render shape.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
@@ -128,36 +128,18 @@ function GeneratedFileRow({
 }) {
   const t = useT();
   return (
-    <li
-      className="file-ops-row file-ops-row--done file-ops-row--generated"
-      data-testid={`file-ops-row-${file.name}`}
-    >
-      <div className="file-ops-row-badges">
-        <span
-          className="file-ops-badge file-ops-badge--generated"
-          title={t('assistant.producedFiles')}
-          aria-label={t('assistant.producedFiles')}
-        >
-          <Icon name={projectFileIconName(file.kind)} size={11} />
-        </span>
-      </div>
-      {onRequestOpenFile ? (
-        <button
-          type="button"
-          className="file-ops-row-path file-ops-row-path-button"
-          onClick={() => onRequestOpenFile(file.name)}
-          title={t('tool.openInTab', { name: file.name })}
-          data-testid={`file-ops-row-path-${file.name}`}
-        >
-          {file.name}
-        </button>
-      ) : (
-        <code className="file-ops-row-path" title={file.path ?? file.name}>
-          {file.name}
-        </code>
-      )}
-      <span className="file-ops-row-size">{humanBytes(file.size)}</span>
-      {projectId ? (
+    <FileOpsRowFrame
+      className="file-ops-row--done file-ops-row--generated"
+      testId={`file-ops-row-${file.name}`}
+      icon={projectFileIconName(file.kind)}
+      iconLabel={t('assistant.producedFiles')}
+      path={file.name}
+      pathTitle={file.path ?? file.name}
+      pathTestId={`file-ops-row-path-${file.name}`}
+      onOpen={onRequestOpenFile ? () => onRequestOpenFile(file.name) : undefined}
+      openTitle={t('tool.openInTab', { name: file.name })}
+      meta={humanBytes(file.size)}
+      action={projectId ? (
         <a
           className="file-ops-row-action"
           href={projectFileUrl(projectId, file.name)}
@@ -168,6 +150,80 @@ function GeneratedFileRow({
           <Icon name="download" size={12} />
         </a>
       ) : null}
+    />
+  );
+}
+
+interface FileOpsRowFrameProps {
+  className: string;
+  testId: string;
+  icon: IconName;
+  iconLabel: string;
+  path: string;
+  pathTitle: string;
+  pathTestId?: string | undefined;
+  onOpen?: (() => void) | undefined;
+  openTitle?: string | undefined;
+  count?: number | undefined;
+  meta?: string | undefined;
+  status?: { label: string; tone: 'running' | 'error' } | undefined;
+  action?: ReactNode;
+}
+
+function FileOpsRowFrame({
+  className,
+  testId,
+  icon,
+  iconLabel,
+  path,
+  pathTitle,
+  pathTestId,
+  onOpen,
+  openTitle,
+  count,
+  meta,
+  status,
+  action,
+}: FileOpsRowFrameProps) {
+  return (
+    <li
+      className={`file-ops-row ${className}`}
+      data-testid={testId}
+      aria-label={`${iconLabel} ${path}`}
+    >
+      <span className="file-ops-row-icon" title={iconLabel} aria-label={iconLabel}>
+        <Icon name={icon} size={12} />
+      </span>
+      {onOpen ? (
+        <button
+          type="button"
+          className="file-ops-row-path file-ops-row-path-button"
+          onClick={onOpen}
+          title={openTitle}
+          data-testid={pathTestId}
+        >
+          {path}
+        </button>
+      ) : (
+        <code className="file-ops-row-path" title={pathTitle}>
+          {path}
+        </code>
+      )}
+      <span className="file-ops-row-count" aria-hidden={count && count > 1 ? undefined : true}>
+        {count && count > 1 ? `×${count}` : ''}
+      </span>
+      <span className="file-ops-row-meta" aria-hidden={meta ? undefined : true}>
+        {meta ?? ''}
+      </span>
+      <span
+        className={`file-ops-row-status${status ? ` file-ops-row-status--${status.tone}` : ''}`}
+        aria-hidden={status ? undefined : true}
+      >
+        {status?.label ?? ''}
+      </span>
+      <span className="file-ops-row-action-slot" aria-hidden={action ? undefined : true}>
+        {action}
+      </span>
     </li>
   );
 }
@@ -198,56 +254,28 @@ function FileOpRow({
   const canOpen =
     !!onRequestOpenFile &&
     (projectFileNames ? projectFileNames.has(entry.path) : true);
+  const opLabels = entry.ops.map((op) => t(OP_LABEL_KEY[op]));
+  const iconLabel = opLabels.join(' · ');
+  const meta = entry.ops.length > 1 ? iconLabel : undefined;
+  const status = entry.status === 'running'
+    ? { label: t('tool.running'), tone: 'running' as const }
+    : entry.status === 'error'
+      ? { label: t('tool.error'), tone: 'error' as const }
+      : undefined;
   return (
-    <li
-      className={`file-ops-row file-ops-row--${entry.status}`}
-      data-testid={`file-ops-row-${entry.path}`}
-    >
-      <div className="file-ops-row-badges">
-        {entry.ops.map((op) => {
-          const count = entry.opCounts[op];
-          const label = count > 1
-            ? `${t(OP_LABEL_KEY[op])} ×${count}`
-            : t(OP_LABEL_KEY[op]);
-          return (
-            <span
-              key={op}
-              className={`file-ops-badge file-ops-badge--${op}`}
-              title={label}
-              aria-label={label}
-            >
-              <Icon name={OP_BADGE_ICON[op]} size={10} />
-              {count > 1 ? (
-                <span className="file-ops-badge-count">×{count}</span>
-              ) : null}
-            </span>
-          );
-        })}
-      </div>
-      {canOpen ? (
-        <button
-          type="button"
-          className="file-ops-row-path file-ops-row-path-button"
-          onClick={() => onRequestOpenFile?.(entry.path)}
-          title={t('tool.openInTab', { name: entry.path })}
-          data-testid={`file-ops-row-path-${entry.path}`}
-        >
-          {entry.path}
-        </button>
-      ) : (
-        <code className="file-ops-row-path" title={entry.fullPath}>
-          {entry.path}
-        </code>
-      )}
-      {entry.status === 'running' ? (
-        <span className="file-ops-row-status file-ops-row-status--running">
-          {t('tool.running')}
-        </span>
-      ) : entry.status === 'error' ? (
-        <span className="file-ops-row-status file-ops-row-status--error">
-          {t('tool.error')}
-        </span>
-      ) : null}
-    </li>
+    <FileOpsRowFrame
+      className={`file-ops-row--${entry.status}`}
+      testId={`file-ops-row-${entry.path}`}
+      icon={OP_BADGE_ICON[entry.ops[0] ?? 'read']}
+      iconLabel={iconLabel}
+      path={entry.path}
+      pathTitle={entry.fullPath}
+      pathTestId={canOpen ? `file-ops-row-path-${entry.path}` : undefined}
+      onOpen={canOpen ? () => onRequestOpenFile?.(entry.path) : undefined}
+      openTitle={t('tool.openInTab', { name: entry.path })}
+      count={entry.total}
+      meta={meta}
+      status={status}
+    />
   );
 }
