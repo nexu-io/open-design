@@ -1706,18 +1706,12 @@ function PluginActionPanel({
   const runAction = onRunAction;
 
   return (
-    <div className="plugin-action-panel" aria-label="Plugin next actions">
-      <div className="plugin-action-panel__head">
-        <span className="plugin-action-panel__icon" aria-hidden>
-          <Icon name="sparkles" size={15} />
-        </span>
-        <div>
-          <div className="plugin-action-panel__title">Plugin ready</div>
-          <div className="plugin-action-panel__subtitle">
-            Send the next step to the agent so it can run the od CLI.
-          </div>
-        </div>
-      </div>
+    <ChatDisclosure
+      className="plugin-action-panel"
+      icon="sparkles"
+      title="Plugin ready"
+      meta="Send the next step to the agent so it can run the od CLI."
+    >
       <div className="plugin-action-panel__list">
         {folders.map((folder) => {
           const actionBusy = activePluginActionPaths.has(folder.path);
@@ -1804,7 +1798,7 @@ function PluginActionPanel({
           </div>
         )})}
       </div>
-    </div>
+    </ChatDisclosure>
   );
 }
 

@@ -244,39 +244,6 @@
 
 .plugin-action-panel {
   margin-top: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--accent-soft);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
-  box-shadow: var(--shadow-xs);
-}
-.plugin-action-panel__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin-bottom: 10px;
-}
-.plugin-action-panel__icon {
-  width: 25px;
-  height: 25px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.plugin-action-panel__title {
-  font-weight: 650;
-  font-size: 13px;
-  color: var(--text);
-}
-.plugin-action-panel__subtitle {
-  margin-top: 2px;
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: var(--text-muted);
 }
 .plugin-action-panel__list {
   display: flex;
@@ -307,8 +274,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  background: var(--bg-subtle);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -323,11 +290,11 @@
 }
 .plugin-action-card__path {
   max-width: 220px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
-  color: var(--text);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
   font-family: var(--mono);
   font-size: 11px;
   overflow: hidden;
@@ -344,19 +311,19 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-height: 28px;
+  min-height: 32px;
   max-width: 100%;
   padding: 5px 10px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 7px;
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
   color: var(--text);
   font-size: 11.5px;
   font-weight: 550;
   cursor: pointer;
 }
 .plugin-action-button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-subtle));
   color: var(--accent);
 }
 .plugin-action-button:disabled {
@@ -364,19 +331,18 @@
   cursor: default;
 }
 .plugin-action-button--primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
+  color: var(--accent);
 }
 .plugin-action-button--primary:hover:not(:disabled) {
-  color: #fff;
-  filter: brightness(0.85);
+  color: var(--accent);
+  filter: none;
 }
 .plugin-action-card__notice {
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
   color: var(--text-muted);
   font-size: 11.5px;
   line-height: 1.35;
