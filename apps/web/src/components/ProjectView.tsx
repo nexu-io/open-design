@@ -1525,6 +1525,7 @@ export function ProjectView({
           ? createHtmlArtifactManifest({
               entry: fileName,
               title,
+              kind: project.metadata?.kind === 'deck' ? 'deck' : 'html',
               sourceSkillId: project.skillId ?? undefined,
               designSystemId: project.designSystemId,
               metadata,

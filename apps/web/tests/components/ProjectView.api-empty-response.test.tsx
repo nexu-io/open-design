@@ -545,6 +545,47 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
   });
 
+  it('persists API deck artifacts with deck renderer metadata', async () => {
+    const artifact =
+      '<artifact identifier="slide-deck" type="text/html" title="Quarterly Deck">' +
+      '<!doctype html><html><head><title>Quarterly Deck</title></head><body><main><section class="slide is-active"><h1>Quarterly Deck</h1><p>Generated slide deck artifact with enough structure to persist.</p></section><section class="slide"><h2>Roadmap</h2></section></main></body></html>' +
+      '</artifact>';
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      skillId: 'html-ppt',
+      metadata: {
+        kind: 'deck',
+      },
+    });
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
+    const [, fileName, , options] = mockedWriteProjectTextFile.mock.calls[0]!;
+    expect(fileName).toBe('slide-deck.html');
+    expect(options?.artifactManifest).toMatchObject({
+      kind: 'deck',
+      renderer: 'deck-html',
+      exports: expect.arrayContaining(['html', 'pdf', 'pptx', 'zip']),
+      primary: true,
+      sourceSkillId: 'html-ppt',
+      metadata: expect.objectContaining({
+        identifier: 'slide-deck',
+        artifactType: 'text/html',
+      }),
+    });
+  });
+
   it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {
     const realPage = {
       name: 'worker-edition-v2.html',

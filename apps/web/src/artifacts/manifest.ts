@@ -72,19 +72,21 @@ export function artifactManifestNameFor(entry: string): string {
 export function createHtmlArtifactManifest(input: {
   entry: string;
   title: string;
+  kind?: Extract<ArtifactKind, 'html' | 'deck'>;
   metadata?: Record<string, unknown>;
   sourceSkillId?: string;
   designSystemId?: string | null;
 }): ArtifactManifest {
   const now = new Date().toISOString();
+  const kind = input.kind === 'deck' ? 'deck' : 'html';
   return {
     version: MANIFEST_VERSION,
-    kind: 'html',
+    kind,
     title: input.title,
     entry: input.entry,
-    renderer: 'html',
+    renderer: kind === 'deck' ? 'deck-html' : 'html',
     status: 'complete',
-    exports: ['html', 'pdf', 'zip'],
+    exports: exportsForKind(kind),
     primary: true,
     createdAt: now,
     updatedAt: now,
