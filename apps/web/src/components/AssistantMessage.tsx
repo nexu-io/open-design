@@ -641,12 +641,6 @@ function AssistantMessageImpl({
         <MessageTimestamp message={message} t={t} />
       </div>
       <div className="assistant-flow">
-        {blocks.length === 0 && streaming ? (
-          <WaitingPill
-            startedAt={message.startedAt}
-            latestStatus={latestStatusLabel(events)}
-          />
-        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
@@ -2005,6 +1999,7 @@ function MessageTextBlock({
   text,
   isLastAssistant,
   streaming,
+  showStreamCursor,
   nextUserContent,
   locallySubmitted,
   suppressDirectionForms,
@@ -2015,6 +2010,7 @@ function MessageTextBlock({
   text: string;
   isLastAssistant: boolean;
   streaming: boolean;
+  showStreamCursor?: boolean;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
@@ -2027,6 +2023,7 @@ function MessageTextBlock({
       text={text}
       isLastAssistant={isLastAssistant}
       streaming={streaming}
+      showStreamCursor={showStreamCursor}
       nextUserContent={nextUserContent}
       locallySubmitted={locallySubmitted}
       suppressDirectionForms={suppressDirectionForms}

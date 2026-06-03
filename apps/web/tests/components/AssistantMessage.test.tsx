@@ -499,7 +499,7 @@ describe('AssistantMessage thinking blocks', () => {
       />,
     );
 
-    const toggle = screen.getByRole('button', { name: 'Thought' });
+    const toggle = screen.getByRole('button', { name: 'Thinking' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('.thinking-label.shimmer-text')).toBeTruthy();
     expect(container.querySelector('.accordion-collapsible.open')).toBeNull();
@@ -553,7 +553,7 @@ describe('AssistantMessage thinking blocks', () => {
       events.push((event as CustomEvent<{ open: boolean }>).detail);
     });
 
-    const toggle = screen.getByRole('button', { name: 'Thinking' });
+    const toggle = screen.getByRole('button', { name: 'Thought' });
     fireEvent.click(toggle);
 
     expect(events).toEqual([{ open: true }]);
@@ -681,11 +681,14 @@ describe('AssistantMessage thinking blocks', () => {
       />,
     );
 
-    expect(screen.queryByText(planningText)).toBeNull();
+    const collapsedPlanningText = screen.getByText(planningText);
+    expect(collapsedPlanningText.closest('.thinking-body')).toBeTruthy();
+    expect(collapsedPlanningText.closest('.accordion-collapsible.open')).toBeNull();
     expect(screen.getByText(finalAnswer)).toBeTruthy();
 
-    const toggles = screen.getAllByRole('button', { name: 'Thinking' });
+    const toggles = screen.getAllByRole('button', { name: 'Thought' });
     fireEvent.click(toggles.at(-1)!);
+    expect(collapsedPlanningText.closest('.accordion-collapsible.open')).toBeTruthy();
     expect(screen.getByText(planningText)).toBeTruthy();
   });
 });

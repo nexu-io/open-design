@@ -730,11 +730,6 @@ function useToolStatus(result: Props['result'] | undefined, runStreaming: boolea
   return { label: t('tool.done'), tone: 'done', hideLabel: true };
 }
 
-function FileErrorDetail({ result }: { result?: Props['result'] }) {
-  if (!result?.isError || !result.content.trim()) return null;
-  return <pre className="op-output">{truncate(result.content, 1200)}</pre>;
-}
-
 function describeInput(input: unknown): string {
   if (input == null) return '';
   if (typeof input === 'string') return input;
