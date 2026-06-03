@@ -256,6 +256,38 @@ describe('HomeView media composer options', () => {
     });
   });
 
+  it('includes selected Home footer options in the submitted payload', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({
+      onSubmit,
+      designSystems: [
+        designSystem('editorial-noir', 'Editorial Noir', 'built-in', 'published'),
+        designSystem('brand-alpha', 'Brand Alpha', 'user', 'published'),
+      ],
+    });
+
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    await chooseOption('designSystem', 'brand-alpha', 'Brand Alpha');
+    await chooseOption('ratio', '1:1', '1:1');
+    await chooseOption('duration', '10', '10s');
+    setHomePrompt('Create a launch teaser.');
+    await submitHome();
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        prompt: 'Create a launch teaser.',
+        designSystemId: 'brand-alpha',
+        projectMetadata: expect.objectContaining({
+          kind: 'video',
+          videoAspect: '1:1',
+          videoLength: 10,
+        }),
+      }));
+    });
+  });
+
   it('submits HyperFrames as a video project with the hyperframes-html model', async () => {
     stubFetch();
     const onSubmit = vi.fn();

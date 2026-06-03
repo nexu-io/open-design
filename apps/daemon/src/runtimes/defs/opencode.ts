@@ -7,11 +7,16 @@ export const opencodeAgentDef = {
     bin: 'opencode-cli',
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
-    // `opencode models` prints `provider/model` per line.
+    // `opencode models` prints `provider/model` per line. Real-world
+    // `opencode models` calls can take >8s (network round-trip to the
+    // provider registry), so the previous 8s budget timed out and fell back
+    // to the hardcoded `fallbackModels`, hiding the user's actual catalog.
+    // 15s matches the listModels budget the rest of the agent defs use
+    // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
     listModels: {
       args: ['models'],
       parse: parseLineSeparatedModels,
-      timeoutMs: 8000,
+      timeoutMs: 15_000,
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,

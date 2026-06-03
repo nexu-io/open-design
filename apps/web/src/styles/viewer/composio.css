@@ -129,7 +129,8 @@
 .deploy-field-grid.single-field {
   grid-template-columns: minmax(0, 1fr);
 }
-.deploy-field-grid label {
+.deploy-field-grid label,
+.deploy-field-control {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -284,11 +285,6 @@
     flex-direction: column;
     gap: 6px;
   }
-  .deploy-form .field-label-note {
-    align-items: flex-start;
-    max-width: none;
-    text-align: left;
-  }
   .deploy-field-grid,
   .cloudflare-domain-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -357,8 +353,8 @@
 }
 .picker select {
   border: none;
-  background: transparent;
-  padding: 4px 6px;
+  background-color: transparent;
+  padding: 4px 26px 4px 6px;
   width: auto;
   min-width: 120px;
   box-shadow: none;

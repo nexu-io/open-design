@@ -192,6 +192,9 @@ export interface HeaderProductMenuCopy {
   openDesignBlurb: string;
   htmlAnythingName: string;
   htmlAnythingBlurb: string;
+  amrName: string;
+  amrKicker: string;
+  amrBlurb: string;
   tutorialsName: string;
   tutorialsBlurb: string;
 }
@@ -217,6 +220,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'The agentic design surface: skills, systems, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data to ship-ready HTML, by your local agent.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Design Agent',
+    amrBlurb: 'Professional design Agent, zero-config use, built-in SOTA models & Harness',
     tutorialsName: 'Tutorials',
     tutorialsBlurb: 'Video walkthroughs, demos, and community reviews.',
   },
@@ -227,6 +233,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent 原生设计工作台：Skill、设计系统、模板。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
+    amrName: 'Open Design AMR',
+    amrKicker: '设计 Agent',
+    amrBlurb: '专业设计Agent、零配置使用、自带SOTA模型与Harness',
     tutorialsName: '教程',
     tutorialsBlurb: '视频上手、演示与社区评测。',
   },
@@ -237,6 +246,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent 原生設計工作台：Skill、設計系統、模板。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 資料變成可交付 HTML，由本地 Agent 完成。',
+    amrName: 'Open Design AMR',
+    amrKicker: '設計 Agent',
+    amrBlurb: '專業設計 Agent、零配置使用、內建 SOTA 模型與 Harness',
     tutorialsName: '教學',
     tutorialsBlurb: '影片上手、演示與社群評測。',
   },
@@ -247,6 +259,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent ネイティブのデザイン面: Skill、システム、テンプレート。',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / データをローカル Agent で納品可能な HTML へ。',
+    amrName: 'Open Design AMR',
+    amrKicker: 'デザイン Agent',
+    amrBlurb: 'プロ向けデザイン Agent、ゼロ設定で利用、SOTA モデルと Harness 内蔵',
     tutorialsName: 'チュートリアル',
     tutorialsBlurb: '動画ガイド、デモ、コミュニティレビュー。',
   },
@@ -257,6 +272,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent 네이티브 디자인 작업면: Skill, 시스템, 템플릿.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / 데이터를 로컬 Agent로 배포 가능한 HTML로 변환.',
+    amrName: 'Open Design AMR',
+    amrKicker: '디자인 Agent',
+    amrBlurb: '전문 디자인 Agent, 무설정 사용, SOTA 모델과 Harness 내장',
     tutorialsName: '튜토리얼',
     tutorialsBlurb: '영상 가이드, 데모, 커뮤니티 리뷰.',
   },
@@ -267,6 +285,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentische Designoberfläche: Skills, Systeme, Vorlagen.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / Daten werden durch deinen lokalen Agent zu fertigem HTML.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Design-Agent',
+    amrBlurb: 'Professioneller Design-Agent, null Konfiguration, integrierte SOTA-Modelle & Harness',
     tutorialsName: 'Tutorials',
     tutorialsBlurb: 'Videoanleitungen, Demos und Community-Reviews.',
   },
@@ -277,6 +298,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Surface de design agentique : skills, systèmes, modèles.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / données vers du HTML prêt à livrer via votre agent local.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent design',
+    amrBlurb: 'Agent de design professionnel, zéro configuration, modèles SOTA et Harness intégrés',
     tutorialsName: 'Tutoriels',
     tutorialsBlurb: 'Guides vidéo, démos et avis de la communauté.',
   },
@@ -287,6 +311,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent-native дизайн-среда: skills, системы, шаблоны.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / данные в готовый HTML через локального Agent.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Дизайн-Agent',
+    amrBlurb: 'Профессиональный дизайн-Agent, без настройки, со встроенными SOTA-моделями и Harness',
     tutorialsName: 'Руководства',
     tutorialsBlurb: 'Видеоразборы, демо и обзоры сообщества.',
   },
@@ -297,6 +324,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Superficie de diseño agentic: skills, sistemas, plantillas.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / datos a HTML listo para entregar con tu Agent local.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent diseño',
+    amrBlurb: 'Agent de diseño profesional, uso sin configuración, modelos SOTA y Harness integrados',
     tutorialsName: 'Tutoriales',
     tutorialsBlurb: 'Guías en video, demos y reseñas de la comunidad.',
   },
@@ -307,6 +337,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Superfície de design agentic: skills, sistemas, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dados viram HTML pronto com seu Agent local.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent design',
+    amrBlurb: 'Agent de design profissional, uso sem configuração, modelos SOTA e Harness integrados',
     tutorialsName: 'Tutoriais',
     tutorialsBlurb: 'Guias em vídeo, demos e avaliações da comunidade.',
   },
@@ -317,6 +350,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Superficie di design agentic: skill, sistemi, template.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dati in HTML pronto alla consegna con il tuo Agent locale.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent design',
+    amrBlurb: 'Agent di design professionale, uso senza configurazione, modelli SOTA e Harness integrati',
     tutorialsName: 'Tutorial',
     tutorialsBlurb: 'Guide video, demo e recensioni della community.',
   },
@@ -327,6 +363,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Bề mặt thiết kế agentic: skill, hệ thống, mẫu.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dữ liệu thành HTML sẵn sàng giao bằng Agent cục bộ.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent thiết kế',
+    amrBlurb: 'Agent thiết kế chuyên nghiệp, dùng không cần cấu hình, tích hợp mô hình SOTA và Harness',
     tutorialsName: 'Hướng dẫn',
     tutorialsBlurb: 'Video hướng dẫn, demo và đánh giá cộng đồng.',
   },
@@ -337,6 +376,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentic powierzchnia projektowa: skills, systemy, szablony.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / dane do gotowego HTML przez lokalnego Agent.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent designu',
+    amrBlurb: 'Profesjonalny Agent do projektowania, zero konfiguracji, wbudowane modele SOTA i Harness',
     tutorialsName: 'Poradniki',
     tutorialsBlurb: 'Wideo, dema i recenzje społeczności.',
   },
@@ -347,6 +389,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Ruang desain agentic: skill, sistem, template.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data menjadi HTML siap kirim lewat Agent lokal.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent desain',
+    amrBlurb: 'Agent desain profesional, tanpa konfigurasi, model SOTA dan Harness bawaan',
     tutorialsName: 'Tutorial',
     tutorialsBlurb: 'Panduan video, demo, dan ulasan komunitas.',
   },
@@ -357,6 +402,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentic designoppervlak: skills, systemen, templates.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / data naar opleverklare HTML via je lokale Agent.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Design-Agent',
+    amrBlurb: 'Professionele design-Agent, nul configuratie, ingebouwde SOTA-modellen en Harness',
     tutorialsName: 'Tutorials',
     tutorialsBlurb: 'Videogidsen, demo’s en communityreviews.',
   },
@@ -367,6 +415,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'مساحة تصميم وكيلة: المهارات والأنظمة والقوالب.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / البيانات إلى HTML جاهز عبر Agent المحلي.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Agent تصميم',
+    amrBlurb: 'Agent تصميم احترافي، استخدام بلا إعداد، نماذج SOTA و Harness مدمجة',
     tutorialsName: 'الدروس',
     tutorialsBlurb: 'شروحات فيديو وعروض وتجارب من المجتمع.',
   },
@@ -377,6 +428,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agentic tasarım yüzeyi: skill, sistemler, şablonlar.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / veriler yerel Agent ile teslim edilebilir HTML olur.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Tasarım Agent',
+    amrBlurb: 'Profesyonel tasarım Agent, sıfır yapılandırma, yerleşik SOTA modelleri ve Harness',
     tutorialsName: 'Eğitimler',
     tutorialsBlurb: 'Video anlatımlar, demolar ve topluluk incelemeleri.',
   },
@@ -387,6 +441,9 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     openDesignBlurb: 'Agent-native дизайн-поверхня: skills, системи, шаблони.',
     htmlAnythingName: 'HTML Anything',
     htmlAnythingBlurb: 'Markdown / дані у готовий HTML через локального Agent.',
+    amrName: 'Open Design AMR',
+    amrKicker: 'Дизайн-Agent',
+    amrBlurb: 'Професійний дизайн-Agent, без налаштувань, із вбудованими SOTA-моделями та Harness',
     tutorialsName: 'Навчальні матеріали',
     tutorialsBlurb: 'Відеоінструкції, демо та огляди спільноти.',
   },
@@ -416,6 +473,7 @@ export interface HomePageCopy {
     titleEmphasis: string;
     titleMiddle: string;
     titleSecondEmphasis: string;
+    titleBreakAfterEmphasis?: boolean;
     lead: (skills: string, systems: string) => string;
     star: string;
     download: string;
@@ -1047,7 +1105,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: '下載桌面應用',
       starAria: '在 GitHub 為 Open Design 按 Star',
       starTitle: '去 GitHub 按 Star',
-      starPrefix: 'Star',
+      starPrefix: '點星',
     },
   },
   ja: {
@@ -1080,7 +1138,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'デスクトップアプリをダウンロード',
       starAria: 'GitHub で Open Design にスター',
       starTitle: 'GitHub でスターする',
-      starPrefix: 'Star',
+      starPrefix: 'スター',
     },
   },
   ko: {
@@ -1113,7 +1171,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: '데스크톱 앱 다운로드',
       starAria: 'GitHub에서 Open Design에 스타 주기',
       starTitle: 'GitHub에서 스타 주기',
-      starPrefix: 'Star',
+      starPrefix: '스타',
     },
   },
   de: {
@@ -1146,7 +1204,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Desktop-App herunterladen',
       starAria: 'Open Design auf GitHub mit Stern markieren',
       starTitle: 'Auf GitHub sternen',
-      starPrefix: 'Star',
+      starPrefix: 'Stern',
     },
   },
   fr: {
@@ -1179,7 +1237,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: "Télécharger l'application desktop",
       starAria: 'Ajouter une étoile à Open Design sur GitHub',
       starTitle: 'Mettre une étoile sur GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Étoile',
     },
   },
   ru: {
@@ -1212,7 +1270,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Скачать desktop-приложение',
       starAria: 'Поставить звезду Open Design на GitHub',
       starTitle: 'Поставить звезду на GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Звезда',
     },
   },
   es: {
@@ -1245,7 +1303,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Descargar la app de escritorio',
       starAria: 'Dar Star a Open Design en GitHub',
       starTitle: 'Dar Star en GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Estrella',
     },
   },
   'pt-br': {
@@ -1278,7 +1336,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Baixar o app desktop',
       starAria: 'Dar Star no Open Design no GitHub',
       starTitle: 'Dar Star no GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Estrela',
     },
   },
   it: {
@@ -1311,7 +1369,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: "Scarica l'app desktop",
       starAria: 'Metti una Star a Open Design su GitHub',
       starTitle: 'Metti una Star su GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Stella',
     },
   },
   vi: {
@@ -1344,7 +1402,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Tải ứng dụng desktop',
       starAria: 'Star Open Design trên GitHub',
       starTitle: 'Star trên GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Sao',
     },
   },
   pl: {
@@ -1377,7 +1435,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Pobierz aplikację desktop',
       starAria: 'Daj gwiazdkę Open Design na GitHubie',
       starTitle: 'Daj gwiazdkę na GitHubie',
-      starPrefix: 'Star',
+      starPrefix: 'Gwiazdka',
     },
   },
   id: {
@@ -1410,7 +1468,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Unduh aplikasi desktop',
       starAria: 'Beri Star Open Design di GitHub',
       starTitle: 'Beri Star di GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Bintang',
     },
   },
   nl: {
@@ -1443,7 +1501,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Desktop-app downloaden',
       starAria: 'Geef Open Design een Star op GitHub',
       starTitle: 'Star op GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Ster',
     },
   },
   ar: {
@@ -1476,7 +1534,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'تنزيل تطبيق سطح المكتب',
       starAria: 'ضع نجمة لـ Open Design على GitHub',
       starTitle: 'ضع نجمة على GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'نجمة',
     },
   },
   tr: {
@@ -1509,7 +1567,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Desktop uygulamasını indir',
       starAria: "GitHub'da Open Design'a Star ver",
       starTitle: "GitHub'da Star ver",
-      starPrefix: 'Star',
+      starPrefix: 'Yıldız',
     },
   },
   uk: {
@@ -1542,7 +1600,7 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       downloadTitle: 'Завантажити desktop-застосунок',
       starAria: 'Поставити зірку Open Design на GitHub',
       starTitle: 'Поставити зірку на GitHub',
-      starPrefix: 'Star',
+      starPrefix: 'Зірка',
     },
   },
 };
@@ -2449,12 +2507,13 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
       joinDiscord: '加入 Discord',
       label: '开源设计工作室',
       issue: 'Nº 01',
-      titlePrefix: '开源的',
-      titleEmphasis: 'Claude Design',
-      titleMiddle: '运行在',
-      titleSecondEmphasis: '你自己的 Agent 上',
-      lead: (skills, systems) =>
-        `Open Design 是官方、本地优先的 Claude Design 替代方案。你现有的编码 Agent —— Claude Code · Codex · Cursor · Gemini · OpenCode · Qwen —— 会变成设计引擎，并由 ${skills} 个可组合 Skill 与 ${systems} 套可移植 DESIGN.md 系统驱动。`,
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: '开源、本地、Agent 驱动的设计平台',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Figma 和 Claude Design 的 Agent-native 替代。\n桌面客户端优先，接入 16 个 Coding Agent，${systems} 个 Design System，Apache-2.0。`,
       star: '在 GitHub 点 Star',
       download: '下载桌面端',
       plate: '图版 Nº 08',
@@ -3665,6 +3724,299 @@ function mergeCopy<T>(base: T, override: DeepPartial<T> | undefined): T {
   }
   return out as T;
 }
+
+const FIRST_SCREEN_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<HomePageCopy>>> = {
+  en: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'Open-source, local, agent-driven design platform',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `An agent-native alternative to Figma and Claude Design.\nDesktop-first, connected to 16 coding agents, ${systems} design systems, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'shippable' },
+        { strong: 'Systems', text: 'portable' },
+        { strong: 'CLI', text: 'bring your agent' },
+      ],
+    },
+  },
+  zh: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: '开源、本地、Agent 驱动的设计平台',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Figma 和 Claude Design 的 Agent 原生替代。\n桌面客户端优先，接入 16 个编码 Agent，${systems} 个设计系统，Apache-2.0。`,
+      star: '在 GitHub 点 Star',
+      stats: [
+        { strong: '技能', text: '可交付' },
+        { strong: '系统', text: '可移植' },
+        { strong: '命令行', text: '自带代理' },
+      ],
+    },
+  },
+  'zh-tw': {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: '開源、本地、Agent 驅動的設計平台',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Figma 和 Claude Design 的 Agent 原生替代。\n桌面客戶端優先，接入 16 個編碼 Agent，${systems} 個設計系統，Apache-2.0。`,
+      star: '在 GitHub 點星',
+      stats: [
+        { strong: '技能', text: '可交付' },
+        { strong: '系統', text: '可移植' },
+        { strong: '命令列', text: '自帶代理' },
+      ],
+    },
+  },
+  ja: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'オープンソース、ローカル、Agent 駆動のデザインプラットフォーム',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Figma と Claude Design に代わる Agent ネイティブな選択肢。\nデスクトップ優先で、16 個のコーディング Agent、${systems} 個のデザインシステム、Apache-2.0 に対応。`,
+      stats: [
+        { strong: 'Skill', text: '納品可能' },
+        { strong: 'System', text: '移植可能' },
+        { strong: 'CLI', text: 'Agent 持ち込み' },
+      ],
+    },
+  },
+  ko: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: '오픈소스, 로컬, Agent 구동 디자인 플랫폼',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Figma와 Claude Design을 대체하는 Agent 네이티브 선택지.\n데스크톱 우선, 16개 코딩 Agent와 ${systems}개 디자인 시스템, Apache-2.0 지원.`,
+      stats: [
+        { strong: '스킬', text: '출하 가능' },
+        { strong: '시스템', text: '이식 가능' },
+        { strong: 'CLI', text: 'Agent 직접 사용' },
+      ],
+    },
+  },
+  de: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'Open-Source, lokal, Agent-getriebene Designplattform',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Die Agent-native Alternative zu Figma und Claude Design.\nDesktop-first, mit 16 Coding-Agents, ${systems} Designsystemen und Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'lieferbar' },
+        { strong: 'Systeme', text: 'portabel' },
+        { strong: 'CLI', text: 'eigener Agent' },
+      ],
+    },
+  },
+  fr: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'plateforme de design open source, locale et pilotée par Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `L’alternative Agent-native à Figma et Claude Design.\nPriorité au desktop, connectée à 16 agents de code, ${systems} systèmes de design, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'livrables' },
+        { strong: 'Systèmes', text: 'portables' },
+        { strong: 'CLI', text: 'votre Agent' },
+      ],
+    },
+  },
+  ru: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'открытая, локальная дизайн-платформа на базе Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Agent-native альтернатива Figma и Claude Design.\nСтавка на десктоп: 16 coding agents, ${systems} дизайн-систем, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'к поставке' },
+        { strong: 'Системы', text: 'портативны' },
+        { strong: 'CLI', text: 'ваш Agent' },
+      ],
+    },
+  },
+  es: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'plataforma de diseño abierta, local e impulsada por Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `La alternativa Agent-native a Figma y Claude Design.\nPrimero desktop, conectada a 16 agentes de código, ${systems} sistemas de diseño, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'entregables' },
+        { strong: 'Sistemas', text: 'portátiles' },
+        { strong: 'CLI', text: 'tu Agent' },
+      ],
+    },
+  },
+  'pt-br': {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'plataforma de design aberta, local e movida por Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `A alternativa Agent-native ao Figma e ao Claude Design.\nDesktop em primeiro lugar, conectada a 16 agentes de código, ${systems} sistemas de design, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'entregáveis' },
+        { strong: 'Sistemas', text: 'portáteis' },
+        { strong: 'CLI', text: 'seu Agent' },
+      ],
+    },
+  },
+  it: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'piattaforma di design open source, locale e guidata da Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `L’alternativa Agent-native a Figma e Claude Design.\nPrima desktop, connessa a 16 agenti di codice, ${systems} sistemi di design, Apache-2.0.`,
+      stats: [
+        { strong: 'Skill', text: 'consegnabili' },
+        { strong: 'Sistemi', text: 'portabili' },
+        { strong: 'CLI', text: 'il tuo Agent' },
+      ],
+    },
+  },
+  vi: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'nền tảng thiết kế mã nguồn mở, cục bộ, do Agent điều khiển',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Lựa chọn thay thế Agent-native cho Figma và Claude Design.\nƯu tiên desktop, kết nối 16 coding agent, ${systems} hệ thống thiết kế, Apache-2.0.`,
+      stats: [
+        { strong: 'Skill', text: 'có thể giao' },
+        { strong: 'Hệ thống', text: 'di động' },
+        { strong: 'CLI', text: 'Agent của bạn' },
+      ],
+    },
+  },
+  pl: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'otwarta, lokalna platforma designu napędzana przez Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Agent-native alternatywa dla Figmy i Claude Design.\nDesktop-first, połączona z 16 agentami kodu, ${systems} systemami designu, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'do wysyłki' },
+        { strong: 'Systemy', text: 'przenośne' },
+        { strong: 'CLI', text: 'twój Agent' },
+      ],
+    },
+  },
+  id: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'platform desain open source, lokal, digerakkan Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Alternatif Agent-native untuk Figma dan Claude Design.\nMengutamakan desktop, terhubung ke 16 agent coding, ${systems} sistem desain, Apache-2.0.`,
+      stats: [
+        { strong: 'Skill', text: 'siap kirim' },
+        { strong: 'Sistem', text: 'portabel' },
+        { strong: 'CLI', text: 'Agent Anda' },
+      ],
+    },
+  },
+  nl: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'open-source, lokaal, Agent-gedreven designplatform',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Het Agent-native alternatief voor Figma en Claude Design.\nDesktop-first, verbonden met 16 coding agents, ${systems} designsystemen, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'leverbaar' },
+        { strong: 'Systemen', text: 'draagbaar' },
+        { strong: 'CLI', text: 'je Agent' },
+      ],
+    },
+  },
+  ar: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'منصة تصميم مفتوحة ومحلية تعمل عبر Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `بديل Agent-native لـ Figma وClaude Design.\nيركز على سطح المكتب، ويتصل بـ 16 Agent برمجة و${systems} نظام تصميم، Apache-2.0.`,
+      stats: [
+        { strong: 'مهارات', text: 'جاهزة للتسليم' },
+        { strong: 'أنظمة', text: 'قابلة للنقل' },
+        { strong: 'CLI', text: 'Agent الخاص بك' },
+      ],
+    },
+  },
+  tr: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'açık kaynak, yerel, Agent destekli tasarım platformu',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Figma ve Claude Design için Agent-native alternatif.\nÖncelik desktop; 16 coding agent, ${systems} tasarım sistemi, Apache-2.0.`,
+      stats: [
+        { strong: 'Skill', text: 'teslim edilebilir' },
+        { strong: 'Sistem', text: 'taşınabilir' },
+        { strong: 'CLI', text: 'kendi Agentın' },
+      ],
+    },
+  },
+  uk: {
+    hero: {
+      titlePrefix: '',
+      titleEmphasis: 'Open Design',
+      titleMiddle: 'відкрита, локальна дизайн-платформа на базі Agent',
+      titleSecondEmphasis: '',
+      titleBreakAfterEmphasis: true,
+      lead: (_skills, systems) =>
+        `Agent-native альтернатива Figma та Claude Design.\nDesktop-first, підключено 16 coding agents, ${systems} дизайн-систем, Apache-2.0.`,
+      stats: [
+        { strong: 'Skills', text: 'до доставки' },
+        { strong: 'Системи', text: 'портативні' },
+        { strong: 'CLI', text: 'ваш Agent' },
+      ],
+    },
+  },
+};
 
 const HOME_PAGE_COPY_OVERRIDES: Partial<Record<LandingLocaleCode, DeepPartial<HomePageCopy>>> = {
   ja: {
@@ -5428,15 +5780,15 @@ export function getLandingUiCopy(locale: LandingLocaleCode): LandingUiCopy {
 
 export function getHomePageCopy(locale: LandingLocaleCode): HomePageCopy {
   const exactCopy = HOME_PAGE_COPY[locale];
-  if (exactCopy) return exactCopy;
+  if (exactCopy) {
+    return mergeCopy(exactCopy, FIRST_SCREEN_COPY_OVERRIDES[locale]);
+  }
   const localizedHomeBodyCopy = mergeCopy(
     LOCALIZED_HOME_BODY_COPY[locale] ?? {},
     EXTRA_LOCALIZED_HOME_BODY_COPY[locale] ?? {},
   );
-  const copy = mergeCopy(
-    mergeCopy(HOME_PAGE_COPY_EN, HOME_PAGE_COPY_OVERRIDES[locale]),
-    localizedHomeBodyCopy,
-  );
+  let copy = mergeCopy(mergeCopy(HOME_PAGE_COPY_EN, HOME_PAGE_COPY_OVERRIDES[locale]), localizedHomeBodyCopy);
+  copy = mergeCopy(copy, FIRST_SCREEN_COPY_OVERRIDES[locale]);
   const footerOverride = LOCALIZED_HOME_FOOTER_COPY[locale];
   return footerOverride ? mergeCopy(copy, { footer: footerOverride }) : copy;
 }

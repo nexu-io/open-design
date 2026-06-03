@@ -5,12 +5,14 @@ import {
   archiveRootFromFilePath,
   buildDesignHandoffContent,
   buildDesignManifestContent,
+  downloadImageDataUrl,
   buildSandboxedPreviewDocument,
   exportAsImage,
   exportAsMd,
   exportAsPdf,
   exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
+  prepareImageExportTarget,
   requestPreviewSnapshot,
 } from '../../src/runtime/exports';
 
@@ -672,12 +674,14 @@ describe('requestPreviewSnapshot', () => {
 
 describe('exportAsImage', () => {
   let clickMock: ReturnType<typeof vi.fn>;
+  let createObjectURLMock: ReturnType<typeof vi.fn>;
   let anchors: Array<{ href: string; download: string; click: ReturnType<typeof vi.fn> }>;
 
   beforeEach(() => {
     clickMock = vi.fn();
+    createObjectURLMock = vi.fn(() => 'blob:mock-url');
     anchors = [];
-    vi.stubGlobal('URL', { createObjectURL: () => 'blob:mock-url', revokeObjectURL: vi.fn() });
+    vi.stubGlobal('URL', { createObjectURL: createObjectURLMock, revokeObjectURL: vi.fn() });
     vi.stubGlobal('document', {
       createElement: () => {
         const el = { href: '', download: '', click: clickMock };
@@ -711,5 +715,73 @@ describe('exportAsImage', () => {
     exportAsImage('data:image/png;base64,AA==', 'Hello <World> / Test!');
 
     expect(anchors[0]!.download).toBe('Hello-World-Test.png');
+  });
+
+  it('does not download an empty image snapshot', () => {
+    expect(() => exportAsImage('data:image/png;base64,', 'Empty')).toThrow('Image snapshot is empty');
+
+    expect(clickMock).not.toHaveBeenCalled();
+    expect(anchors).toHaveLength(0);
+  });
+
+  it('downloads a validated image data URL without creating a blob URL', () => {
+    const dataUrl = 'data:image/png;base64,AA==';
+
+    downloadImageDataUrl(dataUrl, 'workspace.png');
+
+    expect(clickMock).toHaveBeenCalledOnce();
+    expect(createObjectURLMock).not.toHaveBeenCalled();
+    expect(anchors[0]!.href).toBe(dataUrl);
+    expect(anchors[0]!.download).toBe('workspace.png');
+  });
+
+  it('does not download an empty image data URL', () => {
+    expect(() => downloadImageDataUrl('data:image/png;base64,', 'workspace.png')).toThrow('Image snapshot is empty');
+
+    expect(clickMock).not.toHaveBeenCalled();
+    expect(anchors).toHaveLength(0);
+  });
+
+  it('falls back to download when the native save picker is blocked', async () => {
+    const showSaveFilePicker = vi.fn().mockRejectedValue(
+      new DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError'),
+    );
+    vi.stubGlobal('window', { showSaveFilePicker });
+
+    const target = await prepareImageExportTarget('My Design', 'jpeg');
+
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(target?.method).toBe('download');
+    expect(target?.filename).toBe('My-Design.jpg');
+
+    await target?.save(new Blob(['jpeg'], { type: 'image/jpeg' }));
+
+    expect(clickMock).toHaveBeenCalledOnce();
+    expect(anchors[0]!.download).toBe('My-Design.jpg');
+  });
+
+  it('falls back to download when the native save picker reports a cross-realm SecurityError', async () => {
+    const securityError = Object.assign(new Error('Must be handling a user gesture to show a file picker.'), {
+      name: 'SecurityError',
+    });
+    const showSaveFilePicker = vi.fn().mockRejectedValue(securityError);
+    vi.stubGlobal('window', { showSaveFilePicker });
+
+    const target = await prepareImageExportTarget('My Design', 'webp');
+
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(target?.method).toBe('download');
+    expect(target?.filename).toBe('My-Design.webp');
+  });
+
+  it('can skip the native save picker to avoid pre-creating empty files', async () => {
+    const showSaveFilePicker = vi.fn();
+    vi.stubGlobal('window', { showSaveFilePicker });
+
+    const target = await prepareImageExportTarget('My Design', 'png', { useNativePicker: false });
+
+    expect(showSaveFilePicker).not.toHaveBeenCalled();
+    expect(target?.method).toBe('download');
+    expect(target?.filename).toBe('My-Design.png');
   });
 });

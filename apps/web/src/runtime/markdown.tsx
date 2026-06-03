@@ -431,6 +431,48 @@ function isSafeMarkdownImageSrc(src: string): boolean {
   );
 }
 
+const INLINE_CODE_HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const PROSE_HEX_COLOR_RE = /(^|[^\w#])(#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}))(?![\w-])/g;
+
+function isInlineCodeHexColor(value: string): boolean {
+  return INLINE_CODE_HEX_COLOR_RE.test(value);
+}
+
+function ColorSwatch({ color }: { color: string }) {
+  return (
+    <span
+      className="md-color-swatch"
+      aria-hidden="true"
+      style={{ backgroundColor: color }}
+    />
+  );
+}
+
+function renderInlineCodeSpan(value: string, key: number): ReactNode {
+  if (!isInlineCodeHexColor(value)) {
+    return (
+      <code key={key} className="md-inline-code">
+        {value}
+      </code>
+    );
+  }
+  return (
+    <code key={key} className="md-inline-code md-color-token">
+      <ColorSwatch color={value} />
+      {value}
+    </code>
+  );
+}
+
+function renderColorToken(value: string, key: string): ReactNode {
+  return (
+    <span key={key} className="md-color-token">
+      <ColorSwatch color={value} />
+      {value}
+    </span>
+  );
+}
+
 // Inline pass: tokenize into runs of `code`, **bold**, *italic*, links,
 // and plain text. We walk the string with a regex that matches whichever
 // delimiter shows up next; everything between delimiters becomes a text
@@ -464,11 +506,7 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
       pushText(out, text.slice(lastIndex, m.index), key++, options);
     }
     if (m[1]) {
-      out.push(
-        <code key={key++} className="md-inline-code">
-          {m[1].slice(1, -1)}
-        </code>,
-      );
+      out.push(renderInlineCodeSpan(m[1].slice(1, -1), key++));
     } else if (m[3] !== undefined) {
       // Image: m[2] = alt (may be empty), m[3] = src
       const src = m[3];
@@ -552,7 +590,7 @@ function pushText(out: ReactNode[], text: string, baseKey: number, options?: Ren
   let k = 0;
   while ((m = urlRe.exec(text))) {
     if (m.index > lastIndex) {
-      segments.push(...withBreaks(text.slice(lastIndex, m.index), `${baseKey}-${k++}`));
+      segments.push(...withBreaksAndColorSwatches(text.slice(lastIndex, m.index), `${baseKey}-${k++}`));
     }
     const [href, suffix] = splitTrailingAutolinkPunctuation(m[1]!);
     segments.push(
@@ -568,12 +606,12 @@ function pushText(out: ReactNode[], text: string, baseKey: number, options?: Ren
       </a>,
     );
     if (suffix) {
-      segments.push(...withBreaks(suffix, `${baseKey}-${k++}`));
+      segments.push(...withBreaksAndColorSwatches(suffix, `${baseKey}-${k++}`));
     }
     lastIndex = urlRe.lastIndex;
   }
   if (lastIndex < text.length) {
-    segments.push(...withBreaks(text.slice(lastIndex), `${baseKey}-${k++}`));
+    segments.push(...withBreaksAndColorSwatches(text.slice(lastIndex), `${baseKey}-${k++}`));
   }
   out.push(<Fragment key={baseKey}>{segments}</Fragment>);
 }
@@ -585,12 +623,34 @@ function splitTrailingAutolinkPunctuation(url: string): [string, string] {
   return trimmed ? [trimmed, match[1]] : [url, ''];
 }
 
-function withBreaks(text: string, baseKey: string): ReactNode[] {
+function withBreaksAndColorSwatches(text: string, baseKey: string): ReactNode[] {
   const parts = text.split('\n');
   const out: ReactNode[] = [];
   parts.forEach((part, i) => {
     if (i > 0) out.push(<br key={`${baseKey}-br-${i}`} />);
-    if (part) out.push(<Fragment key={`${baseKey}-t-${i}`}>{part}</Fragment>);
+    if (part) out.push(...withProseColorSwatches(part, `${baseKey}-t-${i}`));
   });
+  return out;
+}
+
+function withProseColorSwatches(text: string, baseKey: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  PROSE_HEX_COLOR_RE.lastIndex = 0;
+  while ((match = PROSE_HEX_COLOR_RE.exec(text))) {
+    const prefix = match[1] ?? '';
+    const color = match[2] ?? '';
+    const colorIndex = match.index + prefix.length;
+    if (colorIndex > lastIndex) {
+      out.push(<Fragment key={`${baseKey}-${key++}`}>{text.slice(lastIndex, colorIndex)}</Fragment>);
+    }
+    out.push(renderColorToken(color, `${baseKey}-${key++}`));
+    lastIndex = colorIndex + color.length;
+  }
+  if (lastIndex < text.length) {
+    out.push(<Fragment key={`${baseKey}-${key++}`}>{text.slice(lastIndex)}</Fragment>);
+  }
   return out;
 }

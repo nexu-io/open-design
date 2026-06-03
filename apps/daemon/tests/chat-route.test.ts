@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
@@ -27,6 +28,7 @@ import {
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
+import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
@@ -216,6 +218,87 @@ process.exit(0);
     );
   });
 
+
+  it('reuses an existing assistant message row instead of creating a duplicate when assistantMessageId is supplied', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message reuse tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Assistant row reuse fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    const sqlite = new Database(dbFile);
+    try {
+      upsertMessage(sqlite as never, conversationId!, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        runStatus: 'failed',
+        startedAt: Date.now() - 1_000,
+        endedAt: Date.now() - 500,
+      });
+    } finally {
+      sqlite.close();
+    }
+
+    await withFakeAgent(
+      'opencode',
+      `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'reused-assistant-row-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            assistantMessageId,
+            message: 'retry this turn',
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('reused-assistant-row-ok');
+      },
+    );
+
+    const verifyDb = new Database(dbFile, { readonly: true });
+    try {
+      const rows = verifyDb
+        .prepare(`SELECT id, content, run_id FROM messages WHERE conversation_id = ? AND role = 'assistant'`)
+        .all(conversationId) as Array<{ id: string; content: string; run_id: string | null }>;
+      expect(rows.filter((row) => row.id === assistantMessageId)).toHaveLength(1);
+      expect(rows.some((row) => row.id !== assistantMessageId && row.content.includes('reused-assistant-row-ok'))).toBe(false);
+      const reused = rows.find((row) => row.id === assistantMessageId);
+      expect(reused?.content).toContain('reused-assistant-row-ok');
+    } finally {
+      verifyDb.close();
+    }
+  });
+
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
@@ -309,6 +392,76 @@ child.on('exit', (code, signal) => {
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
       else process.env.VELA_LINK_URL = previousLinkUrl;
     }
+  });
+
+  it('allows plugin authoring to succeed when the requested generated-plugin artifacts exist before close', async () => {
+    const projectId = `proj-plugin-authoring-success-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin authoring artifact success fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.status).toBe(200);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const pluginDir = path.join(process.cwd(), 'generated-plugin');
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'open-design.json'), JSON.stringify({ name: 'generated-plugin' }, null, 2));
+  fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# Generated plugin\\n');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            pluginId: 'od-plugin-authoring',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
+        expect(statusBody.status).toBe('succeeded');
+
+        const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+        expect(filesResponse.status).toBe(200);
+        const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
+        expect(filesBody.files.some((file) => file.name === 'generated-plugin/open-design.json')).toBe(true);
+        expect(filesBody.files.some((file) => file.name === 'generated-plugin/SKILL.md')).toBe(true);
+      },
+    );
   });
 
   it('does not report plugin authoring as succeeded when the agent only emits planning text without artifacts', async () => {

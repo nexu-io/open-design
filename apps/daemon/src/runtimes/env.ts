@@ -1,15 +1,31 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
+import { resolveProjectRootFromNestedModule } from '../project-root.js';
+import {
+  applySandboxRuntimeEnv,
+  isSandboxModeEnabled,
+  resolveSandboxRuntimeConfig,
+  type SandboxRuntimeConfig,
+} from '../sandbox-mode.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
+type SpawnEnvOptions = {
+  resolvedBin?: string | null;
+};
+
+const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
+  path.dirname(fileURLToPath(import.meta.url)),
+);
 
 // Build the env passed to spawn() for a given agent adapter.
 //
-// The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
+// The claude adapter strips Anthropic API credentials so Claude Code's own auth
 // resolution (claude login / Pro/Max plan) wins instead of silently
 // falling back to API-key billing whenever the daemon happened to be
 // launched from a shell that exported the key for SDK or scripting use.
@@ -17,7 +33,7 @@ type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 //
 // However, when ANTHROPIC_BASE_URL is set the user is intentionally
 // routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
-// In that case claude login is meaningless, so preserve the API key so
+// In that case claude login is meaningless, so preserve the credential so
 // the child can authenticate against the custom base URL.
 //
 // The codex adapter has the symmetric problem: a stale BYOK
@@ -38,7 +54,9 @@ export function spawnEnvForAgent(
   baseEnv: RuntimeEnvMap,
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
+  options: SpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
+  const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const env = mergeProxyAwareEnv(
     process.platform,
     systemProxyEnv,
@@ -58,20 +76,55 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return env;
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
-    stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
-    return env;
+    if (!isOpenClaudeExecutable(options.resolvedBin)) {
+      stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', [
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_AUTH_TOKEN',
+      ]);
+    }
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
     stripUnlessCustomBaseUrl(env, 'OPENAI_BASE_URL', [
       'OPENAI_API_KEY',
       'CODEX_API_KEY',
     ]);
-    return env;
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
-  return env;
+  return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+}
+
+function isOpenClaudeExecutable(resolvedBin: string | null | undefined): boolean {
+  if (typeof resolvedBin !== 'string' || !resolvedBin.trim()) return false;
+  const base = path
+    .basename(resolvedBin.trim().replace(/\\/g, '/'))
+    .replace(/\.(exe|cmd|bat)$/i, '')
+    .toLowerCase();
+  return base === 'openclaude';
+}
+
+function sandboxRuntimeConfigForBaseEnv(
+  baseEnv: RuntimeEnvMap,
+): SandboxRuntimeConfig | null {
+  if (!isSandboxModeEnabled(baseEnv)) return null;
+  const dataDir = baseEnv.OD_DATA_DIR?.trim();
+  if (!dataDir) return null;
+  const resolvedDataDir = resolveProjectRelativePath(
+    dataDir,
+    RUNTIME_MODULE_PROJECT_ROOT,
+  );
+  return resolveSandboxRuntimeConfig(true, resolvedDataDir);
+}
+
+function reapplySandboxRuntimeEnv(
+  env: NodeJS.ProcessEnv,
+  sandboxRuntime: SandboxRuntimeConfig | null,
+): NodeJS.ProcessEnv {
+  if (!sandboxRuntime) return env;
+  return applySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
 // Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty

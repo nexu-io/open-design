@@ -1,15 +1,129 @@
-/* -------- Chat sticky header --------------------------------------- */
-.chat-header {
+/* -------- Chat project header (single row) --------------------------
+   The former standalone chrome header row was removed. This single row
+   now carries: back button, design-system picker, editable project
+   title, and (right-aligned) the session-history trigger. position:
+   relative anchors the absolutely-positioned history popover. */
+.chat-project-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
+  min-width: 0;
+  height: 38px;
   position: sticky;
   top: 0;
   z-index: 4;
-  height: 44px;
+}
+.chat-project-back {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.chat-project-back:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.chat-project-design-system {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  /* Pushed to the right end alongside the session trigger: the title
+     uses flex:1, so this margin parks the picker + session button as a
+     pair at the trailing edge. */
+  margin-inline-start: auto;
+}
+.chat-project-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.chat-project-header-title .title {
+  color: var(--text-strong);
+  font-size: 13.5px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+  /* Editable inline rename: a calm padded chip rather than a hard outline
+     box, so the contentEditable focus ring reads as a field, not brackets.
+     No negative margin — the parent clips overflow, which would shave the
+     left edge of the focus ring. */
+  padding: 1px 6px;
+  border-radius: 6px;
+  outline: none;
+  caret-color: var(--accent);
+  transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.chat-project-header-title .title:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.chat-project-header-title .title:focus,
+.chat-project-header-title .title:focus-visible {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.chat-project-header-title .meta {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+/* Right-aligned session-history trigger. Collapses the former
+   name + history + new-session controls into one icon button; clicking
+   it opens the history popover (which contains the "new session" entry
+   and the conversation list). The session title is no longer shown
+   inline — the project title owns the header line. */
+.chat-session-switcher {
+  /* NOT a containing block — the .chat-history-menu popover positions
+     itself with left/right:12px relative to the sticky .chat-project-header. */
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-inline-start: 2px;
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.chat-session-trigger {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.chat-session-trigger:hover,
+.chat-session-switcher.open .chat-session-trigger {
+  background: var(--bg-subtle);
+  color: var(--text);
 }
 .chat-header-tabs { display: inline-flex; gap: 16px; flex: 1; }
 .chat-header-tab {
@@ -446,12 +560,11 @@
 
 /* -------- Composer -------------------------------------------------- */
 .composer {
-  border-top: 1px solid var(--border);
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--bg-panel);
+  background: transparent;
   position: relative;
   z-index: 1;
 }
@@ -476,7 +589,7 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-xs);
-  padding: 8px 10px 6px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -486,12 +599,25 @@
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
 }
+/* Design-system picker row at the top of the composer card (moved out of
+   the former chrome header). A full-bleed hairline divider separates it
+   from the textarea, so the shell carries no padding and each inner row
+   owns its own horizontal padding instead. */
+.composer-design-system-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
 .composer.drag-active .composer-shell {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius);
 }
 .composer textarea {
-  min-height: 88px;
+  min-height: 56px;
   max-height: min(184px, 34vh);
   border: none;
   background: transparent;
@@ -504,24 +630,40 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Shell padding is 0 so the design-system divider is full-bleed; the
+     textarea and the action row carry the horizontal inset instead. */
+  padding: 8px 12px 0;
 }
 .composer-textarea-layer {
   position: relative;
-  min-height: 88px;
+  min-height: 56px;
+  /* Single source of truth for the input font size. The real (transparent)
+     textarea owns the caret and the .composer-input-overlay renders the
+     visible glyphs; both inherit from here so they stay metric-identical.
+     Pinning the size on only one layer drifts them ~0.5px/em apart, which
+     reads as the caret sitting a full character off after a mention. */
+  font-size: 13px;
 }
 .composer-input-overlay {
   position: absolute;
   inset: 0;
   z-index: 2;
-  min-height: 88px;
+  min-height: 56px;
   padding: 0;
   color: var(--text);
   font: inherit;
-  line-height: normal;
+  /* Mirror the textarea's inherited line-height (body is 1.5) instead of
+     forcing `normal`. The overlay is a visual echo of the transparent
+     textarea that owns the caret, so any line-height difference drifts the
+     glyphs off the caret vertically and accumulates per wrapped line. */
+  line-height: inherit;
   pointer-events: none;
   white-space: pre-wrap;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  /* Match the textarea's overflow-wrap so both layers break long runs at the
+     same points; `anywhere` here against the textarea's `break-word` can
+     diverge on long unbroken tokens and drift the caret off the glyphs. */
+  overflow-wrap: break-word;
 }
 .composer-input-overlay-inner {
   min-height: 100%;
@@ -537,9 +679,19 @@
   color: transparent;
 }
 .composer-inline-mention {
-  display: inline-block;
-  max-width: min(240px, 25vw);
-  margin: 0;
+  /* Render the mention as an inline run, not an atomic inline-block chip.
+     The transparent textarea that owns the caret breaks long tokens at
+     normal opportunities (e.g. after the hyphens in a filename), so a
+     nowrap inline-block that refuses to break wraps the whole token to the
+     next line while the textarea splits it. That drifts the caret off the
+     glyphs the moment a mention sits across a wrap boundary. An inline run
+     wraps at the same points as the textarea text, keeping the two locked. */
+  display: inline;
+  /* Padding pads the highlight background; the matching negative margin
+     cancels its layout advance so the net width equals the token's content
+     width. box-decoration-break stays default (slice), so the 1px pads apply
+     only at the run's start and end, never at a wrap fragment. */
+  margin: 0 -1px;
   padding: 0 1px;
   border: 0;
   border-radius: 5px;
@@ -551,16 +703,12 @@
   font-weight: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  vertical-align: bottom;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .composer-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-top: 4px;
+  padding: 4px 12px 10px;
 }
 .composer-row .icon-btn {
   width: 28px; height: 28px;

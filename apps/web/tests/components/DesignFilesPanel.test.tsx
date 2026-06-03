@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
+import { useState } from 'react';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind } from '../../src/types';
+
+// Stub localStorage so the component's view-state persistence writes to an
+// in-memory store. Cleared in beforeEach so no test bleeds state into the next.
+const lsStore = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => lsStore.get(key) ?? null,
+  setItem: (key: string, value: string) => { lsStore.set(key, value); },
+  removeItem: (key: string) => { lsStore.delete(key); },
+  clear: () => { lsStore.clear(); },
+});
 
 function extForKind(kind: ProjectFileKind): string {
   if (kind === 'html') return 'html';
@@ -42,9 +54,13 @@ function generateFiles(count: number): ProjectFile[] {
   });
 }
 
-function renderPanel(files: ProjectFile[]) {
+function renderPanel(
+  files: ProjectFile[],
+  overrides: Partial<ComponentProps<typeof DesignFilesPanel>> = {},
+) {
   const onOpenFile = vi.fn();
   const onDeleteFiles = vi.fn();
+  const onClearUploadError = vi.fn();
   const result = render(
     <DesignFilesPanel
       projectId="test-project"
@@ -60,9 +76,11 @@ function renderPanel(files: ProjectFile[]) {
       onUploadFiles={vi.fn()}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
+      onClearUploadError={onClearUploadError}
+      {...overrides}
     />,
   );
-  return { ...result, onDeleteFiles, onOpenFile };
+  return { ...result, onDeleteFiles, onOpenFile, onClearUploadError };
 }
 
 function getPageInfo(container: HTMLElement): string {
@@ -80,6 +98,10 @@ function getSelects(container: HTMLElement) {
 }
 
 describe('DesignFilesPanel grouping', () => {
+  beforeEach(() => {
+    lsStore.clear();
+  });
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -297,6 +319,14 @@ describe('DesignFilesPanel grouping', () => {
 });
 
 describe('DesignFilesPanel large-list regression', () => {
+  beforeEach(() => {
+    lsStore.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
   it('renders only the default page size (30) rows with 500 files', () => {
     const files = generateFiles(500);
     const { container } = renderPanel(files);
@@ -486,6 +516,31 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
   });
 
+  it('drops hidden selections before batch delete when a kind filter narrows the file list', () => {
+    const files = [
+      file({ name: 'landing.html', kind: 'html', mime: 'text/html' }),
+      file({ name: 'hero.png', kind: 'image', mime: 'image/png' }),
+    ];
+    const { onDeleteFiles } = renderPanel(files);
+
+    fireEvent.click(screen.getByTestId('design-file-row-landing.html').querySelector('.df-row-check')!);
+    fireEvent.click(screen.getByTestId('design-file-row-hero.png').querySelector('.df-row-check')!);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    const filterDialog = screen.getByRole('dialog', { name: 'Filter by kind' });
+    const imageFilterLabel = within(filterDialog).getByText('Image').closest('label');
+    if (!imageFilterLabel) throw new Error('Missing image filter label');
+    fireEvent.click(imageFilterLabel.querySelector('input')!);
+
+    expect(screen.queryByTestId('design-file-row-landing.html')).toBeNull();
+    expect(screen.getByTestId('design-file-row-hero.png')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('design-files-batch-delete'));
+
+    expect(onDeleteFiles).toHaveBeenCalledTimes(1);
+    expect(onDeleteFiles).toHaveBeenCalledWith(['hero.png']);
+  });
+
   it('renders 500 files within a reasonable time', () => {
     const files = generateFiles(500);
     const start = performance.now();
@@ -600,6 +655,57 @@ describe('DesignFilesPanel directory navigation', () => {
 
     expect(document.querySelector('.df-breadcrumbs')).toBeNull();
     expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+  });
+
+  it('returns to root after batch deleting the last files in the current subdirectory', async () => {
+    const deleteSpy = vi.fn();
+
+    function Harness() {
+      const [files, setFiles] = useState<ProjectFile[]>([
+        file({ name: 'assets/logo.png', kind: 'image' }),
+        file({ name: 'assets/hero.png', kind: 'image' }),
+        file({ name: 'top.html', kind: 'html' }),
+      ]);
+
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={files}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={async (names) => {
+            deleteSpy(names);
+            setFiles((current) => current.filter((candidate) => !names.includes(candidate.name)));
+          }}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    fireEvent.click(screen.getByTestId('design-file-row-assets/logo.png').querySelector('.df-row-check')!);
+    fireEvent.click(screen.getByTestId('design-file-row-assets/hero.png').querySelector('.df-row-check')!);
+    fireEvent.click(screen.getByTestId('design-files-batch-delete'));
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith(['assets/logo.png', 'assets/hero.png']);
+    });
+    await waitFor(() => {
+      expect(document.querySelector('.df-breadcrumbs')).toBeNull();
+    });
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+    expect(document.querySelectorAll('.df-file-row.selected').length).toBe(0);
   });
 
   it('does not show the select-all header as checked when the page contains only directory rows', () => {

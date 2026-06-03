@@ -1,10 +1,18 @@
 ---
 /*
- * Shared system card used on `/systems/` and
- * `/systems/category/<slug>/`. Displays palette swatches, name,
- * category, and tagline as a clickable card.
+ * Shared system card used on `/plugins/systems/`. Displays palette
+ * swatches, name, category, and tagline as a clickable card.
+ *
+ * The card links straight to the bundled-plugin detail page
+ * (`/plugins/design-system-<slug>/`) for the 142 systems that ship a
+ * manifest, and degrades to the `/plugins/systems/` index for the ~8
+ * that don't. `detailHrefForSystemSlug` resolves that mapping against
+ * the real detail-page set so we never link at a page that doesn't
+ * exist — same destinations the legacy `/systems/<slug>/` 301s produced,
+ * minus the redirect hop.
  */
 import type { SystemRecord } from '../_lib/catalog';
+import { detailHrefForSystemSlug } from '../_lib/bundled-plugins';
 import { localeFromPath, localizedHref } from '../i18n';
 
 export interface Props {
@@ -14,10 +22,11 @@ export interface Props {
 const { system } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
+const detailHref = detailHrefForSystemSlug(system.slug) ?? '/plugins/systems/';
 ---
 
 <li class="system-card">
-  <a href={href(`/systems/${system.slug}/`)}>
+  <a href={href(detailHref)}>
     <div class="system-swatches" aria-hidden="true">
       {system.palette.length > 0 ? (
         system.palette.slice(0, 4).map((hex) => (

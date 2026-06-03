@@ -147,6 +147,21 @@ test('home view exposes the redesigned hero, recent projects, and starters', asy
   await expect(page.getByTestId('entry-nav-projects')).toHaveAttribute('aria-current', 'page');
 });
 
+test('recent projects strip opens a project card and view all routes to the projects index', async ({ page }) => {
+  const created = await createProject(page, 'Recent project entry point');
+  await gotoEntryHome(page);
+
+  const recentStrip = page.getByTestId('recent-projects-strip');
+  await expect(recentStrip).toBeVisible();
+  await recentStrip.locator(`[data-project-id="${created.project.id}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${created.project.id}`));
+
+  await gotoEntryHome(page);
+  await page.getByTestId('recent-projects-view-all').click();
+  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page.getByTestId('entry-nav-projects')).toHaveAttribute('aria-current', 'page');
+});
+
 test('design systems page is reachable from entry nav and supports search, preview, and default selection', async ({ page }) => {
   const persistedConfigs: Array<{ designSystemId?: string | null }> = [];
   await routeDesignSystems(page);
@@ -777,6 +792,7 @@ test('home starters direct Use keeps prompt empty and still allows a freeform su
   const input = page.getByTestId('home-hero-input');
   await expect(input).toHaveValue('');
 
+  await page.locator('article.plugins-home__card[data-plugin-id="localized-plugin"]').hover();
   await page.getByTestId('plugins-home-use-localized-plugin').click({ force: true });
   await expect(input).toHaveValue('');
 
@@ -820,6 +836,58 @@ test('home starters Use with query hydrates the prompt and keeps plugin context 
   await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
   await expect(page.getByTestId('home-hero-context-plugin-localized-plugin')).toBeVisible();
   await expect(input).toHaveValue('Make a design systems brief.');
+});
+
+test('home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({
+      json: {
+        plugins: [STARTER_PLUGIN],
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+  const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
+  await starterCard.scrollIntoViewIfNeeded();
+  await starterCard.hover();
+  await expect(page.getByTestId('plugins-home-use-menu-localized-plugin')).toBeVisible();
+  await page.getByTestId('plugins-home-use-menu-localized-plugin').click();
+  await page.getByTestId('plugins-home-use-with-query-localized-plugin').click();
+  await expect(page.getByTestId('home-hero-context-plugin-localized-plugin')).toBeVisible();
+  await expect(input).toHaveValue('Make a design systems brief.');
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await page.getByTestId('home-hero-submit').click();
+
+  const projectRequest = await projectRequestPromise;
+  const projectBody = projectRequest.postDataJSON() as {
+    metadata?: { kind?: string };
+    pendingPrompt?: string;
+    pluginId?: string;
+  };
+  expect(projectBody.pendingPrompt).toBe('Make a design systems brief.');
+  expect(projectBody.pluginId).toBe('od-default');
+  expect(typeof projectBody.metadata?.kind).toBe('string');
+
+  const runRequest = await runRequestPromise;
+  const runBody = runRequest.postDataJSON() as { message?: string };
+  expect(runBody.message).toContain('Make a design systems brief.');
+
+  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: 'Make a design systems brief.' }).first()).toBeVisible();
+
+  const { projectId, conversationId } = await getCurrentProjectContext(page);
+  const project = await fetchProjectFromApi(page, projectId);
+  expect(project.metadata?.kind).toBe(projectBody.metadata?.kind);
+
+  const messages = await listMessagesFromApi(page, projectId, conversationId);
+  expect(
+    messages.some((message) => message.role === 'user' && message.content === 'Make a design systems brief.'),
+  ).toBe(true);
 });
 
 test('home hero input keeps Shift+Enter as a newline and submits on Enter', async ({ page }) => {
@@ -949,6 +1017,53 @@ async function createProject(page: Page, name: string) {
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   return response.json() as Promise<{ project: { id: string; name: string } }>;
+}
+
+async function getCurrentProjectContext(page: Page): Promise<{ projectId: string; conversationId: string }> {
+  const current = new URL(page.url());
+  const [, projects, projectId, maybeConversations, conversationId] = current.pathname.split('/');
+  if (projects !== 'projects' || !projectId) {
+    throw new Error(`unexpected project route: ${current.pathname}`);
+  }
+  if (maybeConversations === 'conversations' && conversationId) {
+    return { projectId, conversationId };
+  }
+
+  const response = await page.request.get(`/api/projects/${projectId}/conversations`);
+  expect(response.ok()).toBeTruthy();
+  const { conversations } = (await response.json()) as {
+    conversations: Array<{ id: string; updatedAt: number }>;
+  };
+  const active = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (!active) throw new Error(`no conversations found for project ${projectId}`);
+  return { projectId, conversationId: active.id };
+}
+
+async function fetchProjectFromApi(
+  page: Page,
+  projectId: string,
+): Promise<{ id: string; metadata?: { kind?: string } }> {
+  const response = await page.request.get(`/api/projects/${projectId}`);
+  expect(response.ok()).toBeTruthy();
+  const { project } = (await response.json()) as {
+    project: { id: string; metadata?: { kind?: string } };
+  };
+  return project;
+}
+
+async function listMessagesFromApi(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+): Promise<Array<{ role: 'assistant' | 'user'; content: string }>> {
+  const response = await page.request.get(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+  );
+  expect(response.ok()).toBeTruthy();
+  const { messages } = (await response.json()) as {
+    messages: Array<{ role: 'assistant' | 'user'; content: string }>;
+  };
+  return messages;
 }
 
 async function routeDesignSystems(page: Page) {

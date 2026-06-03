@@ -38,6 +38,8 @@ describe('GET /api/daemon/status', () => {
       version: unknown;
       bindHost: unknown;
       port: unknown;
+      sandboxMode: boolean;
+      sandbox: { enabled: boolean };
       pid: unknown;
       installedPlugins: unknown;
       shuttingDown: boolean;
@@ -49,8 +51,29 @@ describe('GET /api/daemon/status', () => {
     expect(typeof body.port).toBe('number');
     expect(typeof body.pid).toBe('number');
     expect(typeof body.installedPlugins).toBe('number');
+    expect(body.sandboxMode).toBe(false);
+    expect(body.sandbox).toEqual({ enabled: false });
     expect(body.shuttingDown).toBe(false);
     expect(body).not.toHaveProperty('namespace');
+  });
+});
+
+describe('GET /api/ready', () => {
+  it('returns a readiness snapshot for headless launchers', async () => {
+    const resp = await fetch(`${baseUrl}/api/ready`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      ok: boolean;
+      ready: boolean;
+      version: unknown;
+    };
+
+    expect(body.ok).toBe(true);
+    expect(body.ready).toBe(true);
+    expect(typeof body.version === 'string' || typeof body.version === 'object').toBe(true);
+    expect(body).not.toHaveProperty('dataDir');
+    expect(body).not.toHaveProperty('sandboxMode');
+    expect(body).not.toHaveProperty('sandbox');
   });
 });
 

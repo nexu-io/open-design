@@ -1,20 +1,21 @@
 /* -------- App shell ------------------------------------------------- */
 .app {
   display: grid;
-  /* Three rows: chrome header (auto, fixed at 40px), optional
-   * project-actions toolbar (auto — collapses to 0 when hidden),
-   * and the chat/workspace split (1fr — fills the remaining
-   * viewport). The split gets explicit `grid-row: 3` below so the
-   * layout works whether the toolbar is rendered or returns null
-   * (workspace-focused mode). */
+  /* Two rows: optional project-instructions bar (auto — collapses to 0
+   * when hidden) and the chat/workspace split (1fr — fills the remaining
+   * viewport). The standalone chrome header row was removed; its contents
+   * moved into the chat pane (project title + design-system picker) and the
+   * Design Files tab row (settings / handoff / present / share / avatar).
+   * The split gets explicit `grid-row: 2` below so the layout works whether
+   * the instructions bar is rendered or returns null. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   height: 100vh;
   background: var(--bg-app);
   overflow: hidden;
 }
 .app > .split {
-  grid-row: 3;
+  grid-row: 2;
 }
 
 .workspace-shell {
@@ -618,7 +619,19 @@
 }
 .chrome-action-secondary:hover:not(:disabled) {
   background: var(--bg-subtle);
-  border-color: var(--text-muted);
+  border-color: var(--border);
+}
+.chrome-file-action-menus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chrome-action-with-label {
+  gap: 8px;
+}
+.present-trigger[aria-expanded='true'] {
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
 }
 .chrome-action-primary {
   background: var(--text-strong);
@@ -743,51 +756,6 @@
 .live-artifact-preview-frame-host:fullscreen {
   background: var(--bg);
 }
-.app-project-title {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-}
-.app-project-title-line {
-  display: flex;
-  /* Center on the cross-axis so the contentEditable title text, the
-     muted meta string, the design-system picker chip, and the edit
-     icon button all sit on a shared vertical mid-line. Baseline
-     alignment makes the icon-only edit button appear to "float" above
-     the text (the button has no text baseline of its own). */
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-}
-.app-project-title .title {
-  color: var(--text-strong);
-  font-size: 13.5px;
-  line-height: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  padding-left: 1px;
-  text-overflow: ellipsis;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-.app-project-title .meta {
-  color: var(--text-muted);
-  font-size: 11.5px;
-  line-height: 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 0 1 auto;
-}
 .project-target-platforms,
 .project-feature-chips {
   display: inline-flex;
@@ -906,36 +874,6 @@
   justify-content: flex-end;
 }
 
-/* Saved-state entry point: a persistent header chip that reveals the
-   review panel so saved Project instructions stay discoverable (#1822). */
-.project-instructions-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 6px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.6;
-  color: var(--text-muted);
-  background: var(--bg-hover, rgba(128, 128, 128, 0.1));
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  flex-shrink: 0;
-  max-width: 220px;
-}
-.project-instructions-chip span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.project-instructions-chip:hover,
-.project-instructions-chip.is-open {
-  color: var(--text);
-  border-color: var(--accent, #646cff);
-}
 .project-instructions-bar-head {
   display: flex;
   align-items: center;

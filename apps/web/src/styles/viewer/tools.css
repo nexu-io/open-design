@@ -730,7 +730,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 50;
-  min-width: 240px;
+  min-width: 300px;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -767,6 +767,17 @@
   justify-content: center;
   text-align: center;
   font-size: 13px;
+}
+.share-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-menu-text small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.25;
 }
 .share-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
 .template-share-popover {
@@ -929,6 +940,115 @@
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+.deploy-flow-modal {
+  --modal-padding: 22px;
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+}
+.image-export-modal.modal {
+  width: min(430px, calc(100vw - 32px));
+  gap: 0;
+  padding: 0;
+}
+.image-export-modal .modal-head {
+  padding: 22px 24px 12px;
+}
+.image-export-modal .modal-head .kicker {
+  display: none;
+}
+.image-export-modal .modal-head h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.image-export-modal .modal-head .subtitle {
+  max-width: none;
+  margin-top: 6px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.image-export-form {
+  padding: 0 24px 18px;
+}
+.image-export-format-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.image-export-format-field legend {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.image-export-format-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+.image-export-format-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.image-export-format-option:hover {
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+}
+.image-export-format-option.active {
+  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: var(--bg-panel);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 7%, transparent);
+}
+.image-export-format-option input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.image-export-format-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+.image-export-format-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+}
+.image-export-format-text strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.image-export-format-text span {
+  display: none;
+}
+.image-export-modal .modal-foot {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--border);
+}
 /* Add a few extra pixels above the deploy dialog's primary action so
    it does not crowd the divider. The shared .modal-foot uses 12px
    vertical padding which is fine for shorter dialogs but reads as
@@ -942,6 +1062,16 @@
 .deploy-flow-modal .modal-foot {
   padding-top: 16px;
 }
+.deploy-flow-modal .modal-foot .viewer-action.primary {
+  justify-content: center;
+  min-width: 104px;
+}
+.deploy-flow-modal .deploy-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--modal-padding) 18px;
+  margin-top: 0;
+}
 .deploy-form {
   display: flex;
   flex-direction: column;
@@ -953,21 +1083,66 @@
   flex-direction: column;
   gap: 6px;
 }
+.deploy-form .deploy-field-title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.deploy-form label.deploy-field-title {
+  display: inline;
+}
+.deploy-form .deploy-field-title.required::after {
+  content: ' *';
+  color: var(--accent);
+  font-weight: 700;
+}
+.deploy-token-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.deploy-token-input-row input {
+  min-width: 0;
+}
+.deploy-token-input-row .button-like {
+  min-height: 44px;
+}
+.deploy-field-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.deploy-field-inline-action {
+  border: 0;
+  padding: 0 2px;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.deploy-field-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .field-label-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
 }
-.field-label-note {
+.deploy-token-label-row {
+  margin-bottom: -2px;
+}
+.deploy-token-hints {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 4px;
-  max-width: min(420px, 70%);
-  text-align: right;
 }
-.field-label-note .hint {
+.deploy-token-hints .hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.35;

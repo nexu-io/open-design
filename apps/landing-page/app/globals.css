@@ -33,6 +33,7 @@
   --ink-faint: #8b8676;
   --coral: #ed6f5c;
   --coral-soft: #f08e7c;
+  --amr-green: #237f00;
   --mustard: #e9b94a;
   --olive: #6e7448;
   --bone: #f7f1de;
@@ -121,7 +122,7 @@ body::before {
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 36px;
+  width: 46px;
   z-index: 3;
   pointer-events: none;
   display: flex;
@@ -176,7 +177,7 @@ body::before {
 
 /* top metadata strip */
 .topbar {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   padding: 10px 0;
   background: var(--paper);
   /*
@@ -205,7 +206,12 @@ body::before {
 .topbar-inner > span { white-space: nowrap; }
 .topbar-inner .mid { display: inline-flex; gap: 26px; }
 .topbar-inner .mid > span { white-space: nowrap; }
-.topbar-inner .right { display: inline-flex; gap: 18px; align-items: center; }
+.topbar-inner .right {
+  display: inline-flex;
+  gap: 18px;
+  align-items: center;
+  margin-left: auto;
+}
 .topbar-inner .right > span,
 .topbar-inner .right > a { white-space: nowrap; }
 .topbar-link {
@@ -421,6 +427,15 @@ body::before {
 .brand-name {
   white-space: nowrap;
 }
+.brand-logo {
+  width: 204px;
+  height: auto;
+  display: block;
+}
+.nav .brand-logo {
+  width: auto;
+  height: 42px;
+}
 .brand-mark img {
   width: 100%;
   height: 100%;
@@ -604,7 +619,7 @@ body::before {
 .nav-side {
   display: inline-flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
 }
 /*
  * Compact icon-only chrome buttons for community-channel links
@@ -633,6 +648,57 @@ body::before {
 }
 .nav-icon svg {
   display: block;
+}
+.nav-amr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40.1484px;
+  min-height: 40.1484px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 20, 15, 0.18);
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+  font-family: var(--sans);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.nav-amr:hover {
+  transform: translateY(-1px);
+  background: rgba(21, 20, 15, 0.04);
+  border-color: rgba(21, 20, 15, 0.36);
+  box-shadow: none;
+}
+.nav-amr img {
+  width: 66px;
+  height: 24px;
+  display: block;
+  flex: 0 0 auto;
+}
+.nav-amr-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1;
+}
+.nav-amr-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.nav-amr-kicker {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: rgba(13, 84, 0, 0.72);
 }
 .nav-cta {
   display: inline-flex;
@@ -673,19 +739,35 @@ body::before {
   color: var(--ink);
   font-size: 12px;
 }
-.status-dot {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
+.nav-cta.is-download { gap: 4px; }
+.nav-cta.is-download::after { content: '↓'; color: var(--ink); font-size: 12px; }
+.nav-cta.ghost.is-star::after { content: '★'; color: var(--mustard); font-size: 11px; }
+.download-arch {
+  margin-left: 0;
+  opacity: 0.62;
+  font-weight: 500;
+}
+.btn[data-download-cta] { gap: 2px; }
+.nav-locale {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
 }
-.status-dot::after {
-  content: '';
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--coral);
+.nav-locale .locale-trigger {
+  gap: 6px;
+}
+.nav-locale .locale-menu {
+  top: calc(100% + 14px);
 }
 
 /* ---------- typography primitives ---------- */
@@ -788,7 +870,17 @@ body::before {
   align-items: center;
   justify-content: center;
 }
+.btn .arrow-fill {
+  width: 24px;
+  height: 24px;
+}
 .btn .arrow svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.btn .arrow svg.icon-fill {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  stroke: none;
+}
 
 /* helper used inline in headlines */
 .code-inline {
@@ -824,7 +916,7 @@ body::before {
 }
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 36px;
   align-items: stretch;
   width: 100%;
@@ -834,7 +926,51 @@ body::before {
   padding: 4vh 0 4vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  max-width: 1120px;
+  margin: 0 auto;
   position: relative;
+  text-align: center;
+  z-index: 1;
+}
+.hero-angel {
+  position: absolute;
+  right: clamp(60px, 10vw, 140px);
+  bottom: 0;
+  width: clamp(240px, 28vw, 380px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+.hero-scene-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 32px;
+  width: 24px;
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0.8;
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+  line-height: 0;
+}
+.hero-scene {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.hero-dancer {
+  position: absolute;
+  left: clamp(188px, 10vw, 268px);
+  bottom: 0;
+  width: clamp(180px, 20vw, 280px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
 }
 .hero-discord-pill {
   align-self: flex-start;
@@ -866,21 +1002,40 @@ body::before {
   line-height: 1;
 }
 .hero-copy .label { margin-bottom: 28px; }
-.hero-copy .lead { margin-bottom: 30px; max-width: 38ch; font-size: 16px; }
+.hero-copy .lead {
+  margin-bottom: 30px;
+  max-width: none;
+  font-size: 16px;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Keep each BreakText line on a single row only on wider screens. On phones
+   the longer second line would otherwise overflow horizontally and clip
+   instead of wrapping at spaces, so let it reflow below the breakpoint. */
+@media (min-width: 768px) {
+  .hero-copy .lead span {
+    white-space: nowrap;
+  }
+}
 .hero h1 {
   font-size: clamp(44px, 5vw, 78px);
   line-height: 1.0;
   margin-bottom: 28px;
 }
+.hero-title-line {
+  font-size: 60px;
+}
 .hero-actions {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
-  margin-bottom: 38px;
+  margin-bottom: 40px;
 }
 .hero-stats {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 22px;
   flex-wrap: nowrap;
   margin-bottom: 28px;
@@ -911,6 +1066,7 @@ body::before {
 .hero-stats .stat-label b { display: block; font-weight: 700; color: var(--ink); font-size: 12px; }
 
 .hero-foot {
+  width: 100%;
   margin-top: auto;
   padding-top: 22px;
   border-top: 1px solid var(--line);
@@ -2474,6 +2630,7 @@ footer {
   .container { padding: 0 44px; }
   .work { margin: 0 44px; padding: 90px 44px; }
   .side-rail { display: none; }
+  .nav-links { gap: 30px; }
 }
 /* hide topbar mid text early — between 1200 and 1280 it crowds even with nowrap */
 @media (max-width: 1200px) {
@@ -2486,6 +2643,7 @@ footer {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
   .nav-links { gap: 28px; }
+  .nav-side .nav-icon { display: none; }
 }
 
 /* nav: at ≤1080px there's no clean way to fit Product · Skills · Systems ·
@@ -2498,8 +2656,9 @@ footer {
 @media (max-width: 1080px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
-  /* Hide Download + Discord/X icon buttons from the bar (Star stays). */
-  .nav-side .nav-cta.ghost { display: none; }
+  /* Hide AMR, Star + Discord/X icon buttons from the bar (Download stays). */
+  .nav-side .nav-amr { display: none; }
+  .nav-side .nav-cta.ghost:not(.is-download) { display: none; }
   .nav-side .nav-icon { display: none; }
   /* Collapse the nav <ul> into a panel that drops below the header bar.
    * The header is `position: sticky`, so absolute-positioning the panel
@@ -2547,7 +2706,7 @@ footer {
     margin-left: 6px;
     font-size: 11px;
   }
-  /* Product dropdown flattens — always show OD + HA as nested static items. */
+  /* Product dropdown flattens — always show OD + HA + AMR as nested static items. */
   .nav-links li.has-dropdown { position: static; }
   .nav-links .dropdown-caret { display: none; }
   .nav-dropdown {
@@ -2597,6 +2756,8 @@ footer {
   .hero { min-height: 0; padding: 32px 0 0; }
   .hero::before { display: none; }
   .hero-grid { gap: 36px; }
+  .hero-angel { display: none; }
+  .hero-dancer { display: none; }
   .hero-copy { padding: 18px 0 8px; }
   .hero-copy .lead { max-width: none; }
   .hero-art { height: auto; aspect-ratio: 4 / 5; max-height: none; margin: 0 -8px 0 0; }
@@ -2649,12 +2810,13 @@ footer {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta, Download,
-   * and the Discord/X icon buttons stay hidden; Star CTA still pings
-   * in the bar. */
+   * the hamburger panel introduced at ≤1080px. Brand meta, Star, AMR,
+   * and the Discord/X icon buttons stay hidden; Download CTA stays
+   * reachable in the bar. */
   .nav { padding: 16px 0; }
   .brand-meta { display: none; }
-  .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-amr { display: none; }
+  .nav-side .nav-cta.ghost:not(.is-download) { display: none; }
   .nav-side .nav-icon { display: none; }
 }
 @media (max-width: 640px) {
@@ -2698,6 +2860,7 @@ footer {
   .nav-inner { gap: 12px; }
   .brand { font-size: 16px; gap: 8px; }
   .brand-mark { width: 32px; height: 32px; font-size: 16px; }
+  .brand-logo { width: 150px; }
   .read-more { margin-top: 36px; }
   .foot-mega .word { font-size: clamp(48px, 16vw, 88px); }
 }

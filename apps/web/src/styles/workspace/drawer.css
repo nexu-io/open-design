@@ -1346,10 +1346,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
-  height: 44px;
+  height: 38px;
   position: sticky;
   top: 0;
   z-index: 4;
@@ -1361,6 +1361,10 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
+  /* Grow to fill, but always yield to the right-side actions cluster:
+     min-width:0 lets the bar shrink and scroll its tabs internally so the
+     Handoff/Share/Present/avatar buttons keep their reserved space and are
+     never pushed off-screen or overlapped. */
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
@@ -1369,24 +1373,94 @@
   scrollbar-color: var(--border-strong) transparent;
 }
 
-.ws-tab {
+/* Right-aligned project + file actions cluster in the Design Files tab row.
+   The former standalone chrome header was removed; settings / handoff /
+   avatar (rendered by ProjectView via the headerActions slot) and the
+   FileViewer present / share portal (which targets .ws-tabs-file-actions)
+   all live here now. .ws-tabs-bar's flex:1 pushes this to the right edge. */
+.ws-tabs-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  flex-shrink: 0;
+  /* Pin to the right edge and reserve space: the tab bar may grow but the
+     auto margin keeps a gap, and flex-shrink:0 guarantees this cluster is
+     never compressed by long/numerous file tabs. */
+  margin-inline-start: auto;
+}
+.ws-tabs-file-actions,
+.ws-tabs-project-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* The present button is wrapped in an inline-block .present-wrap that
+   doesn't vertically center its child; make it a flex item so the icon
+   button sits on the row's centerline like the others. */
+.ws-tabs-actions .present-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+.ws-tabs-file-actions:not(:empty) + .ws-tabs-project-actions {
+  margin-inline-start: 2px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--border);
+}
+/* The Design Files row is 38px tall, so shrink the action cluster's buttons
+   (present / share / handoff / avatar) to sit comfortably within it without
+   touching the global chrome-action sizing used elsewhere. The `.app`
+   prefix matches the specificity of the global `.app .handoff-trigger` /
+   `.app .avatar-agent-trigger` rules these override. */
+.app .ws-tabs-actions .chrome-action {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  align-items: center;
+  box-shadow: none;
+}
+.app .ws-tabs-actions .chrome-action-icon {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  justify-content: center;
+}
+.app .ws-tabs-actions .handoff-trigger {
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+}
+.app .ws-tabs-actions .avatar-agent-trigger {
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+}
+/* Cancel the global 1px optical nudge inside this row so icons sit dead
+   center rather than slightly low. */
+.app .ws-tabs-actions .chrome-action > svg:first-child {
+  transform: none;
+}
+
+.ws-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   cursor: pointer;
   flex-shrink: 0;
-  max-width: 220px;
+  max-width: 110px;
   min-width: 0;
   color: var(--text-muted);
   transition: background 120ms ease, color 120ms ease;
 }
 .ws-tab.live-artifact-tab {
-  max-width: 320px;
+  max-width: 160px;
 }
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
 .ws-tab.draggable { cursor: grab; }
@@ -1433,11 +1507,11 @@
 .ws-tab.active .tab-icon { color: var(--text); }
 .ws-tab-label {
   flex: 1 1 auto;
-  min-width: 32px;
+  min-width: 24px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;
+  max-width: 96px;
 }
 .ws-tab.live-artifact-tab .ws-tab-label {
   max-width: none;

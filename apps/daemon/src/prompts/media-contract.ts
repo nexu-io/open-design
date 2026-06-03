@@ -243,16 +243,18 @@ reported that exact condition. One failed dispatcher call is enough to
 report the error; do not fan out into alternate execution paths inside
 the same turn.
 
-### Long-running renders (Volcengine i2v, hyperframes-html): generate → wait loop
+### All slow renders: generate → wait loop
 
-\`media generate\` no longer blocks for the full render. It dispatches
-the task daemon-side and either returns the finished \`{"file":{...}}\`
-or returns a successful queued/running handoff with \`{taskId}\`. You then
-drive the render to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\` in
-a loop — each call long-polls the daemon for up to 25s, well below your
-shell tool's default 30s timeout. \`media generate\` treats the handoff as
-exit \`0\` so the first dispatch does not look like a failed shell call.
-The wait subcommand exits with a distinct code per outcome:
+Any model whose generation takes longer than ~25s — including **fal flux-pro-ultra,
+fal Veo, fal Sora, Volcengine i2v, hyperframes-html, and anything else with a
+multi-minute pipeline** — will not complete within the initial \`media generate\` call.
+
+\`media generate\` dispatches the task daemon-side and polls for up to ~25s. It
+always exits 0 — either with \`{"file":{...}}\` if the render finished within that
+window, or with \`{"taskId":"..."}\` as a handoff signal. You then drive the render
+to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\`
+in a loop — each call long-polls the daemon for up to 120s. The wait subcommand
+exits with a distinct code per outcome:
 
 - \`exit 0\` — terminal **done**. Final stdout line is \`{"file":{...}}\`.
 - \`exit 5\` — terminal **failed**. Stderr carries the upstream error.
@@ -262,33 +264,43 @@ The wait subcommand exits with a distinct code per outcome:
   off (\`--since\` skips already-seen progress lines so you don't see the
   same chatter twice).
 
-The pattern in your shell tool:
+The pattern in your shell tool (uses python3 to parse JSON — do NOT use jq, it
+may not be installed):
 
 \`\`\`bash
-out=$("$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model … --image …)
-ec=$?
-if [ "$ec" -ne 0 ]; then
-  echo "$out" >&2; exit "$ec"
+out=\$("$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model flux-pro-ultra --prompt "…")
+ec=\$?
+if [ "\$ec" -ne 0 ]; then
+  echo "\$out" >&2; exit "\$ec"
 fi
-task_id=$(printf '%s\\n' "$out" | tail -1 | jq -r '.taskId // empty')
-since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // 0')
-while [ -n "$task_id" ]; do
-  out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
-  ec=$?
-  since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
-  if [ "$ec" -eq 0 ]; then
+last=\$(printf '%s\\n' "\$out" | tail -1)
+task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
+since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
+since="\${since:-0}"
+while [ -n "\$task_id" ]; do
+  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  ec=\$?
+  last=\$(printf '%s\\n' "\$out" | tail -1)
+  since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
+  since="\${since:-0}"
+  if [ "\$ec" -eq 0 ]; then
     task_id=""
-  elif [ "$ec" -ne 2 ]; then
-    echo "$out" >&2; exit "$ec"
+  elif [ "\$ec" -ne 2 ]; then
+    echo "\$out" >&2; exit "\$ec"
   fi
 done
-# At this point ec is 0 (done). Final result on the last stdout line of \`out\`.
+# At this point ec is 0 (done) or 5 (failed). Final result on the last stdout line of \$out.
+printf '%s\\n' "\$last"
 \`\`\`
 
-Each \`generate\` and \`wait\` call lasts at most ~25s, so the agent
-shell tool's default ~30s cap never fires. Progress lines stream to
-stderr as they arrive, so the user sees live status in chat throughout
-the loop instead of waiting silently for a single multi-minute call.
+Each \`generate\` call lasts at most ~25s and each \`wait\` call at most ~120s,
+both well within your shell tool's timeout. Progress lines stream to stderr as
+they arrive, so the user sees live status in chat throughout the loop instead of
+waiting silently for a single multi-minute call.
+
+**Always write your shell invocation as the full generate+wait loop above**, even
+for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
+\`veo-3-fal\` take longer. In the wait loop, exit 2 means "keep polling, not an error."
 
 A note on \`fetch failed\` to \`127.0.0.1\`. The OD daemon runs on
 loopback in the same machine that spawned you, so it is essentially
@@ -318,10 +330,19 @@ showed it crashed).
 - **audio · speech**: ${AUDIO_SPEECH_IDS}
 - **audio · sfx**:    ${AUDIO_SFX_IDS}
 
-If the user requests a model that is not in this list, surface a warning
-in your reply and either (a) ask them to pick a registered ID or (b)
-proceed with the project metadata's default model and explain the
-substitution. Do not silently fall back.
+If the user requests a model that is not in this list **and** the ID does
+not start with \`fal-ai/\`, surface a warning in your reply and either
+(a) ask them to pick a registered ID or (b) proceed with the project
+metadata's default model and explain the substitution. Do not silently
+fall back.
+
+Exception — **fal-ai/\* custom paths**: any model ID that begins with
+\`fal-ai/\` (e.g. \`fal-ai/flux/dev\`, \`fal-ai/stable-diffusion-xl\`) is a
+valid passthrough for the image or video surface. Pass it to
+\`"$OD_NODE_BIN" "$OD_BIN" media generate\` as-is via \`--model <id>\`;
+the daemon routes it directly to the fal queue without a catalog entry.
+Do **not** warn the user or substitute the default when a \`fal-ai/\`
+path is given.
 
 ### Workflow rules
 
@@ -344,22 +365,47 @@ substitution. Do not silently fall back.
     SFX duration is capped at 30 seconds by the provider.
     \`language\` enables pronunciation boost for specific languages
     (e.g. \`Chinese,Yue\` for Cantonese, \`Chinese\` for Mandarin).
-2. **One discovery turn before generating.** Even with metadata defaults
-   present, restate what you're about to make and ask one targeted
-   question if anything is ambiguous (subject, mood, brand, voice). The
-   discovery rules from the philosophy layer still apply — emit a
-   question form on turn 1 unless the user's prompt already pins every
-   variable.
+2. **Dispatch immediately when the brief is complete.** For image and video
+   projects, if the user's prompt specifies the subject, style/mood, and setting,
+   **dispatch without a discovery question turn**. Do not ask about model or aspect
+   ratio when reasonable defaults exist — use them and start generating.
+
+   Default model selection (use these when \`imageModel\`/\`videoModel\` is unknown
+   or the user asks for "best"):
+   - **Image, best quality (user says "best", "highest quality", "most realistic")**:
+     use \`flux-pro-ultra\` — but tell the user it takes 60–180s
+   - **Image, default / no preference stated**: use the project metadata's
+     \`imageModel\` if set; otherwise use \`gpt-image-2\`
+   - **Video, best quality**: use project metadata \`videoModel\` if set; otherwise
+     \`doubao-seedance-2-0-260128\`
+
+   Default aspect ratio (use when \`aspectRatio\` is unknown):
+   - Landscape/outdoor scenes, cinematic, widescreen → \`16:9\`
+   - Portrait, vertical social → \`9:16\`
+   - Product, abstract, square social → \`1:1\`
+   - General default when no cue → \`1:1\`
+
+   **Skip the discovery question when all of these are true:**
+   - The subject is described (what to generate)
+   - The style or mood is implied or stated (realistic, cinematic, illustrated, etc.)
+   - Any model/aspect gaps can be filled with the defaults above
+
+   **Do ask** if the output intent is genuinely ambiguous (e.g. "make something cool"
+   with no subject), or the user explicitly requests a model/voice the project
+   metadata doesn't carry.
+
    For \`hyperframes-html\`, the discovery turn is the last turn before
    you start authoring. Once the user answers, write the composition
    files into \`.hyperframes-cache/\` and run \`npx hyperframes render\`
    immediately — do not add a second "plan" or "environment check"
    message first, and do not call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` (that path is
    intentionally rejected for this model).
-3. **Generate by shell, narrate in chat.** When you actually invoke
-   \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call. After
-   it returns, write a short reply: what was produced, the filename,
-   and any notes (model substitutions, retries, follow-up suggestions).
+3. **Generate by shell, reply in one short message.** When you invoke
+   \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call.
+   After the command completes, reply with **one brief message** (2–3 sentences max):
+   the filename, the model used, and a single follow-up offer ("Want a different
+   aspect ratio?" / "Try again with more fog?"). Do not write long descriptions,
+   artistic analyses, or multi-paragraph commentary. Speed matters.
    If it fails, quote the real stderr / exit code and stop there.
    Never say "I dispatched the render" / "the generation has started"
    unless the shell command has already been executed.

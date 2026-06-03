@@ -1068,11 +1068,10 @@
 
 .app .composer {
   padding: 8px 10px 10px;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
+  background: transparent;
 }
 .app .composer-shell {
-  padding: 8px 9px 7px;
+  padding: 0;
   border-color: var(--border);
   border-radius: 10px;
   box-shadow: none;
@@ -1086,14 +1085,15 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
 .app .composer textarea {
-  min-height: 88px;
+  min-height: 56px;
   max-height: min(184px, 34vh);
-  font-size: 13px;
+  /* Font size lives on .composer-textarea-layer so the textarea and its
+     mention-highlight overlay share one value. Re-pinning it here would
+     only set the textarea, drifting the overlay glyphs off the caret. */
 }
 .app .composer-row {
   min-height: 32px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-soft);
+  padding-top: 2px;
 }
 .app .composer-row .icon-btn,
 .app .composer-import,
@@ -1725,12 +1725,13 @@
 }
 .project-ds-picker-popover {
   position: fixed;
-  width: min(640px, 86vw);
-  max-height: 60vh;
+  /* width + max-height come from the trigger-anchored inline style so the
+     popover can flip above the trigger (composer-top placement) and stay
+     within the viewport. */
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-md, 0 24px 64px rgba(0, 0, 0, 0.14));
+  border-radius: 10px;
+  box-shadow: var(--shadow-md, 0 18px 48px rgba(0, 0, 0, 0.16));
   display: flex;
   flex-direction: column;
   z-index: 140;
@@ -1740,9 +1741,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 0 10px;
+  height: 34px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
+  flex: 0 0 auto;
 }
 .project-ds-picker-search input {
   flex: 1 1 auto;
@@ -1750,31 +1753,33 @@
   outline: none;
   background: transparent;
   font: inherit;
+  font-size: 12.5px;
+  line-height: 1.2;
   color: var(--text);
 }
 .project-ds-picker-body {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr);
-  min-height: 240px;
-  max-height: calc(60vh - 42px);
+  grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .project-ds-picker-list {
   overflow-y: auto;
-  padding: 6px;
+  padding: 5px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   border-right: 1px solid var(--border);
 }
 .project-ds-picker-option {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 8px 10px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
   border: 0;
   background: transparent;
-  border-radius: 8px;
+  border-radius: 7px;
   text-align: left;
   cursor: pointer;
 }
@@ -1788,7 +1793,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .project-ds-picker-option-title {
@@ -1828,14 +1833,12 @@
 }
 .project-ds-picker-option-check {
   margin-left: auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
   flex: 0 0 auto;
 }
 .project-ds-picker-empty {
@@ -1857,26 +1860,56 @@
   gap: 8px;
   color: var(--text-strong, var(--text));
 }
-.project-ds-picker-preview-expand {
-  margin-left: auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+/* 16:9 preview stage — frames the design-system first-screen render. The
+   expand-to-fullscreen button floats over the top-right, revealed on hover. */
+.project-ds-picker-preview-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
   border: 1px solid var(--border);
-  background: var(--bg-subtle, var(--bg-panel));
-  color: var(--text);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+.project-ds-picker-preview-expand {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translate(-50%, 6px);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  -webkit-backdrop-filter: saturate(1.1) blur(8px);
+  backdrop-filter: saturate(1.1) blur(8px);
+  color: var(--text-strong, var(--text));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background 150ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 150ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  opacity: 0;
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.4);
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-ds-picker-preview-stage:hover .project-ds-picker-preview-expand,
+.project-ds-picker-preview-expand:focus-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.project-ds-picker-preview-expand:hover {
+  background: var(--bg-panel);
 }
 .project-ds-picker-preview-expand svg {
   display: block;
-  width: 16px !important;
-  height: 16px !important;
+  width: 13px !important;
+  height: 13px !important;
 }
 .project-ds-picker-preview-expand:hover {
   color: var(--accent);
@@ -1908,17 +1941,33 @@
   border: 1px solid var(--border);
 }
 .project-ds-picker-preview-frame {
-  width: 100%;
-  height: 180px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-panel);
+  /* Render the design-system page at desktop width (1280×720), then scale
+     the whole thing down so the 16:9 stage shows a faithful first-screen
+     thumbnail rather than a cramped narrow-viewport reflow. scale() needs a
+     unitless ratio, so this is pinned to the stage's resolved width
+     (popover≈440 → right column≈232px ⇒ 232/1280 ≈ 0.181). */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  border: 0;
+  background: #fff;
+  transform: scale(0.181);
+  transform-origin: top left;
+  pointer-events: none;
 }
 .project-ds-picker-preview-empty,
 .project-ds-picker-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
   color: var(--text-muted);
   padding: 8px;
+  text-align: center;
 }
 .project-ds-picker-fullscreen {
   position: fixed;
