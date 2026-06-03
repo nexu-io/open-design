@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
@@ -30,6 +30,9 @@ const createConversation = vi.fn();
 const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
+const chatPaneMock = vi.hoisted(() => ({
+  render: vi.fn(),
+}));
 
 vi.mock('../../src/i18n', () => ({
   // ProjectView calls useI18n() (for locale/t); mock it like the other
@@ -98,7 +101,10 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: () => null,
+  ChatPane: (props: unknown) => {
+    chatPaneMock.render(props);
+    return null;
+  },
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
@@ -363,6 +369,61 @@ describe('ProjectView daemon reattach restore', () => {
       expect(lastWithProduced?.producedFiles?.map((f) => f.name)).toEqual(['new.pptx']);
       expect(lastWithProduced?.runStatus).toBe('succeeded');
     });
+  });
+
+  it('does not re-render chat pane for every reattach run-event cursor tick', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-1',
+        runStatus: 'running',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-1',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let onRunEventId: ((eventId: string) => void) | null = null;
+    reattachDaemonRun.mockImplementation(
+      async (options: { onRunEventId?: (eventId: string) => void }) => {
+        onRunEventId = options.onRunEventId ?? null;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(onRunEventId).not.toBeNull();
+    const rendersAfterAttach = chatPaneMock.render.mock.calls.length;
+
+    for (const eventId of ['1', '2', '3']) {
+      await act(async () => {
+        onRunEventId?.(eventId);
+        await Promise.resolve();
+      });
+    }
+
+    expect(chatPaneMock.render.mock.calls.length).toBe(rendersAfterAttach);
   });
 
   it('reaches succeeded state via the SSE end event even when only the terminal event replays', async () => {
