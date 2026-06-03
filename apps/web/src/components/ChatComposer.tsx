@@ -256,12 +256,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const t = useT();
     const analytics = useAnalytics();
-    const [draft, setDraft] = useState(
-      () => initialDraft ?? loadComposerDraft(draftStorageKey) ?? "",
-    );
+    const initialLoadedDraftRef = useRef<string | null>(null);
+    if (initialLoadedDraftRef.current === null) {
+      initialLoadedDraftRef.current = initialDraft ?? loadComposerDraft(draftStorageKey) ?? "";
+    }
+    const initialLoadedDraft = initialLoadedDraftRef.current;
+    const [draft, setDraft] = useState(() => initialLoadedDraft);
     const [hasDraftText, setHasDraftText] = useState(
-      () => (initialDraft ?? loadComposerDraft(draftStorageKey) ?? "").trim().length > 0,
+      () => initialLoadedDraft.trim().length > 0,
     );
+    const hasDraftTextRef = useRef(initialLoadedDraft.trim().length > 0);
     // Synchronous mirror of the latest committed draft value.
     // `updateDraft` reads this as `prev` instead of relying on the
     // closure `draft` (which only updates after re-render) or
@@ -273,9 +277,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // multiple updates within one tick. Initialized from the same
     // source as the React state to keep the two in lockstep on
     // first render. See `updateDraft` below and #2929 round 5.
-    const draftRef = useRef<string>(
-      initialDraft ?? loadComposerDraft(draftStorageKey) ?? "",
-    );
+    const draftRef = useRef<string>(initialLoadedDraft);
 
     // chat_panel page_view fires from ProjectView (which outlives
     // conversation switches) so the event measures real chat-panel
@@ -402,6 +404,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const textareaResizeFrameRef = useRef<number | null>(null);
+    const textareaResizeTimerRef = useRef<number | null>(null);
     const composingRef = useRef(false);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -450,6 +453,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         if (draftSaveTimerRef.current !== null && typeof window !== 'undefined') {
           window.clearTimeout(draftSaveTimerRef.current);
           draftSaveTimerRef.current = null;
+        }
+        if (textareaResizeTimerRef.current !== null && typeof window !== 'undefined') {
+          window.clearTimeout(textareaResizeTimerRef.current);
+          textareaResizeTimerRef.current = null;
         }
         const latest = latestDraftSaveRef.current;
         saveComposerDraft(latest.key, latest.draft);
@@ -573,7 +580,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       ta.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
 
-    useEffect(() => {
+    function scheduleTextareaResize(): void {
+      if (textareaResizeTimerRef.current !== null && typeof window !== 'undefined') {
+        window.clearTimeout(textareaResizeTimerRef.current);
+        textareaResizeTimerRef.current = null;
+      }
       if (
         typeof window === 'undefined' ||
         typeof window.requestAnimationFrame !== 'function' ||
@@ -589,6 +600,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         textareaResizeFrameRef.current = null;
         resizeTextarea();
       });
+    }
+
+    function deferTextareaResize(): void {
+      if (typeof window === 'undefined') {
+        resizeTextarea();
+        return;
+      }
+      if (textareaResizeTimerRef.current !== null) {
+        window.clearTimeout(textareaResizeTimerRef.current);
+      }
+      textareaResizeTimerRef.current = window.setTimeout(() => {
+        textareaResizeTimerRef.current = null;
+        scheduleTextareaResize();
+      }, COMPOSER_DRAFT_SAVE_DELAY_MS);
+    }
+
+    useEffect(() => {
+      scheduleTextareaResize();
       return () => {
         if (textareaResizeFrameRef.current !== null) {
           window.cancelAnimationFrame(textareaResizeFrameRef.current);
@@ -938,7 +967,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     function updateDraft(
       next: string | ((prev: string) => string),
-      options: { deferRender?: boolean; syncTextarea?: boolean } = {},
+      options: {
+        render?: 'commit' | 'defer' | 'none';
+        resize?: 'immediate' | 'defer' | 'none';
+        syncTextarea?: boolean;
+      } = {},
     ): void {
       const prev = draftRef.current;
       const value = typeof next === 'function' ? next(prev) : next;
@@ -951,16 +984,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         );
       }
       draftRef.current = value;
-      setHasDraftText((current) => {
-        const nextHasDraftText = value.trim().length > 0;
-        return current === nextHasDraftText ? current : nextHasDraftText;
-      });
+      const nextHasDraftText = value.trim().length > 0;
+      if (hasDraftTextRef.current !== nextHasDraftText) {
+        hasDraftTextRef.current = nextHasDraftText;
+        setHasDraftText(nextHasDraftText);
+      }
       scheduleDraftSave(value);
       if (options.syncTextarea !== false) {
         const ta = textareaRef.current;
         if (ta && ta.value !== value) ta.value = value;
       }
-      if (options.deferRender) {
+      if (options.resize === 'defer') {
+        deferTextareaResize();
+      } else if (options.resize !== 'none') {
+        scheduleTextareaResize();
+      }
+      if (options.render === 'none') {
+        return;
+      }
+      if (options.render === 'defer') {
         deferDraftRender();
       } else {
         commitDraftRender(value);
@@ -1344,10 +1386,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       const value = e.target.value;
       const cursor = e.target.selectionStart;
+      const shouldRenderDraft =
+        value.includes('@') ||
+        value.startsWith('/') ||
+        mention !== null ||
+        slash !== null ||
+        composerMentionParts !== null;
       // Goes through the `updateDraft` chokepoint so the
       // plugin-mention offset reconcile runs on every keystroke,
       // matching every other setDraft path for free.
-      updateDraft(value, { deferRender: true, syncTextarea: false });
+      updateDraft(value, {
+        render: shouldRenderDraft ? 'defer' : 'none',
+        resize: shouldRenderDraft ? 'immediate' : 'defer',
+        syncTextarea: false,
+      });
       // Keep the staged-skill chips in sync with the draft. If the user
       // hand-deletes an `@<id>` token from the textarea, the chip must
       // disappear too — otherwise submit() would still forward that id in
@@ -1357,11 +1409,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // alive accidentally. We do not run the same prune for `staged`
       // file attachments because users frequently attach files via the
       // upload button without leaving an `@<path>` token in the draft.
-      setStagedSkills((prev) => pruneStagedSkillsForDraft(prev, value));
+      if (stagedSkills.length > 0) {
+        setStagedSkills((prev) => pruneStagedSkillsForDraft(prev, value));
+      }
       // Skip mention and slash detection during IME composition (e.g.,
       // Chinese, Japanese, Korean input) to prevent cursor jumping.
       // Issue #2851.
       if (composingRef.current) {
+        if (paletteUpdateTimerRef.current !== null && typeof window !== 'undefined') {
+          window.clearTimeout(paletteUpdateTimerRef.current);
+          paletteUpdateTimerRef.current = null;
+        }
+        return;
+      }
+
+      if (!shouldRenderDraft) {
         if (paletteUpdateTimerRef.current !== null && typeof window !== 'undefined') {
           window.clearTimeout(paletteUpdateTimerRef.current);
           paletteUpdateTimerRef.current = null;

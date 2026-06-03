@@ -17,4 +17,10 @@ describe("desktop BrowserWindow chrome options", () => {
     expect(runtimeSource).toContain("flex: 0 0 78px !important;");
     expect(runtimeSource).toContain("width: 78px !important;");
   });
+
+  test("keeps the visible renderer responsive when Chromium misclassifies visibility", () => {
+    const browserWindowBlock = /new BrowserWindow\(\{([\s\S]*?)title: "Open Design",([\s\S]*?)width: 1280,/.exec(runtimeSource)?.[0] ?? "";
+
+    expect(browserWindowBlock).toContain("backgroundThrottling: false");
+  });
 });
