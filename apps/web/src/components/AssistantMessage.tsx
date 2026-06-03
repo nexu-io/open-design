@@ -638,7 +638,6 @@ function AssistantMessageImpl({
             </>
           ) : null}
         </span>
-        <MessageTimestamp message={message} t={t} />
       </div>
       <div className="assistant-flow">
         {blocks.map((b, i) => {
