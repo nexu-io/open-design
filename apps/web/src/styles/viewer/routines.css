@@ -1339,6 +1339,11 @@
   padding: 8px 10px 10px;
   background: transparent;
 }
+.chat-composer-fixed-layer .composer {
+  gap: 5px;
+  padding: 8px 10px 10px;
+  background: transparent;
+}
 .app .composer-shell {
   padding: 8px;
   border-color: color-mix(in srgb, var(--border) 84%, var(--border-strong));
@@ -1346,11 +1351,25 @@
   background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
   box-shadow: var(--shadow-sm);
 }
+.chat-composer-fixed-layer .composer-shell {
+  padding: 0;
+  border-color: var(--border);
+  border-radius: 10px;
+  box-shadow: none;
+}
 .app .composer-shell:focus-within {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm), 0 0 0 3px var(--accent-soft);
 }
+.chat-composer-fixed-layer .composer-shell:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 4%, transparent);
+}
 .app .composer.drag-active .composer-shell {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.chat-composer-fixed-layer .composer.drag-active .composer-shell {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
@@ -1361,7 +1380,15 @@
      mention-highlight overlay share one value. Re-pinning it here would
      only set the textarea, drifting the overlay glyphs off the caret. */
 }
+.chat-composer-fixed-layer .composer textarea {
+  min-height: 56px;
+  max-height: min(184px, 34vh);
+}
 .app .composer-row {
+  min-height: 32px;
+  padding-top: 2px;
+}
+.chat-composer-fixed-layer .composer-row {
   min-height: 32px;
   padding-top: 2px;
 }
@@ -1371,7 +1398,17 @@
 .app .composer-send {
   border-radius: 9px;
 }
+.chat-composer-fixed-layer .composer-row .icon-btn,
+.chat-composer-fixed-layer .composer-import,
+.chat-composer-fixed-layer .composer-research,
+.chat-composer-fixed-layer .composer-send {
+  border-radius: 9px;
+}
 .app .composer-row .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.chat-composer-fixed-layer .composer-row .icon-btn {
   width: 28px;
   height: 28px;
 }
@@ -1383,7 +1420,21 @@
   font-weight: 600;
   box-shadow: none;
 }
+.chat-composer-fixed-layer .composer-send {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
 .app .composer-send:disabled {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  color: var(--text-faint);
+  cursor: default;
+}
+.chat-composer-fixed-layer .composer-send:disabled {
   background: var(--bg-subtle);
   border-color: var(--border);
   color: var(--text-faint);
@@ -1505,6 +1556,14 @@
   gap: 5px;
 }
 .app .split-chat-slot .composer-hint {
+  order: -1;
+  margin: 0 8px 1px;
+  color: color-mix(in srgb, var(--text-muted) 64%, transparent);
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+.chat-composer-fixed-layer .composer-hint {
   order: -1;
   margin: 0 8px 1px;
   color: color-mix(in srgb, var(--text-muted) 64%, transparent);
