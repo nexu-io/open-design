@@ -4665,8 +4665,16 @@ function artifactBaseNameFor(art: Artifact): string {
 interface HtmlArtifactLineage {
   fileName: string;
   identifier: string;
+  title: string;
   artifactType: string;
   artifactGroupIdentifier: string;
+  documentTitle: string;
+}
+
+function htmlDocumentTitle(html: string): string {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const rawTitle = titleMatch?.[1] ?? '';
+  return rawTitle.replace(/\s+/g, ' ').trim();
 }
 
 function htmlArtifactLineageFor(
@@ -4677,9 +4685,18 @@ function htmlArtifactLineageFor(
   return {
     fileName,
     identifier: art.identifier ?? '',
+    title: art.title ?? '',
     artifactType: art.artifactType ?? '',
     artifactGroupIdentifier,
+    documentTitle: htmlDocumentTitle(art.html ?? ''),
   };
+}
+
+function htmlArtifactLineageTitleMatches(art: Artifact, lineage: HtmlArtifactLineage): boolean {
+  const currentTitle = art.title ?? '';
+  if (currentTitle !== '' && currentTitle === lineage.title) return true;
+  const currentDocumentTitle = htmlDocumentTitle(art.html ?? '');
+  return currentDocumentTitle !== '' && currentDocumentTitle === lineage.documentTitle;
 }
 
 function matchingHtmlArtifactLineageFileName(
@@ -4691,6 +4708,7 @@ function matchingHtmlArtifactLineageFileName(
   if ((art.identifier ?? '') !== lineage.identifier) return null;
   if ((art.artifactType ?? '') !== lineage.artifactType) return null;
   if (lineage.artifactGroupIdentifier === '') return null;
+  if (!htmlArtifactLineageTitleMatches(art, lineage)) return null;
 
   // Verify the lineage file still exists and has the same group
   const lineageFile = projectFiles.find(
