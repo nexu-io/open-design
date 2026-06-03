@@ -4673,7 +4673,8 @@ interface HtmlArtifactLineage {
 
 /**
  * Extract stable document identity signature from HTML content.
- * Captures document title and local href topology, ignoring body copy changes.
+ * Uses only the normalized document <title> to identify the document,
+ * ignoring body copy changes and local href topology changes.
  */
 function htmlArtifactIdentitySignature(html: string): string {
   // Extract <title> text (case-insensitive, trim/collapse whitespace)
@@ -4681,37 +4682,7 @@ function htmlArtifactIdentitySignature(html: string): string {
   const rawTitle = titleMatch?.[1] ?? '';
   const title = rawTitle.replace(/\s+/g, ' ').trim();
 
-  // Extract all href values, filter to local page links only
-  const hrefMatches = html.matchAll(/href=["']([^"']+)["']/gi);
-  const localHrefs: string[] = [];
-
-  for (const match of hrefMatches) {
-    const href = match[1];
-    if (!href) continue;
-    // Skip hash-only, external, protocol-relative, data, mailto, tel
-    if (
-      href.startsWith('#') ||
-      href.startsWith('http://') ||
-      href.startsWith('https://') ||
-      href.startsWith('//') ||
-      href.startsWith('data:') ||
-      href.startsWith('mailto:') ||
-      href.startsWith('tel:')
-    ) {
-      continue;
-    }
-    // Keep local links, normalize and dedupe
-    const hrefWithoutHash = href.split('#')[0] ?? '';
-    const normalized = (hrefWithoutHash.split('?')[0] ?? '').trim();
-    if (normalized && !localHrefs.includes(normalized)) {
-      localHrefs.push(normalized);
-    }
-  }
-
-  // Sort for stable signature
-  localHrefs.sort();
-
-  return `title:${title}|hrefs:${localHrefs.join(',')}`;
+  return JSON.stringify({ title });
 }
 
 function htmlArtifactLineageFor(

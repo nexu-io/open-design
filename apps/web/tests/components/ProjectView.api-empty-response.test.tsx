@@ -1067,6 +1067,81 @@ describe('ProjectView API empty response handling', () => {
     );
   });
 
+  it('reuses the relocated group when the same site adds new local links', async () => {
+    let currentFiles = [
+      htmlProjectFile('index.html', 10, {
+        artifactIdentifier: 'index',
+        artifactGroupIdentifier: 'site-a',
+      }),
+    ];
+    mockedFetchProjectFiles.mockImplementation(async () => {
+      return currentFiles as never;
+    });
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, fileName) => {
+      if (mockedWriteProjectTextFile.mock.calls.length === 1) {
+        currentFiles = [
+          htmlProjectFile('index-2.html', 50, {
+            artifactIdentifier: 'index',
+            artifactGroupIdentifier: 'html-artifact:index-2.html',
+          }),
+          htmlProjectFile('about-2.html', 60, {
+            artifactIdentifier: 'about',
+            artifactGroupIdentifier: 'html-artifact:index-2.html',
+          }),
+        ];
+      }
+      return htmlProjectFile(String(fileName), 70) as never;
+    });
+    const firstArtifact =
+      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      '<!doctype html><html><head><title>Home</title></head><body>' +
+      '<main><h1>Home</h1><a href="about.html">About</a></main>' +
+      '</body></html>' +
+      '</artifact>';
+    const secondArtifact =
+      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      '<!doctype html><html><head><title>Home</title></head><body>' +
+      '<main><h1>Home</h1><a href="about.html">About</a><a href="pricing.html">Pricing</a></main>' +
+      '</body></html>' +
+      '</artifact>';
+    let turn = 0;
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      turn += 1;
+      handlers.onDelta(turn === 1 ? firstArtifact : secondArtifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('index-2.html');
+    await waitFor(() => {
+      expect(mockedFetchProjectFiles.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(2);
+    });
+    const [, fileName, content, options] = mockedWriteProjectTextFile.mock.calls.at(-1) ?? [];
+    expect(fileName).toBe('index.html');
+    expect(content).toContain('href="about-2.html"');
+    expect(content).toContain('href="pricing.html"');
+    expect(content).not.toContain('href="pricing-2.html"');
+    expect(options?.artifactManifest?.metadata?.artifactGroupIdentifier).toBe(
+      'html-artifact:index-2.html',
+    );
+  });
+
   it('injects ElevenLabs voice options into API-mode audio project prompts', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
