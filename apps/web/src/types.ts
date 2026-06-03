@@ -414,6 +414,7 @@ export interface Artifact {
   artifactType?: string;
   title: string;
   html: string;
+  lineageToken?: string;
   savedUrl?: string;
 }
 

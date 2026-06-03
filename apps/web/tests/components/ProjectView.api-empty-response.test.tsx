@@ -780,6 +780,7 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('keeps the relocated artifact group when reclaiming index.html', async () => {
+    const lineageToken = 'lineage-relocated-reclaim';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -795,17 +796,19 @@ describe('ProjectView API empty response handling', () => {
           htmlProjectFile('index-2.html', 50, {
             artifactIdentifier: 'index',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
           htmlProjectFile('about-2.html', 60, {
             artifactIdentifier: 'about',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
         ];
       }
       return htmlProjectFile(String(fileName), 70) as never;
     });
     const artifact =
-      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      `<artifact identifier="index" type="text/html" title="Relocated Site" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
@@ -845,6 +848,7 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('reuses the relocated group when the artifact wrapper title changes', async () => {
+    const lineageToken = 'lineage-wrapper-title-change';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -860,23 +864,25 @@ describe('ProjectView API empty response handling', () => {
           htmlProjectFile('index-2.html', 50, {
             artifactIdentifier: 'index',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
           htmlProjectFile('about-2.html', 60, {
             artifactIdentifier: 'about',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
         ];
       }
       return htmlProjectFile(String(fileName), 70) as never;
     });
     const firstArtifact =
-      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      `<artifact identifier="index" type="text/html" title="Relocated Site" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
       '</artifact>';
     const secondArtifact =
-      '<artifact identifier="index" type="text/html" title="Different Site">' +
+      `<artifact identifier="index" type="text/html" title="Different Site" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
@@ -918,6 +924,7 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('reuses the relocated group when the document title changes', async () => {
+    const lineageToken = 'lineage-document-title-change';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -933,23 +940,25 @@ describe('ProjectView API empty response handling', () => {
           htmlProjectFile('index-2.html', 50, {
             artifactIdentifier: 'index',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
           htmlProjectFile('about-2.html', 60, {
             artifactIdentifier: 'about',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
         ];
       }
       return htmlProjectFile(String(fileName), 70) as never;
     });
     const firstArtifact =
-      '<artifact identifier="index" type="text/html" title="Home">' +
+      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
       '</artifact>';
     const secondArtifact =
-      '<artifact identifier="index" type="text/html" title="Home">' +
+      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Pricing</title></head><body>' +
       '<main><h1>Pricing</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
@@ -992,6 +1001,7 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('does not reuse a prior relocated group for a different index site', async () => {
+    const lineageToken = 'lineage-original-site';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -1007,17 +1017,19 @@ describe('ProjectView API empty response handling', () => {
           htmlProjectFile('index-2.html', 50, {
             artifactIdentifier: 'index',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
           htmlProjectFile('about-2.html', 60, {
             artifactIdentifier: 'about',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
         ];
       }
       return htmlProjectFile(String(fileName), 70) as never;
     });
     const firstArtifact =
-      '<artifact identifier="index" type="text/html" title="Home">' +
+      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
@@ -1065,7 +1077,8 @@ describe('ProjectView API empty response handling', () => {
     );
   });
 
-  it('reuses the relocated group when the same site content changes across turns', async () => {
+  it('does not reuse a prior relocated group when an unrelated site shares only one title signal', async () => {
+    const lineageToken = 'lineage-one-title-signal-original';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -1081,23 +1094,181 @@ describe('ProjectView API empty response handling', () => {
           htmlProjectFile('index-2.html', 50, {
             artifactIdentifier: 'index',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
           htmlProjectFile('about-2.html', 60, {
             artifactIdentifier: 'about',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
         ];
       }
       return htmlProjectFile(String(fileName), 70) as never;
     });
     const firstArtifact =
-      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
       '</artifact>';
     const secondArtifact =
-      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      '<artifact identifier="index" type="text/html" title="Different Site" lineageToken="lineage-different-site">' +
+      '<!doctype html><html><head><title>Home</title></head><body>' +
+      '<main><h1>Different Site</h1><a href="about.html">About</a></main>' +
+      '</body></html>' +
+      '</artifact>';
+    let turn = 0;
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      turn += 1;
+      handlers.onDelta(turn === 1 ? firstArtifact : secondArtifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('index-2.html');
+    await waitFor(() => {
+      expect(mockedFetchProjectFiles.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(2);
+    });
+    const [, fileName, content, options] = mockedWriteProjectTextFile.mock.calls.at(-1) ?? [];
+    expect(fileName).toBe('index.html');
+    expect(content).toContain('href="about.html"');
+    expect(content).not.toContain('href="about-2.html"');
+    expect(options?.artifactManifest?.metadata?.artifactGroupIdentifier).toBe(
+      'html-artifact:index.html',
+    );
+  });
+
+  it('does not reuse a prior relocated group when an explicit lineage token changes', async () => {
+    const originalLineageToken = 'lineage-explicit-original-site';
+    const nextLineageToken = 'lineage-explicit-different-site';
+    let currentFiles = [
+      htmlProjectFile('index.html', 10, {
+        artifactIdentifier: 'index',
+        artifactGroupIdentifier: 'site-a',
+      }),
+    ];
+    mockedFetchProjectFiles.mockImplementation(async () => {
+      return currentFiles as never;
+    });
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, fileName) => {
+      if (mockedWriteProjectTextFile.mock.calls.length === 1) {
+        currentFiles = [
+          htmlProjectFile('index-2.html', 50, {
+            artifactIdentifier: 'index',
+            artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: originalLineageToken,
+          }),
+          htmlProjectFile('about-2.html', 60, {
+            artifactIdentifier: 'about',
+            artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: originalLineageToken,
+          }),
+        ];
+      }
+      return htmlProjectFile(String(fileName), 70) as never;
+    });
+    const firstArtifact =
+      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${originalLineageToken}">` +
+      '<!doctype html><html><head><title>Home</title></head><body>' +
+      '<main><h1>Home</h1><a href="about.html">About</a></main>' +
+      '</body></html>' +
+      '</artifact>';
+    const secondArtifact =
+      `<artifact identifier="index" type="text/html" title="Home" lineageToken="${nextLineageToken}">` +
+      '<!doctype html><html><head><title>Home</title></head><body>' +
+      '<main><h1>Different Home</h1><a href="about.html">About</a></main>' +
+      '</body></html>' +
+      '</artifact>';
+    let turn = 0;
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      turn += 1;
+      handlers.onDelta(turn === 1 ? firstArtifact : secondArtifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('index-2.html');
+    await waitFor(() => {
+      expect(mockedFetchProjectFiles.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(2);
+    });
+    const [, fileName, content, options] = mockedWriteProjectTextFile.mock.calls.at(-1) ?? [];
+    expect(fileName).toBe('index.html');
+    expect(content).toContain('href="about.html"');
+    expect(content).not.toContain('href="about-2.html"');
+    expect(options?.artifactManifest?.metadata?.artifactGroupIdentifier).toBe(
+      'html-artifact:index.html',
+    );
+    expect(options?.artifactManifest?.metadata?.artifactLineageToken).toBe(nextLineageToken);
+  });
+
+  it('reuses the relocated group when the same site content changes across turns', async () => {
+    const lineageToken = 'lineage-same-site-content-change';
+    let currentFiles = [
+      htmlProjectFile('index.html', 10, {
+        artifactIdentifier: 'index',
+        artifactGroupIdentifier: 'site-a',
+      }),
+    ];
+    mockedFetchProjectFiles.mockImplementation(async () => {
+      return currentFiles as never;
+    });
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, fileName) => {
+      if (mockedWriteProjectTextFile.mock.calls.length === 1) {
+        currentFiles = [
+          htmlProjectFile('index-2.html', 50, {
+            artifactIdentifier: 'index',
+            artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
+          }),
+          htmlProjectFile('about-2.html', 60, {
+            artifactIdentifier: 'about',
+            artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
+          }),
+        ];
+      }
+      return htmlProjectFile(String(fileName), 70) as never;
+    });
+    const firstArtifact =
+      `<artifact identifier="index" type="text/html" title="Relocated Site" lineageToken="${lineageToken}">` +
+      '<!doctype html><html><head><title>Home</title></head><body>' +
+      '<main><h1>Home</h1><a href="about.html">About</a></main>' +
+      '</body></html>' +
+      '</artifact>';
+    const secondArtifact =
+      `<artifact identifier="index" type="text/html" title="Relocated Site" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Updated Home Content</h1><p>New paragraph</p><a href="about.html">About</a></main>' +
       '</body></html>' +
@@ -1141,6 +1312,7 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('reuses the relocated group when the same site adds new local links', async () => {
+    const lineageToken = 'lineage-same-site-new-link';
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -1156,23 +1328,25 @@ describe('ProjectView API empty response handling', () => {
           htmlProjectFile('index-2.html', 50, {
             artifactIdentifier: 'index',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
           htmlProjectFile('about-2.html', 60, {
             artifactIdentifier: 'about',
             artifactGroupIdentifier: 'html-artifact:index-2.html',
+            artifactLineageToken: lineageToken,
           }),
         ];
       }
       return htmlProjectFile(String(fileName), 70) as never;
     });
     const firstArtifact =
-      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      `<artifact identifier="index" type="text/html" title="Relocated Site" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
       '</artifact>';
     const secondArtifact =
-      '<artifact identifier="index" type="text/html" title="Relocated Site">' +
+      `<artifact identifier="index" type="text/html" title="Relocated Site" lineageToken="${lineageToken}">` +
       '<!doctype html><html><head><title>Home</title></head><body>' +
       '<main><h1>Home</h1><a href="about.html">About</a><a href="pricing.html">Pricing</a></main>' +
       '</body></html>' +
@@ -1354,7 +1528,11 @@ function hasSavedAssistantMessage(predicate: (message: ChatMessage) => boolean):
 function htmlProjectFile(
   name: string,
   mtime: number,
-  options: { artifactIdentifier?: string; artifactGroupIdentifier?: string } = {},
+  options: {
+    artifactIdentifier?: string;
+    artifactGroupIdentifier?: string;
+    artifactLineageToken?: string;
+  } = {},
 ) {
   return {
     name,
@@ -1376,6 +1554,7 @@ function htmlProjectFile(
           metadata: {
             identifier: options.artifactIdentifier,
             artifactGroupIdentifier: options.artifactGroupIdentifier,
+            artifactLineageToken: options.artifactLineageToken,
           },
         }
       : undefined,
