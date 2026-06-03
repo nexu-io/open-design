@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
 import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
@@ -495,6 +496,120 @@ async function collectRepositoryFiles(directory: string, skippedDirectoryNames =
   return files;
 }
 
+const productNeutralitySkippedDirectories = new Set([
+  ".git",
+  ".od",
+  ".tmp",
+  "dist",
+  "node_modules",
+  "out",
+  "test-results",
+]);
+// Public contracts, help/prompt strings, docs, and shipped content should
+// describe the integration role, not name a private deployment. The default
+// check blocks named "orchestrator such as ..." examples; private forks can
+// add stricter local terms through OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
+const productNeutralityCheckedPathPrefixes = [
+  "apps/daemon/src/",
+  "apps/web/app/",
+  "apps/web/src/",
+  "craft/",
+  "design-systems/",
+  "design-templates/",
+  "docs/",
+  "packages/contracts/src/",
+  "skills/",
+];
+const productNeutralityTextExtensions = new Set([".md", ".mdx", ".ts", ".tsx"]);
+const productNeutralityDocFilePattern =
+  /(?:^|\/)(?:AGENTS|CLAUDE|CONTRIBUTING(?:\.[^.]+)?|QUICKSTART|README(?:\.[^.]+)?)\.md$/;
+const namedOrchestratorExamplePattern =
+  /\borchestrator\s+(?:such as|like|for example,?)\s+[`"']?[A-Z][A-Za-z0-9_-]+/gi;
+
+type ProductNeutralityViolation = {
+  filePath: string;
+  lineNumber: number;
+  reason: string;
+};
+
+export function isProductNeutralityCheckedPath(repositoryPath: string): boolean {
+  return (
+    productNeutralityCheckedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix)) ||
+    productNeutralityDocFilePattern.test(repositoryPath)
+  );
+}
+
+function isProductNeutralityTextFile(repositoryPath: string): boolean {
+  return productNeutralityTextExtensions.has(path.extname(repositoryPath));
+}
+
+function productNeutralityForbiddenTerms(): string[] {
+  return String(process.env.OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS ?? "")
+    .split(",")
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0);
+}
+
+export function collectProductNeutralityViolationsFromSource(
+  repositoryPath: string,
+  source: string,
+  forbiddenTerms = productNeutralityForbiddenTerms(),
+): ProductNeutralityViolation[] {
+  if (!isProductNeutralityCheckedPath(repositoryPath) || !isProductNeutralityTextFile(repositoryPath)) {
+    return [];
+  }
+
+  const lowerSource = source.toLowerCase();
+  const violations: ProductNeutralityViolation[] = [];
+
+  for (const match of source.matchAll(namedOrchestratorExamplePattern)) {
+    violations.push({
+      filePath: repositoryPath,
+      lineNumber: lineNumberForIndex(source, match.index ?? 0),
+      reason: "use generic \"external orchestrator\" phrasing instead of named orchestrator examples",
+    });
+  }
+
+  for (const term of forbiddenTerms) {
+    const lowerTerm = term.toLowerCase();
+    let index = lowerSource.indexOf(lowerTerm);
+
+    while (index !== -1) {
+      violations.push({
+        filePath: repositoryPath,
+        lineNumber: lineNumberForIndex(source, index),
+        reason: "use generic \"external orchestrator\" phrasing instead of private deployment names",
+      });
+      index = lowerSource.indexOf(lowerTerm, index + lowerTerm.length);
+    }
+  }
+
+  return violations;
+}
+
+async function checkProductNeutrality(): Promise<boolean> {
+  const violations: ProductNeutralityViolation[] = [];
+
+  for (const repositoryPath of await collectRepositoryFiles(repoRoot, productNeutralitySkippedDirectories)) {
+    if (!isProductNeutralityCheckedPath(repositoryPath) || !isProductNeutralityTextFile(repositoryPath)) {
+      continue;
+    }
+    const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+    violations.push(...collectProductNeutralityViolationsFromSource(repositoryPath, source));
+  }
+
+  if (violations.length > 0) {
+    console.error("Product-neutrality violations found:");
+    for (const violation of violations) {
+      console.error(`${violation.filePath}:${violation.lineNumber} -> ${violation.reason}`);
+    }
+    return false;
+  }
+
+  console.log("Product-neutrality check passed: public docs, contracts, and prompts use generic orchestrator naming.");
+  return true;
+}
+
 async function checkE2eLayout(): Promise<boolean> {
   const violations: string[] = [];
   const packageJson = JSON.parse(await readFile(e2ePackageJsonPath, "utf8")) as {
@@ -921,6 +1036,7 @@ async function checkStylePolicy(): Promise<boolean> {
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
+  { name: "product neutrality", run: checkProductNeutrality },
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
@@ -939,17 +1055,22 @@ const checks: GuardCheck[] = [
   { name: "design system component manifest extraction", run: checkComponentsManifestExtraction },
 ];
 
-const results: boolean[] = [];
-for (const check of checks) {
-  try {
-    results.push(await check.run());
-  } catch (error) {
-    console.error(`Guard check failed unexpectedly: ${check.name}`);
-    console.error(error);
-    results.push(false);
+async function runChecks(): Promise<boolean> {
+  const results: boolean[] = [];
+  for (const check of checks) {
+    try {
+      results.push(await check.run());
+    } catch (error) {
+      console.error(`Guard check failed unexpectedly: ${check.name}`);
+      console.error(error);
+      results.push(false);
+    }
   }
+
+  return results.every(Boolean);
 }
 
-if (results.some((passed) => !passed)) {
+const isMain = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+if (isMain && !(await runChecks())) {
   process.exitCode = 1;
 }

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
@@ -469,6 +469,11 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
   assert.deepEqual(args, ['-p', '-']);
 
+  const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
+    agentLogFilePath: '/tmp/od-agy-test.log',
+  });
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
   // Pass a temp antigravitySettingsPath so buildArgs does not touch the
@@ -477,9 +482,12 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   try {
     const withModel = antigravity.buildArgs('hi', [], [], {
       model: 'Gemini 3.1 Pro (High)',
-    }, { antigravitySettingsPath: join(settingsDir, 'settings.json') });
+    }, {
+      agentLogFilePath: '/tmp/od-agy-test.log',
+      antigravitySettingsPath: join(settingsDir, 'settings.json'),
+    });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['-p', '-']);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -754,6 +762,29 @@ test('codex buildArgs omits model_reasoning_effort when reasoning is "default"',
     ),
     false,
   );
+});
+
+test('grok-build inlines the prompt as -p <value> and never falls back to stdin sentinels', () => {
+  const prompt = 'summarize the current page layout';
+  const args = grokBuild.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'grok-4.3', reasoning: 'high' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.equal(grokBuild.promptViaStdin, false);
+  assert.deepEqual(args, [
+    '-p',
+    prompt,
+    '--model',
+    'grok-4.3',
+    '--effort',
+    'high',
+  ]);
+  assert.equal(args.includes('-'), false);
+  assert.equal(args.filter((entry) => entry === '-p').length, 1);
 });
 
 test('claude flags promptViaStdin and never embeds the prompt in argv', () => {

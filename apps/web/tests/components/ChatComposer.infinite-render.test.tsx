@@ -144,4 +144,56 @@ describe('ChatComposer infinite re-render regression (#2097)', () => {
       }
     }
   });
+
+  it('coalesces textarea auto-resize work behind animation frames', () => {
+    const scrollHeightGetter = vi.fn(() => 96);
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'scrollHeight',
+    );
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const frameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 1;
+
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get: scrollHeightGetter,
+    });
+    window.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+      const id = nextFrameId++;
+      frameCallbacks.set(id, cb);
+      return id;
+    });
+    window.cancelAnimationFrame = vi.fn((id: number) => {
+      frameCallbacks.delete(id);
+    });
+
+    try {
+      renderComposer();
+      const textarea = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+      scrollHeightGetter.mockClear();
+
+      for (const value of ['h', 'he', 'hel', 'hello Open Design']) {
+        fireEvent.change(textarea, { target: { value, selectionStart: value.length } });
+      }
+
+      expect(scrollHeightGetter).not.toHaveBeenCalled();
+      expect(frameCallbacks.size).toBe(1);
+
+      const callbacks = Array.from(frameCallbacks.entries());
+      frameCallbacks.clear();
+      for (const [id, cb] of callbacks) cb(id);
+
+      expect(scrollHeightGetter).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', originalScrollHeight);
+      } else {
+        delete (HTMLTextAreaElement.prototype as { scrollHeight?: number }).scrollHeight;
+      }
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+      window.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
 });

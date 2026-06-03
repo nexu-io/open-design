@@ -13,17 +13,12 @@ import { Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
 import {
   DEFAULT_LOCALE,
-  LANDING_LOCALES,
   getCommonCopy,
   getHomePageCopy,
-  getLocaleDefinition,
-  localePath,
   localizedHref,
   type LandingLocaleCode,
 } from './i18n';
 import {
-  heroImage,
-  heroImageSrcset,
   imageAsset,
   PRECISE_LAZY_PLACEHOLDER,
 } from './image-assets';
@@ -70,9 +65,8 @@ const arrowOut = (
 );
 
 const arrowPlus = (
-  <svg viewBox='0 0 24 24'>
-    <circle cx='12' cy='12' r='9' />
-    <path d='M9 12h6M12 9v6' />
+  <svg className='icon-fill' viewBox='0 0 24 24'>
+    <path d='M12 2C17.52 2 22 6.48 22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2ZM12 20C16.42 20 20 16.42 20 12C20 7.58 16.42 4 12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20ZM13 12H16L12 16L8 12H11V8H13V12Z' />
   </svg>
 );
 
@@ -225,11 +219,6 @@ export default function Page({
         count: pad2(c.count),
       }))
     : [];
-  const localeDef = getLocaleDefinition(locale);
-  const localeOptions = LANDING_LOCALES.map((entry) => ({
-    ...entry,
-    href: localePath(entry.code, '/'),
-  }));
   const href = (path: string) => localizedHref(path, locale);
 
   return (
@@ -245,82 +234,6 @@ export default function Page({
       <div className='shell'>
         {/* ====== STICKY CHROME (topbar + nav as one unit) ====== */}
         <div className='site-chrome' data-chrome-headroom>
-        {/* ====== TOP METADATA STRIP ====== */}
-        <div className='topbar' data-od-id='topbar'>
-          <div className='container topbar-inner'>
-            <span>
-              <b>OD / 2026</b>
-              {NBSP}·{NBSP}
-              {commonCopy.topbar.issue ?? 'Vol. 01 / Issue Nº 26'}
-            </span>
-            <span className='mid'>
-              <span>
-                {commonCopy.topbar.filedUnder}{' '}
-                <b className='coral'>{commonCopy.topbar.category}</b>
-              </span>
-              <span>{commonCopy.topbar.madeOnEarth}</span>
-            </span>
-            <span className='right'>
-              <a className='topbar-link' href={REPO_RELEASES} {...ext}>
-                <span className='pulse' />
-                {commonCopy.topbar.live} ·{' '}
-                <span data-github-version>{github.versionLabel}</span>
-              </a>
-              <details className='locale-switch' data-locale-switch>
-                <summary
-                  className='locale-trigger'
-                  aria-label={commonCopy.topbar.languageSwitcherLabel}
-                >
-                  <span className='locale-trigger-prefix' aria-hidden='true'>
-                    {commonCopy.topbar.languageSwitcherPrefix ?? 'Lang'}
-                  </span>
-                  <span className='locale-trigger-sep' aria-hidden='true'>
-                    ·
-                  </span>
-                  <span className='locale-trigger-code'>
-                    {localeDef.shortLabel}
-                  </span>
-                  <svg
-                    className='locale-trigger-caret'
-                    viewBox='0 0 8 5'
-                    aria-hidden='true'
-                    focusable='false'
-                  >
-                    <path
-                      d='M0.5 0.75 L4 4 L7.5 0.75'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1'
-                      strokeLinecap='square'
-                    />
-                  </svg>
-                </summary>
-                <div className='locale-menu' role='menu'>
-                  {localeOptions.map((entry) => (
-                    <a
-                      className={`locale-menu-item${
-                        entry.code === locale ? ' is-active' : ''
-                      }`}
-                      role='menuitem'
-                      data-locale-link
-                      data-locale-code={entry.code}
-                      href={entry.href}
-                      lang={entry.htmlLang}
-                      aria-current={entry.code === locale ? 'true' : undefined}
-                      key={entry.code}
-                    >
-                      <span className='locale-menu-code'>
-                        {entry.code.toUpperCase()}
-                      </span>
-                      <span className='locale-menu-label'>{entry.label}</span>
-                    </a>
-                  ))}
-                </div>
-              </details>
-            </span>
-          </div>
-        </div>
-
         {/* ====== NAV ====== */}
         {/* Headroom slide handled by `.site-chrome` wrapper above. */}
         <Header counts={counts} github={github} locale={locale} />
@@ -330,35 +243,45 @@ export default function Page({
         <section className='hero' id='top' data-od-id='hero'>
           <div className='container hero-grid'>
             <div className='hero-copy'>
-              <a
-                className='hero-discord-pill'
-                href={DISCORD}
-                aria-label={home.hero.discordAria}
-                {...ext}
-                data-reveal
-              >
-                <span aria-hidden='true'>●</span>
-                {home.hero.joinDiscord}
-              </a>
-              <span className='label' data-reveal>
-                {home.hero.label} <span className='ix'>· {home.hero.issue}</span>
-              </span>
               <h1 className='display' data-reveal>
-                {home.hero.titlePrefix} <em>{home.hero.titleEmphasis}</em>{' '}
-                {home.hero.titleMiddle} <em>{home.hero.titleSecondEmphasis}</em>
+                {home.hero.titlePrefix}
+                {home.hero.titleEmphasis ? (
+                  <>
+                    {home.hero.titlePrefix ? ' ' : null}
+                    <em>{home.hero.titleEmphasis}</em>
+                    {home.hero.titleBreakAfterEmphasis ? <br /> : null}
+                  </>
+                ) : null}
+                {home.hero.titleMiddle ? (
+                  <>
+                    {home.hero.titleBreakAfterEmphasis ? null : ' '}
+                    <span className='hero-title-line'>{home.hero.titleMiddle}</span>
+                  </>
+                ) : null}
+                {home.hero.titleSecondEmphasis ? (
+                  <>
+                    {' '}
+                    <em>{home.hero.titleSecondEmphasis}</em>
+                  </>
+                ) : null}
                 <span className='dot'>.</span>
               </h1>
               <p className='lead' data-reveal>
-                {home.hero.lead(skills, systems)}
+                <BreakText text={home.hero.lead(skills, systems)} />
               </p>
               <div className='hero-actions' data-reveal>
-                <a className='btn btn-primary' href={REPO} {...ext}>
+                <a className='btn btn-ghost' href={REPO} {...ext}>
                   {home.hero.star}
-                  <span className='arrow'>{arrowOut}</span>
+                  <span className='arrow'>
+                    <svg className='icon-fill' viewBox='0 0 24 24' fill='currentColor'>
+                      <path d='M16.0037 9.41421L7.39712 18.0208L5.98291 16.6066L14.5895 8H7.00373V6H18.0037V17H16.0037V9.41421Z' />
+                    </svg>
+                  </span>
                 </a>
-                <a className='btn btn-ghost' href={REPO_RELEASES} {...ext}>
+                <a className='btn btn-primary' href={REPO_RELEASES} data-download-cta {...ext}>
                   {home.hero.download}
-                  <span className='arrow'>{arrowPlus}</span>
+                  <span className='download-arch' data-download-arch hidden />
+                  <span className='arrow arrow-fill'>{arrowPlus}</span>
                 </a>
               </div>
               <div className='hero-stats' data-reveal>
@@ -384,55 +307,36 @@ export default function Page({
                   </span>
                 </div>
               </div>
-              <div className='hero-foot' data-reveal>
-                <span className='meta'>↳{NBSP}{NBSP}{home.hero.foot}</span>
-                <span className='coord'>
-                  52.5200° N{NBSP}·{NBSP}13.4050° E
-                </span>
-              </div>
             </div>
-            <div className='hero-art' data-reveal='scale'>
-              <span className='corner tl' />
-              <span className='corner tr' />
-              <span className='corner bl' />
-              <span className='corner br' />
-              <span className='annot annot-tl coord'>FIG. 01 / OD-26</span>
-              <span className='annot annot-tr'>{home.hero.plate}</span>
-              <span className='annot annot-bl coord'>SHA · a1b2c3d</span>
-              <span className='annot annot-br'>
-                {home.hero.composedIn}
-                {NBSP}
-                <span style={{ color: 'var(--coral)' }}>Open Design</span>
-              </span>
+            <div className='hero-scene-wrap'>
               <img
-                src={heroImage}
-                srcSet={heroImageSrcset}
-                sizes='(max-width: 768px) 100vw, 60vw'
-                width={1280}
-                height={1600}
+                className='hero-scene'
+                src='/hero-scene.gif'
                 alt=''
-                fetchPriority='high'
-                decoding='async'
+                width={132}
+                height={186}
+                aria-hidden='true'
+                data-hero-scene
               />
-              <div className='index'>
-                <span>
-                  <span className='n'>01</span>
-                  {home.hero.index[0]}
-                </span>
-                <span className='on'>
-                  <span className='n'>02</span>
-                  {home.hero.index[1]}
-                </span>
-                <span>
-                  <span className='n'>03</span>
-                  {home.hero.index[2]}
-                </span>
-                <span>
-                  <span className='n'>04</span>
-                  {home.hero.index[3]}
-                </span>
-              </div>
             </div>
+            <img
+              className='hero-dancer'
+              src={imageAsset('hero-dancer.png', { width: 560, quality: 82 })}
+              alt=''
+              width={694}
+              height={1097}
+              aria-hidden='true'
+              loading='lazy'
+            />
+            <img
+              className='hero-angel'
+              src={imageAsset('hero-angel.png', { width: 760, quality: 82 })}
+              alt=''
+              width={1002}
+              height={1239}
+              aria-hidden='true'
+              loading='lazy'
+            />
           </div>
         </section>
 
@@ -1014,7 +918,7 @@ export default function Page({
               </a>
             </div>
             <div className='work-arrows'>
-              <button type='button' className='nav-btn'>
+              <button type='button' className='nav-btn' data-carousel-dir='prev'>
                 <svg
                   width='14'
                   height='14'
@@ -1026,7 +930,7 @@ export default function Page({
                   <path d='M14 6l-6 6 6 6' />
                 </svg>
               </button>
-              <button type='button' className='nav-btn active'>
+              <button type='button' className='nav-btn active' data-carousel-dir='next'>
                 <svg
                   width='14'
                   height='14'
@@ -1295,10 +1199,13 @@ export default function Page({
             <div className='foot-grid'>
               <div className='foot-brand'>
                 <a href='#top' className='brand'>
-                  <span className='brand-mark'>
-                    <img src='/logo.webp' alt='' width={44} height={44} />
-                  </span>
-                  <span className='brand-name'>Open Design</span>
+                  <img
+                    className='brand-logo'
+                    src='/open-design-brand.svg'
+                    alt='Open Design'
+                    width={204}
+                    height={83}
+                  />
                 </a>
                 <p style={{ marginTop: 18 }}>
                   {home.footer.summary}
@@ -1307,11 +1214,13 @@ export default function Page({
                   className='foot-cta'
                   href={REPO_RELEASES}
                   aria-label={home.footer.downloadAria}
+                  data-download-cta
                   {...ext}
                 >
                   {home.footer.download}
                   <span className='meta'>
-                    macOS · <span data-github-version>{github.versionLabel}</span>
+                    <span data-download-os>macOS</span> ·{' '}
+                    <span data-github-version>{github.versionLabel}</span>
                   </span>
                 </a>
               </div>
@@ -1337,36 +1246,31 @@ export default function Page({
                 </ul>
               </div>
               <div className='foot-col'>
-                <h5>{home.footer.columns.library}</h5>
+                {/*
+                 * Plugins column — title and entries mirror the header
+                 * Plugins dropdown and the sub-page footer exactly
+                 * (Templates → Skills → Systems, plain names, no count
+                 * prefixes). Reuses the shared `nav` copy so the three
+                 * surfaces can never drift; `home.footer.columns.library`
+                 * and `home.footer.libraryLinks.*` are intentionally left
+                 * unused here.
+                 */}
+                <h5>{commonCopy.header.nav.plugins}</h5>
                 <ul>
                   <li>
+                    <a href={href('/plugins/templates/')}>
+                      {commonCopy.header.nav.templates}
+                    </a>
+                  </li>
+                  <li>
                     <a href={href('/plugins/skills/')}>
-                      {home.footer.libraryLinks.skills(skills)}
+                      {commonCopy.header.nav.skills}
                     </a>
                   </li>
                   <li>
                     <a href={href('/plugins/systems/')}>
-                      {home.footer.libraryLinks.systems(systems)}
+                      {commonCopy.header.nav.systems}
                     </a>
-                  </li>
-                  <li>
-                    <a href={href('/plugins/templates/')}>
-                      {home.footer.libraryLinks.templates}
-                    </a>
-                  </li>
-                  {/*
-                   * Sister product: HTML Anything is the agent-driven HTML
-                   * editor from the same team. Listed here as a peer to the
-                   * Open Design library facets so the home delivers a real
-                   * inline anchor link to /html-anything/ — nav-only entries
-                   * (the Product dropdown) carry less SEO weight than a body
-                   * anchor in a discoverable section like the footer. The
-                   * brand name stays in English on every locale, so we
-                   * hardcode the label rather than threading a new key
-                   * through 18 home-copy translations.
-                   */}
-                  <li>
-                    <a href='/html-anything/'>HTML Anything</a>
                   </li>
                 </ul>
               </div>

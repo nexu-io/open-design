@@ -10,6 +10,52 @@
 
 /sitemap.xml /sitemap-index.xml 301
 
+# AMR wallet lives under `/amr`. Social auth callbacks from the wallet can
+# return to locale-prefixed `/wallet` paths (for example `/zh/wallet`) after a
+# logout/register flow; keep those callbacks on the wallet surface instead of
+# falling through to the marketing site.
+# Keep locale-prefixed entries in sync with `app/i18n.ts:LANDING_LOCALES`.
+# Do not replace them with `/:locale/wallet`: that would also match
+# `/amr/wallet` and redirect the wallet URL to itself.
+/wallet          /amr/wallet  302
+/wallet/         /amr/wallet  302
+/en/wallet       /amr/wallet  302
+/en/wallet/      /amr/wallet  302
+/zh/wallet       /amr/wallet  302
+/zh/wallet/      /amr/wallet  302
+/zh-tw/wallet    /amr/wallet  302
+/zh-tw/wallet/   /amr/wallet  302
+/ja/wallet       /amr/wallet  302
+/ja/wallet/      /amr/wallet  302
+/ko/wallet       /amr/wallet  302
+/ko/wallet/      /amr/wallet  302
+/de/wallet       /amr/wallet  302
+/de/wallet/      /amr/wallet  302
+/fr/wallet       /amr/wallet  302
+/fr/wallet/      /amr/wallet  302
+/ru/wallet       /amr/wallet  302
+/ru/wallet/      /amr/wallet  302
+/es/wallet       /amr/wallet  302
+/es/wallet/      /amr/wallet  302
+/pt-br/wallet    /amr/wallet  302
+/pt-br/wallet/   /amr/wallet  302
+/it/wallet       /amr/wallet  302
+/it/wallet/      /amr/wallet  302
+/vi/wallet       /amr/wallet  302
+/vi/wallet/      /amr/wallet  302
+/pl/wallet       /amr/wallet  302
+/pl/wallet/      /amr/wallet  302
+/id/wallet       /amr/wallet  302
+/id/wallet/      /amr/wallet  302
+/nl/wallet       /amr/wallet  302
+/nl/wallet/      /amr/wallet  302
+/ar/wallet       /amr/wallet  302
+/ar/wallet/      /amr/wallet  302
+/tr/wallet       /amr/wallet  302
+/tr/wallet/      /amr/wallet  302
+/uk/wallet       /amr/wallet  302
+/uk/wallet/      /amr/wallet  302
+
 # Locale-code migration: the previous OD landing-page stack used BCP-47
 # region-qualified codes (zh-CN, zh-TW, pt-BR, es-ES) whereas the
 # current bundle adopts the simpler codes the @astrojs/sitemap plugin

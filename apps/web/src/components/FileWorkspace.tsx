@@ -5,6 +5,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from 'react';
+import { Button } from '@open-design/components';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -59,6 +60,7 @@ import {
   type SketchItem,
 } from './sketch-model';
 import { GenerationPreviewStage } from './GenerationPreviewStage';
+import { AmrGuidance } from './AmrGuidance';
 import { buildGenerationPreviewState } from '../runtime/generation-preview';
 import type { ChatMessage } from '../types';
 
@@ -72,6 +74,7 @@ interface Props {
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
+  commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   openRequest?: { name: string; nonce: number } | null;
   liveArtifactEvents?: LiveArtifactEventItem[];
@@ -116,6 +119,13 @@ interface Props {
   artifactHtml?: string | null;
   conversationError?: string | null;
   onRetry?: (message: ChatMessage) => void;
+  // Contextual failure recovery, mirrored from the chat error card so the
+  // preview surface can offer the same one-click fix (AMR authorize, terminal
+  // sign-in) instead of a bare retry.
+  onAuthorizeAndRetry?: (message: ChatMessage) => void;
+  onLaunchTerminalAuth?: () => void;
+  // Conversation id for the AMR promotion-card telemetry payload.
+  conversationId?: string | null;
 }
 
 interface SketchState {
@@ -208,6 +218,7 @@ export function FileWorkspace({
   isDeck,
   onExportAsPptx,
   streaming,
+  commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
   liveArtifactEvents = [],
@@ -239,6 +250,9 @@ export function FileWorkspace({
   artifactHtml,
   conversationError,
   onRetry,
+  onAuthorizeAndRetry,
+  onLaunchTerminalAuth,
+  conversationId,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -1008,6 +1022,28 @@ export function FileWorkspace({
                 ? () => onRetry(generationPreview.retryTarget!)
                 : undefined
             }
+            onAuthorizeAndRetry={
+              generationPreview.retryTarget && onAuthorizeAndRetry
+                ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
+                : undefined
+            }
+            onLaunchTerminalAuth={onLaunchTerminalAuth}
+            amrGuidance={
+              generationPreview.promoteAmrSwitch
+                && generationPreview.errorCode
+                && generationPreview.retryTarget
+                && onAuthorizeAndRetry ? (
+                <AmrGuidance
+                  errorCode={generationPreview.errorCode}
+                  projectId={projectId}
+                  projectKind={projectKind}
+                  conversationId={conversationId ?? null}
+                  assistantMessageId={generationPreview.retryTarget.id}
+                  runId={generationPreview.retryTarget.runId ?? null}
+                  onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
+                />
+              ) : undefined
+            }
           />
         ) : activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
@@ -1100,6 +1136,7 @@ export function FileWorkspace({
             isDeck={isDeck}
             onExportAsPptx={onExportAsPptx}
             streaming={streaming}
+            commentQueueOnSend={commentQueueOnSend}
             commentSendDisabled={commentSendDisabled}
             previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
             onSavePreviewComment={onSavePreviewComment}
@@ -1601,14 +1638,14 @@ function DesignSystemProjectPanel({
           {published ? (
             <div className="ds-project-use-row">
               <span>Use this system</span>
-              <button
-                type="button"
-                className="ghost compact"
+              <Button
+                variant="ghost"
+                className="compact"
                 onClick={() => onUseDesignSystem?.(system.id, system.title)}
               >
                 <Icon name="external-link" size={13} />
                 New design
-              </button>
+              </Button>
             </div>
           ) : null}
         </div>
@@ -1621,20 +1658,20 @@ function DesignSystemProjectPanel({
               <small>{repoConnectCopy(githubConnected).bannerBody}</small>
             </span>
             {onConnectRepo ? (
-              <button
-                type="button"
-                className="ghost compact"
+              <Button
+                variant="ghost"
+                className="compact"
                 disabled={githubConnected === undefined}
                 onClick={onConnectRepo}
               >
                 <Icon name="github" size={13} />
                 {repoConnectCopy(githubConnected).buttonLabel}
-              </button>
+              </Button>
             ) : githubEvidence.hasSourceManifest ? (
-              <button type="button" className="ghost compact" onClick={() => onOpenFile('context/source-context.md')}>
+              <Button variant="ghost" className="compact" onClick={() => onOpenFile('context/source-context.md')}>
                 <Icon name="file" size={13} />
                 Open source context
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}

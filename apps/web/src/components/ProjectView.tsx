@@ -139,6 +139,7 @@ import {
   mergeAttachedComments,
   removeAttachedComment,
 } from '../comments';
+import { filterImplicitProducedFiles } from '../produced-files';
 import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
@@ -2139,7 +2140,7 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
-                const diff = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+                const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 if (produced.length > 0) {
                   updateMessageById(
@@ -2698,7 +2699,7 @@ export function ProjectView({
               await persistArtifact(parsedArtifact, nextFiles);
               nextFiles = await refreshProjectFiles();
             }
-            const produced = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+            const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
@@ -3148,6 +3149,7 @@ export function ProjectView({
     },
     [handleSend, currentConversationQueueDisabled],
   );
+  const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
     (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
@@ -4341,6 +4343,37 @@ export function ProjectView({
   const projectInstructions = (project.customInstructions ?? '').trim();
   const hasProjectInstructions = projectInstructions.length > 0;
   const projectInstructionsPreview = compactInlinePreview(projectInstructions);
+  const executionControls = (
+    <>
+      {!hasProjectInstructions ? (
+        <button
+          type="button"
+          className="icon-btn"
+          data-testid="project-instructions-add"
+          title={t('project.customInstructions')}
+          aria-label={t('project.customInstructions')}
+          onClick={() => {
+            setInstructionsDraft('');
+            setInstructionsMode('edit');
+          }}
+        >
+          <Icon name="sliders" size={15} />
+        </button>
+      ) : null}
+      <AvatarMenu
+        config={config}
+        agents={agents}
+        daemonLive={daemonLive}
+        onModeChange={onModeChange}
+        onAgentChange={onAgentChange}
+        onAgentModelChange={onAgentModelChange}
+        onOpenSettings={() => onOpenSettings('execution')}
+        onRefreshAgents={onRefreshAgents}
+        onBack={onBack}
+        placement="up"
+      />
+    </>
+  );
 
   return (
     <div className="app">
@@ -4353,41 +4386,24 @@ export function ProjectView({
         onBack={onBack}
         backLabel={t('project.backToProjects')}
         fileActionsBefore={(
-          <div
-            className="app-chrome-file-actions-before workspace-tabs-file-actions"
-            data-app-chrome-file-actions="true"
-          />
-        )}
-        actions={(
           <>
+            <HandoffButton projectId={project.id} />
             <button
               type="button"
               className="settings-icon-btn"
-              data-testid="project-settings-trigger"
-              title={t('project.customInstructions')}
-              aria-label={t('project.customInstructions')}
-              aria-expanded={instructionsMode !== 'closed'}
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
-              }}
+              onClick={() => onOpenSettings('execution')}
+              title={t('chat.cliSettingsTitle')}
+              aria-label={t('chat.cliSettingsAria')}
             >
-              <Icon name="sliders" size={16} />
+              <Icon name="settings" size={16} />
             </button>
-            <HandoffButton projectId={project.id} />
-            <AvatarMenu
-              config={config}
-              agents={agents}
-              daemonLive={daemonLive}
-              onModeChange={onModeChange}
-              onAgentChange={onAgentChange}
-              onAgentModelChange={onAgentModelChange}
-              onOpenSettings={onOpenSettings}
-              onRefreshAgents={onRefreshAgents}
-              onBack={onBack}
+            <div
+              className="app-chrome-file-actions-before workspace-tabs-file-actions"
+              data-app-chrome-file-actions="true"
             />
           </>
         )}
+        actions={null}
       >
         <div className="app-project-title">
           <span className="app-project-title-line">
@@ -4604,6 +4620,7 @@ export function ProjectView({
                 onProjectChange({ ...project, skillId });
               }}
               activePluginSnapshot={activePluginSnapshot}
+              composerFooterAccessory={executionControls}
               currentDesignSystemId={project.designSystemId}
               onActiveDesignSystemChange={(updatedProject) => {
                 onProjectChange(updatedProject);
@@ -4651,6 +4668,7 @@ export function ProjectView({
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
           streaming={currentConversationActionDisabled}
+          commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}
           liveArtifactEvents={liveArtifactEvents}
@@ -4680,6 +4698,9 @@ export function ProjectView({
           artifactHtml={artifact?.html}
           conversationError={error}
           onRetry={handleRetry}
+          onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
+          onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+          conversationId={activeConversationId}
         />
       </div>
       {projectActionsToast ? (
@@ -5014,7 +5035,7 @@ export function computeProducedFiles(
 ): ProjectFile[] | undefined {
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
-  return next.filter((f) => !set.has(f.name));
+  return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
 }
 
 // Reattach with a recovered (on-disk) artifact must still include any

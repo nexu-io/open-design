@@ -1912,12 +1912,15 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .inspect-row input[type='text'],
 .inspect-row select {
   min-width: 0;
-  padding: 3px 6px;
+  padding: 3px 26px 3px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg);
+  background-color: var(--bg);
   font-size: 11px;
   font-family: inherit;
+}
+.inspect-row input[type='text'] {
+  padding-right: 6px;
 }
 .inspect-row input[type='range'] {
   width: 100%;

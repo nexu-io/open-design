@@ -462,7 +462,30 @@ export function ChatPane({
   // We key the dismissal on the snapshot (serialized TodoWrite input) so
   // the next time the agent emits a different snapshot the card returns,
   // but the same snapshot stays hidden across renders / streaming ticks.
-  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(null);
+  // Persisted to sessionStorage so the dismissal survives tab switches and
+  // component remounts (the ChatPane key includes conversationId, so switching
+  // conversations unmounts and remounts the component).
+  const dismissedStorageKey = `dismissedTodo:${activeConversationId ?? 'none'}`;
+  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(dismissedStorageKey);
+    } catch {
+      return null;
+    }
+  });
+
+  // Sync dismissed state when conversationId changes (e.g., tab switching).
+  // The parent key includes conversationId so unmount/remount resets this,
+  // but if conversationId changes without unmounting or the storage key
+  // changes, re-read to keep the dismissed state in sync.
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(dismissedStorageKey);
+      setDismissedPinnedTodoKey(stored);
+    } catch {
+      // sessionStorage access can fail in private browsing
+    }
+  }, [dismissedStorageKey]);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const hasActiveRunMessage = messages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
@@ -497,7 +520,10 @@ export function ChatPane({
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
   // AMR promotion card payload (only the non-AMR model/auth/quota case).
   const amrSwitchPayload =
-    runFailureUi?.showSwitchCard && retryAssistant && failedRunErrorEvent?.code
+    runFailureUi?.showSwitchCard
+    && failedRunErrorEvent?.code !== 'UPSTREAM_UNAVAILABLE'
+    && retryAssistant
+    && failedRunErrorEvent?.code
       ? {
           errorCode: failedRunErrorEvent.code,
           projectId: projectId ?? '',
@@ -1309,7 +1335,18 @@ export function ChatPane({
             messages={messages}
             streaming={streaming}
             dismissedKey={dismissedPinnedTodoKey}
-            onDismiss={setDismissedPinnedTodoKey}
+            onDismiss={(key) => {
+              setDismissedPinnedTodoKey(key);
+              try {
+                if (key) {
+                  sessionStorage.setItem(dismissedStorageKey, key);
+                } else {
+                  sessionStorage.removeItem(dismissedStorageKey);
+                }
+              } catch {
+                // sessionStorage access can fail in private browsing / sandboxed contexts
+              }
+            }}
             containerRef={pinnedTodoRef}
           />
           <QueuedSendStrip

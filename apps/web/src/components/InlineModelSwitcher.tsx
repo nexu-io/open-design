@@ -11,13 +11,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { KNOWN_PROVIDERS } from '../state/config';
+import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import {
   cancelVelaLogin,
   fetchVelaLoginStatus,
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode, ProviderModelOption } from '../types';
+import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -31,10 +32,16 @@ import {
 } from './amrLoginPolling';
 import { normalizeAgentModelChoice } from './agentModelSelection';
 import { SearchableModelSelect } from './modelOptions';
+import {
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+  type ProviderModelsCache,
+} from './providerModelsCache';
 
 interface Props {
   config: AppConfig;
   agents: AgentInfo[];
+  providerModelsCache?: ProviderModelsCache;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -44,7 +51,6 @@ interface Props {
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
-  providerModelsCache?: Record<string, ProviderModelOption[]>;
   onOpenSettings: (
     section?:
       | 'execution'
@@ -103,13 +109,13 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 export function InlineModelSwitcher({
   config,
   agents,
+  providerModelsCache,
   daemonLive,
   onModeChange,
   onAgentChange,
   onAgentModelChange,
   onApiProtocolChange,
   onApiModelChange,
-  providerModelsCache,
   onOpenSettings,
 }: Props) {
   const t = useT();
@@ -350,12 +356,6 @@ export function InlineModelSwitcher({
         : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
-  const providerModelsInputKey = [
-    apiProtocol,
-    config.baseUrl.trim().replace(/\/+$/, ''),
-    config.apiKey.trim(),
-    config.apiVersion?.trim() ?? '',
-  ].join('\n');
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -367,16 +367,38 @@ export function InlineModelSwitcher({
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
     [apiProtocol, config.apiProviderBaseUrl],
   );
-  const fetchedProviderModels = providerModelsCache?.[providerModelsInputKey] ?? [];
-  const apiModelOptions = useMemo(() => {
-    const discovered = fetchedProviderModels.map((model) => model.id);
-    const staticOptions = providerForProtocol?.models ?? [];
-    const merged = new Set<string>([...discovered, ...staticOptions]);
-    if (config.model.trim()) merged.add(config.model.trim());
-    return Array.from(merged);
-  }, [config.model, fetchedProviderModels, providerForProtocol?.models]);
+  const providerModelsKey = useMemo(
+    () =>
+      providerModelsCacheKey(
+        apiProtocol,
+        config.baseUrl,
+        config.apiKey,
+        config.apiVersion ?? '',
+      ),
+    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl],
+  );
+  const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
+  const suggestedApiModelIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          providerForProtocol?.models?.length
+            ? providerForProtocol.models
+            : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+        ),
+      ),
+    [apiProtocol, providerForProtocol],
+  );
+  const apiModelOptions = useMemo(
+    () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),
+    [fetchedApiModelOptions, suggestedApiModelIds],
+  );
+  const apiModelIds = useMemo(
+    () => apiModelOptions.map((model) => model.id),
+    [apiModelOptions],
+  );
   const apiModelChoices = useMemo(
-    () => apiModelOptions.map((id) => ({ id, label: id })),
+    () => apiModelOptions.map((model) => ({ id: model.id, label: model.label })),
     [apiModelOptions],
   );
 
@@ -712,7 +734,7 @@ export function InlineModelSwitcher({
                     value={config.model}
                     onChange={(nextValue) => onApiModelChange?.(nextValue)}
                     additionalOptions={
-                      config.model && !apiModelOptions.includes(config.model)
+                      config.model && !apiModelIds.includes(config.model)
                         ? [
                             {
                               value: config.model,

@@ -288,6 +288,7 @@ export interface Dict {
   'settings.hide': string;
   'settings.model': string;
   'settings.apiKeyInvalid': string;
+  'settings.apiKeyCleaned': string;
   'settings.modelsLoadedFromAccount': string;
   'settings.fetchModels': string;
   'settings.fetchModelsTitle': string;
@@ -1935,14 +1936,15 @@ export interface Dict {
   'generationPreview.stepUnderstand': string;
   'generationPreview.stepGenerate': string;
   'generationPreview.stepPrepare': string;
-  'generationPreview.elapsed': string;
-  'generationPreview.estimate': string;
-  'generationPreview.progressAria': string;
   'generationPreview.retry': string;
   'generationPreview.awaitingTitle': string;
   'generationPreview.awaitingLead': string;
   'generationPreview.stoppedTitle': string;
   'generationPreview.stoppedLead': string;
+  'generationPreview.reasonAuth': string;
+  'generationPreview.reasonRateLimited': string;
+  'generationPreview.reasonService': string;
+  'generationPreview.reasonBalance': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
@@ -2085,6 +2087,7 @@ export interface Dict {
   'manualEdit.title': string;
   'manualEdit.fallbackTitle': string;
   'manualEdit.movePanel': string;
+  'manualEdit.editParams': string;
   'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;
   'manualEdit.empty': string;
@@ -2158,6 +2161,11 @@ export interface Dict {
   'fileViewer.shareMenuPresentation': string;
   'fileViewer.shareMenuSourceFiles': string;
   'fileViewer.shareMenuSave': string;
+  'fileViewer.copyShareLink': string;
+  'fileViewer.openSharePage': string;
+  'fileViewer.shareLinkRequiresDeploy': string;
+  'fileViewer.shareLinkPublishGuide': string;
+  'fileViewer.shareAfterGenerationComplete': string;
   'fileViewer.copyProviderLink': string;
   'fileViewer.copyCloudflareLink': string;
   'fileViewer.screenshotCopying': string;

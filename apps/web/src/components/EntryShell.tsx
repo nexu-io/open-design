@@ -116,6 +116,10 @@ import {
   amrLoginPollOutcome,
 } from './amrLoginPolling';
 import { renderModelOptions } from './modelOptions';
+import {
+  providerModelsCacheKey,
+  type ProviderModelsCache,
+} from './providerModelsCache';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -236,8 +240,8 @@ interface Props {
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
   config: AppConfig;
-  providerModelsCache?: Record<string, ProviderModelOption[]>;
-  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
+  providerModelsCache?: ProviderModelsCache;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -404,6 +408,18 @@ export function EntryShell({
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [localProviderModelsCache, setLocalProviderModelsCache] =
+    useState<ProviderModelsCache>({});
+  const hasSharedProviderModelsCache =
+    Boolean(sharedProviderModelsCache) && Boolean(onProviderModelsCacheChange);
+  const activeProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? sharedProviderModelsCache!
+      : localProviderModelsCache;
+  const activeSetProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? onProviderModelsCacheChange!
+      : setLocalProviderModelsCache;
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
@@ -554,6 +570,8 @@ export function EntryShell({
           <OnboardingView
             config={config}
             agents={agents}
+            providerModelsCache={activeProviderModelsCache}
+            onProviderModelsCacheChange={activeSetProviderModelsCache}
             daemonLive={daemonLive}
             onModeChange={onModeChange}
             onAgentChange={onAgentChange}
@@ -593,9 +611,9 @@ export function EntryShell({
                 <span className="entry-discord-badge__label">Join Discord</span>
               </a>
               <InlineModelSwitcher
-                providerModelsCache={sharedProviderModelsCache}
                 config={config}
                 agents={agents}
+                providerModelsCache={activeProviderModelsCache}
                 daemonLive={daemonLive}
                 onModeChange={onModeChange}
                 onAgentChange={onAgentChange}
@@ -778,8 +796,8 @@ function OnboardingView({
   onFinish,
 }: {
   config: AppConfig;
-  providerModelsCache?: Record<string, ProviderModelOption[]>;
-  onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
+  providerModelsCache?: ProviderModelsCache;
+  onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
@@ -827,11 +845,18 @@ function OnboardingView({
     | { status: 'running'; inputKey: string }
     | { status: 'done'; inputKey: string; result: ProviderModelsResponse }
   >({ status: 'idle' });
-  const [localProviderModelsCache, setLocalProviderModelsCache] = useState<
-    Record<string, ProviderModelOption[]>
-  >({});
-  const providerModelsCache = sharedProviderModelsCache ?? localProviderModelsCache;
-  const setProviderModelsCache = onProviderModelsCacheChange ?? setLocalProviderModelsCache;
+  const [localProviderModelsCache, setLocalProviderModelsCache] =
+    useState<ProviderModelsCache>({});
+  const hasSharedProviderModelsCache =
+    Boolean(sharedProviderModelsCache) && Boolean(onProviderModelsCacheChange);
+  const activeProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? sharedProviderModelsCache!
+      : localProviderModelsCache;
+  const activeSetProviderModelsCache =
+    hasSharedProviderModelsCache
+      ? onProviderModelsCacheChange!
+      : setLocalProviderModelsCache;
   const [profile, setProfile] = useState({
     role: '',
     orgSize: '',
@@ -862,12 +887,12 @@ function OnboardingView({
     config.apiKey.trim(),
     config.apiVersion?.trim() ?? '',
   ].join('\n');
-  const providerModelsInputKey = [
+  const providerModelsInputKey = providerModelsCacheKey(
     apiProtocol,
-    config.baseUrl.trim().replace(/\/+$/, ''),
-    config.apiKey.trim(),
-    config.apiVersion?.trim() ?? '',
-  ].join('\n');
+    config.baseUrl,
+    config.apiKey,
+    config.apiVersion ?? '',
+  );
   const canTestProvider =
     Boolean(config.apiKey.trim()) &&
     Boolean(config.baseUrl.trim()) &&
@@ -1266,7 +1291,8 @@ function OnboardingView({
       value: model.id,
       label: model.label ?? model.id,
     })) ?? [];
-  const fetchedProviderModels = providerModelsCache[providerModelsInputKey] ?? [];
+  const fetchedProviderModels =
+    activeProviderModelsCache[providerModelsInputKey] ?? [];
   const byokModelOptions = mergeOnboardingProviderModelOptions(
     fetchedProviderModels,
     SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
@@ -1548,7 +1574,7 @@ function OnboardingView({
   async function fetchProviderModelsInline() {
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
-    const cachedModels = providerModelsCache[inputKey];
+    const cachedModels = activeProviderModelsCache[inputKey];
     if (cachedModels) {
       setProviderModelsState({
         status: 'done',
@@ -1570,7 +1596,7 @@ function OnboardingView({
         apiKey: config.apiKey,
       });
       if (result.ok && result.models?.length) {
-        setProviderModelsCache((current) => ({
+        activeSetProviderModelsCache((current) => ({
           ...current,
           [inputKey]: result.models ?? [],
         }));

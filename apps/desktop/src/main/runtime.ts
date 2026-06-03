@@ -1,8 +1,11 @@
+import { execFile } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, shell } from "electron";
 import {
@@ -15,9 +18,12 @@ import {
 } from "@open-design/sidecar-proto";
 import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
+import { openValidatedDirectory } from "./open-path.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -1204,7 +1210,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const validated = await validateExistingDirectory(resolved.context.resolvedDir);
     if (!validated.ok) return `open-path: ${validated.reason}`;
     try {
-      return await shell.openPath(validated.resolved);
+      return await openValidatedDirectory(validated.resolved, {
+        release,
+        execFile: async (cmd, args) => {
+          const { stdout } = await execFileAsync(cmd, [...args]);
+          return { stdout };
+        },
+        openPath: (p) => shell.openPath(p),
+      });
     } catch (err) {
       return err instanceof Error ? err.message : String(err);
     }

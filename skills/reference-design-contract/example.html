@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference Design Contract Example</title>
+  <style>
+    :root {
+      --paper: #f3eee4;
+      --ink: #171614;
+      --muted: #6f675d;
+      --line: #d7cbbb;
+      --accent: #9b4d2d;
+      --accent-soft: #ead6c6;
+      --charcoal: #202623;
+      --green: #486254;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(155, 77, 45, 0.18), transparent 28%),
+        linear-gradient(135deg, #faf7ef 0%, var(--paper) 42%, #dfd5c8 100%);
+      font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+    }
+
+    main {
+      width: min(1160px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 52px 0;
+    }
+
+    .sheet {
+      overflow: hidden;
+      border: 1px solid rgba(23, 22, 20, 0.12);
+      background: rgba(255, 252, 244, 0.82);
+      box-shadow: 0 34px 90px rgba(63, 46, 30, 0.22);
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      gap: 40px;
+      padding: 56px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 720px;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(44px, 7vw, 96px);
+      font-weight: 500;
+      letter-spacing: -0.055em;
+      line-height: 0.9;
+    }
+
+    .summary {
+      align-self: end;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.55;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 0.78fr 1.22fr;
+      min-height: 520px;
+    }
+
+    aside {
+      padding: 38px;
+      color: #f8f1e7;
+      background:
+        linear-gradient(145deg, rgba(32, 38, 35, 0.96), rgba(39, 54, 47, 0.94)),
+        var(--charcoal);
+    }
+
+    .meter {
+      margin-top: 30px;
+      border-top: 1px solid rgba(248, 241, 231, 0.18);
+    }
+
+    .meter div {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      padding: 18px 0;
+      border-bottom: 1px solid rgba(248, 241, 231, 0.18);
+      color: rgba(248, 241, 231, 0.78);
+      font-size: 14px;
+    }
+
+    .meter strong {
+      color: #fff9ef;
+      font-weight: 800;
+    }
+
+    section {
+      padding: 38px;
+    }
+
+    .cards {
+      display: grid;
+      gap: 18px;
+    }
+
+    article {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 22px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    h2,
+    h3 {
+      margin: 0;
+    }
+
+    h2 {
+      margin-bottom: 22px;
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h3 {
+      color: var(--green);
+      font-size: 16px;
+    }
+
+    article p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .chip {
+      border: 1px solid rgba(155, 77, 45, 0.32);
+      background: var(--accent-soft);
+      color: #69351f;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 820px) {
+      header,
+      .grid,
+      article {
+        grid-template-columns: 1fr;
+      }
+
+      header,
+      aside,
+      section {
+        padding: 30px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="sheet">
+      <header>
+        <div>
+          <p class="eyebrow">Reference Design Contract</p>
+          <h1>Turn a taste signal into a buildable direction.</h1>
+        </div>
+        <p class="summary">This sample shows the shape of the contract: evidence first, then boundaries, then a handoff a second agent can execute without cloning the reference.</p>
+      </header>
+      <div class="grid">
+        <aside>
+          <h2>Decision stance</h2>
+          <p>The product should feel like a calm editorial desk: paper warmth, serious type rhythm, tactile panels, one copper accent, and no generic neon SaaS gloss.</p>
+          <div class="meter">
+            <div><span>Evidence confidence</span><strong>mixed</strong></div>
+            <div><span>Reference policy</span><strong>borrow qualities</strong></div>
+            <div><span>Next artifact</span><strong>prototype</strong></div>
+          </div>
+        </aside>
+        <section>
+          <h2>Contract slices</h2>
+          <div class="cards">
+            <article>
+              <h3>Keep</h3>
+              <p>Editorial hierarchy, warm off-white surface, restrained accent, quiet interaction states, and roomy note-taking density.</p>
+            </article>
+            <article>
+              <h3>Change</h3>
+              <p>Replace any reference brand marks, subject matter, pricing, copy, and exact layout with the user's own product context.</p>
+            </article>
+            <article>
+              <h3>Do not copy</h3>
+              <p>No literal screenshot recreation, no proprietary UI details, no borrowed claims, no prompt-template subject copied as the final subject.</p>
+            </article>
+          </div>
+          <div class="chip-row" aria-label="Design constraints">
+            <span class="chip">one accent</span>
+            <span class="chip">serif display</span>
+            <span class="chip">no purple glow</span>
+            <span class="chip">grounded assets</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

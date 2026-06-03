@@ -203,6 +203,30 @@ test('manual edit mode keeps deck navigation available for deck-shaped HTML', as
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
+
+test('simple deck keeps the active slide stable across preview mode switches', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Simple deck navigation state');
+  await seedDeckArtifact(page, projectId, 'simple-deck.html', 'Simple Deck', ['Slide One', 'Slide Two', 'Slide Three']);
+  await page.goto(`/projects/${projectId}/files/simple-deck.html`);
+  await openDesignFile(page, 'simple-deck.html');
+
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('Slide Three');
+  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Three')).toBeVisible();
+});
+
 test('HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'HTML preview toggle regression');

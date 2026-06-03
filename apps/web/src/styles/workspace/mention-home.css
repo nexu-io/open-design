@@ -472,6 +472,7 @@
   height: min(720px, calc(100vh - 64px));
   padding: 0;
   gap: 0;
+  overflow: hidden;
   /* Anchor for the absolutely-positioned `.settings-chrome` strip
      (close button + autosave indicator). Without this the chrome
      would escape to the viewport on long-scrolling sections. */

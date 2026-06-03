@@ -53,6 +53,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, 'clipboard');
+  Reflect.deleteProperty(document, 'execCommand');
 });
 
 function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
@@ -709,7 +710,7 @@ describe('FileViewer SVG artifacts', () => {
 
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
 
     expect(screen.getByRole('menuitem', { name: /export as image/i })).toBeTruthy();
   });
@@ -1160,9 +1161,9 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(screen.getByText('Account ID')).toBeTruthy();
-    expect(screen.getByText(/Pages Edit is required/i)).toBeTruthy();
-    expect(screen.getByText(/Zone Read is required to list domains/i)).toBeTruthy();
-    expect(screen.getByText(/DNS Edit is only needed when binding a custom domain/i)).toBeTruthy();
+    expect(screen.getByText(/Select Pages Edit when creating the API token/i)).toBeTruthy();
+    expect(screen.getByText(/Zone Read/i)).toBeTruthy();
+    expect(screen.getByText(/custom domains need Zone Read \/ DNS Edit/i)).toBeTruthy();
     expect(screen.queryByText(/Pages Read\/Write/i)).toBeNull();
     const subdomainInput = screen.getByLabelText('Subdomain prefix');
     const domainSelect = screen.getByLabelText('Domain');
@@ -1198,7 +1199,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const exportButton = screen.getByRole('button', { name: /share/i });
+    const exportButton = screen.getByRole('button', { name: /download/i });
     await waitFor(() => {
       expect(exportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -1247,7 +1248,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const firstExportButton = screen.getByRole('button', { name: /share/i });
+    const firstExportButton = screen.getByRole('button', { name: /download/i });
     await waitFor(() => {
       expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -1263,7 +1264,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const secondExportButton = screen.getByRole('button', { name: /share/i });
+    const secondExportButton = screen.getByRole('button', { name: /download/i });
     await waitFor(() => {
       expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -1526,7 +1527,7 @@ describe('FileViewer SVG artifacts', () => {
     });
     fireEvent.change(screen.getByLabelText(/Subdomain prefix/i), { target: { value: 'demo' } });
 
-    const deployButtons = screen.getAllByRole('button', { name: /Deploy to Cloudflare Pages/i });
+    const deployButtons = screen.getAllByRole('button', { name: /^Deploy$/i });
     fireEvent.click(deployButtons[deployButtons.length - 1]!);
 
     const pagesDevLabel = await screen.findByText('pages.dev URL');
@@ -1552,7 +1553,7 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
-  it('shows separate copy links for existing Vercel and Cloudflare deployments', async () => {
+  it('copies the newest deployment URL across providers', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -1616,11 +1617,190 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /Copy Vercel link/i })).toBeTruthy();
-    const cloudflareCopy = await screen.findByRole('menuitem', { name: /Copy Cloudflare link/i });
-    fireEvent.click(cloudflareCopy);
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    expect(screen.queryByRole('menuitem', { name: /Copy Vercel link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy Cloudflare link/i })).toBeNull();
+    fireEvent.click(copyShareLink);
 
     expect(writeText).toHaveBeenCalledWith('https://cloudflare.pages.dev');
+    expect(await screen.findByRole('menuitem', { name: /Copied!/i })).toBeTruthy();
+  });
+
+  it('uses a ready Cloudflare custom domain for the share link', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'cloudflare-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'cloudflare-pages',
+          url: 'https://demo-pages.pages.dev',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          cloudflarePages: {
+            projectName: 'demo-pages',
+            pagesDev: {
+              url: 'https://demo-pages.pages.dev',
+              status: 'ready',
+            },
+            customDomain: {
+              hostname: 'demo.example.com',
+              url: 'https://demo.example.com',
+              zoneId: 'zone-1',
+              zoneName: 'example.com',
+              domainPrefix: 'demo',
+              status: 'ready',
+            },
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    fireEvent.click(copyShareLink);
+
+    expect(writeText).toHaveBeenCalledWith('https://demo.example.com');
+  });
+
+  it('allows copying but not opening a deployment while its public link is still preparing', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'pending-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://pending.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'link-delayed',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
+    expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
+    expect(openSharePage.disabled).toBe(true);
+    expect(screen.getAllByText(/public link is still being prepared/i).length).toBeGreaterThan(0);
+    fireEvent.click(copyShareLink);
+
+    expect(writeText).toHaveBeenCalledWith('https://pending.example');
+  });
+
+  it('allows copying and opening a protected deployment but shows an access hint', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'protected-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://protected.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'protected',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
+    expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
+    expect(openSharePage.disabled).toBe(false);
+    expect(screen.getAllByText(/requiring authentication/i).length).toBeGreaterThan(0);
+    fireEvent.click(openSharePage);
+
+    expect(openSpy).toHaveBeenCalledWith('https://protected.example', '_blank', 'noopener');
   });
 
   it('shows one copy link when only one deployment provider has a URL', async () => {
@@ -1638,6 +1818,7 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
+    const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       deployments: [
         {
@@ -1654,6 +1835,10 @@ describe('FileViewer SVG artifacts', () => {
         },
       ],
     }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
 
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
@@ -1663,8 +1848,207 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /Copy Cloudflare link/i })).toBeTruthy();
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    fireEvent.click(copyShareLink);
+
+    expect(writeText).toHaveBeenCalledWith('https://cloudflare.pages.dev');
     expect(screen.queryByRole('menuitem', { name: /Copy Vercel link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy Cloudflare link/i })).toBeNull();
+  });
+
+  it('separates deploy sharing actions from download actions', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ deployments: [] }), { status: 200 })));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    expect(screen.getByText('SHARE')).toBeTruthy();
+    expect(screen.getByText('PUBLISH ONLINE')).toBeTruthy();
+    const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(menuItems.slice(0, 1)).toEqual([
+      'Publish online above to enable share ↑',
+    ]);
+    expect(menuItems.slice(1, 3)).toEqual([
+      'Deploy to Vercel',
+      'Deploy to Cloudflare Pages',
+    ]);
+    expect(screen.getByText('Publish online above to enable share ↑')).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Copy share link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Open share page/i })).toBeNull();
+    expect(menuItems).not.toContain('Export as PDF');
+    expect(menuItems).not.toContain('Export as image');
+    expect(menuItems).not.toContain('Download as .zip');
+    expect(menuItems).not.toContain('Export as standalone HTML');
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /Publish online above to enable share/i }));
+    expect(await screen.findByText('Publish online first to get a link')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+
+    const downloadItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(downloadItems).toContain('Export as PDF');
+    expect(downloadItems).toContain('Export as image');
+    expect(downloadItems).toContain('Download as .zip');
+    expect(downloadItems).toContain('Export as standalone HTML');
+    expect(downloadItems).not.toContain('Copy share link');
+    expect(downloadItems).not.toContain('Deploy to Vercel');
+    expect(downloadItems).not.toContain('Export as PPTX');
+    expect(downloadItems).not.toContain('Export as Markdown');
+  });
+
+  it('disables share link actions while the artifact is still streaming', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'vercel-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://vercel.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+        streaming
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i }) as HTMLButtonElement;
+    const openSharePage = screen.getByRole('menuitem', { name: /Open share page/i }) as HTMLButtonElement;
+    expect(copyShareLink.disabled).toBe(true);
+    expect(openSharePage.disabled).toBe(true);
+    expect(screen.getAllByText(/Share after generation completes/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows markdown export without exposing deploy actions for markdown artifacts', async () => {
+    const file = baseFile({
+      name: 'notes.md',
+      path: 'notes.md',
+      mime: 'text/markdown',
+      kind: 'text',
+      artifactManifest: {
+        version: 1,
+        kind: 'markdown-document',
+        title: 'Notes',
+        entry: 'notes.md',
+        renderer: 'markdown',
+        exports: ['md'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/notes.md') {
+        return new Response('# Notes\n\nKeep this as markdown.');
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    expect(screen.queryByRole('button', { name: /^deploy$/i })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /^download$/i }));
+
+    expect(screen.getByRole('menuitem', { name: /Export as Markdown/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
+  });
+
+  it('shows failed copy feedback when deployed link copying is blocked', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      deployments: [
+        {
+          id: 'vercel-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'vercel-self',
+          url: 'https://vercel.example',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    }), { status: 200 })));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const copyShareLink = await screen.findByRole('menuitem', { name: /Copy share link/i });
+    expect((copyShareLink as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(copyShareLink);
+
+    expect(await screen.findByRole('menuitem', { name: /Copy failed/i })).toBeTruthy();
+    expect(screen.getAllByText('Copy failed').length).toBeGreaterThan(1);
+    expect(screen.getByRole('menu')).toBeTruthy();
   });
 
   it('renders unsafe SVG source as escaped text instead of executable markup', () => {
@@ -1723,7 +2107,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();

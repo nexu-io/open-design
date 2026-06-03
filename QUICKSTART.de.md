@@ -77,6 +77,155 @@ pnpm typecheck                 # Workspace-Typecheck
 
 Während lokaler Entwicklung startet `tools-dev` zuerst den daemon, übergibt dessen Port an `apps/web`, und `apps/web/next.config.ts` rewritet `/api/*`, `/artifacts/*` und `/frames/*` auf diesen daemon-Port. So kann die App-Router-App ohne CORS-Setup mit dem sibling Express-Prozess sprechen.
 
+## Docker-Setup
+
+Führen Sie Open Design in einer vollständig containerisierten Umgebung aus, ohne Node.js oder pnpm lokal zu installieren.
+
+### Voraussetzungen
+
+* Docker Desktop
+* Docker Compose v2
+
+Überprüfen Sie, ob Docker korrekt installiert ist:
+
+```bash
+docker compose version
+```
+
+---
+
+## Open Design starten
+
+Gehen Sie vom Repository-Stammverzeichnis aus wie folgt vor:
+
+1. Wechseln Sie in das deploy-Verzeichnis und kopieren Sie die Umgebungsvorlage:
+
+   ```bash
+   cd deploy
+   cp .env.example .env
+   ```
+
+2. Generieren Sie ein sicheres Token:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. Öffnen Sie `.env` in Ihrem Editor, suchen Sie `OD_API_TOKEN=` und fügen Sie das generierte Token ein.
+
+Starten Sie dann den Dienst:
+
+```bash
+docker compose up -d
+```
+
+Öffnen Sie die App in Ihrem Browser:
+
+```text
+http://localhost:7456
+```
+
+Beim ersten Start kann es einige Sekunden dauern, während Docker das neueste Image pullt.
+
+---
+
+## Häufige Docker-Befehle
+
+### Logs anzeigen
+
+```bash
+docker compose logs -f
+```
+
+### Container neu starten
+
+```bash
+docker compose restart
+```
+
+### Container stoppen
+
+```bash
+docker compose down
+```
+
+### Neuestes Image pullen
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Alle lokalen App-Daten entfernen
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Umgebungskonfiguration
+
+Erstellen Sie eine `deploy/.env`-Datei, um die Standardkonfiguration zu überschreiben. Beginnen Sie mit dem bereitgestellten Beispiel:
+
+```bash
+cp deploy/.env.example deploy/.env
+```
+
+Bearbeiten Sie `deploy/.env`, um Ihr eigenes Token festzulegen und andere Werte nach Bedarf anzupassen:
+
+```env
+# Auf dem Host exponierter Port
+OPEN_DESIGN_PORT=7456
+
+# Container-Speicherlimit
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# Erlaubte CORS-Ursprünge
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker-Image-Tag
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+
+# Erforderliches API-Token für die Daemon-Sicherheit
+# Erzeugen Sie eines mit: openssl rand -hex 32
+OD_API_TOKEN=
+```
+
+---
+
+## Dauerhafter Speicher
+
+Open Design speichert Projekte und SQLite-Daten in einem Docker-Volume:
+
+```text
+open_design_data
+```
+
+Das Volume wird gemountet auf:
+
+```text
+/app/.od
+```
+
+Die Daten bleiben über Container-Neustarts und Image-Updates hinweg erhalten.
+
+Volume inspizieren:
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## Hinweise
+
+* Der Docker-Modus ist ideal für Mitwirkende, die keine lokale Node.js- oder pnpm-Einrichtung wünschen.
+* Der Container exponiert den Produktions-Daemon-Build direkt auf Port `7456`.
+* Für Entwicklungsworkflows und erweiterte lokale Einrichtung siehe den Rest dieser Schnellstartanleitung.
+
+---
+
 ## Prüfungen für Mediengenerierung und Agent-Dispatcher
 
 Image-, Video-, Audio- und HyperFrames-Skills rufen die lokale `od` CLI über Umgebungsvariablen auf, die der daemon beim Start eines Agent injiziert:
