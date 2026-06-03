@@ -473,13 +473,7 @@ describe('ProjectView API empty response handling', () => {
 
   it('includes saved project instructions in the BYOK system prompt for the next run', async () => {
     let capturedSystemPrompt = '';
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockByokStream(({ system, handlers }) => {
       capturedSystemPrompt = system;
       handlers.onDelta('ok');
       handlers.onDone('ok');
