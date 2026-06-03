@@ -11,6 +11,8 @@
 // in the user's language.
 
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { popoverIn } from '../motion';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHelpPopoverClick,
@@ -93,11 +95,16 @@ export function EntryHelpMenu() {
       >
         <Icon name="help-circle" size={18} />
       </button>
-      {open ? (
-        <div
+      <AnimatePresence>
+        {open ? (
+        <motion.div
           className="entry-help-popover"
           role="menu"
           aria-label={t('entry.helpMenuAria')}
+          variants={popoverIn}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
         >
           <a
             className="entry-help-popover__item"
@@ -205,8 +212,9 @@ export function EntryHelpMenu() {
             </span>
             <span>Join Discord</span>
           </a>
-        </div>
+        </motion.div>
       ) : null}
+      </AnimatePresence>
     </div>
   );
 }

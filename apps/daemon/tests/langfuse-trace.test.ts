@@ -13,6 +13,7 @@ import {
   type ReportContext,
   type TelemetrySinkConfig,
 } from '../src/langfuse-trace.js';
+import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
 function makeCtx(overrides: Partial<ReportContext> = {}): ReportContext {
   const base: ReportContext = {
@@ -304,6 +305,60 @@ describe('buildTracePayload', () => {
     expect(trace.output).toMatch(/landing page draft/);
     expect(tool.input).toMatch(/ls -la/);
     expect(tool.output).toBe('total 0');
+  });
+
+  it('adds prompt-stack metadata to trace and generation without replacing user prompt input', () => {
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt:
+        '# Instructions\n\nWork in /Users/alice/project\n\n---\n# User request\n\nBuild a card',
+      sections: [
+        { kind: 'daemonSystemPrompt', content: 'Work in /Users/alice/project' },
+        { kind: 'userRequest', content: 'Build a card' },
+        { kind: 'attachments', metadata: ['src/App.tsx'] },
+      ],
+    });
+    const batch = buildTracePayload(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+        promptTelemetry,
+      }),
+    );
+
+    const trace = bodyOf(batch, 'trace-create');
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    expect(trace.input).toBe('Make a landing page for a coffee shop.');
+    expect(generation.input).toBe('Make a landing page for a coffee shop.');
+    expect(trace.metadata.promptStack).toMatchObject({
+      redactionVersion: 'prompt-stack-redaction-v1',
+      sectionCount: 3,
+    });
+    expect(generation.metadata.promptStack).toEqual(trace.metadata.promptStack);
+    expect(trace.metadata.promptStack.sections[0].redactedContent).toContain(
+      '[REDACTED:path]',
+    );
+    expect(trace.metadata.promptStack.sections[2].redactedContent).toBeUndefined();
+    expect(trace.metadata.promptStack_section_daemonSystemPrompt_present).toBe(true);
+    expect(trace.metadata.promptStack_section_attachments_present).toBeUndefined();
+    expect(trace.metadata.promptStack_section_daemonSystemPrompt_rawBytes).toBeUndefined();
+    expect(trace.metadata.promptStack_promptFingerprint).toMatch(/^sha256:/);
+  });
+
+  it('omits prompt-stack redactedContent when metrics or content consent is off', () => {
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt: '# User request\n\nBuild a card',
+      sections: [{ kind: 'userRequest', content: 'Build a card' }],
+    });
+
+    for (const prefs of [
+      { metrics: true, content: false, artifactManifest: false },
+      { metrics: false, content: true, artifactManifest: false },
+    ]) {
+      const batch = buildTracePayload(makeCtx({ prefs, promptTelemetry }));
+      const trace = bodyOf(batch, 'trace-create');
+      expect(trace.input).toBeUndefined();
+      expect(trace.metadata.promptStack.sections[0].redactedContent).toBeUndefined();
+      expect(trace.metadata.promptStack.redactedContentBytes).toBe(0);
+    }
   });
 
   it('truncates ASCII prompt at 8 KB and output at 16 KB (bytes == chars)', () => {

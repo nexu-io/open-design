@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { navigate, type EntryHomeView, type Route } from '../router';
@@ -43,6 +43,13 @@ interface DisplayTab {
   tab: WorkspaceChromeTab;
 }
 
+type TabDropEdge = 'before' | 'after';
+
+interface TabDragTarget {
+  tabId: string;
+  edge: TabDropEdge;
+}
+
 interface Props {
   route: Route;
   projects: Project[];
@@ -51,6 +58,8 @@ interface Props {
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
 const OPEN_WORKSPACE_TAB_EVENT = 'open-design:workspace-tabs:open';
 const MAX_SEARCH_RESULTS = 80;
+const TAB_DRAG_HAPTIC_MS = 8;
+const TAB_DROP_HAPTIC_MS = 12;
 
 export function openWorkspaceTab(route: Route): void {
   window.dispatchEvent(
@@ -210,6 +219,42 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   };
 }
 
+function reorderTabsById(
+  tabs: WorkspaceChromeTab[],
+  sourceId: string,
+  targetId: string,
+  edge: TabDropEdge,
+): WorkspaceChromeTab[] {
+  if (sourceId === targetId) return tabs;
+  const movedTab = tabs.find((tab) => tab.id === sourceId);
+  if (!movedTab) return tabs;
+
+  const nextTabs = tabs.filter((tab) => tab.id !== sourceId);
+  const targetIndex = nextTabs.findIndex((tab) => tab.id === targetId);
+  if (targetIndex < 0) return tabs;
+  nextTabs.splice(edge === 'after' ? targetIndex + 1 : targetIndex, 0, movedTab);
+  if (nextTabs.every((tab, index) => tab.id === tabs[index]?.id)) return tabs;
+  return nextTabs;
+}
+
+function tabDragTargetKey(target: TabDragTarget): string {
+  return `${target.tabId}:${target.edge}`;
+}
+
+function tabDropEdgeFromElement(event: DragEvent<HTMLElement>, element: HTMLElement): TabDropEdge {
+  const rect = element.getBoundingClientRect();
+  return event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+}
+
+function pulseTabDragHaptic(durationMs = TAB_DRAG_HAPTIC_MS) {
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+  try {
+    navigator.vibrate(durationMs);
+  } catch {
+    // Haptics are opportunistic; unsupported environments should keep dragging normally.
+  }
+}
+
 function initialTabsState(route: Route): WorkspaceTabsState {
   const fallback = tabFromRoute(route);
   if (typeof window === 'undefined') {
@@ -327,6 +372,7 @@ interface HoverPreviewState {
   anchorLeft: number;
   anchorRight: number;
   anchorBottom: number;
+  anchorWidth: number;
 }
 
 const HOVER_PREVIEW_DELAY_MS = 380;
@@ -342,6 +388,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
+  const dragSuppressClickRef = useRef(false);
+  const draggingTabIdRef = useRef<string | null>(null);
+  const dragHapticTargetRef = useRef<string | null>(null);
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<TabDragTarget | null>(null);
 
   function clearHoverTimer() {
     if (hoverTimerRef.current !== null) {
@@ -359,6 +410,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         anchorLeft: rect.left,
         anchorRight: rect.right,
         anchorBottom: rect.bottom,
+        anchorWidth: rect.width,
       });
     }, HOVER_PREVIEW_DELAY_MS);
   }
@@ -482,6 +534,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }, [tabsMenuOpen]);
 
   function openTab(tab: WorkspaceChromeTab) {
+    if (dragSuppressClickRef.current) {
+      dragSuppressClickRef.current = false;
+      return;
+    }
     setState((current) => ({
       tabs: normalizeTabsState(current).tabs.map((item) =>
         item.id === tab.id ? { ...item, lastActiveAt: Date.now() } : item,
@@ -538,6 +594,113 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     if (nextRoute) navigate(nextRoute);
   }
 
+  function reorderTab(sourceId: string, targetId: string, edge: TabDropEdge) {
+    dismissHoverPreview();
+    setTabsMenuOpen(false);
+    setState((current) => {
+      const normalized = normalizeTabsState(current);
+      const tabs = reorderTabsById(normalized.tabs, sourceId, targetId, edge);
+      return tabs === normalized.tabs ? normalized : { ...normalized, tabs };
+    });
+  }
+
+  function findTabDropTarget(event: DragEvent<HTMLElement>, sourceId: string): TabDragTarget | null {
+    const strip = stripRef.current;
+    if (!strip) return null;
+
+    const eventTarget = event.target;
+    if (eventTarget instanceof HTMLElement) {
+      const tabElement = eventTarget.closest<HTMLElement>('[data-workspace-tab-id]');
+      if (tabElement && strip.contains(tabElement)) {
+        const tabId = tabElement.dataset.workspaceTabId;
+        if (tabId && tabId !== sourceId) {
+          return { tabId, edge: tabDropEdgeFromElement(event, tabElement) };
+        }
+      }
+    }
+
+    let lastTarget: TabDragTarget | null = null;
+    for (const tabElement of strip.querySelectorAll<HTMLElement>('[data-workspace-tab-id]')) {
+      const tabId = tabElement.dataset.workspaceTabId;
+      if (!tabId || tabId === sourceId) continue;
+      const rect = tabElement.getBoundingClientRect();
+      if (event.clientX <= rect.left + rect.width / 2) return { tabId, edge: 'before' };
+      if (event.clientX <= rect.right) return { tabId, edge: 'after' };
+      lastTarget = { tabId, edge: 'after' };
+    }
+    return lastTarget;
+  }
+
+  function handleTabDragStart(tabId: string, event: DragEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('.workspace-tab__close')) {
+      event.preventDefault();
+      return;
+    }
+    dismissHoverPreview();
+    dragSuppressClickRef.current = true;
+    draggingTabIdRef.current = tabId;
+    dragHapticTargetRef.current = `${tabId}:self`;
+    setDragOverTarget(null);
+    setDraggingTabId(tabId);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', tabId);
+    pulseTabDragHaptic();
+  }
+
+  function handleStripDragOver(event: DragEvent<HTMLDivElement>) {
+    const sourceId = draggingTabIdRef.current ?? event.dataTransfer.getData('text/plain');
+    if (!sourceId) return;
+    const target = findTabDropTarget(event, sourceId);
+    if (!target) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const targetKey = tabDragTargetKey(target);
+    setDragOverTarget((current) =>
+      current && tabDragTargetKey(current) === targetKey ? current : target,
+    );
+    if (dragHapticTargetRef.current !== targetKey) {
+      dragHapticTargetRef.current = targetKey;
+      pulseTabDragHaptic();
+    }
+    reorderTab(sourceId, target.tabId, target.edge);
+  }
+
+  function handleStripDrop(event: DragEvent<HTMLDivElement>) {
+    const sourceId = draggingTabIdRef.current ?? event.dataTransfer.getData('text/plain');
+    if (sourceId) {
+      event.preventDefault();
+    }
+    const target = sourceId ? findTabDropTarget(event, sourceId) : null;
+    if (sourceId && target) {
+      reorderTab(sourceId, target.tabId, target.edge);
+      pulseTabDragHaptic(TAB_DROP_HAPTIC_MS);
+    }
+    draggingTabIdRef.current = null;
+    dragHapticTargetRef.current = null;
+    setDragOverTarget(null);
+    setDraggingTabId(null);
+    window.setTimeout(() => {
+      dragSuppressClickRef.current = false;
+    }, 0);
+  }
+
+  function handleStripDragLeave(event: DragEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDragOverTarget(null);
+  }
+
+  function handleTabDragEnd() {
+    draggingTabIdRef.current = null;
+    dragHapticTargetRef.current = null;
+    setDragOverTarget(null);
+    setDraggingTabId(null);
+    window.setTimeout(() => {
+      dragSuppressClickRef.current = false;
+    }, 0);
+  }
+
   return (
     <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
@@ -546,6 +709,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         role="tablist"
         aria-label="Open workspaces"
         ref={stripRef}
+        onDragOver={handleStripDragOver}
+        onDrop={handleStripDrop}
+        onDragLeave={handleStripDragLeave}
       >
         {/* Render every open tab — the strip itself scrolls horizontally
             when the tabs exceed the available chrome width. Previous
@@ -557,13 +723,21 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         {state.tabs.map((tab) => {
           const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
           const active = tab.id === state.activeTabId;
+          const dragOverClass =
+            dragOverTarget?.tabId === tab.id && draggingTabId !== tab.id
+              ? ` is-drag-over-${dragOverTarget.edge}`
+              : '';
           return (
             <div
               key={tab.id}
-              className={`workspace-tab${active ? ' is-active' : ''}`}
+              className={`workspace-tab${active ? ' is-active' : ''}${draggingTabId === tab.id ? ' is-dragging' : ''}${dragOverClass}`}
+              data-workspace-tab-id={tab.id}
               role="tab"
               aria-selected={active}
               aria-describedby={hoverPreview?.tabId === tab.id ? 'workspace-tab-preview' : undefined}
+              draggable={state.tabs.length > 1}
+              onDragStart={(event) => handleTabDragStart(tab.id, event)}
+              onDragEnd={handleTabDragEnd}
               onMouseEnter={(event) => scheduleHoverPreview(tab.id, event.currentTarget)}
               onMouseLeave={dismissHoverPreview}
             >
@@ -687,12 +861,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = 240;
-              const anchorCenter = (hoverPreview.anchorLeft + hoverPreview.anchorRight) / 2;
+              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
-                10,
-                Math.min(viewportWidth - previewWidth - 10, anchorCenter - previewWidth / 2),
+                0,
+                Math.min(viewportWidth - previewWidth, hoverPreview.anchorLeft),
               );
               return (
                 <div

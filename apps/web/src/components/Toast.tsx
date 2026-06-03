@@ -11,6 +11,8 @@
 // the real upstream message alongside the daemon's category label.
 
 import { useEffect } from 'react';
+import { motion } from 'motion/react';
+import { toastSlideUp } from '../motion';
 
 export interface ToastProps {
   message: string;
@@ -47,10 +49,14 @@ export function Toast({ message, details, code, ttlMs = DEFAULT_TTL, onDismiss, 
   }, [message, details, code, effectiveTtl, onDismiss]);
 
   return (
-    <div
+    <motion.div
       className={`od-toast tone-${tone} placement-${placement}`}
       role={role}
       aria-live={role === 'alert' ? 'assertive' : 'polite'}
+      variants={toastSlideUp}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
     >
       <div className="od-toast-message">{message}</div>
       {details ? <div className="od-toast-details">{details}</div> : null}
@@ -67,6 +73,6 @@ export function Toast({ message, details, code, ttlMs = DEFAULT_TTL, onDismiss, 
           Dismiss
         </button>
       ) : null}
-    </div>
+    </motion.div>
   );
 }

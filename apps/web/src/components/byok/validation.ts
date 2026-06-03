@@ -37,6 +37,7 @@ export interface ByokDraftValidation {
 interface ValidateByokDraftOptions {
   requiresApiKey?: boolean;
   requireModel?: boolean;
+  keyValidationBaseUrl?: string;
 }
 
 interface ByokDraftConfig {
@@ -145,7 +146,11 @@ export function validateByokDraft(
         action: 'focus_api_key',
       });
     }
-    const keyIssue = validateApiKeyShape(protocol, cleanedApiKey, baseUrl);
+    const keyIssue = validateApiKeyShape(
+      protocol,
+      cleanedApiKey,
+      options.keyValidationBaseUrl?.trim() || baseUrl,
+    );
     if (keyIssue) issues.push(keyIssue);
   }
 

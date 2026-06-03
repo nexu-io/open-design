@@ -249,6 +249,11 @@ describe('AssistantMessage question forms', () => {
       '</question-form>',
     ].join('\n');
 
+    // A historical (non-last) assistant turn renders its question forms
+    // inline in the scrollback. The live, still-unanswered form on the most
+    // recent turn lives in the right-hand Questions tab (chat shows only a
+    // focus banner), so the dedup behavior is asserted on a historical turn
+    // where the form markup is rendered in place.
     render(
       <AssistantMessage
         message={baseMessage({
@@ -261,7 +266,6 @@ describe('AssistantMessage question forms', () => {
         })}
         streaming={false}
         projectId="proj-1"
-        isLast
       />,
     );
 

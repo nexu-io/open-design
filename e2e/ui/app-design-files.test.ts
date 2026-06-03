@@ -60,7 +60,7 @@ const designFileFlows = new Set([
 ]);
 
 for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.has(scenario.flow ?? ''))) {
-  test(`${entry.id}: ${entry.title}`, async ({ page }) => {
+  test(`[${designFileScenarioPriority(entry)}] ${entry.id}: ${entry.title}`, async ({ page }) => {
     await page.route('**/api/agents', async (route) => {
       await route.fulfill({
         json: {
@@ -290,7 +290,12 @@ async function openDesignFile(page: Page, fileName: string) {
     return;
   }
 
-  await page.getByRole('button', { name: new RegExp(fileName.replace(/\./g, '\\.')) }).click();
+  await page.getByTestId('design-files-tab').click();
+  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: fileName,
+  });
+  await expect(fileRow).toBeVisible();
+  await fileRow.getByRole('button').first().click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
 }
 
@@ -589,4 +594,17 @@ function homeDesignCard(page: Page, name: string): Locator {
   return page.locator('.design-card', {
     has: page.locator('.design-card-name', { hasText: name }),
   });
+}
+
+function designFileScenarioPriority(entry: UiScenario): 'P0' | 'P1' {
+  switch (entry.flow) {
+    case 'design-files-upload':
+    case 'design-files-delete':
+    case 'design-files-tab-persistence':
+      return 'P0';
+    case 'uploaded-image-renders-in-preview':
+    case 'python-source-preview':
+    default:
+      return 'P1';
+  }
 }

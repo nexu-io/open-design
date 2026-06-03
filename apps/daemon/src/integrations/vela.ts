@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,15 @@ export interface VelaLoginStatus {
   profile: string;
   user: VelaUser | null;
   configPath: string;
+}
+
+export interface VelaCredentialRevision {
+  authSource: 'env' | 'file' | 'none';
+  profile: string;
+  loggedIn: boolean;
+  userId: string;
+  userEmail: string;
+  configMtimeMs: number | null;
 }
 
 interface VelaProfileShape {
@@ -101,6 +110,28 @@ export function readVelaLoginStatus(
       }
     : null;
   return { loggedIn: true, loginInFlight, profile, user, configPath };
+}
+
+export function readVelaCredentialRevision(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaCredentialRevision {
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  const status = readVelaLoginStatus(env, configuredEnv);
+  const hasEnvCredentials =
+    (mergedEnv.VELA_RUNTIME_KEY?.trim() ?? '').length > 0 &&
+    (mergedEnv.VELA_LINK_URL?.trim() ?? '').length > 0;
+  return {
+    authSource: hasEnvCredentials ? 'env' : status.loggedIn ? 'file' : 'none',
+    profile: status.profile,
+    loggedIn: status.loggedIn,
+    userId: status.user?.id ?? '',
+    userEmail: status.user?.email ?? '',
+    configMtimeMs:
+      hasEnvCredentials || !existsSync(status.configPath)
+        ? null
+        : statSync(status.configPath).mtimeMs,
+  };
 }
 
 export function forgetVelaLogin(env: NodeJS.ProcessEnv = process.env): void {

@@ -76,6 +76,8 @@ describe('analytics run_finished contract', () => {
         tool_call_count: 2,
         tool_duration_ms: 350,
         finalize_duration_ms: 30,
+        retry_attempt_count: 1,
+        retry_final_result: 'success',
       },
     } satisfies Extract<AnalyticsEventPayload, { event: 'run_finished' }>;
 
@@ -87,5 +89,43 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.cache_token_source).toBe('anthropic');
     expect(payload.props.total_duration_ms).toBe(1234);
     expect(payload.props.tool_call_count).toBe(2);
+    expect(payload.props.retry_attempt_count).toBe(1);
+    expect(payload.props.retry_final_result).toBe('success');
+  });
+
+  it('accepts retry attempted and finished lifecycle events', () => {
+    const attempted = {
+      event: 'run_retry_attempted',
+      props: {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        project_id: 'proj-1',
+        conversation_id: 'conv-1',
+        run_id: 'run-1',
+        retry_of_run_id: 'run-1',
+        retry_attempt_index: 1,
+        retry_max_attempts: 2,
+        retry_strategy: 'same_run_transient',
+        agent_provider_id: 'claude_code',
+        model_id: 'claude-sonnet-4-5',
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'upstream_5xx',
+        failure_stage: 'first_token_wait',
+        error_code: 'UPSTREAM_UNAVAILABLE',
+        retry_reason: 'transient_failure',
+      },
+    } satisfies Extract<AnalyticsEventPayload, { event: 'run_retry_attempted' }>;
+
+    const finished = {
+      event: 'run_retry_finished',
+      props: {
+        ...attempted.props,
+        retry_result: 'suppressed',
+        retry_suppressed_reason: 'tool_call_seen',
+      },
+    } satisfies Extract<AnalyticsEventPayload, { event: 'run_retry_finished' }>;
+
+    expect(attempted.props.retry_strategy).toBe('same_run_transient');
+    expect(finished.props.retry_suppressed_reason).toBe('tool_call_seen');
   });
 });

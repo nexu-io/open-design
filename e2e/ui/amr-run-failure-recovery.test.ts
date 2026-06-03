@@ -18,15 +18,24 @@ import {
 } from '@/playwright/amr';
 
 let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
+const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
 test.describe.configure({ mode: 'serial' });
+
+function artifactPreview(page: Page) {
+  return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
+}
+
+function artifactPreviewFrame(page: Page) {
+  return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
 
 test.beforeAll(async () => {
   const runtimes = await createFakeAgentRuntimes(['codex', 'claude']);
   codexRuntime = runtimes.codex;
 });
 
-test('AMR auth failures offer Authorize & retry and open AMR authorization controls', async ({ page }) => {
+test('[P0] AMR auth failures offer Authorize & retry and open AMR authorization controls', async ({ page }) => {
   let loggedIn = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -81,7 +90,7 @@ test('AMR auth failures offer Authorize & retry and open AMR authorization contr
   });
 });
 
-test('AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
+test('[P0] AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
   await page.addInitScript(() => {
     const opened: string[] = [];
     (window as Window & { __openedUrls?: string[] }).__openedUrls = opened;
@@ -116,7 +125,7 @@ test('AMR insufficient-balance failures surface Top up AMR and keep Retry availa
     .toContain('https://open-design.ai/amr/wallet');
 });
 
-test('after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
+test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
   const amr = await setupAmrWorkspace(page, { failAuthAtPrompt: true, selectedAgentId: 'amr' });
 
   await gotoProject(page, amr.projectId);
@@ -139,15 +148,15 @@ test('after an AMR failure the user can switch to Codex and complete a fresh run
   await expect(settings).toHaveCount(0);
 
   await sendPrompt(page, 'Create a deterministic smoke artifact');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible({ timeout: 20_000 });
+  await expect(artifactPreview(page)).toBeVisible({ timeout: 20_000 });
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    artifactPreviewFrame(page).getByRole('heading', {
       name: 'Real Daemon Smoke',
     }),
   ).toBeVisible();
 });
 
-test('upstream outages keep Retry available without promoting AMR', async ({ page }) => {
+test('[P0] upstream outages keep Retry available without promoting AMR', async ({ page }) => {
   const root = join(tmpdir(), `open-design-upstream-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const runtimes = await createFakeAgentRuntimes({ root: join(root, 'agents'), runtimeIds: ['claude'] });
   const config = {
@@ -221,7 +230,7 @@ test('upstream outages keep Retry available without promoting AMR', async ({ pag
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
-test('antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {
+test('[P0] antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {
   let oauthLaunchCalls = 0;
   await page.route('**/api/agents/antigravity/oauth-launch', async (route) => {
     oauthLaunchCalls += 1;

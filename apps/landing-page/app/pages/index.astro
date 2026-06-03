@@ -288,6 +288,11 @@ const pageHtml = renderToStaticMarkup(
           const url = platform.artifact(metadata);
           if (typeof url !== 'string' || url.length === 0) return;
           for (const cta of ctas) {
+            // The header nav download button routes to the /download page on
+            // purpose (it carries data-download-page); it still gets the arch
+            // label above but keeps its page href. The hero CTA has no such
+            // marker and is rewritten to the direct installer as before.
+            if (cta.hasAttribute('data-download-page')) continue;
             cta.href = url;
             // A direct file download should not open a blank tab.
             cta.removeAttribute('target');

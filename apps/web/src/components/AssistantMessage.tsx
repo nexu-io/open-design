@@ -30,6 +30,7 @@ import {
 } from "@open-design/contracts/analytics";
 import {
   splitOnQuestionForms,
+  stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
 import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
@@ -319,6 +320,10 @@ interface Props {
   // Submit handler the form fires when the user picks answers — opaque
   // to AssistantMessage; ProjectView wires it into onSend.
   onSubmitForm?: (text: string) => void;
+  // Open the right-hand Questions tab. The active discovery form renders
+  // there (Claude-Design style) instead of inline; this assistant message
+  // shows a banner that focuses the tab on click.
+  onOpenQuestions?: () => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
@@ -351,6 +356,7 @@ export function AssistantMessage({
   errorCardOwnerId = null,
   nextUserContent,
   onSubmitForm,
+  onOpenQuestions,
   onContinueRemainingTasks,
   onFeedback,
   suppressDirectionForms = false,
@@ -588,6 +594,7 @@ export function AssistantMessage({
                   });
                   onSubmitForm?.(text);
                 }}
+                onOpenQuestions={onOpenQuestions}
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
@@ -1771,6 +1778,7 @@ function ProseBlock({
   locallySubmitted,
   suppressDirectionForms,
   onSubmitForm,
+  onOpenQuestions,
   onRequestOpenFile,
 }: {
   text: string;
@@ -1781,18 +1789,30 @@ function ProseBlock({
   locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
   onSubmitForm: (formId: string, text: string) => void;
+  onOpenQuestions?: () => void;
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
   const cleaned = useMemo(() => stripArtifact(text), [text]);
+  // While the latest turn is still streaming a not-yet-closed question-form,
+  // drop the partial `<question-form>{…` markup from the prose so the chat
+  // doesn't flash raw JSON; we surface a banner for it instead. The actual
+  // form streams into the right-hand Questions tab.
+  const { text: visibleText, hadOpenForm } = useMemo(
+    () =>
+      isLastAssistant && streaming
+        ? stripTrailingOpenQuestionForm(cleaned)
+        : { text: cleaned, hadOpenForm: false },
+    [cleaned, isLastAssistant, streaming],
+  );
   // While an `<artifact type="text/html">` is still streaming (no closing tag
   // yet), surface its body in a live code panel instead of leaking the raw
   // tag + half-written HTML as Markdown text. Once it closes, stripArtifact
   // removes it and the file/preview panel takes over — so this only fires
   // mid-stream.
   const { head, live } = useMemo(
-    () => (streaming ? splitStreamingArtifact(cleaned) : { head: cleaned, live: null }),
-    [cleaned, streaming]
+    () => (streaming ? splitStreamingArtifact(visibleText) : { head: visibleText, live: null }),
+    [visibleText, streaming]
   );
   const segments = useMemo(() => splitOnQuestionForms(head), [head]);
   // Route relative file-link clicks (`template.html`, `subdir/hero.html`)
@@ -1863,10 +1883,10 @@ function ProseBlock({
             key={seg.key}
             form={seg.form}
             isLastAssistant={isLastAssistant}
-            streaming={streaming}
             nextUserContent={nextUserContent}
             locallySubmitted={locallySubmitted}
             onSubmitForm={onSubmitForm}
+            onOpenQuestions={onOpenQuestions}
           />
         );
       })}
@@ -1877,7 +1897,30 @@ function ProseBlock({
           code={live.content}
         />
       ) : null}
+      {hadOpenForm ? <QuestionsBanner onOpen={onOpenQuestions} /> : null}
     </div>
+  );
+}
+
+// Chat-side banner that points to the right-hand Questions tab where the
+// active discovery form lives. Clicking it focuses that tab.
+function QuestionsBanner({ onOpen }: { onOpen?: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="questions-banner"
+      data-testid="questions-banner"
+      onClick={() => onOpen?.()}
+    >
+      <span className="questions-banner-icon" aria-hidden>
+        <Icon name="help-circle" size={15} />
+      </span>
+      <span className="questions-banner-label">{t("questions.banner")}</span>
+      <span className="questions-banner-cta" aria-hidden>
+        <Icon name="chevron-right" size={14} />
+      </span>
+    </button>
   );
 }
 
@@ -1890,17 +1933,17 @@ function isDirectionForm(form: QuestionForm): boolean {
 function FormBlock({
   form,
   isLastAssistant,
-  streaming,
   nextUserContent,
   locallySubmitted,
   onSubmitForm,
+  onOpenQuestions,
 }: {
   form: QuestionForm;
   isLastAssistant: boolean;
-  streaming: boolean;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
   onSubmitForm: (formId: string, text: string) => void;
+  onOpenQuestions?: () => void;
 }) {
   // Reconstruct prior answers from a follow-up user message so older
   // forms in the scrollback render in their answered state.
@@ -1909,15 +1952,18 @@ function FormBlock({
     return parseSubmittedAnswers(form, nextUserContent);
   }, [form, nextUserContent]);
   const wasSubmittedLocally = locallySubmitted.has(form.id);
-  const interactive =
-    isLastAssistant &&
-    !streaming &&
-    !submittedFromHistory &&
-    !wasSubmittedLocally;
+  // The live, still-unanswered form lives in the right-hand Questions tab —
+  // even mid-stream. In chat we only show a banner that focuses it, so the
+  // left side never renders the form itself. Answered / historical forms stay
+  // inline so the scrollback reads naturally.
+  const showBanner = isLastAssistant && !submittedFromHistory && !wasSubmittedLocally;
+  if (showBanner) {
+    return <QuestionsBanner onOpen={onOpenQuestions} />;
+  }
   return (
     <QuestionFormView
       form={form}
-      interactive={interactive}
+      interactive={false}
       submittedAnswers={submittedFromHistory ?? undefined}
       onSubmit={(text) => onSubmitForm(form.id, text)}
     />

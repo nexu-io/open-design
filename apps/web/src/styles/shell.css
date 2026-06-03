@@ -54,10 +54,10 @@
   max-width: 100%;
   min-height: 38px;
   height: 38px;
-  padding: 0 8px 0 12px;
+  padding: 0 8px 0 6px;
   gap: 0;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--bg-subtle));
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+  border-bottom: 0;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-panel) 80%, transparent) inset;
   user-select: none;
   -webkit-app-region: drag;
@@ -65,8 +65,21 @@
   position: relative;
   z-index: 120;
 }
+.workspace-tabs-chrome.app-chrome-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 64%, transparent);
+  transform: scaleY(0.5);
+  transform-origin: center bottom;
+  pointer-events: none;
+  z-index: 0;
+}
 .workspace-tabs-chrome .workspace-tabs-traffic {
-  margin-right: calc(var(--app-chrome-traffic-margin) + 8px);
+  margin-right: var(--app-chrome-traffic-margin);
 }
 .workspace-tabs-new-btn {
   width: 24px;
@@ -115,6 +128,8 @@
   align-items: center;
   gap: 0;
   padding-left: 0;
+  position: relative;
+  z-index: 1;
   /* Horizontal scroll inside the strip — tabs keep their natural width
      and the strip itself scrolls when it overflows the chrome. This
      replaces the previous "slice to N visible + overflow chip" model
@@ -148,21 +163,37 @@
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
-  overflow: hidden;
+  overflow: visible;
   contain: layout style;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition-property: background, border-color, color, opacity, transform, box-shadow;
+  transition-duration: 100ms, 100ms, 100ms, 120ms, 150ms, 150ms;
+  transition-timing-function: ease, ease, ease, ease, cubic-bezier(0.2, 0.8, 0.2, 1), ease;
   -webkit-app-region: no-drag;
+  cursor: default;
+  z-index: 1;
+  will-change: transform;
+}
+.workspace-tab.is-dragging {
+  opacity: 0.88;
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 14%, transparent);
+  cursor: default;
+  z-index: 3;
+}
+.workspace-tab.is-drag-over-before,
+.workspace-tab.is-drag-over-after {
+  background: color-mix(in srgb, var(--bg-panel) 84%, var(--bg-subtle));
+  border-color: color-mix(in srgb, var(--border-strong) 42%, transparent);
+  color: var(--text);
+}
+.workspace-tab.is-drag-over-before {
+  transform: translateX(6px);
+}
+.workspace-tab.is-drag-over-after {
+  transform: translateX(-6px);
 }
 .workspace-tab + .workspace-tab::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 1px;
-  height: 14px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
-  transform: translateY(-50%);
-  pointer-events: none;
+  display: none;
 }
 .workspace-tab:hover {
   background: color-mix(in srgb, var(--bg-panel) 64%, transparent);
@@ -196,6 +227,7 @@
   justify-content: flex-start;
   gap: 6px;
   text-align: left;
+  cursor: inherit;
 }
 .workspace-tab__main:hover:not(:disabled) {
   background: transparent;
@@ -241,6 +273,7 @@
   justify-content: center;
   opacity: 0;
   flex: 0 0 auto;
+  cursor: pointer;
 }
 .workspace-tab:hover .workspace-tab__close,
 .workspace-tab.is-active .workspace-tab__close {
@@ -426,6 +459,7 @@
 .workspace-tab-preview {
   position: fixed;
   z-index: 140;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: 9px;
@@ -1059,6 +1093,53 @@
 }
 .avatar-popover-head .who { font-weight: 600; font-size: 13px; }
 .avatar-popover-head .where { font-size: 11.5px; color: var(--text-muted); }
+.avatar-amr-account-link,
+.avatar-amr-account-link:visited {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 6px 6px;
+  padding: 9px 10px;
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border-soft));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-tint) 34%, var(--bg-panel));
+}
+.avatar-amr-account-link:hover {
+  background: color-mix(in srgb, var(--accent-tint) 52%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+.avatar-amr-account-link__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-strong);
+}
+.avatar-amr-account-link__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.avatar-amr-account-link__copy span:first-child {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.avatar-amr-account-link__copy span:last-child {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .avatar-item {
   display: flex;
   align-items: center;
@@ -1118,18 +1199,21 @@ a.avatar-item:visited {
 }
 .avatar-select-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
   font-size: 12px;
   color: var(--text-muted);
 }
 .avatar-select-label {
   flex-shrink: 0;
-  min-width: 64px;
+  min-width: 0;
 }
 .avatar-select {
-  flex: 1;
-  min-width: 0;
+  display: block;
+  width: 100%;
+  min-width: min(340px, 100%);
   font-size: 12px;
   padding: 4px 6px;
   border-radius: var(--radius-sm);

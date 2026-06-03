@@ -44,6 +44,7 @@ export interface PluginLoopSubmit {
   // Files staged on Home before the project exists. App uploads them
   // into the created project's Design Files before the first auto-send.
   attachments?: File[];
+  examplePromptContext?: { title: string; artifactType: string; brief: Record<string, string> };
 }
 
 interface Props {

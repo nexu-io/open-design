@@ -7,7 +7,7 @@
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
   ConnectorDetail,
@@ -51,7 +51,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
+import { HomeHero, type ExamplePromptInfo } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -73,6 +73,7 @@ import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { AnimatePresence } from 'motion/react';
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -240,6 +241,10 @@ export function HomeView({
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [promptEditedByUser, setPromptEditedByUser] = useState(false);
+  const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
+  const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
+    examplePromptInfoRef.current = info;
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
@@ -1271,6 +1276,13 @@ export function HomeView({
       contextMcpServers,
       contextConnectors,
       attachments: stagedFiles,
+      ...(() => {
+        if (!examplePromptInfoRef.current) return {};
+        const key = 'od:example-prompt-used';
+        if (localStorage.getItem(key)) return {};
+        localStorage.setItem(key, '1');
+        return { examplePromptContext: examplePromptInfoRef.current };
+      })(),
     });
   }
 
@@ -1330,6 +1342,7 @@ export function HomeView({
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
+        onExamplePromptStatusChange={handleExamplePromptStatusChange}
       />
 
       <RecentProjectsStrip
@@ -1373,14 +1386,16 @@ export function HomeView({
         presetSelection={presetStartersSelection}
       />
 
-      {detailsRecord ? (
-        <PluginDetailsModal
-          record={detailsRecord}
-          onClose={() => setDetailsRecord(null)}
-          onUse={(record) => requestPluginContextUse(record, 'use')}
-          isApplying={pendingApplyId === detailsRecord.id}
-        />
-      ) : null}
+      <AnimatePresence>
+        {detailsRecord ? (
+          <PluginDetailsModal
+            record={detailsRecord}
+            onClose={() => setDetailsRecord(null)}
+            onUse={(record) => requestPluginContextUse(record, 'use')}
+            isApplying={pendingApplyId === detailsRecord.id}
+          />
+        ) : null}
+      </AnimatePresence>
       {pendingReplacement ? (
         <div className="home-hero-confirm__backdrop" role="presentation">
           <div

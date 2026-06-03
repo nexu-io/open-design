@@ -267,6 +267,8 @@ interface Props {
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
   onSubmitForm?: (text: string) => void;
+  // Focus the right-hand Questions tab from the chat banner.
+  onOpenQuestions?: () => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -391,6 +393,7 @@ export function ChatPane({
   liveToolInput,
   initialDraft,
   onSubmitForm,
+  onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
   onNewConversation,
@@ -1225,6 +1228,7 @@ export function ChatPane({
                           scrolledToFormRef.current = new Set();
                           onSubmitForm?.(text);
                         }}
+                        onOpenQuestions={onOpenQuestions}
                         onContinueRemainingTasks={
                           m.id === lastAssistantId && onContinueRemainingTasks
                             ? (todos) => onContinueRemainingTasks(m, todos)

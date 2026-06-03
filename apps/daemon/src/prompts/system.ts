@@ -129,6 +129,9 @@ type ProjectMetadata = {
   platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
   skipDiscoveryBrief?: boolean | null;
+  examplePrompt?: boolean | null;
+  examplePromptTitle?: string | null;
+  examplePromptBrief?: Record<string, string> | null;
   imageModel?: string | null;
   imageAspect?: string | null;
   imageStyle?: string | null;
@@ -277,6 +280,35 @@ printf '%s\\n' "\$last"
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+
+export function buildExamplePromptOverride(
+  title?: string | null,
+  brief?: Record<string, string> | null,
+): string {
+  let text = `# Example prompt mode — full-quality direct generation
+
+The user selected a curated example prompt from the gallery and sent it without modification. This prompt is a complete, self-contained creative brief that has been carefully designed to produce a showcase-quality artifact.`;
+
+  if (title) {
+    text += `\n\nSelected example: "${title}"`;
+  }
+
+  if (brief && Object.keys(brief).length > 0) {
+    text += `\n\nPre-filled creative brief (treat as if the user already answered all discovery questions):`;
+    for (const [key, value] of Object.entries(brief)) {
+      text += `\n- ${key.replace(/_/g, ' ')}: ${value}`;
+    }
+  }
+
+  text += `\n\nRules:
+1. Do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask any clarifying questions.
+2. Treat the user's message as the FULL specification — it contains all visual direction, content themes, and structural intent needed.
+3. Generate the artifact at your absolute highest quality. This is a showcase piece — match or exceed the standard of a hand-crafted design.
+4. Infer any unspecified details (copy, layout choices, imagery descriptions) in a way that is maximally coherent with the stated creative direction.
+5. Proceed directly to planning and building. Output your TodoWrite plan and then the artifact immediately.`;
+
+  return text;
+}
 
 const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 
@@ -510,7 +542,10 @@ export function composeSystemPrompt({
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
 
-  if (metadata?.skipDiscoveryBrief === true) {
+  if (metadata?.examplePrompt === true) {
+    parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
+    parts.push('\n\n---\n\n');
+  } else if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
   }

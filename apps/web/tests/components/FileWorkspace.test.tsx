@@ -906,6 +906,64 @@ describe('FileWorkspace tab reordering', () => {
   });
 });
 
+describe('FileWorkspace Questions tab', () => {
+  const discoveryForm = {
+    id: 'discovery',
+    title: 'Quick brief',
+    questions: [
+      {
+        id: 'platform',
+        label: 'Platform',
+        type: 'radio' as const,
+        options: [
+          { label: 'Mobile', value: 'Mobile' },
+          { label: 'Desktop web', value: 'Desktop web' },
+        ],
+        required: true,
+      },
+    ],
+  };
+
+  it('shows the Questions tab while the form is unanswered', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        questionForm={discoveryForm}
+      />,
+    );
+
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+  });
+
+  it('removes the Questions tab once the form has been answered', () => {
+    // Regression for #3355: answering a question moved the answered copy back
+    // into chat but left a locked duplicate mounted in the Questions tab.
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        questionForm={discoveryForm}
+        questionFormSubmittedAnswers={{ platform: 'Mobile' }}
+      />,
+    );
+
+    expect(screen.queryByTestId('questions-tab')).toBeNull();
+  });
+});
+
 describe('projectSplitClassName', () => {
   it('marks the project split as focused so the chat pane can collapse globally', () => {
     expect(projectSplitClassName(false)).toBe('split');

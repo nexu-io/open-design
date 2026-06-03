@@ -109,6 +109,7 @@ import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import { MemoryModelInline } from './MemoryModelInline';
 import { MemorySection } from './MemorySection';
+import { ByokConnectionTestControl } from './byok/ByokConnectionTestControl';
 import { ByokKeyField } from './byok/ByokKeyField';
 import { ByokModelField } from './byok/ByokModelField';
 import { ByokProviderBaseUrl } from './byok/ByokProviderBaseUrl';
@@ -215,6 +216,7 @@ interface Props {
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
+  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   /** Re-fetch functional skills into App state after Settings mutations. */
   onSkillsRefresh?: () => Promise<void> | void;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
@@ -239,6 +241,14 @@ export interface AgentRefreshOptions {
   throwOnError?: boolean;
   agentCliEnv?: AppConfig['agentCliEnv'];
 }
+
+// When AMR sign-in completes, vela's live `models` catalog can lag the
+// credential write by a beat (the link backend has to register the freshly
+// authorized device). Re-detect a few times so a momentarily-empty catalog
+// doesn't leave the model picker hidden — the symptom that previously needed
+// an app restart / reinstall to clear.
+const AMR_SIGN_IN_RESCAN_ATTEMPTS = 4;
+const AMR_SIGN_IN_RESCAN_RETRY_MS = 1500;
 
 function codexPathStrings(locale: Locale) {
   if (locale === 'zh-CN') {
@@ -296,6 +306,11 @@ type TestState =
   | { status: 'idle' }
   | { status: 'running' }
   | { status: 'done'; result: ConnectionTestResponse };
+
+const GATEWAY_API_PROTOCOLS = new Set<ApiProtocol>([
+  'ollama',
+  'senseaudio',
+]);
 
 type ProviderModelsState =
   | { status: 'idle' }
@@ -430,6 +445,55 @@ function byokProviderRequiresApiKey(
   if (provider?.requiresApiKey === false) return false;
   if (protocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl)) return false;
   return true;
+}
+
+type ByokFirstPartyBaseUrlHint = {
+  baseUrl: string;
+  hostTypo: boolean;
+};
+
+function byokFirstPartyBaseUrlHint(
+  protocol: ApiProtocol,
+  baseUrl: string,
+  protocolProviders: readonly KnownProvider[],
+): ByokFirstPartyBaseUrlHint | undefined {
+  if (
+    protocol !== 'anthropic' &&
+    protocol !== 'openai' &&
+    protocol !== 'google'
+  ) {
+    return undefined;
+  }
+  const firstPartyBaseUrl = protocolProviders.find(
+    (provider) => provider.baseUrl.trim(),
+  )?.baseUrl;
+  if (!firstPartyBaseUrl) return undefined;
+
+  const firstPartyHost = byokDraftBaseUrlHost(firstPartyBaseUrl);
+  const draftHost = byokDraftBaseUrlHost(baseUrl);
+  if (!firstPartyHost || !draftHost) return undefined;
+  if (draftHost === firstPartyHost) {
+    return { baseUrl: firstPartyBaseUrl, hostTypo: false };
+  }
+  if (!draftHost.startsWith(firstPartyHost)) return undefined;
+
+  const suffix = draftHost.slice(firstPartyHost.length);
+  return suffix && !suffix.startsWith('.')
+    ? { baseUrl: firstPartyBaseUrl, hostTypo: true }
+    : undefined;
+}
+
+function byokDraftBaseUrlHost(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    return new URL(withProtocol).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> = {
@@ -856,6 +920,7 @@ export function SettingsDialog({
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
+  onAmrLoginStatusChange,
   onSkillsRefresh,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
@@ -932,6 +997,10 @@ export function SettingsDialog({
   });
 
   useEffect(() => {
+    onAmrLoginStatusChange?.(amrCardStatus);
+  }, [amrCardStatus, onAmrLoginStatusChange]);
+
+  useEffect(() => {
     const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
     if (!hasAmrAgent) {
       setAmrCardStatus(null);
@@ -940,7 +1009,13 @@ export function SettingsDialog({
       return;
     }
     let cancelled = false;
-    setAmrCardStatusReady(false);
+    // Refetch in place on every agents refresh, but do NOT flip
+    // `amrCardStatusReady` back to false here. The post-sign-in model-catalog
+    // rescan loop hands down a fresh `agents` array on each retry; tearing the
+    // pill down to the hidden `--placeholder` between the reset and the async
+    // status read made the Sign out action blink out and back on every tick.
+    // Readiness latches true after the first read and only resets when AMR
+    // becomes unavailable (handled above).
     void fetchVelaLoginStatus().then((next) => {
       if (!cancelled) {
         setAmrCardStatus(next);
@@ -951,8 +1026,41 @@ export function SettingsDialog({
       cancelled = true;
     };
   }, [agents]);
+
+  // Reconcile AMR sign-in state whenever the user returns to the window. The
+  // vela device-login flow completes in an external browser / AMR console; if
+  // the in-pill poll has already timed out (or the login finished fully
+  // out-of-band), the card would otherwise keep showing the stale signed-out
+  // state until Settings is closed and reopened. Refetching on focus /
+  // visibility keeps the signed-in state, email, and Sign out action live.
+  useEffect(() => {
+    const hasAmrAgent = agents.some((agent) => agent.id === 'amr' && agent.available);
+    if (!hasAmrAgent) return;
+    let cancelled = false;
+    // Passive read only. Push the daemon's current status down into the card;
+    // the pill mirrors it via `initialStatus` (and clears any stale login error
+    // when it sees a signed-in status). Do NOT republish the login-state-change
+    // event here — that restarts the pill's poll/pending machine on every focus
+    // and, while the external browser is stealing and returning focus during a
+    // login, ping-pongs the action between "Signing in…" and "Authorize".
+    const resyncAmrStatus = () => {
+      if (document.visibilityState === 'hidden') return;
+      void fetchVelaLoginStatus().then((next) => {
+        if (cancelled || !next) return;
+        setAmrCardStatus(next);
+      });
+    };
+    window.addEventListener('focus', resyncAmrStatus);
+    document.addEventListener('visibilitychange', resyncAmrStatus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', resyncAmrStatus);
+      document.removeEventListener('visibilitychange', resyncAmrStatus);
+    };
+  }, [agents]);
   const [byokPreconditionNotice, setByokPreconditionNotice] = useState<{
     action: ByokPreconditionAction;
+    field?: ByokRequiredField;
     message: string;
   } | null>(null);
   const [providerModelsState, setProviderModelsState] =
@@ -992,9 +1100,13 @@ export function SettingsDialog({
   const providerTestAbortRef = useRef<AbortController | null>(null);
   const providerModelsAbortRef = useRef<AbortController | null>(null);
   const pendingAgentInstallRescanRef = useRef(false);
+  // Guards the AMR catalog-chase loop so concurrent renders can't start it
+  // twice (see the re-detect effect below).
+  const amrRescanInFlightRef = useRef(false);
   const agentTestRevisionRef = useRef(0);
   const providerTestRevisionRef = useRef(0);
   const providerModelsRevisionRef = useRef(0);
+  const providerTestFirstResetRef = useRef(true);
   const providerModelsFirstResetRef = useRef(true);
   const deferAfterKeyCleanRef = useRef(false);
   const providerAutoTestKeyRef = useRef<string | null>(null);
@@ -1124,6 +1236,10 @@ export function SettingsDialog({
     return () => window.clearTimeout(id);
   }, [agentRescanNotice]);
   useEffect(() => {
+    if (providerTestFirstResetRef.current) {
+      providerTestFirstResetRef.current = false;
+      return;
+    }
     providerTestRevisionRef.current += 1;
     providerAutoTestKeyRef.current = null;
     setByokPreconditionNotice(null);
@@ -1234,6 +1350,67 @@ export function SettingsDialog({
     };
   }, [agentRescanRunning, handleRefreshAgents]);
 
+  // Chase AMR's live model catalog whenever the user is signed in but the
+  // model list hasn't arrived yet. AMR is detected at app start (often while
+  // signed out, so it comes back with an empty, fail-closed list), and the
+  // live `vela models` catalog only becomes fetchable once the credential
+  // lands — and can lag the credential write by a beat. We must cover every
+  // way Settings ends up "signed in + empty", not just an in-Settings
+  // sign-in edge: onboarding signs in and re-detects exactly once, so if that
+  // single call lands during the propagation window Settings later mounts
+  // already signed in with an empty list. Keying on `loggedIn === true` +
+  // "AMR has no models" handles both; the picker shows its loading state
+  // (see renderAgentModelConfig) until the catalog fills in.
+  //
+  // `onRefreshAgents` / `agents` are read through refs so re-detecting (which
+  // changes their identity) can't tear the retry loop down mid-flight — that
+  // is what made the loading row flash and vanish before the catalog arrived.
+  // The in-flight ref keeps a single loop running across renders.
+  const onRefreshAgentsRef = useRef(onRefreshAgents);
+  onRefreshAgentsRef.current = onRefreshAgents;
+  const agentsRef = useRef(agents);
+  agentsRef.current = agents;
+  useEffect(() => {
+    if (amrCardStatus?.loggedIn !== true) return;
+    const amr = agentsRef.current.find((agent) => agent.id === 'amr');
+    if (!amr || (amr.models?.length ?? 0) > 0) return;
+    if (amrRescanInFlightRef.current) return;
+    amrRescanInFlightRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        for (
+          let attempt = 0;
+          attempt < AMR_SIGN_IN_RESCAN_ATTEMPTS && !cancelled;
+          attempt += 1
+        ) {
+          let next: void | AgentInfo[];
+          try {
+            next = await onRefreshAgentsRef.current();
+          } catch {
+            return;
+          }
+          if (cancelled) return;
+          const detected = Array.isArray(next) ? next : [];
+          const refreshed = detected.find((agent) => agent.id === 'amr');
+          // Stop once the live catalog has caught up (or AMR vanished); a
+          // still-empty list means vela hasn't published the catalog yet, so
+          // retry.
+          if (!refreshed || (refreshed.models?.length ?? 0) > 0) return;
+          await new Promise((resolve) => {
+            setTimeout(resolve, AMR_SIGN_IN_RESCAN_RETRY_MS);
+          });
+        }
+      } finally {
+        amrRescanInFlightRef.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      amrRescanInFlightRef.current = false;
+    };
+  }, [amrCardStatus?.loggedIn]);
+
   const handleTestAgent = async () => {
     if (agentTestState.status === 'running') {
       return;
@@ -1314,10 +1491,23 @@ export function SettingsDialog({
       return;
     }
     const blockingIssues = blockingByokDraftIssues(byokDraftValidation);
+    const hasFirstPartyHostTypo = Boolean(byokFirstPartyBaseUrl?.hostTypo);
     const currentConfigKey = providerConnectionTestKey(apiProtocol, cfg);
     const lastUnsuccessfulConfigKey = byokLastUnsuccessfulTestKeyRef.current;
     const configKeyChanged = lastUnsuccessfulConfigKey !== null &&
       lastUnsuccessfulConfigKey !== currentConfigKey;
+    if (hasFirstPartyHostTypo) {
+      if (!options.silentPreconditions) {
+        setByokPreconditionNotice({
+          action: 'test',
+          field: 'base_url',
+          message: t('settings.testInvalidBaseUrl'),
+        });
+        focusByokRequiredField('base_url');
+      }
+      byokLastUnsuccessfulTestKeyRef.current = currentConfigKey;
+      return;
+    }
     if (blockingIssues.length > 0) {
       if (options.silentPreconditions) {
         return;
@@ -1433,6 +1623,9 @@ export function SettingsDialog({
     if (providerTestState.status === 'running') {
       return;
     }
+    if (byokFirstPartyBaseUrl?.hostTypo) {
+      return;
+    }
     if (blockingByokDraftIssues(byokDraftValidation).length > 0) {
       return;
     }
@@ -1502,6 +1695,17 @@ export function SettingsDialog({
     const modelFetchBlockingIssues = blockingByokDraftIssues(
       byokModelFetchDraftValidation,
     );
+    if (byokFirstPartyBaseUrl?.hostTypo) {
+      if (!options.silent) {
+        setByokPreconditionNotice({
+          action: 'test',
+          field: 'base_url',
+          message: t('settings.testInvalidBaseUrl'),
+        });
+        focusByokRequiredField('base_url');
+      }
+      return;
+    }
     if (modelFetchBlockingIssues.length > 0) {
       trackModelsFetchResult({
         result: 'failed',
@@ -1697,6 +1901,18 @@ export function SettingsDialog({
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
+  const apiProtocolTabGroups = [
+    {
+      id: 'protocols',
+      label: t('settings.protocolGroupProtocols'),
+      tabs: API_PROTOCOL_TABS.filter((tab) => !GATEWAY_API_PROTOCOLS.has(tab.id)),
+    },
+    {
+      id: 'gateways',
+      label: t('settings.protocolGroupGateways'),
+      tabs: API_PROTOCOL_TABS.filter((tab) => GATEWAY_API_PROTOCOLS.has(tab.id)),
+    },
+  ];
   const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
   const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const byokRequiredLabel = (field: ByokRequiredField): string => {
@@ -1789,6 +2005,7 @@ export function SettingsDialog({
     if (!firstIssue) return;
     setByokPreconditionNotice({
       action,
+      field: firstIssue.field,
       message: byokDraftIssueMessage(firstIssue),
     });
     focusByokRequiredField(firstIssue.field);
@@ -1966,8 +2183,6 @@ export function SettingsDialog({
     () => KNOWN_PROVIDERS.filter((p) => p.protocol === apiProtocol),
     [apiProtocol],
   );
-  const showQuickFillProvider =
-    protocolProviders.length > 1;
   const selectedProviderIndex =
     cfg.apiProviderBaseUrl == null
       ? -1
@@ -1975,11 +2190,22 @@ export function SettingsDialog({
           (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const showProviderPreset =
+    protocolProviders.length > 0;
   const byokRequiresApiKey = byokProviderRequiresApiKey(
     apiProtocol,
     selectedProvider,
     cfg.baseUrl,
   );
+  const byokFirstPartyBaseUrl = useMemo(
+    () => byokFirstPartyBaseUrlHint(
+      apiProtocol,
+      cfg.baseUrl,
+      protocolProviders,
+    ),
+    [apiProtocol, cfg.baseUrl, protocolProviders],
+  );
+  const byokKeyValidationBaseUrl = byokFirstPartyBaseUrl?.baseUrl;
   const byokDraftValidation = useMemo(
     () => validateByokDraft(
       apiProtocol,
@@ -1988,9 +2214,26 @@ export function SettingsDialog({
         baseUrl: cfg.baseUrl,
         model: cfg.model,
       },
-      { requiresApiKey: byokRequiresApiKey },
+      {
+        requiresApiKey: byokRequiresApiKey,
+        keyValidationBaseUrl: byokKeyValidationBaseUrl,
+      },
     ),
-    [apiProtocol, byokRequiresApiKey, cfg.apiKey, cfg.baseUrl, cfg.model],
+    [
+      apiProtocol,
+      byokKeyValidationBaseUrl,
+      byokRequiresApiKey,
+      cfg.apiKey,
+      cfg.baseUrl,
+      cfg.model,
+    ],
+  );
+  const byokBlockingDraftIssues = useMemo(
+    () => blockingByokDraftIssues(byokDraftValidation),
+    [byokDraftValidation],
+  );
+  const apiKeyDraftInvalid = byokBlockingDraftIssues.some((issue) =>
+    issue.field === 'api_key' && issue.code !== 'api_key_required'
   );
   const byokModelFetchDraftValidation = useMemo(
     () => validateByokDraft(
@@ -2000,9 +2243,20 @@ export function SettingsDialog({
         baseUrl: cfg.baseUrl,
         model: cfg.model,
       },
-      { requiresApiKey: byokRequiresApiKey, requireModel: false },
+      {
+        requiresApiKey: byokRequiresApiKey,
+        requireModel: false,
+        keyValidationBaseUrl: byokKeyValidationBaseUrl,
+      },
     ),
-    [apiProtocol, byokRequiresApiKey, cfg.apiKey, cfg.baseUrl, cfg.model],
+    [
+      apiProtocol,
+      byokKeyValidationBaseUrl,
+      byokRequiresApiKey,
+      cfg.apiKey,
+      cfg.baseUrl,
+      cfg.model,
+    ],
   );
   const providerModelsKey = useMemo(
     () => providerModelsCacheKey(
@@ -2016,7 +2270,10 @@ export function SettingsDialog({
   const fetchedApiModelOptions =
     activeProviderModelsCache[providerModelsKey] ?? [];
   const commitProviderModelsInputs = () => {
-    if (blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0) {
+    if (
+      byokFirstPartyBaseUrl?.hostTypo ||
+      blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0
+    ) {
       setProviderModelsCommittedKey(null);
       return;
     }
@@ -2049,7 +2306,10 @@ export function SettingsDialog({
   useEffect(() => {
     if (!deferAfterKeyCleanRef.current) return;
     deferAfterKeyCleanRef.current = false;
-    if (blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0) {
+    if (
+      byokFirstPartyBaseUrl?.hostTypo ||
+      blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0
+    ) {
       setProviderModelsCommittedKey(null);
     } else {
       setProviderModelsCommittedKey(providerModelsKey);
@@ -2057,10 +2317,38 @@ export function SettingsDialog({
     // Runs after the provider-test reset effect (declaration order) bumped the
     // revision for the cleaned key, so this auto-test is not flagged stale.
     handleAutoTestProvider();
-  }, [cfg.apiKey, byokModelFetchDraftValidation, providerModelsKey]);
+  }, [
+    byokFirstPartyBaseUrl?.hostTypo,
+    byokModelFetchDraftValidation,
+    cfg.apiKey,
+    providerModelsKey,
+  ]);
+  useEffect(() => {
+    if (cfg.mode !== 'api') return;
+    if (providerTestState.status === 'running') return;
+    if (byokFirstPartyBaseUrl?.hostTypo) return;
+    if (blockingByokDraftIssues(byokDraftValidation).length > 0) return;
+    const key = providerConnectionTestKey(apiProtocol, cfg);
+    if (providerAutoTestKeyRef.current === key) return;
+    const timer = window.setTimeout(() => {
+      handleAutoTestProvider();
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    apiProtocol,
+    byokFirstPartyBaseUrl?.hostTypo,
+    byokDraftValidation,
+    cfg.apiKey,
+    cfg.apiVersion,
+    cfg.baseUrl,
+    cfg.mode,
+    cfg.model,
+    providerTestState.status,
+  ]);
   useEffect(() => {
     if (cfg.mode !== 'api') return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0) return;
     if (providerModelsCommittedKey !== providerModelsKey) return;
     const timer = window.setTimeout(() => {
@@ -2069,6 +2357,7 @@ export function SettingsDialog({
     return () => window.clearTimeout(timer);
   }, [
     apiProtocol,
+    byokFirstPartyBaseUrl?.hostTypo,
     cfg.apiKey,
     cfg.baseUrl,
     cfg.mode,
@@ -2096,6 +2385,22 @@ export function SettingsDialog({
             currentProviderModelsResult.detail ||
             currentProviderModelsResult.kind,
         })
+      : null;
+  const providerTestBaseUrlInvalid =
+    providerTestState.status === 'done' &&
+    !providerTestState.result.ok &&
+    providerTestState.result.kind === 'invalid_base_url';
+  const providerTestApiKeyAuthFailed =
+    providerTestState.status === 'done' &&
+    !providerTestState.result.ok &&
+    providerTestState.result.kind === 'auth_failed';
+  const apiKeyFieldAuthFailed =
+    providerTestApiKeyAuthFailed ||
+    (apiKeyAuthFailed && providerTestState.status === 'idle');
+  const baseUrlErrorMessage = baseUrlInvalid
+    ? t('settings.baseUrlInvalid')
+    : providerTestBaseUrlInvalid || byokFirstPartyBaseUrl?.hostTypo
+      ? t('settings.testInvalidBaseUrl')
       : null;
   const suggestedApiModelIds = useMemo(
     () => Array.from(new Set(
@@ -2255,6 +2560,41 @@ export function SettingsDialog({
     const hasReasoning =
       Array.isArray(selected.reasoningOptions) &&
       selected.reasoningOptions.length > 0;
+    // AMR's live catalog only lands a beat after sign-in. While the user is
+    // signed in but the model list hasn't arrived yet, show the picker in a
+    // loading state instead of hiding it — so the dropdown appears at sign-in
+    // and simply fills in, rather than popping in seconds later.
+    if (selected.id === 'amr' && !hasModels && (amrCardStatus?.loggedIn ?? false)) {
+      return (
+        <div className="agent-card-config">
+          <label className="field">
+            <span className="field-label">
+              {t('settings.modelPicker')}
+              <span
+                className="agent-model-source-badge live"
+                aria-hidden="true"
+              >
+                {t('settings.modelSourceLive')}
+              </span>
+            </span>
+            <div className="agent-model-select-wrap">
+              <div
+                className="settings-model-select agent-model-select-loading"
+                role="status"
+                aria-busy="true"
+                data-testid={`settings-agent-model-loading-${selected.id}`}
+              >
+                <Icon name="spinner" size={13} className="icon-spin" />
+                <span>{t('common.loading')}</span>
+              </div>
+            </div>
+          </label>
+          <p className="hint agent-model-row-hint">
+            {t('settings.modelPickerLiveHint')}
+          </p>
+        </div>
+      );
+    }
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
@@ -2309,7 +2649,9 @@ export function SettingsDialog({
         : t('settings.modelSourceFallback');
     const modelSourceHint =
       modelSource === 'live'
-        ? t('settings.modelPickerLiveHint')
+        ? selected.supportsCustomModel === false
+          ? t('settings.modelPickerLiveCatalogOnlyHint')
+          : t('settings.modelPickerLiveHint')
         : t('settings.modelPickerFallbackHint');
     return (
       <div className="agent-card-config">
@@ -2333,6 +2675,8 @@ export function SettingsDialog({
                   searchPlaceholder={t('designs.searchPlaceholder')}
                   searchInputTestId={`settings-agent-model-search-${selected.id}`}
                   popoverTestId={`settings-agent-model-popover-${selected.id}`}
+                  minSearchableOptions={5}
+                  popoverMinWidth={340}
                   models={selected.models!}
                   onChange={(nextValue) => {
                     if (nextValue === CUSTOM_MODEL_SENTINEL) {
@@ -2732,30 +3076,39 @@ export function SettingsDialog({
                   role="tablist"
                   aria-label={t('settings.protocolAria')}
                 >
-                  {API_PROTOCOL_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={apiProtocol === tab.id}
-                      className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
-                      onClick={() => {
-                        const byokProviderId = byokProtocolToTracking(tab.id);
-                        if (byokProviderId) {
-                          trackSettingsByokProviderOptionClick(analytics.track, {
-                            page_name: 'settings',
-                            area: 'configure_execution_mode_byok',
-                            element: 'byok_provider_option',
-                            action: 'select_byok_provider',
-                            provider_id: byokProviderId,
-                            is_selected: apiProtocol === tab.id,
-                          });
-                        }
-                        setApiProtocol(tab.id);
-                      }}
-                    >
-                      {tab.title}
-                    </button>
+                  {apiProtocolTabGroups.map((group) => (
+                    <div className="protocol-chip-group" key={group.id}>
+                      <span className="protocol-chip-group-label">
+                        {group.label}
+                      </span>
+                      <div className="protocol-chip-group-options">
+                        {group.tabs.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={apiProtocol === tab.id}
+                            className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
+                            onClick={() => {
+                              const byokProviderId = byokProtocolToTracking(tab.id);
+                              if (byokProviderId) {
+                                trackSettingsByokProviderOptionClick(analytics.track, {
+                                  page_name: 'settings',
+                                  area: 'configure_execution_mode_byok',
+                                  element: 'byok_provider_option',
+                                  action: 'select_byok_provider',
+                                  provider_id: byokProviderId,
+                                  is_selected: apiProtocol === tab.id,
+                                });
+                              }
+                              setApiProtocol(tab.id);
+                            }}
+                          >
+                            {tab.title}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               ) : null}
@@ -3017,6 +3370,7 @@ export function SettingsDialog({
                                         initialStatus={amrCardStatus}
                                         skipInitialRefresh
                                         signInLabel={t('settings.amrAuthorize')}
+                                        showConsoleAction={amrCardStatus?.loggedIn === true}
                                         revealPendingCancelAction={amrRevealPendingCancelAction}
                                         onStatusChange={setAmrCardStatus}
                                       />
@@ -3387,17 +3741,59 @@ export function SettingsDialog({
             <section className="settings-section settings-section-card settings-section-byok">
               <div className="section-head">
                 <div>
-                  <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                  <div className="settings-byok-title">
+                    <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                    <span className="settings-byok-info-wrap">
+                      <button
+                        type="button"
+                        className="settings-byok-info-button"
+                        aria-label={t('settings.byokNoFileToolsNotice')}
+                        aria-describedby="settings-byok-no-file-tools-tooltip"
+                        data-testid="settings-byok-no-file-tools-trigger"
+                      >
+                        <Icon name="info" size={13} />
+                      </button>
+                      <span
+                        id="settings-byok-no-file-tools-tooltip"
+                        className="settings-byok-info-tooltip"
+                        role="tooltip"
+                        data-testid="settings-byok-no-file-tools-notice"
+                      >
+                        {t('settings.byokNoFileToolsNotice')}
+                      </span>
+                    </span>
+                  </div>
                 </div>
+                <ByokConnectionTestControl
+                  baseUrlValid={baseUrlValid}
+                  canRunConnectionTest={
+                    !byokFirstPartyBaseUrl?.hostTypo &&
+                    canRunProviderConnectionTest(cfg, {
+                      requiresApiKey: byokRequiresApiKey,
+                    })
+                  }
+                  labels={{
+                    readyToTest: t('settings.byokReadyToTest'),
+                    test: t('settings.test'),
+                    testRetry: t('settings.testRetry'),
+                    testRunning: t('settings.testRunning'),
+                    testTitle: t('settings.testTitle'),
+                  }}
+                  providerTestState={providerTestState}
+                  renderTestMessage={(result) => renderTestMessage(result, 'api')}
+                  suppressResultStatus={
+                    providerTestBaseUrlInvalid || providerTestApiKeyAuthFailed
+                  }
+                  suppressReadyState={Boolean(
+                    byokPreconditionNotice ||
+                      apiKeyFieldAuthFailed ||
+                      providerTestBaseUrlInvalid ||
+                      byokBlockingDraftIssues.length > 0,
+                  )}
+                  onTestProvider={() => handleTestProvider()}
+                />
               </div>
-              <p
-                className="settings-test-status warn settings-byok-no-file-tools-notice"
-                role="note"
-                data-testid="settings-byok-no-file-tools-notice"
-              >
-                {t('settings.byokNoFileToolsNotice')}
-              </p>
-              {byokPreconditionNotice ? (
+              {byokPreconditionNotice && !byokPreconditionNotice.field ? (
                 <p
                   className="settings-test-status error"
                   role="alert"
@@ -3407,9 +3803,9 @@ export function SettingsDialog({
                   {byokPreconditionNotice.message}
                 </p>
               ) : null}
-              {showQuickFillProvider ? (
+              {showProviderPreset ? (
                 <ByokProviderPicker
-                  label={t('settings.quickFillProvider')}
+                  label={t('settings.providerPreset')}
                   customProviderLabel={t('settings.customProvider')}
                   providers={protocolProviders}
                   selectedProviderIndex={selectedProviderIndex}
@@ -3433,13 +3829,8 @@ export function SettingsDialog({
               ) : null}
               <ByokKeyField
                 apiKey={cfg.apiKey}
-                apiKeyAuthFailed={apiKeyAuthFailed}
                 apiKeyConsoleLink={apiKeyConsoleLink}
                 apiProtocol={apiProtocol}
-                baseUrlValid={baseUrlValid}
-                canRunConnectionTest={canRunProviderConnectionTest(cfg, {
-                  requiresApiKey: byokRequiresApiKey,
-                })}
                 inputRef={apiKeyInputRef}
                 labels={{
                   apiHint: t('settings.apiHint'),
@@ -3454,15 +3845,13 @@ export function SettingsDialog({
                   required: t('settings.required'),
                   show: t('settings.show'),
                   showKey: t('settings.showKey'),
-                  test: t('settings.test'),
-                  testRetry: t('settings.testRetry'),
-                  testRunning: t('settings.testRunning'),
-                  testTitle: t('settings.testTitle'),
                 }}
-                providerTestState={providerTestState}
-                draftValidation={byokDraftValidation}
-                renderTestMessage={(result) => renderTestMessage(result, 'api')}
                 requiresApiKey={byokRequiresApiKey}
+                showApiKeyInvalid={Boolean(
+                  apiKeyFieldAuthFailed ||
+                    byokPreconditionNotice?.field === 'api_key' ||
+                    apiKeyDraftInvalid,
+                )}
                 showApiKey={showApiKey}
                 onBlur={onByokKeyCommit}
                 onChange={(value) => updateApiConfig({ apiKey: value })}
@@ -3478,16 +3867,54 @@ export function SettingsDialog({
                     });
                   }
                 }}
-                onTestProvider={() => handleTestProvider()}
                 onToggleShowApiKey={() => setShowApiKey((v) => !v)}
+              />
+              <ByokProviderBaseUrl
+                apiProtocol={apiProtocol}
+                inputRef={baseUrlInputRef}
+                baseUrl={cfg.baseUrl}
+                baseUrlError={baseUrlErrorMessage}
+                baseUrlInvalid={Boolean(baseUrlErrorMessage)}
+                baseUrlPlaceholder={baseUrlPlaceholder}
+                baseUrlReadOnly={baseUrlReadOnly}
+                labels={{
+                  baseUrl: t('settings.baseUrl'),
+                  required: t('settings.required'),
+                  customize: t('settings.baseUrlCustomize'),
+                  invalid: t('settings.baseUrlInvalid'),
+                  defaultHint: t('settings.baseUrlDefaultHint'),
+                  azureHint: t('settings.azureBaseUrlHint'),
+                }}
+                onBlur={commitProviderModelsInputs}
+                onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
+                onCustomize={() => {
+                  updateApiConfig({ apiProviderBaseUrl: null });
+                  window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
+                }}
+                onFocus={() => {
+                  const byokProviderId = byokProtocolToTracking(apiProtocol);
+                  if (byokProviderId) {
+                    trackSettingsByokFieldClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'configure_execution_mode_byok',
+                      element: 'base_url',
+                      provider_id: byokProviderId,
+                      has_value: Boolean(cfg.baseUrl?.trim()),
+                    });
+                  }
+                }}
               />
               <ByokModelField
                 customActive={apiModelCustomActive}
                 customInputRef={customModelInputRef}
                 labels={{
                   customModel: t('settings.modelCustom'),
-                  customModelLabel: t('settings.modelCustomLabel'),
-                  customModelPlaceholder: t('settings.modelCustomPlaceholder'),
+                  customModelLabel: apiProtocol === 'azure'
+                    ? t('settings.azureCustomDeploymentName')
+                    : t('settings.modelCustomLabel'),
+                  customModelPlaceholder: apiProtocol === 'azure'
+                    ? 'e.g. gpt-4o-production'
+                    : t('settings.modelCustomPlaceholder'),
                   fetchModelsUnsupported: t('settings.fetchModelsUnsupported'),
                   model: apiProtocol === 'azure'
                     ? t('settings.azureDeploymentModel')
@@ -3519,7 +3946,7 @@ export function SettingsDialog({
                 providerModelsFailureMessage={providerModelsFailureMessage}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
                 showFetchModelsUnsupportedHint={apiProtocol === 'ollama'}
-                showSuggestedModelsHint={!selectedProvider}
+                showSuggestedModelsHint={apiProtocol !== 'azure' && !selectedProvider}
                 azureModelFetchHint={t('settings.azureModelFetchHint')}
                 onCustomModelChange={(value) => updateApiConfig({ model: value })}
                 onCustomModelSelect={() => {
@@ -3545,44 +3972,17 @@ export function SettingsDialog({
                   updateApiConfig({ model: nextValue });
                 }}
               />
-              <ByokProviderBaseUrl
-                apiProtocol={apiProtocol}
-                inputRef={baseUrlInputRef}
-                baseUrl={cfg.baseUrl}
-                baseUrlInvalid={baseUrlInvalid}
-                baseUrlPlaceholder={baseUrlPlaceholder}
-                baseUrlReadOnly={baseUrlReadOnly}
-                labels={{
-                  baseUrl: t('settings.baseUrl'),
-                  required: t('settings.required'),
-                  customize: t('settings.baseUrlCustomize'),
-                  invalid: t('settings.baseUrlInvalid'),
-                  defaultHint: t('settings.baseUrlDefaultHint'),
-                  azureHint: t('settings.azureBaseUrlHint'),
-                }}
-                onBlur={commitProviderModelsInputs}
-                onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
-                onCustomize={() => {
-                  updateApiConfig({ apiProviderBaseUrl: null });
-                  window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
-                }}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'base_url',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.baseUrl?.trim()),
-                    });
-                  }
-                }}
-              />
               <details className="agent-cli-env settings-memory-advanced">
                 <summary className="agent-cli-env-summary">
                   <span className="agent-cli-env-summary-title">
                     {t('settings.memoryModelInlineLabel')}
+                  </span>
+                  <span className="settings-memory-summary-value">
+                    {cfg.model.trim()
+                      ? t('settings.memoryModelInlineSameAsChatWithModel', {
+                          model: cfg.model.trim(),
+                        })
+                      : t('settings.memoryModelInlineSameAsChat')}
                   </span>
                 </summary>
                 <div className="agent-cli-env-body">
@@ -3611,29 +4011,30 @@ export function SettingsDialog({
               {apiProtocol === 'senseaudio' ? (
                 <label className="field">
                   <span className="field-label">{t('settings.byokImageModel')}</span>
-                  <select
-                    value={cfg.byokImageModel ?? ''}
-                    onChange={(e) =>
-                      updateApiConfig({ byokImageModel: e.target.value })
-                    }
-                  >
-                    {/* Default-empty option resolves to the registry default
-                        on the daemon side (senseaudio-image-2.0-260319 today).
-                        Listing it explicitly lets the picker show what the
-                        unconfigured state actually means. */}
-                    <option value="">
-                      {IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
-                        ?? 'senseaudio-image-2.0'}
-                      {' (default)'}
-                    </option>
-                    {IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
-                      (m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
+                  <SearchableModelSelect
+                    className="inline-switcher__select settings-model-select settings-model-select--byok"
+                    aria-label={t('settings.byokImageModel')}
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    popoverClassName="settings-byok-select-popover"
+                    minSearchableOptions={Number.POSITIVE_INFINITY}
+                    models={[
+                      {
+                        id: '',
+                        label: `${IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
+                          ?? 'senseaudio-image-2.0'} (default)`,
+                      },
+                      ...IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
+                        (m) => ({
+                          id: m.id,
+                          label: m.label,
+                        }),
                       ),
-                    )}
-                  </select>
+                    ]}
+                    value={cfg.byokImageModel ?? ''}
+                    onChange={(value) =>
+                      updateApiConfig({ byokImageModel: value })
+                    }
+                  />
                 </label>
               ) : null}
             </section>

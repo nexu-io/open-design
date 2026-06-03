@@ -83,6 +83,11 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
       const url = platform.artifact(metadata);
       if (typeof url !== 'string' || url.length === 0) return;
       for (const cta of ctas) {
+        // CTAs that intentionally route to the /download page (the header nav
+        // button) opt out of direct-asset rewriting: they still get the arch
+        // label above, but keep their page href so JS-enabled visitors land on
+        // the full installer matrix instead of an immediate download.
+        if (cta.hasAttribute('data-download-page')) continue;
         cta.href = url;
         cta.removeAttribute('target');
         cta.removeAttribute('rel');

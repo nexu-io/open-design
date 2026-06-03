@@ -685,38 +685,74 @@
    Keep the outer panes flat; only controls and repeated items get radius. */
 .workspace-shell .workspace-tabs-chrome.app-chrome-header {
   --workspace-tabs-chrome-height: 36px;
+  --workspace-tab-bar-bg: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-subtle));
+  --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 42%, transparent);
   height: 36px;
   min-height: 36px;
-  padding: 0 10px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
+  padding: 0 10px 0 0;
+  background: var(--workspace-tab-bar-bg);
+  border-bottom: 0;
   box-shadow: none;
 }
 .workspace-shell .workspace-tabs-strip {
   gap: 4px;
+  align-items: flex-end;
+  padding-top: 3px;
 }
 .workspace-shell .workspace-tab {
-  height: 24px;
-  min-height: 24px;
+  height: 32px;
+  min-height: 32px;
   min-width: 96px;
   max-width: 168px;
   flex: 1 1 148px;
   grid-template-columns: minmax(0, 1fr) 24px;
-  border-radius: 6px;
+  align-self: flex-end;
+  border-radius: 10px 10px 0 0;
   border: 1px solid transparent;
+  border-bottom: 0;
   background: transparent;
   box-shadow: none;
 }
 .workspace-shell .workspace-tab + .workspace-tab::before {
-  height: 12px;
+  display: none;
 }
 .workspace-shell .workspace-tab.is-active {
-  background: var(--bg-subtle);
-  border-color: var(--border);
+  background: var(--bg-panel);
+  border-color: var(--workspace-active-tab-border);
+  border-bottom-color: transparent;
+  box-shadow:
+    0 1px 0 var(--bg-panel),
+    0 -1px 0 color-mix(in srgb, var(--bg-panel) 86%, transparent) inset;
+  z-index: 2;
+}
+.workspace-shell .workspace-tab:not(.is-active):hover,
+.workspace-shell .workspace-tab:not(.is-active):focus-within {
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--bg-panel) 78%, transparent),
+      color-mix(in srgb, var(--bg-panel) 78%, transparent)
+    )
+    0 0 / 100% calc(100% - 2px) no-repeat;
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--border) 58%, transparent),
+    0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+}
+.workspace-shell .workspace-tab.is-dragging {
+  background: var(--bg-panel);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--text) 16%, transparent);
+  z-index: 4;
 }
 .workspace-shell .workspace-tab__main {
+  position: relative;
+  z-index: 2;
   gap: 6px;
-  padding-inline: 9px 4px;
+  padding-inline: 10px 4px;
+}
+.workspace-shell .workspace-tab__close {
+  position: relative;
+  z-index: 2;
 }
 .workspace-shell .workspace-tab__label {
   font-size: 12px;

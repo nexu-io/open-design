@@ -65,4 +65,16 @@ describe('HomeHero prompt overlay metrics', () => {
     expect(optionalRuleValue(inner, 'transform')).toBeNull();
     expect(ruleValue(inner, 'top')).toBe('calc(-1 * var(--home-hero-prompt-scroll, 0px))');
   });
+
+  it('keeps the prompt input chrome clean on focus', () => {
+    const card = cssDeclarations('.home-hero__input-card');
+    const focusedCard = cssDeclarations('.home-hero__input-card:focus-within');
+    const dragCard = cssDeclarations('.home-hero__input-card.is-drag-active');
+    const foot = cssDeclarations('.home-hero__input-foot');
+
+    expect(ruleValue(card, 'box-shadow')).toBe('none');
+    expect(ruleValue(focusedCard, 'box-shadow')).toBe('none');
+    expect(ruleValue(dragCard, 'box-shadow')).not.toContain('var(--shadow-md)');
+    expect(ruleValue(foot, 'border-top')).toBe('0');
+  });
 });

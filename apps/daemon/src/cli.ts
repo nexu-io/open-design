@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { runDaemonCliStartup } from './daemon-startup.js';
+import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
@@ -13,6 +13,13 @@ import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import {
+  AGENT_SLUGS,
+  isAgentSlug,
+  planAgentInstall,
+  applyJsonInstall,
+  removeJsonInstall,
+} from './mcp-agent-install.js';
 
 const argv = process.argv.slice(2);
 
@@ -67,6 +74,25 @@ const MCP_STRING_FLAGS = new Set([
 const MCP_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
+]);
+
+// Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
+// above: `od mcp install <agent>` dispatches through SUBCOMMAND_MAP during
+// top-level module evaluation, and runMcpInstall references these `const`
+// Sets — defining them next to runMcpInstall lower in the file would hit
+// the TDZ.
+const MCP_INSTALL_STRING_FLAGS = new Set([
+  'daemon-url',
+  'name',
+]);
+const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+  'json',
+  'print',
+  'dry-run',
+  'uninstall',
+  'remove',
 ]);
 
 const RESEARCH_SEARCH_STRING_FLAGS = new Set([
@@ -137,9 +163,7 @@ const UI_BOOLEAN_FLAGS = new Set([
 // during module load; any const declared further down the file is
 // still in TDZ when the handler executes, so `od status` /
 // `od atoms list` / etc. would crash with `Cannot access X before
-// initialization`. The actual definitions stay further down (next
-// to their handlers); we just export the bindings up here so the
-// dispatch path always sees an initialized value.
+// initialization`.
 const DAEMON_STRING_FLAGS = new Set([
   'daemon-url', 'port', 'host',
 ]);
@@ -148,6 +172,10 @@ const DAEMON_BOOLEAN_FLAGS = new Set([
 ]);
 const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
+const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
+const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
@@ -836,6 +864,9 @@ files folder so the FileViewer can preview them immediately.`);
 // ---------------------------------------------------------------------------
 
 async function runMcp(args) {
+  if (args[0] === 'install') {
+    return runMcpInstall(args.slice(1));
+  }
   let flags;
   try {
     flags = parseFlags(args, {
@@ -897,7 +928,254 @@ callers can see which project/file got resolved.
 For the copy-paste, per-client snippet (with absolute paths resolved
 for your machine, plus a one-click deeplink for Cursor), open Settings
 → MCP server in the Open Design app. The daemon must be running locally
-for tool calls to succeed.`);
+for tool calls to succeed.
+
+To register this server into a coding agent's own config automatically:
+  od mcp install <agent> [--uninstall] [--print] [--json] [--daemon-url <url>]
+  Agents: ${AGENT_SLUGS.join(' ')}`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od mcp install <agent>
+//
+// Wires this daemon's stdio MCP server into a coding agent's own config.
+// The pure planner (mcp-agent-install.ts) maps a resolved launch spec onto
+// one of three strategies — drive the agent's own `mcp add/remove` CLI,
+// deep-merge a JSON config file, or (for unverified formats) print a
+// ready-to-paste snippet. This executor performs the IO the planner avoids.
+// ---------------------------------------------------------------------------
+
+// Resolve the canonical launch spec from the running daemon's
+// /api/mcp/install-info (the same payload the Settings → MCP panel and the
+// Codex one-click install use), so every install path configures byte-for-
+// byte the same command. Falls back to a minimal `od mcp --daemon-url`
+// spec when the daemon is unreachable.
+async function resolveMcpLaunchSpec(flags) {
+  const base = await cliDaemonBaseUrl(flags);
+  try {
+    const resp = await fetch(`${base}/api/mcp/install-info`);
+    if (resp.ok) {
+      const info = await resp.json();
+      if (info && typeof info.command === 'string' && Array.isArray(info.args)) {
+        return {
+          command: info.command,
+          args: info.args,
+          env: info.env && typeof info.env === 'object' ? info.env : {},
+        };
+      }
+    }
+  } catch {
+    // daemon not running / unreachable — fall through to the minimal spec
+  }
+  return {
+    command: 'od',
+    args: ['mcp', '--daemon-url', base],
+    env: {},
+  };
+}
+
+function emitInstallResult(useJson, result) {
+  if (useJson) {
+    console.log(JSON.stringify(result));
+    return;
+  }
+  if (result.ok) {
+    console.log(`✓ ${result.message}`);
+  } else {
+    console.error(`✗ ${result.message}`);
+  }
+}
+
+async function runMcpInstall(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, {
+      string: MCP_INSTALL_STRING_FLAGS,
+      boolean: MCP_INSTALL_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printMcpInstallHelp();
+    process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    printMcpInstallHelp();
+    return;
+  }
+
+  const slug = positionalArgs(args, MCP_INSTALL_STRING_FLAGS)[0];
+  const useJson = Boolean(flags.json);
+  if (!slug) {
+    console.error('missing agent slug');
+    printMcpInstallHelp();
+    process.exit(2);
+  }
+  if (!isAgentSlug(slug)) {
+    const msg = `unknown agent: ${slug} (expected one of: ${AGENT_SLUGS.join(' ')})`;
+    emitInstallResult(useJson, { ok: false, agent: slug, message: msg });
+    process.exit(2);
+  }
+
+  const uninstall = Boolean(flags.uninstall || flags.remove);
+  const dryRun = Boolean(flags.print || flags['dry-run']);
+  const serverName = flags.name || 'open-design';
+
+  const os = await import('node:os');
+  const spec = await resolveMcpLaunchSpec(flags);
+  const plan = planAgentInstall(slug, spec, {
+    home: os.homedir(),
+    platform: process.platform,
+    serverName,
+  });
+
+  if (plan.kind === 'manual') {
+    const result = {
+      ok: false,
+      agent: slug,
+      kind: 'manual',
+      configPath: plan.configPath,
+      format: plan.format,
+      snippet: plan.snippet,
+      message: `${slug}: manual setup required. ${plan.reason}`,
+    };
+    if (useJson) {
+      console.log(JSON.stringify(result));
+    } else {
+      console.error(`› ${result.message}`);
+      if (plan.configPath) console.error(`  Config: ${plan.configPath}`);
+      console.error(`  Add this ${plan.format} block:\n`);
+      console.log(plan.snippet);
+    }
+    return;
+  }
+
+  if (plan.kind === 'cli') {
+    const argv = uninstall ? plan.removeArgv : plan.addArgv;
+    if (dryRun) {
+      emitInstallResult(useJson, {
+        ok: true,
+        agent: slug,
+        kind: 'cli',
+        command: `${plan.bin} ${argv.join(' ')}`,
+        message: `would run: ${plan.bin} ${argv.join(' ')}`,
+      });
+      return;
+    }
+    const { spawn } = await import('node:child_process');
+    const code = await new Promise((resolve) => {
+      const child = spawn(plan.bin, argv, { stdio: 'inherit' });
+      child.on('error', (err) => {
+        console.error(`✗ failed to run ${plan.bin}: ${err.message}`);
+        resolve(127);
+      });
+      child.on('exit', (c) => resolve(c ?? 0));
+    });
+    if (code !== 0) {
+      emitInstallResult(useJson, {
+        ok: false,
+        agent: slug,
+        kind: 'cli',
+        message: `${plan.bin} exited with code ${code}`,
+      });
+      process.exit(code || 1);
+    }
+    emitInstallResult(useJson, {
+      ok: true,
+      agent: slug,
+      kind: 'cli',
+      message: uninstall
+        ? `removed ${serverName} from ${slug}`
+        : `installed ${serverName} into ${slug}`,
+    });
+    return;
+  }
+
+  // plan.kind === 'json'
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  let existing = null;
+  try {
+    existing = await fs.readFile(plan.configPath, 'utf8');
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') throw err;
+  }
+
+  if (uninstall) {
+    const next = removeJsonInstall(existing, plan);
+    if (next == null) {
+      emitInstallResult(useJson, {
+        ok: true,
+        agent: slug,
+        kind: 'json',
+        configPath: plan.configPath,
+        message: `${serverName} not present in ${plan.configPath} — nothing to remove`,
+      });
+      return;
+    }
+    if (dryRun) {
+      emitInstallResult(useJson, {
+        ok: true,
+        agent: slug,
+        kind: 'json',
+        configPath: plan.configPath,
+        preview: next,
+        message: `would update ${plan.configPath}`,
+      });
+      return;
+    }
+    await fs.writeFile(plan.configPath, next, 'utf8');
+    emitInstallResult(useJson, {
+      ok: true,
+      agent: slug,
+      kind: 'json',
+      configPath: plan.configPath,
+      message: `removed ${serverName} from ${plan.configPath}`,
+    });
+    return;
+  }
+
+  const next = applyJsonInstall(existing, plan);
+  if (dryRun) {
+    emitInstallResult(useJson, {
+      ok: true,
+      agent: slug,
+      kind: 'json',
+      configPath: plan.configPath,
+      preview: next,
+      message: `would write ${plan.configPath}`,
+    });
+    return;
+  }
+  await fs.mkdir(path.dirname(plan.configPath), { recursive: true });
+  await fs.writeFile(plan.configPath, next, 'utf8');
+  emitInstallResult(useJson, {
+    ok: true,
+    agent: slug,
+    kind: 'json',
+    configPath: plan.configPath,
+    message: `installed ${serverName} into ${plan.configPath}`,
+  });
+}
+
+function printMcpInstallHelp() {
+  console.log(`Usage: od mcp install <agent> [options]
+
+Register Open Design's stdio MCP server into a coding agent's own config.
+
+Agents:
+  ${AGENT_SLUGS.join(' ')}
+
+Options:
+  --uninstall, --remove   Remove the Open Design MCP server instead.
+  --print, --dry-run      Show what would change; write nothing.
+  --json                  Machine-readable result.
+  --name <name>           MCP server name in the agent config (default: open-design).
+  --daemon-url <url>      Daemon URL used to resolve the launch command.
+
+The launch command is resolved from the running daemon's
+/api/mcp/install-info, so the installed entry matches the Settings → MCP
+panel snippet byte-for-byte. Start the daemon first for an exact match;
+otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -5550,50 +5828,34 @@ function formatBytes(n) {
 }
 
 async function runDaemonStart(flags) {
-  // The headless flag implies --no-open AND auto-applies any other
-  // headless-only env defaults. Because the existing default-mode boot
-  // already handles port / host / no-open, we forward into it by
-  // mutating process.argv before re-entering the boot path.
-  // Simpler path: re-implement the boot inline, mirroring the default.
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
   const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1');
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
-  process.env.OD_BIND_HOST = host;
-  process.env.OD_PORT = String(port);
-  const { startServer: startHeadless } = await import('./server.js');
-  const started = await startHeadless({ port, host, returnServer: true });
-  const url = started.url;
-  const server = started.server;
-  const shutdown = started.shutdown;
-  const closeServer = () => new Promise((resolve) => {
-    let resolved = false;
-    const resolveOnce = () => { if (!resolved) { resolved = true; resolve(); } };
-    const idleTimer = setTimeout(() => server.closeIdleConnections?.(), 1_000);
-    const hardTimer = setTimeout(() => { server.closeAllConnections?.(); resolveOnce(); }, 5_000);
-    idleTimer.unref?.();
-    hardTimer.unref?.();
-    server.close(() => resolveOnce());
+  const runtime = await startDaemonRuntime({
+    host,
+    logListening: false,
+    openBrowser: !headless,
+    port,
   });
-  let shuttingDown = false;
-  const stop = () => {
-    if (shuttingDown) process.exit(0);
-    shuttingDown = true;
-    void Promise.allSettled([
-      Promise.resolve().then(() => shutdown?.()),
-      closeServer(),
-    ]).finally(() => process.exit(0));
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-  console.log(`[od] listening on ${url} (${headless ? 'headless' : 'desktop'})`);
-  if (!headless) {
-    const opener = process.platform === 'darwin' ? 'open'
-      : process.platform === 'win32' ? 'start'
-      : 'xdg-open';
-    import('node:child_process').then(({ spawn }) => {
-      spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
-    });
-  }
+  console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
+
+  await new Promise((resolve) => {
+    let shuttingDown = false;
+    const stop = () => {
+      if (shuttingDown) process.exit(0);
+      shuttingDown = true;
+      void runtime.stop().finally(() => {
+        cleanup();
+        resolve();
+      });
+    };
+    const cleanup = () => {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
 }
 
 async function runDaemonStatus(flags) {
@@ -5825,9 +6087,6 @@ async function runStatus(args) {
 // without driving the web UI.
 // ---------------------------------------------------------------------------
 
-const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
-const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-
 async function runDiagnostics(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -5928,9 +6187,6 @@ async function runVersion(args) {
 // without leaving the terminal. JSON values pass through unchanged;
 // scalar strings/numbers/booleans are coerced.
 // ---------------------------------------------------------------------------
-
-const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
-const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 async function runDoctor(args) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });

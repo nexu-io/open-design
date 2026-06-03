@@ -153,6 +153,14 @@ export interface ProjectMetadata {
   // Batch/API-created projects can opt out of the initial discovery form so
   // the first agent turn builds immediately from the submitted brief.
   skipDiscoveryBrief?: boolean;
+  // Set when the user submits an unmodified curated example prompt from the
+  // gallery. Skips discovery AND requests full-quality direct generation,
+  // treating the curated title/brief as the complete creative brief. Honored
+  // by both the daemon and contracts (API/BYOK) system-prompt composers so the
+  // feature is not mode-dependent.
+  examplePrompt?: boolean;
+  examplePromptTitle?: string;
+  examplePromptBrief?: Record<string, string>;
   // Plugins selected through @ mentions on Home. These are additive
   // context references; the explicit "Use plugin" snapshot, when present,
   // remains the primary executable plugin for the run.

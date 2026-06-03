@@ -25,6 +25,8 @@ export type AnalyticsEventName =
   // Run lifecycle (daemon authoritative)
   | 'run_created'
   | 'run_finished'
+  | 'run_retry_attempted'
+  | 'run_retry_finished'
   // Packaged updater lifecycle
   | 'update_install_result'
   | 'update_apply_observed'
@@ -141,7 +143,8 @@ export type TrackingByokProviderId =
   | 'senseaudio';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
-// `kilo` over v1.
+// `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
+// fold into the `other` catch-all bucket.
 export type TrackingCliProviderId =
   | 'claude_code'
   | 'codex_cli'
@@ -156,6 +159,7 @@ export type TrackingCliProviderId =
   | 'github_copilot_cli'
   | 'pi'
   | 'kilo'
+  | 'amr'
   | 'other';
 
 export type TrackingFeedbackProviderId =
@@ -256,6 +260,23 @@ export type TrackingRunFailureUserAction =
   | 'reduce_context'
   | 'install_cli'
   | 'none';
+export type TrackingRunRetryStrategy = 'same_run_transient';
+export type TrackingRunRetryFinalResult =
+  | 'not_attempted'
+  | 'success'
+  | 'failed'
+  | 'suppressed';
+export type TrackingRunRetrySuppressedReason =
+  | 'not_failed'
+  | 'not_retryable'
+  | 'unsupported_category'
+  | 'hard_quota'
+  | 'attempt_limit_reached'
+  | 'cancel_requested'
+  | 'user_visible_output_seen'
+  | 'tool_call_seen'
+  | 'artifact_write_seen'
+  | 'live_artifact_seen';
 export type TrackingRunDiagnosticSource =
   | 'error_event'
   | 'stderr'
@@ -1903,6 +1924,36 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   design_system_created?: boolean;
   preview_module_count?: number;
   missing_font_count?: number;
+  retry_attempt_count?: number;
+  retry_final_result?: TrackingRunRetryFinalResult;
+  retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+}
+
+export interface RunRetryBaseProps {
+  page_name: 'chat_panel' | 'design_system_project';
+  area: 'chat_panel' | 'design_system_generation';
+  project_id: string;
+  conversation_id: string | null;
+  run_id: string;
+  retry_of_run_id: string;
+  retry_attempt_index: number;
+  retry_max_attempts: number;
+  retry_strategy: TrackingRunRetryStrategy;
+  agent_provider_id: TrackingCliProviderId;
+  model_id: string;
+  failure_category?: TrackingRunFailureCategory;
+  failure_detail?: TrackingRunFailureDetail;
+  failure_stage?: TrackingRunFailureStage;
+  error_code?: string;
+}
+
+export interface RunRetryAttemptedProps extends RunRetryBaseProps {
+  retry_reason: 'transient_failure';
+}
+
+export interface RunRetryFinishedProps extends RunRetryBaseProps {
+  retry_result: 'success' | 'failed' | 'suppressed';
+  retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
 }
 
 export type TrackingUpdateApplyResult = 'success' | 'not_applied' | 'unknown';
@@ -2145,6 +2196,8 @@ export type AnalyticsEventPayload =
   | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
   | { event: 'run_created'; props: RunCreatedProps }
   | { event: 'run_finished'; props: RunFinishedProps }
+  | { event: 'run_retry_attempted'; props: RunRetryAttemptedProps }
+  | { event: 'run_retry_finished'; props: RunRetryFinishedProps }
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
   | { event: 'update_apply_observed'; props: UpdateApplyObservedProps }
   | { event: 'file_upload_result'; props: FileUploadResultProps }
@@ -2290,6 +2343,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'pi';
     case 'kilo':
       return 'kilo';
+    case 'amr':
+      return 'amr';
     default:
       return 'other';
   }

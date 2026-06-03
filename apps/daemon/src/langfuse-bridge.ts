@@ -10,6 +10,8 @@
 
 import os from 'node:os';
 
+import { modelIdForTracking } from '@open-design/contracts/analytics';
+
 import { readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
@@ -26,6 +28,7 @@ import {
   type ToolCallSummary,
   type TurnInfo,
 } from './langfuse-trace.js';
+import type { PromptStackTelemetry } from './prompt-telemetry.js';
 import { redactSecrets } from './redact.js';
 import {
   hasExplicitRequestedModelForAnalytics,
@@ -67,6 +70,7 @@ interface DaemonRunRecord {
   skillId?: string;
   designSystemId?: string;
   clientType?: 'desktop' | 'web' | 'unknown';
+  promptTelemetry?: PromptStackTelemetry;
 }
 
 export interface ReportRunCompletedFromDaemonOpts {
@@ -116,13 +120,11 @@ function turnInfoFromRun(
     turn.model = run.model;
   } else if (agentReportedModel && agentReportedModel.trim().length > 0) {
     turn.model = agentReportedModel.trim();
+  } else {
+    // Keep Langfuse aligned with PostHog's model bucket when the user selected
+    // "Default (CLI config)" and the runtime did not emit a resolved model.
+    turn.model = modelIdForTracking(agentReportedModel);
   }
-  // No fallback to a non-explicit `run.model` here. When the request never
-  // pinned a concrete model and the agent never reported one, forwarding the
-  // request-side `default` placeholder would label the generation
-  // `model: "default"` — and Langfuse treats `generation.model` as a
-  // first-class grouping/cost dimension, so that creates a fake model bucket
-  // instead of leaving the model unknown.
   if (run.reasoning) turn.reasoning = run.reasoning;
   if (run.skillId) turn.skillId = run.skillId;
   if (run.designSystemId) turn.designSystemId = run.designSystemId;
@@ -444,6 +446,7 @@ export async function reportRunCompletedFromDaemon(
       prefs,
       ...(turn ? { turn } : {}),
       runtime,
+      ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
     };
 
     await reportRunCompleted(

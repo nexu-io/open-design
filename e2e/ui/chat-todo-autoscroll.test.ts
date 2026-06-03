@@ -259,7 +259,7 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
     await seedAppConfig(page);
   });
 
-  test('scenario A: pinned user stays at bottom after PinnedTodoCard grows', async ({
+  test('[P2] scenario A: pinned user stays at bottom after PinnedTodoCard grows', async ({
     page,
   }) => {
     const { projectId, conversationId } = await seedProjectWithTodos(page, {
@@ -323,7 +323,7 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
     ).toBeLessThan(20);
   });
 
-  test('scenario B: user scroll-up is preserved when PinnedTodoCard grows', async ({
+  test('[P2] scenario B: user scroll-up is preserved when PinnedTodoCard grows', async ({
     page,
   }) => {
     const { projectId, conversationId } = await seedProjectWithTodos(page, {

@@ -124,6 +124,35 @@ export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip 
 
 This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Do not call AskUserQuestion, do not emit any question form or choice card, and do not wait for user input. Treat the user's first message and project metadata as the brief, choose reasonable defaults for any missing details, then proceed directly to planning/building under the normal artifact workflow.`;
 
+export function buildExamplePromptOverride(
+  title?: string | null,
+  brief?: Record<string, string> | null,
+): string {
+  let text = `# Example prompt mode — full-quality direct generation
+
+The user selected a curated example prompt from the gallery and sent it without modification. This prompt is a complete, self-contained creative brief that has been carefully designed to produce a showcase-quality artifact.`;
+
+  if (title) {
+    text += `\n\nSelected example: "${title}"`;
+  }
+
+  if (brief && Object.keys(brief).length > 0) {
+    text += `\n\nPre-filled creative brief (treat as if the user already answered all discovery questions):`;
+    for (const [key, value] of Object.entries(brief)) {
+      text += `\n- ${key.replace(/_/g, ' ')}: ${value}`;
+    }
+  }
+
+  text += `\n\nRules:
+1. Do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask any clarifying questions.
+2. Treat the user's message as the FULL specification — it contains all visual direction, content themes, and structural intent needed.
+3. Generate the artifact at your absolute highest quality. This is a showcase piece — match or exceed the standard of a hand-crafted design.
+4. Infer any unspecified details (copy, layout choices, imagery descriptions) in a way that is maximally coherent with the stated creative direction.
+5. Proceed directly to planning and building. Output your TodoWrite plan and then the artifact immediately.`;
+
+  return text;
+}
+
 const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 
 ---
@@ -247,7 +276,10 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (metadata?.skipDiscoveryBrief === true) {
+  if (metadata?.examplePrompt === true) {
+    parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
+    parts.push('\n\n---\n\n');
+  } else if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
   }

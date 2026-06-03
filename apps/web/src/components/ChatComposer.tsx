@@ -53,6 +53,7 @@ import {
   type TrackedInsertion,
 } from '../utils/pluginInsertionTracking';
 import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
+import { SearchableModelSelect } from './modelOptions';
 import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -399,9 +400,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
     const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
-    const [petMenuOpen, setPetMenuOpen] = useState(false);
-    const petWrapRef = useRef<HTMLDivElement | null>(null);
-    const [petMenuStyle, setPetMenuStyle] = useState<React.CSSProperties>({});
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // initialDraft is only honored on the first non-empty value the parent
     // hands us. After we seed once, the composer is fully under user control
@@ -445,58 +443,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }, [toolsOpen]);
 
-    useEffect(() => {
-      if (!petMenuOpen) return;
-      function onPointer(e: MouseEvent) {
-        const target = e.target as Node;
-        if (petWrapRef.current?.contains(target)) return;
-        setPetMenuOpen(false);
-      }
-      function onKey(e: KeyboardEvent) {
-        if (e.key === 'Escape') setPetMenuOpen(false);
-      }
-      document.addEventListener('mousedown', onPointer);
-      document.addEventListener('keydown', onKey);
-      return () => {
-        document.removeEventListener('mousedown', onPointer);
-        document.removeEventListener('keydown', onKey);
-      };
-    }, [petMenuOpen]);
-
-    // Viewport-aware pet menu positioning — flips the popover to stay
-    // within screen bounds instead of clipping at the edge.
-    useEffect(() => {
-      if (!petMenuOpen) return;
-      const wrap = petWrapRef.current;
-      if (!wrap) return;
-      const rect = wrap.getBoundingClientRect();
-      const menuW = 260;
-      const menuH = 200;
-      const gap = 6;
-      const viewW = window.innerWidth;
-      const viewH = window.innerHeight;
-      // Prefer opening upward (bottom of menu above the button).
-      // Flip downward when there isn't enough room above.
-      // When neither direction fits, clamp to viewport bounds.
-      let top: number;
-      if (rect.top >= menuH + gap) {
-        top = rect.top - menuH - gap;
-      } else if (rect.bottom + menuH + gap <= viewH) {
-        top = rect.bottom + gap;
-      } else {
-        top = Math.max(gap, viewH - menuH - gap);
-      }
-      // Right-align by default (menu right edge ≈ button right edge).
-      // Shift left when the menu would spill past the viewport left edge.
-      const left = Math.max(8, Math.min(viewW - menuW - 8, rect.right - menuW));
-      setPetMenuStyle({
-        position: 'fixed',
-        top,
-        left,
-        bottom: 'auto',
-        right: 'auto',
-      });
-    }, [petMenuOpen]);
 
     // Lazy-fetch the user's external MCP servers list once on mount so the
     // `/mcp …` slash palette and the composer's MCP button popover have
@@ -1780,31 +1726,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               >
                 {t('settings.byokImageModel')}
               </label>
-              <select
+              <SearchableModelSelect
                 id="composer-byok-image-model-select"
+                className="inline-switcher__select composer-byok-image-model__select"
                 value={byokImageModel ?? ''}
-                onChange={(e) => onChangeByokImageModel(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--border, #444)',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  color: 'inherit',
-                  fontSize: 12,
-                }}
-              >
-                <option value="">
-                  {(IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
-                    ?? 'senseaudio-image-2.0') + ' (default)'}
-                </option>
-                {IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
-                  (m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ),
-                )}
-              </select>
+                onChange={(value) => onChangeByokImageModel(value)}
+                models={IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map((m) => ({ id: m.id, label: m.label }))}
+                additionalOptions={[
+                  {
+                    value: '',
+                    label: (IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
+                      ?? 'senseaudio-image-2.0') + ' (default)',
+                  },
+                ]}
+                searchPlaceholder={t('newproj.modelSearch')}
+                searchInputTestId="composer-byok-image-model-search"
+                popoverTestId="composer-byok-image-model-popover"
+                style={{ fontSize: 12 }}
+              />
             </div>
           ) : null}
           {/*
@@ -2224,70 +2163,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 </div>
               ) : null}
             </div>
-            {petEnabled ? (
-              <div className="composer-pet-wrap" ref={petWrapRef}>
-                <button
-                  type="button"
-                  className={`composer-pet${petConfig?.adopted ? ' adopted' : ''}`}
-                  onClick={() => {
-                    if (petConfig?.adopted) {
-                      if (!petConfig.enabled) setPetMenuOpen(true);
-                      else setPetMenuOpen((v) => !v);
-                    } else {
-                      setPetMenuOpen((v) => !v);
-                    }
-                  }}
-                  title={t('pet.composerTitle')}
-                  aria-haspopup="menu"
-                  aria-expanded={petMenuOpen}
-                  aria-label={t('pet.composerTitle')}
-                >
-                  <span className="composer-pet-glyph">
-                    {petConfig?.adopted ? (petConfig?.custom?.glyph || '🐾') : '🐾'}
-                  </span>
-                  <span className="composer-pet-label">
-                    {petConfig?.adopted ? (petConfig?.custom?.name || 'Buddy') : t('pet.composerMenuTitle')}
-                  </span>
-                </button>
-                {petMenuOpen ? (
-                  <div
-                    className="composer-pet-menu"
-                    style={petMenuStyle}
-                  >
-                    <div className="composer-pet-menu-head">
-                      <strong>{t('pet.composerMenuTitle')}</strong>
-                      <span>{t('pet.composerMenuHint')}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="composer-pet-menu-row toggle"
-                      onClick={() => {
-                        if (petConfig?.adopted) {
-                          onTogglePet?.();
-                        } else {
-                          onOpenPetSettings?.();
-                        }
-                        setPetMenuOpen(false);
-                      }}
-                    >
-                      <Icon name={petConfig?.enabled ? 'eye-off' : 'eye'} size={12} />
-                      <span>{petConfig?.enabled ? t('pet.tuck') : t('pet.wake')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="composer-pet-menu-row settings"
-                      onClick={() => {
-                        onOpenPetSettings?.();
-                        setPetMenuOpen(false);
-                      }}
-                    >
-                      <Icon name="settings" size={12} />
-                      <span>{t('pet.composerOpenSettings')}</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
             <Button
               size="icon"
               data-testid="chat-attach"

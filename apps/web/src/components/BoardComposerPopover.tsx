@@ -206,13 +206,31 @@ function annotationHoverAnchorStyle(target: PreviewCommentSnapshot, scale: numbe
   };
 }
 
-export function AnnotationHoverPopover({ target, scale }: { target: PreviewCommentSnapshot; scale: number }) {
+export function AnnotationHoverPopover({
+  target,
+  scale,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  target: PreviewCommentSnapshot;
+  scale: number;
+  // The card floats over the preview iframe at the cursor. Moving onto it pulls
+  // the pointer off the iframe, which fires mouseout and would otherwise unmount
+  // the card — the cursor then lands back on the iframe and re-triggers it,
+  // flickering forever. The host uses these to pin the card while it is hovered
+  // (ignoring the iframe's leave) so the tooltip stays put and its values stay
+  // selectable/copyable.
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
   return (
     <div
       className="comment-popover annotation-hover-popover"
       data-testid="annotation-hover-popover"
       role="tooltip"
       style={annotationHoverAnchorStyle(target, scale)}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <AnnotationStyleSummary target={target} testId="annotation-hover-style-summary" />
     </div>

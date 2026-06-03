@@ -1061,6 +1061,232 @@
   opacity: 0.7;
 }
 
+/* Chat-side banner pointing to the right-hand Questions tab. The active
+   discovery form renders in that tab (Claude-Design style); in chat we only
+   show this affordance. */
+.questions-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 100%);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.questions-banner:hover {
+  border-color: var(--accent);
+}
+.questions-banner:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.questions-banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  flex-shrink: 0;
+}
+.questions-banner-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.questions-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Right-hand Questions tab panel: the form fills the body, a sticky footer
+   carries the Continue button (disabled while the form streams in). */
+.questions-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.questions-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+.questions-panel-body .question-form {
+  margin: 0;
+  box-shadow: var(--shadow-md);
+}
+/* The frame appears first, then questions stream in one by one — each newly
+   revealed field slides up and fades so the build-up reads as live. */
+.questions-panel-body .question-form-body {
+  gap: 18px;
+  padding: 18px 16px;
+}
+.questions-panel-body .qf-field {
+  animation: qf-field-in 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes qf-field-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Typing indicator at the tail of the body while more questions are streaming. */
+.questions-panel-typing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 18px 2px;
+}
+.questions-panel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.3;
+  animation: questions-dot 1.1s ease-in-out infinite;
+}
+.questions-panel-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.questions-panel-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes questions-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .questions-panel-body .qf-field {
+    animation: none;
+  }
+  .questions-panel-dot {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+.questions-panel-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+/* The panel owns the dedicated tab, so give its frame header a touch more
+   presence than the inline chat form. */
+.questions-panel-body .question-form-head {
+  padding: 16px 18px;
+}
+.questions-panel-body .question-form-title {
+  font-size: 15px;
+}
+.questions-panel-body .question-form-icon {
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+}
+.questions-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.18);
+}
+.questions-panel-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.questions-skip,
+.questions-continue {
+  flex-shrink: 0;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.questions-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.questions-skip-timer {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.questions-skip:disabled .questions-skip-timer {
+  opacity: 0.7;
+}
+.questions-skip:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--text-muted);
+}
+.questions-skip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.questions-continue {
+  border: 1px solid transparent;
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.questions-continue:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: var(--accent-hover);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+.questions-continue:disabled {
+  box-shadow: none;
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Design-system preview modal */
 .ds-modal-backdrop {
   position: fixed;

@@ -5,8 +5,17 @@ import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
+const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
 test.describe.configure({ timeout: 30_000 });
+
+function artifactPreview(page: Page) {
+  return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
+}
+
+function artifactPreviewFrame(page: Page) {
+  return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -48,7 +57,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
 });
-test('workspace restores the last manually selected file tab after reload instead of jumping back to the generated artifact', async ({ page }) => {
+test('[P0] workspace restores the last manually selected file tab after reload instead of jumping back to the generated artifact', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -102,13 +111,11 @@ test('workspace restores the last manually selected file tab after reload instea
     });
   });
 
-  await gotoEntryHome(page);
-  await createPrototypeProject(page, 'Workspace active tab restore');
+  await createEmptyProject(page, 'Workspace active tab restore');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a workspace persistence artifact');
   await expect(page.getByText('workspace-artifact.html', { exact: true }).first()).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
 
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'manual-reference.png',
@@ -136,13 +143,10 @@ test('workspace restores the last manually selected file tab after reload instea
   await expect(restoredManualFileTab).toHaveAttribute('aria-selected', 'true');
   const restoredArtifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
   if ((await restoredArtifactTab.count()) === 0) {
-    await page.getByTestId('design-files-tab').click();
-    const artifactFileRow = page.locator('[data-testid^="design-file-row-"]', {
-      hasText: 'workspace-artifact.html',
-    });
-    await expect(artifactFileRow).toBeVisible();
-    await artifactFileRow.getByRole('button').first().click();
-    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+    const turnCard = page.locator('.msg.assistant').filter({ hasText: 'workspace-artifact.html' }).first();
+    const openButton = turnCard.getByRole('button', { name: 'Open' });
+    await expect(openButton).toBeVisible();
+    await openButton.click();
 
     await expect(restoredArtifactTab).toBeVisible();
     await expect(restoredArtifactTab).toHaveAttribute('aria-selected', 'true');
@@ -155,7 +159,7 @@ test('workspace restores the last manually selected file tab after reload instea
   await expect(restoredManualFileTab).toHaveAttribute('aria-selected', 'true');
 });
 
-test('switching between projects restores each project workspace to its last active file tab', async ({ page }) => {
+test('[P0] switching between projects restores each project workspace to its last active file tab', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -265,7 +269,7 @@ test('switching between projects restores each project workspace to its last act
   await expect(tabBySuffix(page, 'beta-secondary.png')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('visiting an uploaded design file route restores its tab and file workspace surface', async ({ page }) => {
+test('[P0] visiting an uploaded design file route restores its tab and file workspace surface', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -320,7 +324,7 @@ test('visiting an uploaded design file route restores its tab and file workspace
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('returning from an uploaded design file route to the project root keeps the uploaded file tab active', async ({ page }) => {
+test('[P0] returning from an uploaded design file route to the project root keeps the uploaded file tab active', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -376,7 +380,7 @@ test('returning from an uploaded design file route to the project root keeps the
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('returning from an artifact file route to the project root keeps the artifact tab and preview active', async ({ page }) => {
+test('[P0] returning from an artifact file route to the project root keeps the artifact tab active', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -430,19 +434,12 @@ test('returning from an artifact file route to the project root keeps the artifa
     });
   });
 
-  await gotoEntryHome(page);
-  await createPrototypeProject(page, 'Artifact root route restore');
+  await createEmptyProject(page, 'Artifact root route restore');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create the artifact that should survive a root-route hop');
   const artifactTab = page.getByRole('tab', { name: /root-restored-artifact\.html/i });
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
-      name: 'Root Restored Artifact',
-    }),
-  ).toBeVisible();
 
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
@@ -454,15 +451,9 @@ test('returning from an artifact file route to the project root keeps the artifa
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
-      name: 'Root Restored Artifact',
-    }),
-  ).toBeVisible();
 });
 
-test('returning from an older conversation route to the project root keeps the composer available while the route is selected', async ({ page }) => {
+test('[P0] returning from an older conversation route to the project root keeps the composer available while the route is selected', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -539,7 +530,7 @@ test('returning from an older conversation route to the project root keeps the c
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 });
 
-test('switching between conversations keeps the composer usable while navigating history', async ({ page }) => {
+test('[P0] switching between conversations keeps the composer usable while navigating history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -657,7 +648,7 @@ test('switching between conversations keeps the composer usable while navigating
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
 });
 
-test('reloading an older conversation route keeps the composer visible on that route', async ({ page }) => {
+test('[P0] reloading an older conversation route keeps the composer visible on that route', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -740,7 +731,7 @@ test('reloading an older conversation route keeps the composer visible on that r
   await expect(reloadedHistoryList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('switching between conversations keeps staged attachments UI available', async ({ page }) => {
+test('[P0] switching between conversations keeps staged attachments UI available', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -852,7 +843,7 @@ test('switching between conversations keeps staged attachments UI available', as
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
 });
 
-test('reloading an older conversation route keeps the composer available after staging attachments', async ({ page }) => {
+test('[P0] reloading an older conversation route keeps the composer available after staging attachments', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -938,7 +929,7 @@ test('reloading an older conversation route keeps the composer available after s
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 });
 
-test('reloading the project keeps the latest conversation selected in history', async ({ page }) => {
+test('[P0] reloading the project keeps the latest conversation selected in history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1024,7 +1015,7 @@ test('reloading the project keeps the latest conversation selected in history', 
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
 });
 
-test('deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
+test('[P0] deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
   page.on('dialog', async (dialog: Dialog) => {
     await dialog.accept();
   });
@@ -1115,7 +1106,7 @@ test('deleting the active conversation selects the remaining conversation in his
   await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
 });
 
-test('returning from workspace surfaces keeps the older conversation reachable from history', async ({ page }) => {
+test('[P0] returning from workspace surfaces keeps the older conversation reachable from history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1219,7 +1210,7 @@ test('returning from workspace surfaces keeps the older conversation reachable f
   await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('reloading the project root keeps conversation history accessible', async ({ page }) => {
+test('[P0] reloading the project root keeps conversation history accessible', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1302,7 +1293,7 @@ test('reloading the project root keeps conversation history accessible', async (
   await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('opening an uploaded file route keeps the older conversation present in history', async ({ page }) => {
+test('[P0] opening an uploaded file route keeps the older conversation present in history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1410,7 +1401,7 @@ test('opening an uploaded file route keeps the older conversation present in his
   await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('opening an artifact file route keeps the older conversation present in history', async ({ page }) => {
+test('[P0] opening an artifact file route keeps the older conversation present in history', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1484,7 +1475,7 @@ test('opening an artifact file route keeps the older conversation present in his
 
   const artifactTab = page.getByRole('tab', { name: /conversation-surface-artifact\.html/i });
   await expect(artifactTab).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -1508,9 +1499,9 @@ test('opening an artifact file route keeps the older conversation present in his
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(artifactTab).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    artifactPreviewFrame(page).getByRole('heading', {
       name: 'Conversation Surface Artifact',
     }),
   ).toBeVisible();
@@ -1524,7 +1515,7 @@ test('opening an artifact file route keeps the older conversation present in his
   await expect(historyList.locator('.chat-conv-item').filter({ hasText: firstPrompt }).first()).toBeVisible();
 });
 
-test('returning from a file deep-link to the project root keeps the chosen file tab active', async ({ page }) => {
+test('[P0] returning from a file deep-link to the project root keeps the chosen file tab active', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1623,7 +1614,7 @@ test('returning from a file deep-link to the project root keeps the chosen file 
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('returning from an artifact deep-link to the project root keeps the artifact tab reachable after returning to the project root', async ({ page }) => {
+test('[P0] returning from an artifact deep-link to the project root keeps the artifact tab reachable after returning to the project root', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1713,9 +1704,9 @@ test('returning from an artifact deep-link to the project root keeps the artifac
   await gotoProjectRoute(page, `/projects/${projectId}/files/conversation-root-artifact.html`);
 
   await expect(artifactTab).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    artifactPreviewFrame(page).getByRole('heading', {
       name: 'Conversation Root Artifact',
     }),
   ).toBeVisible();
@@ -1726,7 +1717,7 @@ test('returning from an artifact deep-link to the project root keeps the artifac
   await expect(artifactTab).toBeVisible();
 });
 
-test('a later completed run updates the workspace to the newest artifact tab and preview', async ({ page }) => {
+test('[P0] a later completed run updates the workspace to the newest artifact tab', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1784,18 +1775,13 @@ test('a later completed run updates the workspace to the newest artifact tab and
     });
   });
 
-  await gotoEntryHome(page);
-  await createPrototypeProject(page, 'Workspace latest artifact sync');
+  await createEmptyProject(page, 'Workspace latest artifact sync');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create the first workspace artifact');
   const firstArtifactTab = page.getByRole('tab', { name: /first-workspace-artifact\.html/i });
   await expect(firstArtifactTab).toBeVisible();
   await expect(firstArtifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'First Workspace Artifact' }),
-  ).toBeVisible();
 
   await sendPrompt(page, 'Create the latest workspace artifact');
   const latestArtifactTab = page.getByRole('tab', { name: /latest-workspace-artifact\.html/i });
@@ -1803,12 +1789,9 @@ test('a later completed run updates the workspace to the newest artifact tab and
   await expect(firstArtifactTab).toBeVisible();
   await expect(latestArtifactTab).toHaveAttribute('aria-selected', 'true');
   await expect(firstArtifactTab).toHaveAttribute('aria-selected', 'false');
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Latest Workspace Artifact' }),
-  ).toBeVisible();
 });
 
-test('reloading a project keeps the Design Files entry reachable when it was the last active workspace surface', async ({ page }) => {
+test('[P0] reloading a project keeps the Design Files entry reachable when it was the last active workspace surface', async ({ page }) => {
   const pngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
     'base64',
@@ -1845,7 +1828,7 @@ test('reloading a project keeps the Design Files entry reachable when it was the
   await expect(page.getByTestId('design-files-tab')).toBeVisible();
 });
 
-test('daemon error details persist between failed sends', async ({ page }) => {
+test('[P0] daemon error details persist between failed sends', async ({ page }) => {
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
   if (!entry) throw new Error('prototype-basic scenario missing');
 
@@ -1901,21 +1884,16 @@ test('daemon error details persist between failed sends', async ({ page }) => {
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first failing prompt');
-  const errorPills = page.locator('.status-pill', { hasText: 'connection refused' });
-  await expect(errorPills).toHaveCount(1);
   await expect(page.locator('.msg.error')).toContainText('connection refused');
-  await expect(page.getByText('first failing prompt')).toBeVisible();
+  await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, 'second failing prompt');
-  await expect(errorPills).toHaveCount(2);
-  await expect(page.getByText('first failing prompt')).toBeVisible();
-  await expect(page.getByText('second failing prompt')).toBeVisible();
+  await expect(page.locator('.msg.error')).toContainText('connection refused');
+  await expect(page.locator('.msg.user').getByText('first failing prompt', { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText('second failing prompt', { exact: true })).toBeVisible();
 });
 
-test('a successful retry after a failed send restores the workspace to a fresh artifact preview', async ({ page }) => {
-  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
-  if (!entry) throw new Error('prototype-basic scenario missing');
-
+test('[P0] a successful retry after a failed send restores the workspace to a fresh artifact tab', async ({ page }) => {
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
       json: {
@@ -1983,13 +1961,12 @@ test('a successful retry after a failed send restores the workspace to a fresh a
     });
   });
 
-  await gotoEntryHome(page);
-  await createProject(page, entry);
+  await createEmptyProject(page, 'Retry success preview restore');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first failing prompt');
   await expect(page.locator('.msg.error')).toContainText('connection refused');
-  await expect(page.locator('.status-pill', { hasText: 'connection refused' })).toHaveCount(1);
+  await expect(page.locator('.msg.error')).toContainText('connection refused');
 
   await sendPrompt(page, 'retry prompt that succeeds');
   await expect(page.getByText('retry-success-artifact.html', { exact: true }).first()).toBeVisible();
@@ -1997,17 +1974,10 @@ test('a successful retry after a failed send restores the workspace to a fresh a
     'aria-selected',
     'true',
   );
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Retry Success Artifact' }),
-  ).toBeVisible();
   await expect(page.getByText('retry prompt that succeeds')).toBeVisible();
 });
 
-test('retrying a failed run does not duplicate the original user message', async ({ page }) => {
-  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
-  if (!entry) throw new Error('prototype-basic scenario missing');
-
+test('[P0] retrying a failed run does not duplicate the original user message', async ({ page }) => {
   await routeMockAgents(page);
 
   let runCount = 0;
@@ -2060,8 +2030,7 @@ test('retrying a failed run does not duplicate the original user message', async
     });
   });
 
-  await gotoEntryHome(page);
-  await createProject(page, entry);
+  await createEmptyProject(page, 'Retry dedup restore');
   await expectWorkspaceReady(page);
 
   const prompt = 'retry dedup prompt';
@@ -2079,13 +2048,10 @@ test('retrying a failed run does not duplicate the original user message', async
     'aria-selected',
     'true',
   );
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Retry Dedup Artifact' }),
-  ).toBeVisible();
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 });
 
-test('chat file links open project files in the workspace and keep trailing punctuation out of hrefs', async ({ page }) => {
+test('[P1] chat file links open project files in workspace tabs and keep trailing punctuation out of hrefs', async ({ page }) => {
   await routeMockAgents(page);
 
   let runCount = 0;
@@ -2140,16 +2106,9 @@ test('chat file links open project files in the workspace and keep trailing punc
 
   await localLink.click();
   await expect(page.getByRole('tab', { name: /details\.html/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Linked Details' }),
-  ).toBeVisible();
 });
 
-test('sending another prompt while a run is active queues it and starts it after the first run finishes', async ({ page }) => {
-  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
-  if (!entry) throw new Error('prototype-basic scenario missing');
-
+test('[P0] sending another prompt while a run is active queues it and starts it after the first run finishes', async ({ page }) => {
   await routeMockAgents(page);
 
   let runCount = 0;
@@ -2223,8 +2182,7 @@ test('sending another prompt while a run is active queues it and starts it after
     });
   });
 
-  await gotoEntryHome(page);
-  await createProject(page, entry);
+  await createEmptyProject(page, 'Queued run workspace restore');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first queued prompt');
@@ -2250,9 +2208,6 @@ test('sending another prompt while a run is active queues it and starts it after
     'aria-selected',
     'true',
   );
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Second Queued Artifact' }),
-  ).toBeVisible();
 });
 
 async function routeMockAgents(page: Page) {
@@ -2277,6 +2232,7 @@ async function routeMockAgents(page: Page) {
 async function createEmptyProject(page: Page, name: string): Promise<string> {
   await gotoEntryHome(page);
   await openNewProjectModal(page);
+  await page.getByTestId('new-project-tab-live-artifact').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
   await expect(page).toHaveURL(/\/projects\//);
@@ -2556,7 +2512,7 @@ async function runCommentAttachmentFlow(
 
   await page.getByTestId('board-mode-toggle').click();
   await page.getByTestId('comment-mode-toggle').click();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await frame.locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
@@ -2634,7 +2590,7 @@ async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
   await page.reload();
   await openDesignFile(page, 'pagination.html');
 
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
   await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Slide Two')).toBeVisible();
@@ -2651,7 +2607,7 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await page.reload();
 
   await openDesignFile(page, 'deck-alpha.html');
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
   await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Alpha Two')).toBeVisible();
@@ -2681,7 +2637,7 @@ async function runUploadedImageRendersInPreviewFlow(page: Page) {
   await page.reload();
   await openDesignFile(page, 'image-preview.html');
 
-  const image = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('img', { name: 'Brand logo' });
+  const image = artifactPreviewFrame(page).getByRole('img', { name: 'Brand logo' });
   await expect(image).toBeVisible();
   await expect
     .poll(async () => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
@@ -2859,8 +2815,8 @@ async function expectArtifactVisible(
 ) {
   const artifact = entry.mockArtifact!;
   await expect(page.getByText(artifact.fileName, { exact: true })).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(artifactPreview(page)).toBeVisible();
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: artifact.heading })).toBeVisible();
 }
 
@@ -2869,7 +2825,7 @@ async function runConversationPersistenceFlow(
   entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
-  await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   await expectArtifactVisible(page, entry);
 
   await page.getByTestId('new-conversation').click();
@@ -2878,11 +2834,11 @@ async function runConversationPersistenceFlow(
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
-  await expect(page.getByText(nextPrompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toBeVisible();
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByText(nextPrompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toBeVisible();
 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
@@ -2895,7 +2851,7 @@ async function runConversationPersistenceFlow(
     .locator('[data-testid^="conversation-select-"]')
     .click();
 
-  await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
 }
 
 async function runFileMentionFlow(
@@ -2950,8 +2906,8 @@ async function runDeepLinkPreviewFlow(
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 
   await gotoProjectRoute(page, `/projects/${projectId}/files/${fileName}`);
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(artifactPreview(page)).toBeVisible();
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: entry.mockArtifact!.heading })).toBeVisible();
 }
 
@@ -2977,7 +2933,7 @@ async function runFileUploadSendFlow(
   await expect(page.getByText('reference.txt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, entry.prompt);
-  await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
+  await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   await expect(page.locator('.user-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
 }
 

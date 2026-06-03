@@ -3117,6 +3117,152 @@ describe('FileViewer tweaks toolbar', () => {
     });
   });
 
+  it('keeps the hover card mounted when the pointer moves onto it (no flicker)', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    const target = {
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'p',
+      text: 'Hero',
+      position: { x: 8, y: 12, width: 312, height: 63 },
+      hoverPoint: { x: 200, y: 100 },
+      htmlHint: '<p data-od-id="hero">Hero</p>',
+      style: { color: 'rgb(26, 25, 22)', fontSize: '13.5px' },
+    };
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    const card = await screen.findByTestId('annotation-hover-popover');
+
+    // Pointer crosses from the element onto the floating card. The iframe sees
+    // that as a mouseout and posts od:comment-leave; the card's own mouseenter
+    // fires first and pins it, so the leave must be ignored and the card stays.
+    fireEvent.mouseEnter(card);
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:comment-leave' },
+    }));
+
+    // Give React a chance to (wrongly) unmount before asserting it did not.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+
+    // Leaving the card itself dismisses it.
+    fireEvent.mouseLeave(card);
+    await waitFor(() => {
+      expect(screen.queryByTestId('annotation-hover-popover')).toBeNull();
+    });
+  });
+
+  it('ignores an occlusion leave that arrives before the card pins (no entry flicker)', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    const target = {
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'p',
+      text: 'Hero',
+      position: { x: 8, y: 12, width: 312, height: 63 },
+      hoverPoint: { x: 200, y: 100 },
+      htmlHint: '<p data-od-id="hero">Hero</p>',
+      style: { color: 'rgb(26, 25, 22)', fontSize: '13.5px' },
+    };
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    const card = await screen.findByTestId('annotation-hover-popover');
+
+    // Real-world ordering the synchronous teardown got wrong: the iframe's async
+    // od:comment-leave lands BEFORE the card's mouseenter has had a chance to pin
+    // it. The dismiss must be deferred so the imminent mouseenter cancels it —
+    // otherwise the card tears down for a frame and flickers on the way in.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:comment-leave' },
+    }));
+    fireEvent.mouseEnter(card);
+
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+  });
+
+  it('keeps the card when the pointer moves from it back onto the element', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    clickAgentTool('board-mode-toggle');
+
+    const target = {
+      elementId: 'hero',
+      selector: '[data-od-id="hero"]',
+      label: 'p',
+      text: 'Hero',
+      position: { x: 8, y: 12, width: 312, height: 63 },
+      hoverPoint: { x: 200, y: 100 },
+      htmlHint: '<p data-od-id="hero">Hero</p>',
+      style: { color: 'rgb(26, 25, 22)', fontSize: '13.5px' },
+    };
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    const card = await screen.findByTestId('annotation-hover-popover');
+    fireEvent.mouseEnter(card);
+
+    // Pointer leaves the card heading back onto the element it overlaps. The
+    // card must NOT tear down synchronously on its own mouseleave — clearing
+    // here is what made the card vanish while the pointer was still over the
+    // element (the iframe does not always re-emit a hover to bring it back).
+    fireEvent.mouseLeave(card);
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+
+    // A re-hover (pointer landed back on the element) cancels the pending
+    // dismiss, so the card stays put rather than blinking out.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { ...target, type: 'od:comment-hover' },
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    expect(screen.queryByTestId('annotation-hover-popover')).not.toBeNull();
+  });
+
   it('closes an open saved-comment composer when that comment leaves the open state', async () => {
     const openComment: PreviewComment = {
       id: 'comment-status-transition',

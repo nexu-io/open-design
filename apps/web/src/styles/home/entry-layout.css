@@ -34,7 +34,7 @@
 /* Left rail */
 .entry-nav-rail {
   width: var(--entry-rail-width, 64px);
-  border-right: 1px solid var(--border);
+  border-right: 0;
   background: var(--bg-panel);
   padding: 8px 0 10px;
   display: flex;
@@ -54,6 +54,18 @@
      area lets those floats appear over the scroll surface. */
   position: relative;
   z-index: 30;
+}
+.entry-nav-rail::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 64%, transparent);
+  transform: scaleX(0.5);
+  transform-origin: right center;
+  pointer-events: none;
 }
 .entry-nav-rail__group {
   display: flex;
@@ -1016,6 +1028,9 @@
 /* Shared select inside the popover */
 .model-select-searchable {
   position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
 }
 .model-select-searchable.is-open {
   z-index: 1400;
@@ -1033,11 +1048,13 @@
   overflow: hidden;
 }
 .model-select-searchable__search-row {
-  padding: 8px;
+  padding: 0;
   border-bottom: 1px solid var(--border);
 }
 .model-select-searchable__input {
+  display: block;
   width: 100%;
+  box-sizing: border-box;
 }
 .model-select-searchable__list {
   max-height: 280px;
@@ -1104,6 +1121,7 @@
     no-repeat right 10px center;
   font-size: 12px;
   color: var(--text);
+  text-align: left;
   cursor: pointer;
 }
 .inline-switcher__select:focus-visible {
@@ -2076,6 +2094,19 @@
 }
 
 .onboarding-view__card-model .onboarding-view__model-picker {
+  width: min(260px, 100%);
+}
+
+.onboarding-view__card--amr .onboarding-view__model-picker {
+  width: 100%;
+}
+
+.onboarding-view__alternatives .onboarding-view__model-picker {
+  width: 100%;
+}
+
+.onboarding-view__setup-panel .onboarding-view__model-picker,
+.onboarding-view__setup-panel .onboarding-view__setup-model-picker {
   width: 100%;
 }
 
@@ -2120,43 +2151,28 @@
   display: block;
 }
 
-.onboarding-view__model-select-wrap select {
-  appearance: none;
-  -webkit-appearance: none;
-  display: block;
+.onboarding-view__model-select-wrap .onboarding-view__model-select {
   width: 100%;
   min-height: 42px;
   padding: 0 34px 0 13px;
-  border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-panel);
+  background-color: var(--bg-panel);
   color: var(--text-strong);
-  font: inherit;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.2;
   box-shadow: var(--shadow-xs);
-  cursor: pointer;
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.onboarding-view__model-select-wrap select:hover {
+.onboarding-view__model-select-wrap .onboarding-view__model-select:hover {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 97%, var(--accent) 3%);
+  background-color: color-mix(in srgb, var(--bg-panel) 97%, var(--accent) 3%);
 }
 
-.onboarding-view__model-select-wrap select:focus-visible {
+.onboarding-view__model-select-wrap .onboarding-view__model-select:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   outline-offset: 2px;
-}
-
-.onboarding-view__model-select-chevron {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-soft);
-  pointer-events: none;
 }
 
 .onboarding-view__benefits {
