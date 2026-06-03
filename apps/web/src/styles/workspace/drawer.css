@@ -1505,6 +1505,14 @@
   flex: none;
 }
 .ws-tab.active .tab-icon { color: var(--text); }
+.ws-tab-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  overflow: hidden;
+}
 .ws-tab-label {
   flex: 1 1 auto;
   min-width: 24px;
@@ -1512,6 +1520,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 96px;
+}
+.ws-tab.has-meta {
+  max-width: 320px;
+}
+.ws-tab.has-meta .ws-tab-label {
+  flex: 0 1 auto;
+  min-width: 42px;
+  max-width: 150px;
+}
+.ws-tab-meta {
+  flex: 1 1 auto;
+  min-width: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 450;
+}
+.ws-tab-meta::before {
+  content: "/";
+  margin-right: 5px;
+  color: color-mix(in srgb, var(--text-faint) 72%, transparent);
 }
 .ws-tab.live-artifact-tab .ws-tab-label {
   max-width: none;
@@ -1571,7 +1602,55 @@
   background: var(--bg-subtle);
 }
 
+.ws-add-tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  z-index: 3;
+  margin-left: 2px;
+}
+.ws-tabs-bar.is-overflowing .ws-add-tab {
+  position: sticky;
+  right: 0;
+  padding-left: 4px;
+  background: var(--bg-panel);
+  box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
+}
+.ws-tab-add {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ws-tab-add:hover,
+.ws-tab-add.active,
+.ws-tab-add[aria-expanded='true'] {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.ws-tab-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }
+.ws-focus-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 0;
+  box-sizing: border-box;
+}
 .ws-focus-toggle {
   display: inline-flex;
   align-items: center;
@@ -1620,6 +1699,21 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.ws-browser-panel {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.ws-browser-panel.active {
+  display: flex;
 }
 
 .designs-empty-state {

@@ -13,7 +13,7 @@ import {
   projectKindToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
-import type { AmrModelsResponse } from '@open-design/contracts';
+import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
@@ -24,6 +24,7 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   DesignSystemCreationFlow,
@@ -87,6 +88,7 @@ import {
   deleteTemplate,
   patchProject,
 } from './state/projects';
+import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
@@ -233,6 +235,7 @@ function AppInner() {
   const { t } = useI18n();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
+  useModalWindowDragGuard();
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
@@ -1018,6 +1021,7 @@ function AppInner() {
         pluginId?: string;
         appliedPluginSnapshotId?: string;
         pluginInputs?: Record<string, unknown>;
+        conversationMode?: ChatSessionMode;
         autoSendFirstMessage?: boolean;
         requestId?: string;
         pendingFiles?: File[];
@@ -1041,6 +1045,7 @@ function AppInner() {
         designSystemId: input.designSystemId,
         pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
+        ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
         ...(input.pluginId ? { pluginId: input.pluginId } : {}),
         ...(input.appliedPluginSnapshotId
           ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
@@ -1692,6 +1697,7 @@ function AppInner() {
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
         onRefreshAgents={refreshAgents}
+        onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
@@ -1810,6 +1816,7 @@ function AppInner() {
           onOpenProject={handleOpenProject}
         />
       )}
+      <TooltipLayer />
       <AnimatePresence>
       {settingsOpen ? (
         <SettingsDialog

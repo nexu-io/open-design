@@ -129,6 +129,69 @@
     0 4px 14px rgba(0, 0, 0, 0.14),
     0 0 0 1px color-mix(in srgb, var(--success, #2da44e) 12%, transparent);
 }
+.od-toast.tone-error {
+  border: 1px solid color-mix(in srgb, var(--danger, #cf222e) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger, #cf222e) 13%, var(--bg));
+  color: var(--text);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.14),
+    0 0 0 1px color-mix(in srgb, var(--danger, #cf222e) 12%, transparent);
+}
+.od-toast-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.od-toast-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+.od-toast.tone-success .od-toast-icon {
+  color: var(--success, #2da44e);
+}
+.od-toast.tone-error .od-toast-icon {
+  color: var(--danger, #cf222e);
+}
+.od-toast.tone-loading .od-toast-icon {
+  color: var(--text-muted, #6e7781);
+}
+/* Entrance: gentle rise + fade (ease-out per the UI animation philosophy).
+   Exit: the .leaving class plays a faster fade-out before onDismiss unmounts
+   the toast, so confirmations like "copied to clipboard" don't blink away. */
+.od-toast {
+  animation: od-toast-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.od-toast.leaving {
+  animation: od-toast-out 140ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+@keyframes od-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+@keyframes od-toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .od-toast,
+  .od-toast.leaving {
+    animation: none;
+  }
+}
 .od-toast-message {
   font-weight: 500;
 }
@@ -689,7 +752,7 @@
   --workspace-active-tab-border: color-mix(in srgb, var(--border-strong) 42%, transparent);
   height: 36px;
   min-height: 36px;
-  padding: 0 10px 0 0;
+  padding: 0 10px 0 6px;
   background: var(--workspace-tab-bar-bg);
   border-bottom: 0;
   box-shadow: none;
@@ -832,28 +895,12 @@
 .app .split-resize-handle {
   width: 8px;
   min-width: 8px;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0,
-      transparent 3px,
-      var(--border) 3px,
-      var(--border) 4px,
-      transparent 4px
-    );
+  background: transparent;
 }
 .app .split-resize-handle:hover,
 .app .split-resize-handle:focus-visible,
 .app .split.is-resizing-chat .split-resize-handle {
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--accent) 12%, transparent) 0,
-      color-mix(in srgb, var(--accent) 12%, transparent) 3px,
-      var(--accent) 3px,
-      var(--accent) 4px,
-      color-mix(in srgb, var(--accent) 12%, transparent) 4px
-    );
+  background: transparent;
 }
 
 .app .chat-header,
@@ -1293,14 +1340,15 @@
   background: transparent;
 }
 .app .composer-shell {
-  padding: 0;
-  border-color: var(--border);
+  padding: 8px;
+  border-color: color-mix(in srgb, var(--border) 84%, var(--border-strong));
   border-radius: 10px;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
+  box-shadow: var(--shadow-sm);
 }
 .app .composer-shell:focus-within {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 4%, transparent);
+  box-shadow: var(--shadow-sm), 0 0 0 3px var(--accent-soft);
 }
 .app .composer.drag-active .composer-shell {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
@@ -1523,11 +1571,17 @@
 }
 .app .df-controls-row {
   margin: 0 0 14px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: flex-start;
+  gap: 10px 14px;
+}
+.app .df-controls-primary {
+  grid-template-columns: 31px minmax(220px, 340px) minmax(0, auto);
   gap: 10px;
-  flex-wrap: wrap;
+}
+.app .df-controls-toggles {
+  gap: 8px;
 }
 .app .df-refresh-control {
   width: 31px;
@@ -1543,8 +1597,7 @@
   border-color: var(--border-strong);
 }
 .app .df-controls-row .df-actions {
-  flex: 0 0 auto;
-  margin-left: auto;
+  margin-left: 0;
   gap: 8px;
 }
 .app .df-controls-row .df-actions button {
@@ -1579,6 +1632,19 @@
 .app .df-group-toggle button.active {
   background: var(--bg-panel);
   box-shadow: none;
+}
+@media (max-width: 1180px) {
+  .app .df-controls-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app .df-controls-primary {
+    grid-template-columns: 31px minmax(180px, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .app .df-controls-primary {
+    grid-template-columns: 31px minmax(0, 1fr);
+  }
 }
 .app .df-pagination {
   gap: 8px;
@@ -1832,23 +1898,126 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  min-width: 200px;
+  width: min(460px, calc(100vw - 24px));
+  max-height: min(72vh, 620px);
+  overflow: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
-  padding: 6px;
+  padding: 8px;
   z-index: 50;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+.app .handoff-menu-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-muted) 5%, transparent);
+}
+.app .handoff-menu-tab {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.app .handoff-menu-tab:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text-muted) 7%, transparent);
+}
+.app .handoff-menu-tab.active {
+  color: var(--text);
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.app .handoff-path-row {
+  display: flex;
+  min-width: 0;
+}
+.app .handoff-path-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--text) 3%);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.app .handoff-path-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+}
+.app .handoff-path-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.app .handoff-path-button.copied {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+}
+.app .handoff-path-button-main,
+.app .handoff-path-button-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.app .handoff-path-button-main {
+  gap: 8px;
+  min-width: 0;
+}
+.app .handoff-path-button-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+.app .handoff-path-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app .handoff-menu-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 .app .handoff-menu-title {
-  padding: 6px 10px 7px;
-  border-bottom: 1px solid var(--border);
-  margin: 0 0 4px;
-  color: var(--text-muted);
+  padding: 0 2px;
+  margin: 0;
+  color: var(--text);
   font-size: 11.5px;
   line-height: 16px;
+  font-weight: 650;
 }
 .app .handoff-menu-item {
   display: inline-flex;
@@ -1871,12 +2040,156 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .app .handoff-menu-item.dim {
-  opacity: 0.55;
+  opacity: 0.62;
+}
+.app .handoff-target-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 1px;
+}
+.app .handoff-editor-rail {
+  grid-template-rows: none;
+}
+.app .handoff-cli-rail {
+  grid-template-rows: none;
+}
+.app .handoff-target-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.app .handoff-target-group + .handoff-target-group {
+  padding-top: 2px;
+}
+.app .handoff-target-group-title {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 18px;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 18px;
+  font-weight: 650;
+}
+.app .handoff-target-rail--unavailable .handoff-target-card {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--text-muted) 5%);
+}
+.app .handoff-target-card {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 5px;
+  width: auto;
+  min-width: 0;
+  min-height: 74px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--text) 4%);
+}
+.app .handoff-target-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+}
+.app .handoff-target-card.active,
+.app .handoff-target-card.copied {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+}
+.app .handoff-target-card.active > svg {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: var(--accent);
+}
+.app .handoff-target-card .agent-icon {
+  color: var(--text);
+}
+.app .handoff-target-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  line-height: 14px;
+  font-weight: 600;
+}
+.app .handoff-target-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 12px;
+}
+.app .handoff-framework-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 3px 0 1px;
+}
+.app .handoff-amr-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  font-size: 11.5px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.app .handoff-amr-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+}
+.app .handoff-amr-link .agent-icon {
+  flex: 0 0 auto;
+}
+.app .handoff-framework-label {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 18px;
+  margin-right: 2px;
+}
+.app .handoff-framework-chip {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.app .handoff-framework-chip:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.app .handoff-framework-chip.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 .app .handoff-menu-divider {
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: 0;
 }
 .app .handoff-menu-section {
   font-size: 10.5px;

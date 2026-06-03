@@ -4,6 +4,9 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  background: var(--bg);
+  overflow: hidden;
 }
 .viewer-toolbar {
   display: flex;
@@ -168,8 +171,8 @@
   line-height: 1;
   text-align: left;
 }
-.viewer-action-icon[data-tooltip]::after,
-.viewer-comment-count-trigger[data-tooltip]::after {
+.viewer-action-icon:not(.od-tooltip)[data-tooltip]::after,
+.viewer-comment-count-trigger:not(.od-tooltip)[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   z-index: 80;
@@ -187,10 +190,10 @@
   white-space: nowrap;
   transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.viewer-action-icon[data-tooltip]:hover::after,
-.viewer-action-icon[data-tooltip]:focus-visible::after,
-.viewer-comment-count-trigger[data-tooltip]:hover::after,
-.viewer-comment-count-trigger[data-tooltip]:focus-visible::after {
+.viewer-action-icon:not(.od-tooltip)[data-tooltip]:hover::after,
+.viewer-action-icon:not(.od-tooltip)[data-tooltip]:focus-visible::after,
+.viewer-comment-count-trigger:not(.od-tooltip)[data-tooltip]:hover::after,
+.viewer-comment-count-trigger:not(.od-tooltip)[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
@@ -395,6 +398,7 @@
 .viewer-body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   position: relative;
   background: var(--bg);
   overflow: auto;
@@ -892,7 +896,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: white;
+  background: transparent;
 }
 .artifact-preview-transport-stack {
   position: absolute;
@@ -1080,6 +1084,8 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  background: var(--bg);
+  isolation: isolate;
 }
 .comment-overlay-layer {
   position: absolute;
@@ -1369,6 +1375,63 @@
   gap: 10px;
   min-width: 0;
 }
+.comment-popover-actions-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* Attached-image thumbnails inside the element-comment composer — mirrors the
+   markup overlay's tray so element comments can carry images too. */
+.comment-popover-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.comment-popover-image {
+  position: relative;
+  flex: 0 0 auto;
+}
+.comment-popover-image-thumb {
+  display: block;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  cursor: zoom-in;
+}
+.comment-popover-image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.comment-popover-image-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel, #fff);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.comment-popover-image-remove:hover {
+  background: var(--red-bg);
+  border-color: var(--red-border);
+  color: var(--red);
+}
 .comment-popover-delete:hover {
   background: var(--red-bg);
   border-color: var(--red-border);
@@ -1551,9 +1614,10 @@
   font-size: 12.5px;
 }
 .comment-side-item {
+  position: relative;
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 8px;
   background: transparent;
   color: var(--text);
   display: flex;
@@ -1569,10 +1633,57 @@
   border-color: var(--comment-accent-border);
   box-shadow: inset 3px 0 0 var(--comment-accent);
 }
+.comment-side-item.dragging {
+  opacity: 0.45;
+}
+.comment-side-item-drop-before::before,
+.comment-side-item-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 32px;
+  right: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected-soft);
+}
+.comment-side-item-drop-before::before {
+  top: -2px;
+}
+.comment-side-item-drop-after::after {
+  bottom: -2px;
+}
 .comment-side-item-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+.comment-side-drag-handle {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: grab;
+}
+.comment-side-drag-handle:active:not(:disabled) {
+  cursor: grabbing;
+}
+.comment-side-drag-handle:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+.comment-side-drag-handle:hover:not(:disabled),
+.comment-side-drag-handle:focus-visible {
+  border-color: var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
 }
 .comment-side-author {
   display: inline-flex;
@@ -1630,6 +1741,27 @@
   line-height: 1.45;
   word-break: break-word;
   white-space: pre-wrap;
+}
+.comment-side-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.comment-side-attachment {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+.comment-side-attachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .comment-side-selectbar {
   display: flex;

@@ -44,7 +44,7 @@ describe('conversation timestamps', () => {
     vi.useRealTimers();
   });
 
-  it('shows the assistant relative time in the footer and an exact short time for user messages', () => {
+  it('shows inline relative message times with exact hover text', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
 
@@ -60,25 +60,16 @@ describe('conversation timestamps', () => {
         role: 'assistant',
         content: 'Done',
         createdAt: Date.parse('2025-01-15T12:01:00Z'),
-        startedAt: Date.parse('2025-01-15T12:01:00Z'),
-        endedAt: Date.parse('2025-01-15T12:02:00Z'),
-        runStatus: 'succeeded',
       },
     ]);
 
-    // The assistant timestamp now lives in the footer as a relative label.
-    const assistantTime = screen.getByText('1h ago');
-    expect(assistantTime.tagName).toBe('TIME');
-    expect(assistantTime.getAttribute('title')).toContain('2025');
-
-    // User messages show an exact short time alongside the copy action,
-    // not a relative label.
-    const userTime = document.querySelector('.user-actions-time');
-    expect(userTime?.tagName).toBe('TIME');
-    expect(userTime?.getAttribute('title')).toContain('2025');
+    const firstTime = screen.getByText('2h ago');
+    expect(firstTime.tagName).toBe('TIME');
+    expect(firstTime.getAttribute('title')).toContain('2025');
+    expect(screen.getByText('1h ago').tagName).toBe('TIME');
   });
 
-  it('no longer renders day separators (the day divider was removed)', () => {
+  it('adds day separators when a conversation crosses days', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-16T14:00:00Z'));
 
@@ -97,7 +88,7 @@ describe('conversation timestamps', () => {
       },
     ]);
 
-    expect(screen.queryAllByRole('separator')).toHaveLength(0);
+    expect(screen.getAllByRole('separator')).toHaveLength(2);
   });
 
   it('does not treat a completed last assistant message as streaming just because another conversation is running', () => {

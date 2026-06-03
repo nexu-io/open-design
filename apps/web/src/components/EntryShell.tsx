@@ -20,6 +20,7 @@ import {
 } from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
@@ -76,6 +77,10 @@ import { DesignSystemsTab } from './DesignSystemsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { UpdaterPopup } from './UpdaterPopup';
 import { GithubStarBadge } from './GithubStarBadge';
+import {
+  formatDiscordPresenceCount,
+  useDiscordPresence,
+} from './useDiscordPresence';
 import { HomeView } from './HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -87,6 +92,10 @@ import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
+import {
+  EntrySettingsMenu,
+  type EntrySettingsSection,
+} from './EntrySettingsMenu';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
@@ -121,6 +130,9 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+
+const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
+const X_URL = 'https://x.com/nexudotio';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -219,8 +231,6 @@ function defaultPluginInputsForCreate(
   };
 }
 
-// Theme options exposed in the avatar-popover appearance submenu.
-
 interface Props {
   skills: SkillSummary[];
   designTemplates: SkillSummary[];
@@ -265,6 +275,7 @@ interface Props {
       pluginId?: string;
       appliedPluginSnapshotId?: string;
       pluginInputs?: Record<string, unknown>;
+      conversationMode?: ChatSessionMode;
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
@@ -300,24 +311,7 @@ interface Props {
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
-  onOpenSettings: (
-    section?:
-      | 'execution'
-      | 'media'
-      | 'composio'
-      | 'orbit'
-      | 'integrations'
-      | 'mcpClient'
-      | 'language'
-      | 'appearance'
-      | 'notifications'
-      | 'pet'
-      | 'projectLocations'
-      | 'library'
-      | 'about'
-      | 'memory'
-      | 'designSystems',
-  ) => void;
+  onOpenSettings: (section?: EntrySettingsSection) => void;
   onCompleteOnboarding: () => void;
 }
 
@@ -417,6 +411,7 @@ export function EntryShell({
   onCompleteOnboarding,
 }: Props) {
   const t = useT();
+  const discordPresence = useDiscordPresence();
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
   // to /design-systems lands on that section. We derive the active
@@ -442,6 +437,14 @@ export function EntryShell({
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const analytics = useAnalytics();
+  const discordOnlineLabel = discordPresence
+    ? t('entry.discordOnlineLabel', {
+        count: formatDiscordPresenceCount(discordPresence.onlineCount),
+      })
+    : null;
+  const discordAriaLabel = discordOnlineLabel
+    ? t('entry.discordAriaWithOnline', { online: discordOnlineLabel })
+    : t('entry.discordAria');
   function changeView(next: EntryViewKind) {
     const navElement = navElementForView(next);
     if (navElement) {
@@ -560,6 +563,7 @@ export function EntryShell({
         ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
         : {}),
       ...(payload.pluginInputs ? { pluginInputs: payload.pluginInputs } : {}),
+      ...(payload.conversationMode ? { conversationMode: payload.conversationMode } : {}),
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
         : {}),
@@ -573,15 +577,11 @@ export function EntryShell({
   }
 
   const avatarMenu = (
-    <button
-      type="button"
-      className="settings-icon-btn"
-      onClick={() => onOpenSettings()}
-      title={t('entry.openSettingsTitle')}
-      aria-label={t('entry.openSettingsAria')}
-    >
-      <Icon name="settings" size={17} />
-    </button>
+    <EntrySettingsMenu
+      config={config}
+      onThemeChange={onThemeChange}
+      onOpenSettings={onOpenSettings}
+    />
   );
 
 
@@ -624,13 +624,23 @@ export function EntryShell({
               <GithubStarBadge />
               <a
                 className="entry-discord-badge"
-                href="https://discord.gg/mHAjSMV6gz"
-                aria-label="Join the Open Design Discord"
-                title="Join the Open Design Discord"
+                href={DISCORD_URL}
+                aria-label={discordAriaLabel}
+                title={discordAriaLabel}
                 data-testid="entry-discord-badge"
               >
                 <Icon name="discord" size={14} className="entry-discord-badge__icon" />
-                <span className="entry-discord-badge__label">Join Discord</span>
+                <span className="entry-discord-badge__label">{t('entry.discordLabel')}</span>
+                {discordOnlineLabel ? (
+                  <>
+                    <span className="entry-discord-badge__sep" aria-hidden>
+                      ·
+                    </span>
+                    <span className="entry-discord-badge__online">
+                      {discordOnlineLabel}
+                    </span>
+                  </>
+                ) : null}
               </a>
               <InlineModelSwitcher
                 config={config}

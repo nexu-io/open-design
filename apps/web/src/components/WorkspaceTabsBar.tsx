@@ -61,6 +61,11 @@ const MAX_SEARCH_RESULTS = 80;
 const TAB_DRAG_HAPTIC_MS = 8;
 const TAB_DROP_HAPTIC_MS = 12;
 
+function consumeWorkspaceTabShortcut(event: KeyboardEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 export function openWorkspaceTab(route: Route): void {
   window.dispatchEvent(
     new CustomEvent<{ route: Route }>(OPEN_WORKSPACE_TAB_EVENT, {
@@ -383,6 +388,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
+  const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -481,6 +487,33 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   useEffect(() => {
     const stripElement = stripRef.current;
     if (!stripElement) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      setTabsOverflowing(stripElement.scrollWidth > stripElement.clientWidth + 1);
+    };
+    const requestMeasure = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+    requestMeasure();
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(requestMeasure);
+    if (resizeObserver) {
+      resizeObserver.observe(stripElement);
+      Array.from(stripElement.children).forEach((child) => resizeObserver.observe(child));
+    }
+    window.addEventListener('resize', requestMeasure);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', requestMeasure);
+    };
+  }, [state.tabs.length]);
+
+  useEffect(() => {
+    const stripElement = stripRef.current;
+    if (!stripElement) return;
     const activeEl = stripElement.querySelector<HTMLElement>('.workspace-tab.is-active');
     if (!activeEl) return;
     if (typeof activeEl.scrollIntoView === 'function') {
@@ -533,11 +566,61 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     };
   }, [tabsMenuOpen]);
 
-  function openTab(tab: WorkspaceChromeTab) {
-    if (dragSuppressClickRef.current) {
-      dragSuppressClickRef.current = false;
-      return;
+  useEffect(() => {
+    function onWorkspaceTabShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+
+      const key = event.key;
+      const lowerKey = key.toLocaleLowerCase();
+      const primaryModifier = event.metaKey || event.ctrlKey;
+      const primaryWithoutAlt = primaryModifier && !event.altKey;
+      const ctrlWithoutPlatformModifiers = event.ctrlKey && !event.metaKey && !event.altKey;
+
+      if (primaryWithoutAlt && !event.shiftKey && lowerKey === 't') {
+        consumeWorkspaceTabShortcut(event);
+        createNewTab();
+        return;
+      }
+
+      if (primaryWithoutAlt && !event.shiftKey && lowerKey === 'w') {
+        consumeWorkspaceTabShortcut(event);
+        closeActiveTab();
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && key === 'Tab') {
+        consumeWorkspaceTabShortcut(event);
+        activateTabByOffset(event.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && !event.shiftKey && key === 'PageDown') {
+        consumeWorkspaceTabShortcut(event);
+        activateTabByOffset(1);
+        return;
+      }
+
+      if (ctrlWithoutPlatformModifiers && !event.shiftKey && key === 'PageUp') {
+        consumeWorkspaceTabShortcut(event);
+        activateTabByOffset(-1);
+        return;
+      }
+
+      if (primaryWithoutAlt && !event.shiftKey && /^[1-9]$/u.test(key)) {
+        consumeWorkspaceTabShortcut(event);
+        const normalized = normalizeTabsState(state);
+        const targetIndex = key === '9'
+          ? normalized.tabs.length - 1
+          : Number(key) - 1;
+        activateTabByIndex(targetIndex);
+      }
     }
+
+    window.addEventListener('keydown', onWorkspaceTabShortcut, true);
+    return () => window.removeEventListener('keydown', onWorkspaceTabShortcut, true);
+  }, [state]);
+
+  function activateTab(tab: WorkspaceChromeTab) {
     setState((current) => ({
       tabs: normalizeTabsState(current).tabs.map((item) =>
         item.id === tab.id ? { ...item, lastActiveAt: Date.now() } : item,
@@ -547,6 +630,37 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     setTabsMenuOpen(false);
     dismissHoverPreview();
     navigate(routeForTab(tab));
+  }
+
+  function activateTabByOffset(offset: number) {
+    const normalized = normalizeTabsState(state);
+    if (normalized.tabs.length === 0) return;
+    const activeIndex = Math.max(
+      0,
+      normalized.tabs.findIndex((tab) => tab.id === normalized.activeTabId),
+    );
+    const targetIndex =
+      (activeIndex + offset + normalized.tabs.length) % normalized.tabs.length;
+    activateTab(normalized.tabs[targetIndex]!);
+  }
+
+  function activateTabByIndex(index: number) {
+    const normalized = normalizeTabsState(state);
+    if (index < 0 || index >= normalized.tabs.length) return;
+    activateTab(normalized.tabs[index]!);
+  }
+
+  function closeActiveTab() {
+    const normalized = normalizeTabsState(state);
+    closeTab(normalized.activeTabId);
+  }
+
+  function openTab(tab: WorkspaceChromeTab) {
+    if (dragSuppressClickRef.current) {
+      dragSuppressClickRef.current = false;
+      return;
+    }
+    activateTab(tab);
   }
 
   function createNewTab() {
@@ -705,7 +819,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
     <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
       <div
-        className="workspace-tabs-strip"
+        className={`workspace-tabs-strip${tabsOverflowing ? ' is-overflowing' : ''}`}
         role="tablist"
         aria-label="Open workspaces"
         ref={stripRef}
@@ -743,8 +857,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             >
               <button
                 type="button"
-                className="workspace-tab__main"
+                className="workspace-tab__main od-tooltip"
                 onClick={() => openTab(tab)}
+                title={display.title}
+                data-tooltip={display.title}
+                data-tooltip-placement="bottom"
                 onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
                 onBlur={dismissHoverPreview}
               >
@@ -755,8 +872,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               </button>
               <button
                 type="button"
-                className="workspace-tab__close"
+                className="workspace-tab__close od-tooltip"
                 aria-label={t('common.close')}
+                title={t('common.close')}
+                data-tooltip={t('common.close')}
+                data-tooltip-placement="bottom"
                 onClick={() => closeTab(tab.id)}
               >
                 <Icon name="close" size={10} />
@@ -764,22 +884,26 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             </div>
           );
         })}
-      </div>
-      <div className="workspace-tabs-actions" ref={menuRef}>
         <button
           type="button"
-          className="workspace-tabs-new-btn"
+          className="workspace-tabs-new-btn od-tooltip"
           onClick={createNewTab}
           title="New tab"
+          data-tooltip="New tab"
+          data-tooltip-placement="bottom"
           aria-label="New tab"
         >
           <Icon name="plus" size={14} />
         </button>
+      </div>
+      <div className="workspace-tabs-actions" ref={menuRef}>
         <button
           type="button"
-          className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
+          className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
           onClick={() => setTabsMenuOpen((open) => !open)}
           title="Search tabs"
+          data-tooltip="Search tabs"
+          data-tooltip-placement="bottom"
           aria-label="Search tabs"
           aria-haspopup="dialog"
           aria-expanded={tabsMenuOpen}
@@ -821,8 +945,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                         >
                           <button
                             type="button"
-                            className="workspace-tabs-list__main"
+                            className="workspace-tabs-list__main od-tooltip"
                             onClick={() => openTab(display.tab)}
+                            title={display.title}
+                            data-tooltip={display.title}
+                            data-tooltip-placement="right"
                           >
                             <span className="workspace-tabs-list__icon" aria-hidden>
                               <Icon name={display.icon} size={15} />
@@ -834,9 +961,11 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                           </button>
                           <button
                             type="button"
-                            className="workspace-tabs-list__close"
+                            className="workspace-tabs-list__close od-tooltip"
                             onClick={() => closeTab(display.id)}
                             title={t('common.close')}
+                            data-tooltip={t('common.close')}
+                            data-tooltip-placement="left"
                             aria-label={t('common.close')}
                           >
                             <Icon name="close" size={11} />

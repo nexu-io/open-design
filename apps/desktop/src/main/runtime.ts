@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, session, shell } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -16,7 +16,7 @@ import {
   type DesktopExportPdfResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
 import { openValidatedDirectory } from "./open-path.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
@@ -225,6 +225,7 @@ const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
@@ -260,6 +261,16 @@ export type DesktopConsoleEntry = {
 export type DesktopConsoleResult = {
   entries: DesktopConsoleEntry[];
 };
+
+type DesktopBrowserStorageType =
+  | "cachestorage"
+  | "cookies"
+  | "filesystem"
+  | "indexdb"
+  | "localstorage"
+  | "serviceworkers"
+  | "shadercache"
+  | "websql";
 
 export type DesktopClickInput = {
   selector: string;
@@ -576,13 +587,13 @@ const MAC_WINDOW_CHROME =
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 64px !important;
-    --app-chrome-traffic-margin: 4px !important;
+    --app-chrome-traffic-space: 78px !important;
+    --app-chrome-traffic-margin: 8px !important;
     -webkit-app-region: drag;
   }
   .app-chrome-traffic-space {
-    flex: 0 0 64px !important;
-    width: 64px !important;
+    flex: 0 0 78px !important;
+    width: 78px !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -605,6 +616,16 @@ const MAC_WINDOW_CHROME_CSS = `
   .modal-backdrop *,
   .modal,
   .modal *,
+  .new-project-modal-backdrop,
+  .new-project-modal-backdrop *,
+  .automation-modal-backdrop,
+  .automation-modal-backdrop *,
+  .use-everywhere-modal-backdrop,
+  .use-everywhere-modal-backdrop *,
+  .plugin-details-modal-backdrop,
+  .plugin-details-modal-backdrop *,
+  .plugins-import-modal__backdrop,
+  .plugins-import-modal__backdrop *,
   .ds-modal-backdrop,
   .ds-modal-backdrop *,
   .ds-modal,
@@ -614,8 +635,41 @@ const MAC_WINDOW_CHROME_CSS = `
   .prompt-template-modal,
   .prompt-template-modal *,
   .prompt-template-lightbox-backdrop,
-  .prompt-template-lightbox-backdrop * {
+  .prompt-template-lightbox-backdrop *,
+  .project-instructions-modal-backdrop,
+  .project-instructions-modal-backdrop *,
+  .home-hero-confirm__backdrop,
+  .home-hero-confirm__backdrop *,
+  .project-ds-picker-fullscreen,
+  .project-ds-picker-fullscreen *,
+  .staged-preview-modal,
+  .staged-preview-modal *,
+  .qs-overlay,
+  .qs-overlay * {
     -webkit-app-region: no-drag;
+  }
+  .modal-backdrop::before,
+  .new-project-modal-backdrop::before,
+  .automation-modal-backdrop::before,
+  .use-everywhere-modal-backdrop::before,
+  .plugin-details-modal-backdrop::before,
+  .plugins-import-modal__backdrop::before,
+  .ds-modal-backdrop::before,
+  .prompt-template-modal-backdrop::before,
+  .prompt-template-lightbox-backdrop::before,
+  .project-instructions-modal-backdrop::before,
+  .home-hero-confirm__backdrop::before,
+  .project-ds-picker-fullscreen::before,
+  .staged-preview-modal::before,
+  .qs-overlay::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 56px;
+    pointer-events: auto;
+    -webkit-app-region: drag !important;
   }
   .entry-brand {
     -webkit-app-region: drag;
@@ -771,6 +825,26 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     return (
       parsed.protocol === "blob:" ||
       parsed.protocol === "od:" ||
+      (parsed.protocol === "about:" && parsed.pathname === "blank")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedEmbeddedBrowserUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    // Security boundary for the design-browser webview. Keep this to remote
+    // references and project-served content only. `file:` is deliberately
+    // excluded: the same surface can capture the webview region and persist
+    // the PNG into the project, so allowing `file://` would let a compromised
+    // renderer or a pasted address load and exfiltrate arbitrary local files
+    // (e.g. `/etc/passwd`). The reference board only needs http(s) and
+    // about:blank.
+    return (
+      parsed.protocol === "http:" ||
+      parsed.protocol === "https:" ||
       (parsed.protocol === "about:" && parsed.pathname === "blank")
     );
   } catch {
@@ -985,6 +1059,36 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
   return deck === true ? { deck: true } : {};
 }
 
+// Parses the optional renderer-supplied capture clip into an Electron
+// Rectangle. Returns undefined (capture the full page) when the payload is
+// missing, not an object, or carries an invalid clip; valid clips are
+// rounded and clamped so x/y stay >= 0 and width/height stay >= 1.
+function parseCaptureClip(value: unknown): Electron.Rectangle | undefined {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const clip = (value as { clip?: unknown }).clip;
+  if (clip == null || typeof clip !== "object" || Array.isArray(clip)) return undefined;
+  const { x, y, width, height } = clip as {
+    x?: unknown;
+    y?: unknown;
+    width?: unknown;
+    height?: unknown;
+  };
+  if (
+    typeof x !== "number" || !Number.isFinite(x) ||
+    typeof y !== "number" || !Number.isFinite(y) ||
+    typeof width !== "number" || !Number.isFinite(width) ||
+    typeof height !== "number" || !Number.isFinite(height)
+  ) {
+    return undefined;
+  }
+  return {
+    x: Math.max(0, Math.round(x)),
+    y: Math.max(0, Math.round(y)),
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
+  };
+}
+
 function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
   return {
     arch: process.arch,
@@ -1059,6 +1163,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-and-replace-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  ipcMain.removeHandler("browser:clear-data");
   for (const channel of UPDATER_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
   }
@@ -1244,6 +1349,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       nodeIntegration: false,
       preload: preloadPath,
       sandbox: true,
+      webviewTag: true,
     },
     width: 1280,
   });
@@ -1272,9 +1378,69 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("updater IPC is only available to the main Open Design window");
+      throw new Error("host IPC is only available to the main Open Design window");
     }
   };
+  window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+    const src = typeof params.src === "string" ? params.src : "";
+    const partition = typeof params.partition === "string" ? params.partition : "";
+    if (!isAllowedEmbeddedBrowserUrl(src) || partition !== DESIGN_BROWSER_PARTITION) {
+      event.preventDefault();
+      return;
+    }
+    delete webPreferences.preload;
+    webPreferences.contextIsolation = true;
+    webPreferences.nodeIntegration = false;
+    webPreferences.sandbox = true;
+  });
+  // `will-attach-webview` only vets the initial `src`. The design-browser panel
+  // navigates an already-attached guest with `<webview>.loadURL(...)`, which does
+  // not re-trigger attach, so the same allowlist has to gate every guest
+  // navigation too — otherwise a compromised renderer or pasted address could
+  // `loadURL("file:///etc/passwd")` after the first http(s) load and exfiltrate
+  // its pixels through the host capture bridge.
+  window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
+    const blockDisallowed = (navEvent: Electron.Event, url: string): void => {
+      if (!isAllowedEmbeddedBrowserUrl(url)) {
+        navEvent.preventDefault();
+      }
+    };
+    guestWebContents.on("will-navigate", blockDisallowed);
+    guestWebContents.on("will-redirect", blockDisallowed);
+    guestWebContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  });
+  ipcMain.handle("browser:clear-data", async (event, rawOptions: unknown): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const optionsRecord = rawOptions != null && typeof rawOptions === "object"
+      ? rawOptions as { cookies?: unknown; storage?: unknown }
+      : {};
+    const clearCookies = optionsRecord.cookies !== false;
+    const clearStorage = optionsRecord.storage !== false;
+    const storages: DesktopBrowserStorageType[] = [];
+    if (clearCookies) storages.push("cookies");
+    if (clearStorage) {
+      storages.push(
+        "cachestorage",
+        "filesystem",
+        "indexdb",
+        "localstorage",
+        "shadercache",
+        "websql",
+        "serviceworkers",
+      );
+    }
+    try {
+      if (storages.length > 0) {
+        await session.fromPartition(DESIGN_BROWSER_PARTITION).clearStorageData({ storages });
+      }
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
   ipcMain.handle("od:update:status", async (event) => {
     requireMainWindowSender(event);
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
@@ -1341,6 +1507,23 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     );
     if (!result.ok) {
       throw new Error(result.error ?? 'PDF export failed');
+    }
+  });
+
+  ipcMain.removeHandler('od:capture-page');
+  ipcMain.handle('od:capture-page', async (event, rawOptions: unknown): Promise<OpenDesignHostCaptureResult> => {
+    if (event.sender !== window.webContents) {
+      return { ok: false, reason: 'capture sender not allowed' };
+    }
+    try {
+      const clip = parseCaptureClip(rawOptions);
+      const image = clip
+        ? await window.webContents.capturePage(clip)
+        : await window.webContents.capturePage();
+      const size = image.getSize();
+      return { ok: true, dataUrl: image.toDataURL(), w: size.width, h: size.height };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
     }
   });
 
@@ -1514,6 +1697,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       for (const channel of UPDATER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
+      ipcMain.removeHandler("browser:clear-data");
       if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },

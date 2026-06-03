@@ -212,10 +212,7 @@ test('[P2] captures the settings execution surface', async ({ page }) => {
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  // Settings now opens from the header gear, not the avatar menu dropdown.
-  await page.locator('.settings-icon-btn').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDetailsFromHeader(page);
   await expect(dialog.getByRole('tab', { name: /Local CLI/i })).toBeVisible();
   await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
   await waitForVisualFonts(page);
@@ -228,10 +225,7 @@ test('[P2] captures the settings BYOK surface', async ({ page }) => {
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  // Settings now opens from the header gear, not the avatar menu dropdown.
-  await page.locator('.settings-icon-btn').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  const dialog = await openSettingsDetailsFromHeader(page);
   await dialog.getByRole('tab', { name: 'BYOK' }).click();
   await expect(dialog.getByRole('tablist', { name: 'API protocol' })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
@@ -245,6 +239,15 @@ async function openAvatarMenu(page: Parameters<typeof configureVisualPage>[0]) {
   const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
   return menu;
+}
+
+async function openSettingsDetailsFromHeader(page: Parameters<typeof configureVisualPage>[0]) {
+  await page.locator('.settings-icon-btn').click();
+  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 async function gotoVisualWorkspace(page: Parameters<typeof configureVisualPage>[0]) {

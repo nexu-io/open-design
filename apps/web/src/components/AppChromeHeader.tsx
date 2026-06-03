@@ -31,9 +31,11 @@ export function AppChromeHeader({
       {onBack ? (
         <button
           type="button"
-          className="app-chrome-back"
+          className="app-chrome-back od-tooltip"
           onClick={onBack}
           title={resolvedBackLabel}
+          data-tooltip={resolvedBackLabel}
+          data-tooltip-placement="bottom"
           aria-label={resolvedBackLabel}
         >
           <RemixIcon name="arrow-left-line" size={16} />
@@ -64,9 +66,11 @@ export function SettingsIconButton({
   return (
     <button
       type="button"
-      className="settings-icon-btn"
+      className="settings-icon-btn od-tooltip"
       onClick={onClick}
       title={title}
+      data-tooltip={title}
+      data-tooltip-placement="bottom"
       aria-label={ariaLabel}
     >
       <RemixIcon name="settings-line" size={18} />

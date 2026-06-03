@@ -31,6 +31,19 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     const prompt = composeSystemPrompt({});
     expect(prompt).not.toMatch(/5[–\-]10\s+short\s+imperative/);
   });
+
+  it('uses a top-level Chat mode override for conversational sessions', () => {
+    const prompt = composeSystemPrompt({ sessionMode: 'chat' });
+
+    expect(prompt).toContain('# Chat mode — standard conversation');
+    expect(prompt).toContain('https://github.com/nexu-io/open-design');
+    expect(prompt).toContain('https://open-design.ai/');
+    expect(prompt).toContain('https://discord.com/invite/9ptkbbqRu');
+    expect(prompt).toContain('do not emit a default discovery `<question-form>`');
+    expect(prompt.indexOf('# Chat mode — standard conversation')).toBeLessThan(
+      prompt.indexOf(DISCOVERY_AND_PHILOSOPHY),
+    );
+  });
 });
 
 describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', () => {

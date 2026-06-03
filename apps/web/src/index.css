@@ -5,6 +5,8 @@
 @import './styles/base.css';
 @import '@open-design/components/styles.css';
 @import './styles/primitives.css';
+@import './styles/social-share.css';
+@import './styles/workspace/terminal.css';
 @import './styles/shell.css';
 @import './styles/chat.css';
 @import './styles/workspace/mention-home.css';
@@ -24,4 +26,5 @@
 @import './styles/viewer/plugin-rail.css';
 @import './styles/viewer/plugin-inputs.css';
 @import './styles/viewer/routines.css';
+@import './styles/modal-window-drag.css';
 @import './styles/entrance.css';

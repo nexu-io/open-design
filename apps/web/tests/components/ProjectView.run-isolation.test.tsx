@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectView } from '../../src/components/ProjectView';
+import { ProjectView, mergeSavedPreviewComment } from '../../src/components/ProjectView';
 import type {
   AgentInfo,
   AppConfig,
@@ -99,6 +99,8 @@ vi.mock('../../src/state/projects', () => ({
   patchProject: (...args: unknown[]) => patchProject(...args),
   saveMessage: (...args: unknown[]) => saveMessage(...args),
   saveTabs: (...args: unknown[]) => saveTabs(...args),
+  cacheTabsLocally: (_projectId: string, state: unknown) => state,
+  persistTabsToDaemonNow: vi.fn(),
 }));
 
 vi.mock('../../src/components/AppChromeHeader', () => ({
@@ -496,11 +498,28 @@ const secondPreviewComment: PreviewComment = {
   note: 'keep this attached',
 };
 
+describe('mergeSavedPreviewComment', () => {
+  it('appends newly saved comments after existing comments', () => {
+    expect(mergeSavedPreviewComment([previewComment], secondPreviewComment).map((comment) => comment.id))
+      .toEqual(['comment-1', 'comment-2']);
+  });
+
+  it('replaces existing comments without moving them', () => {
+    const updatedFirst = { ...previewComment, note: 'updated first', updatedAt: 10 };
+
+    const next = mergeSavedPreviewComment([previewComment, secondPreviewComment], updatedFirst);
+
+    expect(next.map((comment) => comment.id)).toEqual(['comment-1', 'comment-2']);
+    expect(next[0]?.note).toBe('updated first');
+  });
+});
+
 describe('ProjectView conversation run isolation', () => {
   let resolveConversationBMessages: ((messages: ChatMessage[]) => void) | null = null;
   let conversationAMessages: ChatMessage[] = [runningAssistant];
 
   beforeEach(() => {
+    window.localStorage.clear();
     resolveConversationBMessages = null;
     conversationAMessages = [runningAssistant];
     listConversations.mockResolvedValue(conversations);
@@ -539,6 +558,7 @@ describe('ProjectView conversation run isolation', () => {
 
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -819,6 +839,97 @@ describe('ProjectView conversation run isolation', () => {
     };
     expect(payload.history?.at(-1)).toMatchObject({ role: 'user', content: 'hello from c' });
   });
+
+  it('auto-starts queued sends one at a time after the active run completes', async () => {
+    let finishReattach: (() => void) | null = null;
+    let reattachHandlers: { onDone: () => void } | null = null;
+    const daemonRuns: Array<{
+      handlers: { onDone: (fullText?: string) => void };
+      onRunCreated?: (runId: string) => void;
+      onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+    }> = [];
+
+    reattachDaemonRun.mockImplementation(async (input: unknown) => {
+      reattachHandlers = (input as { handlers: { onDone: () => void } }).handlers;
+      return new Promise<void>((resolve) => {
+        finishReattach = resolve;
+      });
+    });
+    streamViaDaemon.mockImplementation(async (input: unknown) => {
+      const options = input as {
+        handlers: { onDone: (fullText?: string) => void };
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      daemonRuns.push(options);
+      options.onRunCreated?.(`run-${daemonRuns.length}`);
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    fireEvent.click(screen.getByTestId('send-message-alt'));
+
+    await waitFor(() => expect(screen.getByTestId('send-queued-1').textContent).toBe('hello from c'));
+
+    await act(async () => {
+      reattachHandlers?.onDone();
+      finishReattach?.();
+    });
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        history: expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: 'hello from b' }),
+        ]),
+      }),
+    );
+    expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c');
+    expect(screen.queryByTestId('send-queued-1')).toBeNull();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      daemonRuns[0]?.onRunStatus?.('succeeded');
+      daemonRuns[0]?.handlers.onDone('first done');
+    });
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    expect(streamViaDaemon.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        history: expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: 'hello from c' }),
+        ]),
+      }),
+    );
+    expect(screen.queryByTestId('send-queued-0')).toBeNull();
+  });
+
+  it('restores queued sends after the project view remounts', async () => {
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    const firstRender = renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
+
+    firstRender.unmount();
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
+  });
+
   it('surfaces conversation message load errors and keeps sends disabled until messages load', async () => {
     let conversationBLoadAttempts = 0;
     listMessages.mockImplementation(async (_projectId: string, conversationId: string) => {

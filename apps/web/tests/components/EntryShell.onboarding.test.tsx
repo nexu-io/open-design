@@ -136,6 +136,58 @@ function renderOnboarding(
   return props;
 }
 
+function renderHome(
+  overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
+) {
+  window.history.replaceState(null, '', '/');
+  const props: React.ComponentProps<typeof EntryShell> = {
+    skills: [],
+    designTemplates: [],
+    designSystems: [],
+    projects: [],
+    templates: [],
+    promptTemplates: [],
+    defaultDesignSystemId: null,
+    connectors: [],
+    connectorsLoading: false,
+    config: baseConfig({
+      agentId: 'claude-code',
+      agentModels: { 'claude-code': { model: 'sonnet' } },
+      theme: 'system',
+    }),
+    agents: [cliAgent()],
+    daemonLive: true,
+    onModeChange: vi.fn(),
+    onAgentChange: vi.fn(),
+    onAgentModelChange: vi.fn(),
+    onApiProtocolChange: vi.fn(),
+    onApiModelChange: vi.fn(),
+    onConfigPersist: vi.fn(),
+    onRefreshAgents: vi.fn(() => [cliAgent()]),
+    onThemeChange: vi.fn(),
+    onCreateProject: vi.fn(),
+    onCreatePluginShareProject: vi.fn(),
+    onImportClaudeDesign: vi.fn(),
+    onOpenProject: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
+    onDeleteProject: vi.fn(),
+    onRenameProject: vi.fn(),
+    onChangeDefaultDesignSystem: vi.fn(),
+    onPersistComposioKey: vi.fn(),
+    onOpenSettings: vi.fn(),
+    onCompleteOnboarding: vi.fn(),
+    ...overrides,
+  };
+
+  render(
+    <I18nProvider initial="en">
+      <EntryShell {...props} />
+    </I18nProvider>,
+  );
+
+  return props;
+}
+
 function trackedEvents(name: string) {
   return analyticsMocks.track.mock.calls.filter(([eventName]) => eventName === name);
 }
@@ -186,6 +238,52 @@ afterEach(() => {
 beforeEach(() => {
   globalThis.fetch = originalFetch;
   analyticsMocks.track.mockReset();
+});
+
+describe('EntryShell settings menu', () => {
+  it('opens quick actions before opening the full settings dialog', async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/community/discord')) {
+        return jsonResponse({
+          inviteCode: 'mHAjSMV6gz',
+          inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+          onlineCount: 1234,
+          memberCount: 4321,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      if (url.endsWith('/api/github/open-design')) {
+        return jsonResponse({
+          repo: 'nexu-io/open-design',
+          stargazers_count: 56100,
+          fetchedAt: Date.now(),
+          stale: false,
+        });
+      }
+      return jsonResponse({});
+    }) as typeof fetch;
+    const props = renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText('1.2k online')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+
+    expect(props.onOpenSettings).not.toHaveBeenCalled();
+    expect(screen.getByTestId('entry-settings-menu')).toBeTruthy();
+    expect(screen.getByText('Language')).toBeTruthy();
+    expect(screen.getByText('Appearance')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('entry-settings-open-details'));
+
+    expect(props.onOpenSettings).toHaveBeenCalledWith();
+  });
 });
 
 describe('EntryShell onboarding Open Design AMR runtime', () => {

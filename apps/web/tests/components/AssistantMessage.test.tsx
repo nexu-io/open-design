@@ -6,7 +6,7 @@
  * streaming turns, failed runs, and empty responses.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -60,6 +60,80 @@ function producedFile(name: string): ProjectFile {
 }
 
 describe('AssistantMessage feedback gate', () => {
+  it('copies the raw assistant markdown from the completion footer', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText,
+      },
+    });
+    try {
+      const message = baseMessage({
+        content: '**Done.**\n\n- Keep the markdown',
+        events: [
+          {
+            kind: 'text',
+            text: '**Done.**\n\n- Keep the markdown',
+          } as ChatMessage['events'][number],
+        ],
+      });
+      render(
+        <AssistantMessage
+          message={message}
+          streaming={false}
+          projectId="proj-1"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy response markdown' }));
+
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith(message.content);
+      });
+      expect(screen.getByRole('button', { name: 'Copied!' })).toBeTruthy();
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      } else {
+        delete (navigator as { clipboard?: Clipboard }).clipboard;
+      }
+    }
+  });
+
+  it('calls the fork handler from completed assistant turns', () => {
+    const onForkFromMessage = vi.fn();
+    render(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        onForkFromMessage={onForkFromMessage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fork from here' }));
+
+    expect(onForkFromMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show the fork action while the assistant is streaming', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          runStatus: 'running',
+          endedAt: undefined,
+        })}
+        streaming
+        projectId="proj-1"
+        onForkFromMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Fork from here' })).toBeNull();
+  });
+
   it('shows the feedback widget after a successful turn that produced files', () => {
     render(
       <AssistantMessage
@@ -215,6 +289,45 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
     const link = screen.getByRole('link', { name: 'https://open-design.ai/amr/wallet' });
     expect(link.getAttribute('href')).toBe('https://open-design.ai/amr/wallet');
     expect(link.classList.contains('md-link')).toBe(true);
+  });
+});
+
+describe('AssistantMessage thinking blocks', () => {
+  it('does not render an empty thinking block for whitespace-only thinking deltas', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'thinking' } as ChatMessage['events'][number],
+            { kind: 'thinking', text: '\n  \t' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.querySelector('.thinking-block')).toBeNull();
+  });
+
+  it('keeps non-empty thinking content visible after leading whitespace deltas', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'thinking', text: '\n  ' } as ChatMessage['events'][number],
+            { kind: 'thinking', text: 'Reading the directory listing.' } as ChatMessage['events'][number],
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.querySelector('.thinking-block')).toBeTruthy();
+    expect(screen.getByText('Reading the directory listing.')).toBeTruthy();
   });
 });
 

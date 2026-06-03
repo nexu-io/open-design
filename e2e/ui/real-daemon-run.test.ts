@@ -270,7 +270,7 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
 
   await page.getByTestId('home-hero-shortcuts-trigger').click();
   await page.getByTestId('home-hero-rail-create-plugin').click();
-  await expect(page.getByTestId('home-hero-input')).toHaveValue(/Create an Open Design plugin for:/);
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -393,7 +393,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toBeVisible({ timeout: 5_000 });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveValue(prompt);
+  await expect(input).toHaveText(prompt);
   await expect(sendButton).toBeEnabled();
   const response = await Promise.race([
     page.waitForResponse(isCreateRunResponse, { timeout: 10_000 }),
@@ -430,7 +430,7 @@ async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: strin
   await expect(input).toBeVisible({ timeout: 5_000 });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveValue(prompt);
+  await expect(input).toHaveText(prompt);
   await expect(sendButton).toBeEnabled();
   await sendButton.click();
   await expect.poll(() => createResponseReady, { timeout: 10_000 }).toBe(true);

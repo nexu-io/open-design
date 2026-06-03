@@ -380,6 +380,13 @@ describe('manual edit bridge target normalization', () => {
     }));
     expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
     expect(title.getAttribute('data-od-editing')).toBe('true');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'od-edit-select',
+      target: expect.objectContaining({
+        id: 'title',
+        kind: 'text',
+      }),
+    }, '*');
 
     title.textContent = 'Edited title';
     title.dispatchEvent(new dom.window.FocusEvent('blur', { bubbles: false }));

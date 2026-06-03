@@ -1,5 +1,5 @@
 // SQLite-backed persistence for projects, conversations, messages, and the
-// per-project set of open file tabs. The on-disk project folder under
+// per-project set of open workspace tabs. The on-disk project folder under
 // .od/projects/<id>/ is still the single owner of the user's actual files
 // (HTML artifacts, sketches, uploads); this database tracks the metadata
 // that used to live in localStorage.
@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';
 import { migratePlugins } from './plugins/persistence.js';
@@ -15,6 +16,7 @@ import { migratePlugins } from './plugins/persistence.js';
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
+type ChatSessionMode = 'design' | 'chat';
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
@@ -75,6 +77,7 @@ function migrate(db: SqliteDb): void {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       title TEXT,
+      session_mode TEXT NOT NULL DEFAULT 'design',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -95,6 +98,9 @@ function migrate(db: SqliteDb): void {
       produced_files_json TEXT,
       feedback_json TEXT,
       pre_turn_file_names_json TEXT,
+      session_mode TEXT,
+      run_context_json TEXT,
+      applied_plugin_snapshot_json TEXT,
       started_at INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
@@ -120,6 +126,7 @@ function migrate(db: SqliteDb): void {
       member_count INTEGER,
       pod_members_json TEXT,
       style_json TEXT,
+      attachments_json TEXT,
       slide_index INTEGER,
       slide_key INTEGER NOT NULL DEFAULT -1,
       note TEXT NOT NULL,
@@ -133,6 +140,8 @@ function migrate(db: SqliteDb): void {
 
     CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation
       ON preview_comments(project_id, conversation_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation_created
+      ON preview_comments(project_id, conversation_id, created_at ASC);
 
     CREATE TABLE IF NOT EXISTS tabs (
       project_id TEXT NOT NULL,
@@ -146,6 +155,7 @@ function migrate(db: SqliteDb): void {
     CREATE TABLE IF NOT EXISTS tabs_state (
       project_id TEXT PRIMARY KEY,
       updated_at INTEGER NOT NULL,
+      state_json TEXT,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
@@ -227,6 +237,10 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
+  if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
+  }
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
@@ -252,6 +266,15 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'pre_turn_file_names_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN pre_turn_file_names_json TEXT`);
   }
+  if (!messageCols.some((c: DbRow) => c.name === 'session_mode')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN session_mode TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'run_context_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN run_context_json TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'applied_plugin_snapshot_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`);
+  }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
     db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
@@ -269,6 +292,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!previewCommentCols.some((c: DbRow) => c.name === 'style_json')) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN style_json TEXT`);
+  }
+  if (!previewCommentCols.some((c: DbRow) => c.name === 'attachments_json')) {
+    db.exec(`ALTER TABLE preview_comments ADD COLUMN attachments_json TEXT`);
   }
   if (!previewCommentCols.some((c: DbRow) => c.name === 'slide_index')) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN slide_index INTEGER`);
@@ -298,6 +324,10 @@ function migrate(db: SqliteDb): void {
   }
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
+  }
+  const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
+  if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
+    db.exec(`ALTER TABLE tabs_state ADD COLUMN state_json TEXT`);
   }
   migrateCritique(db);
   migrateMediaTasks(db);
@@ -330,6 +360,7 @@ function migratePreviewCommentsSlideKey(db: SqliteDb): void {
       member_count INTEGER,
       pod_members_json TEXT,
       style_json TEXT,
+      attachments_json TEXT,
       slide_index INTEGER,
       slide_key INTEGER NOT NULL DEFAULT -1,
       note TEXT NOT NULL,
@@ -344,10 +375,10 @@ function migratePreviewCommentsSlideKey(db: SqliteDb): void {
     INSERT INTO preview_comments_next
       (id, project_id, conversation_id, file_path, element_id, selector, label,
        text, position_json, html_hint, selection_kind, member_count, pod_members_json,
-       style_json, slide_index, slide_key, note, status, created_at, updated_at)
+       style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at)
     SELECT id, project_id, conversation_id, file_path, element_id, selector, label,
        text, position_json, html_hint, selection_kind, member_count, pod_members_json,
-       style_json, slide_index, COALESCE(slide_index, -1), note, status, created_at, updated_at
+       style_json, attachments_json, slide_index, COALESCE(slide_index, -1), note, status, created_at, updated_at
       FROM preview_comments;
 
     DROP TABLE preview_comments;
@@ -787,7 +818,7 @@ export function listConversations(db: SqliteDb, projectId: string) {
   return rows(db
     .prepare(
       `WITH project_conversations AS (
-          SELECT id, project_id AS projectId, title,
+          SELECT id, project_id AS projectId, title, session_mode AS sessionMode,
                  created_at AS createdAt, updated_at AS updatedAt
             FROM conversations
            WHERE project_id = ?
@@ -815,6 +846,13 @@ export function listConversations(db: SqliteDb, projectId: string) {
             )
            WHERE rn = 1
         ),
+        message_counts AS (
+          SELECT m.conversation_id AS conversationId,
+                 COUNT(*) AS messageCount
+            FROM messages m
+            JOIN project_conversations c ON c.id = m.conversation_id
+           GROUP BY m.conversation_id
+        ),
         total_run_durations AS (
           SELECT m.conversation_id AS conversationId,
                  SUM(${terminalRunDurationSql('m')}) AS totalDurationMs
@@ -824,12 +862,14 @@ export function listConversations(db: SqliteDb, projectId: string) {
              AND m.run_status IN ('succeeded', 'failed', 'canceled')
            GROUP BY m.conversation_id
         )
-        SELECT c.id, c.projectId, c.title, c.createdAt, c.updatedAt,
+        SELECT c.id, c.projectId, c.title, c.sessionMode, c.createdAt, c.updatedAt,
+               COALESCE(mc.messageCount, 0) AS messageCount,
                lr.latestRunStatus, lr.latestRunStartedAt,
                lr.latestRunEndedAt, lr.latestRunEventsJson,
                trd.totalDurationMs
           FROM project_conversations c
           LEFT JOIN latest_runs lr ON lr.conversationId = c.id
+          LEFT JOIN message_counts mc ON mc.conversationId = c.id
           LEFT JOIN total_run_durations trd ON trd.conversationId = c.id
          ORDER BY c.updatedAt DESC`,
     )
@@ -839,8 +879,9 @@ export function listConversations(db: SqliteDb, projectId: string) {
 export function getConversation(db: SqliteDb, id: string) {
   const r = db
     .prepare(
-      `SELECT id, project_id AS projectId, title,
-              created_at AS createdAt, updated_at AS updatedAt
+      `SELECT id, project_id AS projectId, title, session_mode AS sessionMode,
+              created_at AS createdAt, updated_at AS updatedAt,
+              (SELECT COUNT(*) FROM messages WHERE conversation_id = conversations.id) AS messageCount
          FROM conversations WHERE id = ?`,
     )
     .get(id) as DbRow | undefined;
@@ -863,11 +904,17 @@ function normalizeConversation(r: DbRow) {
     id: r.id,
     projectId: r.projectId,
     title: r.title ?? null,
+    sessionMode: normalizeConversationSessionMode(r.sessionMode),
+    messageCount: Number(r.messageCount ?? 0),
     createdAt: Number(r.createdAt),
     updatedAt: Number(r.updatedAt),
     ...numberProperty('totalDurationMs', r.totalDurationMs),
     latestRun: latestRun ?? undefined,
   };
+}
+
+export function normalizeConversationSessionMode(value: unknown): ChatSessionMode {
+  return value === 'chat' ? 'chat' : 'design';
 }
 
 function numberProperty(key: string, value: unknown) {
@@ -982,9 +1029,16 @@ function latestUsageDurationMs(eventsJson: unknown): number | undefined {
 export function insertConversation(db: SqliteDb, c: DbRow) {
   db.prepare(
     `INSERT INTO conversations
-       (id, project_id, title, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(c.id, c.projectId, c.title ?? null, c.createdAt, c.updatedAt);
+       (id, project_id, title, session_mode, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    c.id,
+    c.projectId,
+    c.title ?? null,
+    normalizeConversationSessionMode(c.sessionMode),
+    c.createdAt,
+    c.updatedAt,
+  );
   return getConversation(db, c.id);
 }
 
@@ -994,12 +1048,15 @@ export function updateConversation(db: SqliteDb, id: string, patch: DbRow) {
   const merged = {
     ...existing,
     ...patch,
+    sessionMode: Object.prototype.hasOwnProperty.call(patch, 'sessionMode')
+      ? normalizeConversationSessionMode(patch.sessionMode)
+      : existing.sessionMode,
     updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
   };
   db.prepare(
     `UPDATE conversations
-        SET title = ?, updated_at = ? WHERE id = ?`,
-  ).run(merged.title ?? null, merged.updatedAt, id);
+        SET title = ?, session_mode = ?, updated_at = ? WHERE id = ?`,
+  ).run(merged.title ?? null, merged.sessionMode, merged.updatedAt, id);
   return getConversation(db, id);
 }
 
@@ -1021,6 +1078,9 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               produced_files_json AS producedFilesJson,
               feedback_json AS feedbackJson,
               pre_turn_file_names_json AS preTurnFileNamesJson,
+              session_mode AS sessionMode,
+              run_context_json AS runContextJson,
+              applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -1044,6 +1104,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
+              session_mode = ?, run_context_json = ?, applied_plugin_snapshot_json = ?,
               started_at = ?, ended_at = ?
         WHERE id = ?`,
     ).run(
@@ -1060,6 +1121,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
       m.feedback ? JSON.stringify(m.feedback) : null,
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
+      normalizeMessageSessionModeForStorage(m.sessionMode),
+      m.runContext ? JSON.stringify(m.runContext) : null,
+      m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       m.id,
@@ -1071,18 +1135,20 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       )
       .get(conversationId) as DbRow | undefined;
     const position = (max?.m ?? -1) + 1;
-    // 19 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 22 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, feedback_json,
-    // pre_turn_file_names_json, started_at, ended_at, position, created_at.
+    // pre_turn_file_names_json, session_mode, run_context_json,
+    // applied_plugin_snapshot_json, started_at, ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
           feedback_json, pre_turn_file_names_json,
+          session_mode, run_context_json, applied_plugin_snapshot_json,
           started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -1099,6 +1165,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
       m.feedback ? JSON.stringify(m.feedback) : null,
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
+      normalizeMessageSessionModeForStorage(m.sessionMode),
+      m.runContext ? JSON.stringify(m.runContext) : null,
+      m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       position,
@@ -1121,6 +1190,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               produced_files_json AS producedFilesJson,
               feedback_json AS feedbackJson,
               pre_turn_file_names_json AS preTurnFileNamesJson,
+              session_mode AS sessionMode,
+              run_context_json AS runContextJson,
+              applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -1196,11 +1268,12 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
               pod_members_json AS podMembersJson, style_json AS styleJson,
+              attachments_json AS attachmentsJson,
               slide_index AS slideIndex,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
         WHERE project_id = ? AND conversation_id = ?
-        ORDER BY updated_at DESC`,
+        ORDER BY created_at ASC, rowid ASC`,
     )
     .all(projectId, conversationId) as DbRow[])
     .map(normalizePreviewComment);
@@ -1209,7 +1282,8 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
 export function upsertPreviewComment(db: SqliteDb, projectId: string, conversationId: string, input: DbRow) {
   const target = input?.target ?? {};
   const note = typeof input?.note === 'string' ? input.note.trim() : '';
-  if (!note) throw new Error('comment note required');
+  const attachmentsProvided = Object.prototype.hasOwnProperty.call(input ?? {}, 'attachments');
+  const incomingAttachments = normalizePreviewCommentAttachments(input?.attachments);
   const filePath = cleanRequiredString(target.filePath, 'filePath');
   const elementId = cleanRequiredString(target.elementId, 'elementId');
   const selector = cleanRequiredString(target.selector, 'selector');
@@ -1232,19 +1306,23 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
   const now = Date.now();
   const existing = db
     .prepare(
-      `SELECT id, created_at AS createdAt
+      `SELECT id, created_at AS createdAt, attachments_json AS attachmentsJson
          FROM preview_comments
         WHERE project_id = ? AND conversation_id = ? AND file_path = ? AND element_id = ? AND slide_key = ?`,
     )
     .get(projectId, conversationId, filePath, elementId, slideKey) as DbRow | undefined;
   const id = existing?.id ?? randomCommentId();
   const createdAt = existing?.createdAt ?? now;
+  const existingAttachments = normalizePreviewCommentAttachments(parseJsonOrUndef(existing?.attachmentsJson));
+  const attachments = attachmentsProvided ? incomingAttachments : existingAttachments;
+  // A comment must carry either a note or at least one image attachment.
+  if (!note && attachments.length === 0) throw new Error('comment note required');
   db.prepare(
     `INSERT INTO preview_comments
        (id, project_id, conversation_id, file_path, element_id, selector, label,
         text, position_json, html_hint, selection_kind, member_count, pod_members_json,
-        style_json, slide_index, slide_key, note, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_id, conversation_id, file_path, element_id, slide_key) DO UPDATE SET
        selector = excluded.selector,
        label = excluded.label,
@@ -1255,6 +1333,7 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
        member_count = excluded.member_count,
        pod_members_json = excluded.pod_members_json,
        style_json = excluded.style_json,
+       attachments_json = excluded.attachments_json,
        slide_index = excluded.slide_index,
        note = excluded.note,
        status = 'open',
@@ -1274,6 +1353,7 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
     selectionKind === 'pod' ? memberCount : null,
     selectionKind === 'pod' ? JSON.stringify(podMembers) : null,
     style ? JSON.stringify(style) : null,
+    attachments.length > 0 ? JSON.stringify(attachments) : null,
     slideIndex,
     slideKey,
     note,
@@ -1313,6 +1393,7 @@ function getPreviewComment(db: SqliteDb, projectId: string, conversationId: stri
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
               pod_members_json AS podMembersJson, style_json AS styleJson,
+              attachments_json AS attachmentsJson,
               slide_index AS slideIndex,
               note, status, created_at AS createdAt, updated_at AS updatedAt
          FROM preview_comments
@@ -1347,10 +1428,25 @@ function normalizePreviewComment(row: DbRow) {
     podMembers: normalizedPodMembers,
     slideIndex: Number.isFinite(row.slideIndex) ? row.slideIndex : undefined,
     note: row.note,
+    attachments: normalizePreviewCommentAttachments(parseJsonOrUndef(row.attachmentsJson)),
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function normalizePreviewCommentAttachments(input: unknown) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const path = typeof (item as DbRow).path === 'string' ? (item as DbRow).path.trim() : '';
+      if (!path) return null;
+      const rawName = typeof (item as DbRow).name === 'string' ? (item as DbRow).name.trim() : '';
+      return { path, name: rawName || path.split('/').pop() || path };
+    })
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 function cleanRequiredString(value: unknown, name: string): string {
@@ -1451,10 +1547,21 @@ function normalizeMessage(row: DbRow) {
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
     feedback: parseJsonOrUndef(row.feedbackJson),
     preTurnFileNames: parseJsonOrUndef(row.preTurnFileNamesJson),
+    sessionMode: normalizeMessageSessionMode(row.sessionMode),
+    runContext: parseJsonOrUndef(row.runContextJson),
+    appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,
   };
+}
+
+function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
+  return value === 'chat' || value === 'design' ? value : undefined;
+}
+
+function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
+  return value === 'chat' || value === 'design' ? value : null;
 }
 
 function parseJsonOrUndef(s: unknown): any {
@@ -1715,6 +1822,51 @@ function normalizeRoutineRun(row: DbRow) {
 
 // ---------- tabs ----------
 
+function normalizeBrowserWorkspaceTab(value: unknown): ProjectBrowserWorkspaceTab | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== 'string' || !record.id.trim()) return null;
+  if (typeof record.label !== 'string' || !record.label.trim()) return null;
+  const tab: ProjectBrowserWorkspaceTab = {
+    id: record.id,
+    label: record.label,
+  };
+  if (record.insertAfter === null) tab.insertAfter = null;
+  else if (typeof record.insertAfter === 'string') tab.insertAfter = record.insertAfter;
+  if (typeof record.title === 'string' && record.title.trim()) tab.title = record.title;
+  if (typeof record.url === 'string' && record.url.trim()) tab.url = record.url;
+  if (typeof record.iconUrl === 'string' && record.iconUrl.trim()) tab.iconUrl = record.iconUrl;
+  return tab;
+}
+
+function normalizeProjectTabsState(value: unknown): ProjectTabsState | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.tabs) || !record.tabs.every((tab) => typeof tab === 'string')) {
+    return null;
+  }
+  const browserTabs = Array.isArray(record.browserTabs)
+    ? record.browserTabs
+        .map(normalizeBrowserWorkspaceTab)
+        .filter((tab): tab is ProjectBrowserWorkspaceTab => Boolean(tab))
+    : [];
+  const state: ProjectTabsState = {
+    tabs: record.tabs.slice(),
+    active: typeof record.active === 'string' ? record.active : null,
+  };
+  if (browserTabs.length > 0) state.browserTabs = browserTabs;
+  return state;
+}
+
+function parseProjectTabsStateJson(value: unknown): ProjectTabsState | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    return normalizeProjectTabsState(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
 export function listTabs(db: SqliteDb, projectId: string) {
   const rows = db
     .prepare(
@@ -1723,30 +1875,51 @@ export function listTabs(db: SqliteDb, projectId: string) {
     )
     .all(projectId) as DbRow[];
   const state = db
-    .prepare(`SELECT project_id FROM tabs_state WHERE project_id = ? LIMIT 1`)
+    .prepare(`SELECT project_id, updated_at AS updatedAt, state_json AS stateJson FROM tabs_state WHERE project_id = ? LIMIT 1`)
     .get(projectId) as DbRow | undefined;
+  const savedState = parseProjectTabsStateJson(state?.stateJson);
+  if (savedState) {
+    return {
+      ...savedState,
+      hasSavedState: true,
+      updatedAt: Number(state?.updatedAt ?? Date.now()),
+    };
+  }
   const active = (rows as DbRow[]).find((r: DbRow) => r.isActive) ?? null;
   return {
     tabs: (rows as DbRow[]).map((r: DbRow) => r.name),
     active: active ? active.name : null,
     hasSavedState: rows.length > 0 || Boolean(state),
+    updatedAt: state ? Number(state.updatedAt ?? Date.now()) : undefined,
   };
 }
 
-export function setTabs(db: SqliteDb, projectId: string, names: string[], activeName: string | null) {
+export function setTabs(
+  db: SqliteDb,
+  projectId: string,
+  stateOrNames: ProjectTabsState | string[],
+  activeName: string | null = null,
+) {
+  const state = normalizeProjectTabsState(
+    Array.isArray(stateOrNames)
+      ? { tabs: stateOrNames, active: activeName }
+      : stateOrNames,
+  ) ?? { tabs: [], active: null };
   const tx = db.transaction(() => {
     db.prepare(
-      `INSERT INTO tabs_state (project_id, updated_at)
-       VALUES (?, ?)
-       ON CONFLICT(project_id) DO UPDATE SET updated_at = excluded.updated_at`,
-    ).run(projectId, Date.now());
+      `INSERT INTO tabs_state (project_id, updated_at, state_json)
+       VALUES (?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET
+         updated_at = excluded.updated_at,
+         state_json = excluded.state_json`,
+    ).run(projectId, Date.now(), JSON.stringify(state));
     db.prepare(`DELETE FROM tabs WHERE project_id = ?`).run(projectId);
     const ins = db.prepare(
       `INSERT INTO tabs (project_id, name, position, is_active)
        VALUES (?, ?, ?, ?)`,
     );
-    names.forEach((name: string, i: number) => {
-      ins.run(projectId, name, i, name === activeName ? 1 : 0);
+    state.tabs.forEach((name: string, i: number) => {
+      ins.run(projectId, name, i, name === state.active ? 1 : 0);
     });
   });
   tx();

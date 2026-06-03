@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
@@ -325,10 +325,56 @@ interface Props {
   // shows a banner that focuses the tab on click.
   onOpenQuestions?: () => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
+  onForkFromMessage?: () => void;
+  forking?: boolean;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
   hasDesignSystemContext?: boolean;
 }
+
+// Props compared by reference to decide whether a memoized AssistantMessage can
+// skip re-rendering. The four interaction callbacks (onSubmitForm,
+// onContinueRemainingTasks, onForkFromMessage, onFeedback) are DELIBERATELY
+// excluded: ChatPane re-creates them per render, but routes them through a ref
+// so their behavior is reference-stable — comparing them would defeat the memo
+// on every streamed frame. `isLast` is compared, which captures the only state
+// transition those callbacks' presence depends on. The remaining context props
+// (projectFiles, the Set props, handlers) come from ProjectView as stable
+// useState/useMemo/useCallback values, so reference comparison is correct and
+// cheap.
+const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
+  'message',
+  'streaming',
+  'projectId',
+  'projectKind',
+  'conversationId',
+  'projectFiles',
+  'projectFileNames',
+  'onRequestOpenFile',
+  'onRequestPluginFolderAgentAction',
+  'activePluginActionPaths',
+  'hiddenPluginActionPaths',
+  'isLast',
+  'errorCardOwnerId',
+  'nextUserContent',
+  'forking',
+  'suppressDirectionForms',
+  'hasDesignSystemContext',
+];
+
+function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
+  for (const key of ASSISTANT_MESSAGE_COMPARED_PROPS) {
+    if (!Object.is(prev[key], next[key])) return false;
+  }
+  return true;
+}
+
+/**
+ * Memoized so a streamed frame only re-renders the ONE assistant message whose
+ * `message` object changed identity (the streaming turn), not all N messages in
+ * the conversation. See `areAssistantMessagePropsEqual` for the comparison.
+ */
+export const AssistantMessage = memo(AssistantMessageImpl, areAssistantMessagePropsEqual);
 
 /**
  * Renders an assistant message as an interleaved flow of:
@@ -339,7 +385,7 @@ interface Props {
  *     the individual tool cards. Mirrors the chat surface in screenshot 9.
  *   - status pills
  */
-export function AssistantMessage({
+function AssistantMessageImpl({
   message,
   streaming,
   liveToolInput,
@@ -358,6 +404,8 @@ export function AssistantMessage({
   onSubmitForm,
   onOpenQuestions,
   onContinueRemainingTasks,
+  onForkFromMessage,
+  forking = false,
   onFeedback,
   suppressDirectionForms = false,
   hasDesignSystemContext = false,
@@ -373,8 +421,10 @@ export function AssistantMessage({
   // above the composer, so we strip any TodoWrite tool-groups out of the
   // per-message flow to avoid the same task list rendering twice.
   const persistedBlocks = stripTodoToolGroups(
-    suppressDuplicateQuestionForms(
-      suppressAskUserQuestionFallbackText(buildBlocks(events)),
+    stripEmptyThinkingBlocks(
+      suppressDuplicateQuestionForms(
+        suppressAskUserQuestionFallbackText(buildBlocks(events)),
+      ),
     ),
   );
   // Synthesize live code boxes for tool calls whose JSON input is still
@@ -495,6 +545,8 @@ export function AssistantMessage({
     !!isLast &&
     unfinishedTodos.length > 0 &&
     !!onContinueRemainingTasks;
+  const canFork = !streaming && !!onForkFromMessage;
+  const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
   const showFeedback =
     !!onFeedback &&
     isFeedbackEligible({
@@ -510,7 +562,9 @@ export function AssistantMessage({
     !!message.endedAt ||
     !!usage ||
     unfinishedTodos.length > 0 ||
-    hasEmptyResponse;
+    hasEmptyResponse ||
+    !!copyMarkdown ||
+    canFork;
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working" and the elapsed clock restarts from that instant.
@@ -730,7 +784,9 @@ export function AssistantMessage({
                   hasEmptyResponse,
                   preparing,
                   outputStartedAt,
-                  copyText: message.content,
+                  copyMarkdown,
+                  onFork: canFork ? onForkFromMessage : undefined,
+                  forking,
                   forceVisible: true,
                   message,
                   isLast: !!isLast,
@@ -746,7 +802,9 @@ export function AssistantMessage({
                 hasEmptyResponse={hasEmptyResponse}
                 preparing={preparing}
                 outputStartedAt={outputStartedAt}
-                copyText={message.content}
+                copyMarkdown={copyMarkdown}
+                onFork={canFork ? onForkFromMessage : undefined}
+                forking={forking}
                 message={message}
                 isLast={!!isLast}
               />
@@ -898,8 +956,10 @@ interface AssistantFooterProps {
   // counter restarts from `outputStartedAt` (the moment content appeared).
   preparing?: boolean;
   outputStartedAt?: number | undefined;
+  copyMarkdown?: string;
+  onFork?: () => void;
+  forking?: boolean;
   feedbackControls?: ReactNode;
-  copyText?: string;
   forceVisible?: boolean;
   message?: ChatMessage;
   // The most recent assistant reply keeps its footer permanently visible
@@ -916,8 +976,10 @@ function AssistantFooter({
   hasEmptyResponse,
   preparing = false,
   outputStartedAt,
+  copyMarkdown,
+  onFork,
+  forking = false,
   feedbackControls,
-  copyText,
   forceVisible = false,
   message,
   isLast = false,
@@ -942,7 +1004,9 @@ function AssistantFooter({
     !elapsed &&
     !usage &&
     !hasUnfinishedTodos &&
-    !hasEmptyResponse
+    !hasEmptyResponse &&
+    !copyMarkdown &&
+    !onFork
   )
     return null;
   return (
@@ -971,42 +1035,83 @@ function AssistantFooter({
           : ""}
         {costLabel}
       </span>
-      {!streaming && copyText ? (
-        <span className="assistant-actions" role="group">
-          <CopyMessageButton text={copyText} />
+      {copyMarkdown || onFork || feedbackControls ? (
+        <span className="assistant-footer-controls">
+          {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
+          {onFork ? (
+            <AssistantForkButton
+              disabled={forking}
+              onFork={onFork}
+            />
+          ) : null}
+          {feedbackControls}
         </span>
       ) : null}
-      {feedbackControls}
       {!streaming && message ? <MessageTimestamp message={message} t={t} /> : null}
     </div>
   );
 }
 
-// Copy-the-whole-response affordance that rides the hover footer, mirroring
-// Lobe's per-message action bar. Regenerate/edit/delete are intentionally
-// omitted: they would drive real daemon runs or need message-mutation APIs
-// this surface does not expose.
-function CopyMessageButton({ text }: { text: string }) {
+function AssistantForkButton({
+  disabled,
+  onFork,
+}: {
+  disabled: boolean;
+  onFork: () => void;
+}) {
   const t = useT();
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-  }, []);
-  async function handleCopy() {
-    if (!text) return;
-    const ok = await copyToClipboard(text);
-    if (!ok) return;
-    setCopied(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setCopied(false), 2000);
-  }
-  const label = copied ? t("fileViewer.copied") : t("fileViewer.copy");
+  const label = disabled
+    ? t("assistant.forkingConversation")
+    : t("assistant.forkConversation");
   return (
     <button
       type="button"
-      className="assistant-action-btn"
-      onClick={() => { void handleCopy(); }}
+      className="assistant-copy-button od-tooltip"
+      disabled={disabled}
+      data-tooltip={label}
+      data-tooltip-placement="top"
+      onClick={onFork}
+      aria-label={label}
+      title={label}
+    >
+      <Icon name={disabled ? "spinner" : "fork"} size={13} />
+    </button>
+  );
+}
+
+function AssistantMarkdownCopyButton({ markdown }: { markdown: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    const ok = await copyToClipboard(markdown);
+    if (!ok) return;
+    setCopied(true);
+    copyTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = undefined;
+    }, 2000);
+  }
+
+  const label = copied ? t("chat.copyDone") : t("assistant.copyMarkdown");
+  return (
+    <button
+      type="button"
+      className="assistant-copy-button od-tooltip"
+      data-copied={copied ? "true" : "false"}
+      data-tooltip={label}
+      data-tooltip-placement="top"
+      onClick={() => {
+        void handleCopy();
+      }}
       aria-label={label}
       title={label}
     >
@@ -1300,8 +1405,10 @@ function AssistantFeedback({
     >
       <button
         type="button"
-        className="assistant-feedback-button"
+        className="assistant-feedback-button od-tooltip"
         data-selected={selected === "positive" ? "true" : "false"}
+        data-tooltip={t("assistant.feedbackPositive")}
+        data-tooltip-placement="top"
         aria-pressed={selected === "positive"}
         aria-label={t("assistant.feedbackPositive")}
         title={t("assistant.feedbackPositive")}
@@ -1325,8 +1432,10 @@ function AssistantFeedback({
       </button>
       <button
         type="button"
-        className="assistant-feedback-button"
+        className="assistant-feedback-button od-tooltip"
         data-selected={selected === "negative" ? "true" : "false"}
+        data-tooltip={t("assistant.feedbackNegative")}
+        data-tooltip-placement="top"
         aria-pressed={selected === "negative"}
         aria-label={t("assistant.feedbackNegative")}
         title={t("assistant.feedbackNegative")}
@@ -2518,6 +2627,13 @@ function stripTodoToolGroups(blocks: Block[]): Block[] {
   return blocks.filter((block) => {
     if (block.kind !== "tool-group") return true;
     return !block.items.every((it) => isTodoWriteToolName(it.use.name));
+  });
+}
+
+function stripEmptyThinkingBlocks(blocks: Block[]): Block[] {
+  return blocks.filter((block) => {
+    if (block.kind !== "thinking") return true;
+    return block.text.trim().length > 0;
   });
 }
 

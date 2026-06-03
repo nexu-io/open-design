@@ -181,7 +181,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
-  'title', 'against',
+  'title', 'against', 'seed-from', 'fork-after', 'mode',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
@@ -210,6 +210,12 @@ const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
 ]);
 const MEMORY_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json',
+]);
+const SHARE_STRING_FLAGS = new Set([
+  'daemon-url', 'url', 'title', 'text', 'copy-text', 'locale', 'platform',
+]);
+const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 // Hoisted because `runAutomation` is reachable through the top-of-file
@@ -253,14 +259,17 @@ const SUBCOMMAND_MAP = {
   plugin: runPlugin,
   ui: runUi,
   marketplace: runMarketplace,
+  share: runShare,
   project: runProject,
   automation: runAutomation,
   automations: runAutomation,
   memory: runMemory,
   run: runRun,
   files: runFiles,
+  shell: runShell,
   templates: runTemplates,
   conversation: runConversation,
+  chat: runChat,
   daemon: runDaemon,
   atoms: runAtoms,
   skills: runSkills,
@@ -365,8 +374,17 @@ function printRootHelp() {
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
+  od share <open-design|url> [options]
+      Build localized social-share targets for the Open Design repo or a
+      deployed project URL. Use --json for scripted integrations.
+
   od ui <list|show|respond|revoke|prefill> [args]
       Read and answer GenUI surfaces (form / choice / confirmation / oauth-prompt) headlessly.
+
+  od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]
+      Create a Side Chat: a new conversation that inherits another
+      conversation's context by copying its messages (--seed-from), optionally
+      stopping at one message (--fork-after). Mirrors the web chat fork action.
 
   od diagnostics export [<path>] [--json]
       Bundle daemon/web/desktop logs, machine info, and recent crash reports
@@ -4614,6 +4632,103 @@ async function projectDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
+function printShareUsage() {
+  console.log(`Usage:
+  od share open-design [--locale <locale>] [--platform <id>] [--json]
+  od share url --url <https-url> [--title <title>] [--text <text>]
+               [--copy-text <text>] [--locale <locale>] [--platform <id>] [--json]
+
+Platforms:
+  x, linkedin, facebook, reddit, telegram, whatsapp, weibo, line, instagram, xiaohongshu
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+}
+
+async function runShare(args) {
+  const wantsHelp = args.length === 0
+    || args[0] === 'help'
+    || args.includes('--help')
+    || args.includes('-h');
+  if (wantsHelp) {
+    printShareUsage();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+
+  const sub = args[0] && !args[0].startsWith('-') ? args[0] : 'open-design';
+  const rest = sub === args[0] ? args.slice(1) : args;
+  const flags = parseFlags(rest, {
+    string: SHARE_STRING_FLAGS,
+    boolean: SHARE_BOOLEAN_FLAGS,
+  });
+  const base = (await cliDaemonUrl(flags)).replace(/\/$/, '');
+  const positional = positionalArgs(rest, SHARE_STRING_FLAGS);
+  const url = flags.url ?? positional[0];
+  const body = sub === 'url'
+    ? {
+        kind: 'project-html',
+        url,
+        title: flags.title,
+        text: flags.text,
+        copyText: flags['copy-text'],
+        locale: flags.locale,
+      }
+    : {
+        kind: 'open-design-repo',
+        title: flags.title,
+        text: flags.text,
+        copyText: flags['copy-text'],
+        locale: flags.locale,
+      };
+
+  if (sub !== 'open-design' && sub !== 'url') {
+    console.error(`unknown share target: ${sub}`);
+    printShareUsage();
+    process.exit(2);
+  }
+  if (body.kind === 'project-html' && !body.url) {
+    console.error('Usage: od share url --url <https-url>');
+    process.exit(2);
+  }
+
+  const resp = await fetch(`${base}/api/social-share`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.platform) {
+    const target = (data.platforms ?? []).find((item) => item.platform === flags.platform);
+    if (!target) {
+      console.error(`unknown platform: ${flags.platform}`);
+      process.exit(2);
+    }
+    if (flags.json) return process.stdout.write(JSON.stringify(target, null, 2) + '\n');
+    if (target.shareUrl) {
+      console.log(target.shareUrl);
+      return;
+    }
+    console.log(data.copyText);
+    if (target.entryUrl) console.log(target.entryUrl);
+    return;
+  }
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  console.log(data.copyText);
+  for (const target of data.platforms ?? []) {
+    console.log(`${target.platform}\t${target.shareUrl ?? target.entryUrl ?? '-'}`);
+  }
+}
+
+function normalizeChatSessionModeFlag(value) {
+  if (value == null) return undefined;
+  const mode = String(value).trim().toLowerCase();
+  if (mode === 'design' || mode === 'chat') return mode;
+  console.error('--mode must be one of: design, chat');
+  process.exit(2);
+}
+
 function safeReadJsonFile(p) {
   try {
     const fs = (require ? require('node:fs') : null);
@@ -4714,6 +4829,7 @@ async function runProject(args) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
+                    [--mode design|chat]
   od project import <baseDir> [--name "<title>"]
   od project import-folder <path> [--name "<title>"] [--skill <id>]
                     [--design-system <id>] [--json]
@@ -4787,6 +4903,8 @@ Common options:
         skillId:        flags.skill ?? null,
         designSystemId: flags['design-system'] ?? null,
       };
+      const conversationMode = normalizeChatSessionModeFlag(flags.mode);
+      if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
       if (flags['metadata-json']) {
         const mj = safeReadJsonFile(flags['metadata-json']);
@@ -5148,6 +5266,128 @@ async function streamRunEvents(base, runId) {
         return;
       }
     }
+  }
+}
+
+// `od shell --project <id>` opens an interactive PTY rooted at the project's
+// working directory and attaches to it. This is the CLI parity for the web
+// Terminal tab — both surfaces drive `/api/projects/:id/terminals`. Output
+// streams down over SSE; local keystrokes are POSTed back up to /stdin. When
+// stdin is a TTY we flip it into raw mode so the remote shell sees per-key
+// bytes (ctrl-c, arrows, tab) instead of line-buffered input.
+async function runShell(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od shell --project <projectId> [--shell <path>] [--json]
+                                  Open an interactive shell in the project's
+                                  working directory and attach to it.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Print the created terminal session as JSON and exit
+                       (does not attach).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const flags = parseFlags(args, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  if (!flags.project) {
+    console.error('--project <projectId> is required');
+    process.exit(2);
+  }
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const body = {};
+  if (flags.shell) body.shell = flags.shell;
+  if (process.stdout.columns) body.cols = process.stdout.columns;
+  if (process.stdout.rows) body.rows = process.stdout.rows;
+  const createResp = await fetch(
+    `${base}/api/projects/${encodeURIComponent(flags.project)}/terminals`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!createResp.ok) return structuredHttpFailure(createResp, 'project-not-found');
+  const created = await createResp.json();
+  if (flags.json) {
+    return process.stdout.write(JSON.stringify(created, null, 2) + '\n');
+  }
+  const terminalId = created?.terminal?.id;
+  if (!terminalId) {
+    console.error('terminal create returned no id');
+    process.exit(1);
+  }
+  await attachTerminal(base, flags.project, terminalId);
+}
+
+// Bridge a local TTY to a remote PTY session: SSE `data` events → stdout,
+// local stdin bytes → POST /stdin, terminal resize → POST /resize. Resolves
+// when the remote shell emits its `exit` event.
+async function attachTerminal(base, projectId, terminalId) {
+  const termPath = `${base}/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}`;
+  const isRawTty = Boolean(process.stdin.isTTY && process.stdin.setRawMode);
+  if (isRawTty) process.stdin.setRawMode(true);
+  process.stdin.resume();
+
+  const onInput = (chunk) => {
+    fetch(`${termPath}/stdin`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: chunk.toString('utf8') }),
+    }).catch(() => {});
+  };
+  process.stdin.on('data', onInput);
+
+  const onResize = () => {
+    fetch(`${termPath}/resize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cols: process.stdout.columns, rows: process.stdout.rows }),
+    }).catch(() => {});
+  };
+  process.stdout.on('resize', onResize);
+
+  const restore = () => {
+    process.stdin.off('data', onInput);
+    process.stdout.off('resize', onResize);
+    if (isRawTty) {
+      try { process.stdin.setRawMode(false); } catch { /* ignore */ }
+    }
+    process.stdin.pause();
+  };
+
+  try {
+    const resp = await fetch(`${termPath}/stream`, { headers: { accept: 'text/event-stream' } });
+    if (!resp.ok || !resp.body) {
+      console.error(`shell attach failed: ${resp.status}`);
+      process.exit(1);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        const lines = block.split('\n');
+        const eventLine = lines.find((l) => l.startsWith('event: '));
+        const dataLine = lines.find((l) => l.startsWith('data: '));
+        const event = eventLine ? eventLine.slice('event: '.length) : 'message';
+        const dataRaw = dataLine ? dataLine.slice('data: '.length) : '';
+        let parsed;
+        try { parsed = JSON.parse(dataRaw); } catch { parsed = dataRaw; }
+        if (event === 'data' && parsed && typeof parsed.data === 'string') {
+          process.stdout.write(parsed.data);
+        } else if (event === 'exit') {
+          restore();
+          process.exit(typeof parsed?.code === 'number' ? parsed.code : 0);
+        }
+      }
+    }
+  } finally {
+    restore();
   }
 }
 
@@ -5606,8 +5846,12 @@ Common options:
 async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od conversation new  <projectId> [--title "<title>"]
+  od conversation new  <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>] [--mode design|chat]
                                            Create a conversation in a project.
+                                           --seed-from copies another
+                                           conversation's messages in (Side Chat).
+                                           --fork-after stops the copy at one
+                                           source message.
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
 
@@ -5624,11 +5868,23 @@ Common options:
     case 'new': {
       const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
       if (!id) {
-        console.error('Usage: od conversation new <projectId> [--title "<title>"]');
+        console.error('Usage: od conversation new <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>]');
         process.exit(2);
       }
       const body = {};
       if (typeof flags.title === 'string') body.title = flags.title;
+      const sessionMode = normalizeChatSessionModeFlag(flags.mode);
+      if (sessionMode) body.sessionMode = sessionMode;
+      if (typeof flags['seed-from'] === 'string' && flags['seed-from']) {
+        body.seedFromConversationId = flags['seed-from'];
+      }
+      if (typeof flags['fork-after'] === 'string' && flags['fork-after']) {
+        if (!body.seedFromConversationId) {
+          console.error('--fork-after requires --seed-from');
+          process.exit(2);
+        }
+        body.forkAfterMessageId = flags['fork-after'];
+      }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
@@ -5637,7 +5893,8 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-      console.log(`[conversation] created ${data.conversation?.id ?? '-'}`);
+      const conv = data.conversation;
+      console.log(`[conversation] created ${conv?.id ?? '-'} (mode ${conv?.sessionMode ?? sessionMode ?? 'design'})`);
       return;
     }
     case 'list': {
@@ -5666,6 +5923,85 @@ Common options:
     }
     default:
       console.error(`unknown subcommand: od conversation ${sub}`);
+      process.exit(2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od chat  (Side Chat — context-seeded conversations)
+//
+// `od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]`
+//   Creates a new conversation that inherits another conversation's context
+//   by copying its messages, optionally truncating at one source message.
+//   Mirrors the web chat fork action and POSTs to the same
+//   /api/projects/:id/conversations endpoint the UI uses. This is the CLI half
+//   of the dual-track surface for context-seeded conversations.
+// ---------------------------------------------------------------------------
+
+async function runChat(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"] [--mode design|chat] [--json]
+                                           Create a Side Chat — a new conversation
+                                           that copies in another conversation's
+                                           context (--seed-from). Use
+                                           --fork-after to stop at one source
+                                           message.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  switch (sub) {
+    case 'new': {
+      // Accept --project for parity with the rest of the project-scoped CLI,
+      // or a bare positional id for convenience.
+      const id = typeof flags.project === 'string' && flags.project
+        ? flags.project
+        : positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      if (!id) {
+        console.error('Usage: od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"]');
+        process.exit(2);
+      }
+      const body = {};
+      if (typeof flags.title === 'string') body.title = flags.title;
+      const sessionMode = normalizeChatSessionModeFlag(flags.mode);
+      if (sessionMode) body.sessionMode = sessionMode;
+      if (typeof flags['seed-from'] === 'string' && flags['seed-from']) {
+        body.seedFromConversationId = flags['seed-from'];
+      }
+      if (typeof flags['fork-after'] === 'string' && flags['fork-after']) {
+        if (!body.seedFromConversationId) {
+          console.error('--fork-after requires --seed-from');
+          process.exit(2);
+        }
+        body.forkAfterMessageId = flags['fork-after'];
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const conv = data.conversation;
+      const seeded = body.seedFromConversationId
+        ? ` (seeded from ${body.seedFromConversationId})`
+        : '';
+      const forked = body.forkAfterMessageId
+        ? ` through ${body.forkAfterMessageId}`
+        : '';
+      console.log(`[chat] created ${conv?.id ?? '-'}${conv?.title ? ` "${conv.title}"` : ''}${seeded}${forked} (mode ${conv?.sessionMode ?? sessionMode ?? 'design'})`);
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od chat ${sub}`);
       process.exit(2);
   }
 }

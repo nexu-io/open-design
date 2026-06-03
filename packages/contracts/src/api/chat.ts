@@ -1,5 +1,6 @@
 import type { ProjectFile } from './files';
 import type {
+  PreviewCommentAttachment,
   PreviewCommentMember,
   PreviewCommentPosition,
   PreviewCommentSelectionKind,
@@ -9,9 +10,11 @@ import type {
 import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
 import type { MediaExecutionPolicy } from './media.js';
+import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 
 export type ChatRole = 'user' | 'assistant';
+export type ChatSessionMode = 'design' | 'chat';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
 
 export interface ChatRequest {
@@ -22,6 +25,7 @@ export interface ChatRequest {
   systemPrompt?: string;
   projectId?: string | null;
   conversationId?: string | null;
+  sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -40,6 +44,7 @@ export interface ChatRequest {
   locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  appliedPluginSnapshotId?: string | null;
   /**
    * Run-scoped media execution policy. Omitted means current Open Design
    * behavior: media generation is enabled and OD may execute its configured
@@ -270,6 +275,11 @@ export interface ChatAttachment {
   name: string;
   kind: 'image' | 'file';
   size?: number;
+  /**
+   * User-visible attachment order for this turn. Older messages may omit it;
+   * consumers should fall back to array position.
+   */
+  order?: number;
 }
 
 export interface ChatCommentAttachment {
@@ -290,6 +300,9 @@ export interface ChatCommentAttachment {
   screenshotPath?: string;
   markKind?: PreviewVisualMarkKind;
   intent?: string;
+  imageAttachments?: PreviewCommentAttachment[];
+  /** `'query'` means `comment` was promoted to the message text; keep target data as context only. */
+  commentContext?: 'context' | 'query';
   source?: 'saved-comment' | 'board-batch';
 }
 
@@ -344,6 +357,9 @@ export interface ChatMessage {
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;
+  sessionMode?: ChatSessionMode;
+  runContext?: RunContextSelection;
+  appliedPluginSnapshot?: AppliedPluginSnapshot;
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];

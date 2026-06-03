@@ -1,6 +1,6 @@
-import type { CSSProperties } from 'react';
+import type { ChangeEvent, ClipboardEvent, CSSProperties } from 'react';
 import { Button, Textarea } from '@open-design/components';
-import { useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import type { PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
@@ -46,8 +46,9 @@ function compactFontFamily(value: string | undefined): string | null {
 }
 
 type AnnotationStyleRow = { label: string; value: string; swatch?: string };
-type PopoverBounds = { width: number; height: number };
+type PopoverBounds = { width: number; height: number; scrollLeft?: number; scrollTop?: number };
 type PopoverOffset = { x: number; y: number };
+type PopoverSize = { width: number; height: number };
 
 function annotationStyleRows(target: PreviewCommentSnapshot): AnnotationStyleRow[] {
   const rows: AnnotationStyleRow[] = [];
@@ -89,6 +90,7 @@ function popoverAnchorStyle(
   bounds?: PopoverBounds,
   offset: PopoverOffset = { x: 0, y: 0 },
   expanded = true,
+  measuredSize?: PopoverSize,
 ): CSSProperties {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const anchor = target.hoverPoint ?? {
@@ -104,6 +106,10 @@ function popoverAnchorStyle(
   const preferredLeft = clampPopoverCoordinate(anchorX + pad, pad);
   const preferredTop = clampPopoverCoordinate(anchorY + pad, pad);
   if (bounds?.width && bounds.width > 0) {
+    const viewportLeft = Math.max(0, bounds.scrollLeft ?? 0);
+    const viewportTop = Math.max(0, bounds.scrollTop ?? 0);
+    const viewportRight = viewportLeft + bounds.width;
+    const viewportBottom = bounds.height ? viewportTop + bounds.height : Number.POSITIVE_INFINITY;
     const position = target.position;
     const rect = {
       left: offset.x + position.x * safeScale,
@@ -113,56 +119,57 @@ function popoverAnchorStyle(
     };
     const rectRight = rect.left + rect.width;
     const rectBottom = rect.top + rect.height;
-    const viewportWidth = bounds.width;
-    const viewportHeight = bounds.height || Number.POSITIVE_INFINITY;
-    const maxLeft = Math.max(pad, viewportWidth - width - pad);
-    const maxTop = Number.isFinite(viewportHeight)
-      ? Math.max(pad, viewportHeight - estimatedHeight - pad)
+    const measuredWidth = measuredSize?.width && measuredSize.width > 0 ? measuredSize.width : width;
+    const measuredHeight = measuredSize?.height && measuredSize.height > 0
+      ? measuredSize.height
+      : expanded
+        ? 320
+        : estimatedHeight;
+    const minLeft = viewportLeft + pad;
+    const minTop = viewportTop + pad;
+    const maxLeft = Math.max(minLeft, viewportRight - measuredWidth - pad);
+    const maxTop = Number.isFinite(viewportBottom)
+      ? Math.max(minTop, viewportBottom - measuredHeight - pad)
       : preferredTop;
     const spaces = [
-      { side: 'top' as const, space: rect.top - pad, fits: rect.top - pad >= estimatedHeight },
-      { side: 'bottom' as const, space: viewportHeight - rectBottom - pad, fits: viewportHeight - rectBottom - pad >= estimatedHeight },
-      { side: 'left' as const, space: rect.left - pad, fits: rect.left - pad >= width },
-      { side: 'right' as const, space: viewportWidth - rectRight - pad, fits: viewportWidth - rectRight - pad >= width },
+      { side: 'top' as const, space: rect.top - viewportTop - pad, fits: rect.top - viewportTop - pad >= measuredHeight },
+      { side: 'bottom' as const, space: viewportBottom - rectBottom - pad, fits: viewportBottom - rectBottom - pad >= measuredHeight },
+      { side: 'left' as const, space: rect.left - viewportLeft - pad, fits: rect.left - viewportLeft - pad >= measuredWidth },
+      { side: 'right' as const, space: viewportRight - rectRight - pad, fits: viewportRight - rectRight - pad >= measuredWidth },
     ];
     const sorted = spaces
       .filter((item) => Number.isFinite(item.space))
       .sort((a, b) => Number(b.fits) - Number(a.fits) || b.space - a.space);
     const side = sorted[0]?.side ?? 'bottom';
-    const centerLeft = rect.left + rect.width / 2 - width / 2;
-    const centerTop = rect.top + rect.height / 2 - estimatedHeight / 2;
-    if (side === 'top' && sorted[0]?.fits) {
+    const centerLeft = rect.left + rect.width / 2 - measuredWidth / 2;
+    const centerTop = rect.top + rect.height / 2 - measuredHeight / 2;
+    const withVisibleHeight = (left: number, top: number): CSSProperties => {
+      const clampedTop = clampPopoverRange(top, minTop, maxTop);
+      const maxHeight = Number.isFinite(viewportBottom)
+        ? Math.max(120, Math.floor(viewportBottom - clampedTop - pad))
+        : undefined;
       return {
-        left: clampPopoverRange(centerLeft, pad, maxLeft),
-        top: clampPopoverRange(rect.top - estimatedHeight - pad, pad, maxTop),
+        left: clampPopoverRange(left, minLeft, maxLeft),
+        top: clampedTop,
+        ...(maxHeight ? { maxHeight } : {}),
       };
+    };
+    if (side === 'top' && sorted[0]?.fits) {
+      return withVisibleHeight(centerLeft, rect.top - measuredHeight - pad);
     }
     if (side === 'bottom' && sorted[0]?.fits) {
-      return {
-        left: clampPopoverRange(centerLeft, pad, maxLeft),
-        top: clampPopoverRange(rectBottom + pad, pad, maxTop),
-      };
+      return withVisibleHeight(centerLeft, rectBottom + pad);
     }
     if (side === 'left' && sorted[0]?.fits) {
-      return {
-        left: clampPopoverRange(rect.left - width - pad, pad, maxLeft),
-        top: clampPopoverRange(centerTop, pad, maxTop),
-      };
+      return withVisibleHeight(rect.left - measuredWidth - pad, centerTop);
     }
     if (side === 'right' && sorted[0]?.fits) {
-      return {
-        left: clampPopoverRange(rectRight + pad, pad, maxLeft),
-        top: clampPopoverRange(centerTop, pad, maxTop),
-      };
+      return withVisibleHeight(rectRight + pad, centerTop);
     }
-    return {
-      left: clampPopoverRange(
-        anchorX + pad + width <= viewportWidth - pad ? anchorX + pad : anchorX - width - pad,
-        pad,
-        maxLeft,
-      ),
-      top: clampPopoverRange(anchorY + overlapOffset, pad, maxTop),
-    };
+    return withVisibleHeight(
+      anchorX + pad + measuredWidth <= viewportRight - pad ? anchorX + pad : anchorX - measuredWidth - pad,
+      anchorY + overlapOffset,
+    );
   }
   return {
     left: preferredLeft,
@@ -251,6 +258,11 @@ export function BoardComposerPopover({
   onRemoveMember,
   onHoverMember,
   onDeleteComment,
+  images = [],
+  existingImages = [],
+  onAttachImages,
+  onRemoveImage,
+  onPreviewImage,
   sending,
   queueOnSend = false,
   sendDisabled = false,
@@ -274,6 +286,13 @@ export function BoardComposerPopover({
   onRemoveMember: (elementId: string) => void;
   onHoverMember?: (elementId: string | null) => void;
   onDeleteComment?: (commentId: string) => void | Promise<void>;
+  /** Object-URL thumbnails for images the user attached to this comment. */
+  images?: { file: File; url: string }[];
+  /** Already-saved attachment thumbnails (read-only) for a re-opened comment. */
+  existingImages?: { url: string; name: string }[];
+  onAttachImages?: (files: File[]) => void;
+  onRemoveImage?: (index: number) => void;
+  onPreviewImage?: (index: number) => void;
   sending: boolean;
   queueOnSend?: boolean;
   sendDisabled?: boolean;
@@ -285,23 +304,81 @@ export function BoardComposerPopover({
   commenting?: boolean;
 }) {
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
-  const hasCommentChange = !existing || draft.trim() !== existing.note.trim();
   const podMembers = target.podMembers ?? [];
   const composingRef = useRef(false);
-  const submitDisabled = pendingCount === 0 || sending || sendDisabled;
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [popoverSize, setPopoverSize] = useState<PopoverSize | undefined>(undefined);
+  useLayoutEffect(() => {
+    const node = popoverRef.current;
+    if (!node) return;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      const next = {
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+      };
+      if (next.width <= 0 || next.height <= 0) return;
+      setPopoverSize((current) =>
+        current?.width === next.width && current.height === next.height ? current : next,
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+    // Key only on `commenting` (which mounts/unmounts the compose section, so
+    // the observed node identity can change). Content-driven size changes —
+    // typing in the textarea, adding images/notes — are reported by the
+    // ResizeObserver itself, so listing draft/images/notes here only churned a
+    // teardown + re-observe + synchronous getBoundingClientRect on every keystroke.
+  }, [commenting]);
+  const trimmedDraft = draft.trim();
+  const existingNote = existing?.note.trim() ?? '';
+  const hasFreshImage = images.length > 0;
+  // An attached image alone is enough to send (the element context rides along
+  // even without a typed note).
+  const hasAnyImage = hasFreshImage || existingImages.length > 0;
+  // `sendDisabled` (prop) is the external gate (e.g. the chat can't accept the
+  // batch right now); combine it with the local "nothing to send" / sending
+  // checks so the send-to-chat CTA reflects both.
+  const sendBlocked = (pendingCount === 0 && !hasAnyImage) || sending || sendDisabled;
+  const isPodSelection = target.selectionKind === 'pod';
+  const hasSaveContent = Boolean(trimmedDraft) || hasAnyImage;
+  const existingChanged = existing ? trimmedDraft !== existingNote || hasFreshImage : true;
+  const saveDisabled = !hasSaveContent || !existingChanged || sending;
+  // Queue-on-send swaps the primary label to the annotation-queue wording.
   const primaryLabel = sending
     ? t('chat.comments.sending')
     : queueOnSend
       ? t('chat.annotationQueue')
       : t('chat.comments.sendToChat');
+  function pickImages(list: FileList | null) {
+    const imgs = Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
+    if (imgs.length > 0) onAttachImages?.(imgs);
+  }
+  function onImageInputChange(e: ChangeEvent<HTMLInputElement>) {
+    pickImages(e.target.files);
+    e.target.value = '';
+  }
+  function onComposerPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return;
+    const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (imgs.length === 0) return;
+    e.preventDefault();
+    onAttachImages?.(imgs);
+  }
   return (
     <div
+      ref={popoverRef}
       className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
       data-testid="comment-popover"
       role="dialog"
       aria-modal="false"
       aria-label="Annotation"
-      style={docked ? undefined : popoverAnchorStyle(target, scale, bounds, offset, commenting)}
+      style={docked ? undefined : popoverAnchorStyle(target, scale, bounds, offset, commenting, popoverSize)}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -360,6 +437,46 @@ export function BoardComposerPopover({
               ))}
             </div>
           ) : null}
+          {existingImages.length > 0 || images.length > 0 ? (
+            <div className="comment-popover-images">
+              {existingImages.map((item) => (
+                <div key={`saved-${item.url}`} className="comment-popover-image">
+                  <a
+                    className="comment-popover-image-thumb"
+                    data-testid="comment-popover-existing-image"
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={item.name}
+                  >
+                    <img src={item.url} alt="" aria-hidden />
+                  </a>
+                </div>
+              ))}
+              {images.map((item, index) => (
+                <div key={item.url} className="comment-popover-image">
+                  <button
+                    type="button"
+                    className="comment-popover-image-thumb"
+                    onClick={() => onPreviewImage?.(index)}
+                    title={item.file.name}
+                    aria-label={item.file.name}
+                  >
+                    <img src={item.url} alt="" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="comment-popover-image-remove"
+                    onClick={() => onRemoveImage?.(index)}
+                    aria-label={t('chat.annotationAttachedRemove')}
+                    title={t('chat.annotationAttachedRemove')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <Textarea
             data-testid="comment-popover-input"
             value={draft}
@@ -367,6 +484,7 @@ export function BoardComposerPopover({
             aria-label={t('chat.comments.placeholder')}
             placeholder={t('chat.comments.placeholder')}
             onChange={(event) => onDraft(event.target.value)}
+            onPaste={onComposerPaste}
             onCompositionStart={() => {
               composingRef.current = true;
             }}
@@ -378,17 +496,42 @@ export function BoardComposerPopover({
               if (
                 event.key === 'Enter' &&
                 !event.shiftKey &&
-                !event.altKey &&
-                (event.metaKey || event.ctrlKey)
+                !event.altKey
               ) {
                 event.preventDefault();
-                if (submitDisabled) return;
-                void onSendBatch();
+                // Enter triggers the primary CTA: comment (save) for element
+                // selections, send-to-chat for pod selections.
+                if (isPodSelection) {
+                  if (!sendBlocked) void onSendBatch();
+                } else if (!saveDisabled) {
+                  void onSaveComment();
+                }
               }
             }}
           />
           <div className="comment-popover-actions">
             <div className="comment-popover-actions-start">
+              {onAttachImages ? (
+                <>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={onImageInputChange}
+                  />
+                  <button
+                    type="button"
+                    className="comment-popover-close"
+                    onClick={() => imageInputRef.current?.click()}
+                    title={t('chat.annotationAttachImage')}
+                    aria-label={t('chat.annotationAttachImage')}
+                  >
+                    <Icon name="attach" size={13} />
+                  </button>
+                </>
+              ) : null}
               {existing && onDeleteComment ? (
                 <button
                   type="button"
@@ -412,33 +555,48 @@ export function BoardComposerPopover({
               )}
             </div>
             <div className="comment-popover-actions-end">
-              {target.selectionKind === 'pod' ? (
-                <Button
-                  variant="ghost"
-                  data-testid="comment-popover-add-note"
-                  disabled={!draft.trim()}
-                  onClick={onAddDraft}
-                >
-                  {t('chat.comments.addNote')}
-                </Button>
+              {isPodSelection ? (
+                <>
+                  {/* Pod: add-note is secondary, send-to-chat is the primary CTA. */}
+                  <Button
+                    variant="ghost"
+                    data-testid="comment-popover-add-note"
+                    disabled={!draft.trim()}
+                    onClick={onAddDraft}
+                  >
+                    {t('chat.comments.addNote')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    data-testid="comment-add-send"
+                    disabled={sendBlocked}
+                    onClick={() => void onSendBatch()}
+                  >
+                    {primaryLabel}
+                  </Button>
+                </>
               ) : (
-                <Button
-                  variant="ghost"
-                  data-testid="comment-popover-save"
-                  disabled={!draft.trim() || !hasCommentChange}
-                  onClick={() => void onSaveComment()}
-                >
-                  {t('chat.comments.comment')}
-                </Button>
+                <>
+                  {/* Element: comment (save) is the primary CTA (also Enter);
+                      send-to-chat is secondary. */}
+                  <Button
+                    variant="ghost"
+                    data-testid="comment-add-send"
+                    disabled={sendBlocked}
+                    onClick={() => void onSendBatch()}
+                  >
+                    {primaryLabel}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    data-testid="comment-popover-save"
+                    disabled={saveDisabled}
+                    onClick={() => void onSaveComment()}
+                  >
+                    {t('chat.comments.comment')}
+                  </Button>
+                </>
               )}
-              <Button
-                variant="primary"
-                data-testid="comment-add-send"
-                disabled={submitDisabled}
-                onClick={() => void onSendBatch()}
-              >
-                {primaryLabel}
-              </Button>
             </div>
           </div>
         </section>

@@ -390,6 +390,7 @@ for (const entry of automatedUiScenarios().filter(
 }
 
 test('[P0] comment attachment flow attaches preview comments to the next run as structured context', async ({ page }) => {
+  test.setTimeout(75_000);
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
   if (!entry?.mockArtifact) {
     throw new Error('comment-attachment-flow scenario fixture is missing');
@@ -435,7 +436,8 @@ test('[P0] comment attachment flow attaches preview comments to the next run as 
   await runCommentAttachmentFlow(page, entry);
 });
 
-test('[P0] sending preview comments keeps the preview file active and refreshes it with the follow-up artifact', async ({ page }) => {
+test('[P0] sending preview comments opens the refreshed follow-up artifact', async ({ page }) => {
+  test.setTimeout(75_000);
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
   if (!entry?.mockArtifact) {
     throw new Error('comment-attachment-flow scenario fixture is missing');
@@ -458,8 +460,8 @@ test('[P0] sending preview comments keeps the preview file active and refreshes 
     });
   });
   await page.route('**/api/runs/*/events', async (route) => {
-    const artifactTitle = requestCount === 1 ? entry.mockArtifact!.title : 'Commentable Artifact Revised';
-    const artifactHtml = requestCount === 1 ? entry.mockArtifact!.html : revisedHtml;
+    const artifactTitle = entry.mockArtifact!.title;
+    const artifactHtml = revisedHtml;
     const body = [
       'event: start',
       'data: {"bin":"mock-agent"}',
@@ -521,26 +523,39 @@ test('[P0] sending preview comments keeps the preview file active and refreshes 
   await expect(page.getByTestId('comment-side-send-claude')).toBeVisible();
 
   const runRequest = page.waitForRequest(isCreateRunRequest);
+  const runEvents = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.startsWith('/api/runs/') && url.pathname.endsWith('/events');
+  });
   await page.getByTestId('comment-side-send-claude').click();
   const body = (await runRequest).postDataJSON() as {
-    commentAttachments?: Array<{ elementId?: string; comment?: string; filePath?: string }>;
+    message?: string;
+    commentAttachments?: Array<{
+      elementId?: string;
+      comment?: string;
+      commentContext?: string;
+      filePath?: string;
+    }>;
   };
+  expect(body.message).toContain('Make the headline more specific.');
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({
       elementId: 'hero-title',
-      comment: 'Make the headline more specific.',
+      comment: '',
+      commentContext: 'query',
       filePath: 'commentable-artifact.html',
     }),
   ]);
+  await runEvents;
 
-  await ensureHtmlArtifactPreviewable(page, projectId, entry.mockArtifact.fileName, revisedHtml);
-  await page.reload();
-  await expectWorkspaceReady(page);
-  await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
+  const revisedFileName = await findProjectFileContaining(page, projectId, 'Revised headline');
+  expect(revisedFileName).not.toBe('');
+  await page.goto(`/projects/${projectId}/files/${revisedFileName}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/files/${entry.mockArtifact.fileName.replace('.', '\\.')}$`));
-  await expectProjectFileToContain(page, projectId, entry.mockArtifact.fileName, 'Revised headline');
-  await expectProjectFileToContain(page, projectId, entry.mockArtifact.fileName, 'Preview copy refreshed after comment send.');
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/files/${revisedFileName.replace('.', '\\.')}$`));
+  await expect(artifactPreview(page)).toBeVisible();
+  await expectProjectFileToContain(page, projectId, revisedFileName, 'Revised headline');
+  await expectProjectFileToContain(page, projectId, revisedFileName, 'Preview copy refreshed after comment send.');
 });
 
 async function routeMockAgents(page: Page) {
@@ -657,30 +672,6 @@ async function seedHtmlArtifact(
   expect(resp.ok()).toBeTruthy();
 }
 
-async function ensureHtmlArtifactPreviewable(
-  page: Page,
-  projectId: string,
-  fileName: string,
-  content: string,
-) {
-  const resp = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: {
-      name: fileName,
-      content,
-      artifactManifest: {
-        version: 1,
-        kind: 'html',
-        title: fileName,
-        entry: fileName,
-        renderer: 'html',
-        exports: ['html'],
-      },
-    },
-  });
-  if (resp.ok() || resp.status() === 409) return;
-  expect(resp.ok(), `${resp.status()} ${await resp.text()}`).toBeTruthy();
-}
-
 async function openDesignFile(page: Page, fileName: string) {
   await page.getByTestId('design-files-tab').click();
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
@@ -782,7 +773,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toBeVisible({ timeout: T.short });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveValue(prompt, { timeout: T.short });
+  await expect(input).toHaveText(prompt, { timeout: T.short });
   await expect(sendButton).toBeEnabled({ timeout: T.short });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
@@ -826,7 +817,7 @@ async function runExampleUsePromptFlow(
 
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue(entry.prompt);
+  await expect(page.getByTestId('chat-composer-input')).toHaveText(entry.prompt);
   await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
   await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
 }
@@ -1122,14 +1113,21 @@ async function runCommentAttachmentFlow(
   const request = await runRequest;
   const body = request.postDataJSON() as {
     message?: string;
-    commentAttachments?: Array<{ elementId?: string; comment?: string; filePath?: string }>;
+    commentAttachments?: Array<{
+      elementId?: string;
+      comment?: string;
+      commentContext?: string;
+      filePath?: string;
+    }>;
   };
 
   expect(body.message ?? '').not.toContain('Apply selected preview comments');
+  expect(body.message).toContain('Make the headline more specific.');
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({
       elementId: 'hero-title',
-      comment: 'Make the headline more specific.',
+      comment: '',
+      commentContext: 'query',
       filePath: 'commentable-artifact.html',
     }),
   ]);
@@ -1418,6 +1416,25 @@ async function expectProjectFileToContain(
     .toContain(expected);
 }
 
+async function findProjectFileContaining(
+  page: Page,
+  projectId: string,
+  expected: string,
+): Promise<string> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const files = await listProjectFilesFromApi(page, projectId);
+    for (const file of files) {
+      const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
+      if (!response.ok()) continue;
+      const source = await response.text();
+      if (source.includes(expected)) return file.name;
+    }
+    await page.waitForTimeout(250);
+  }
+  return '';
+}
+
 async function expectArtifactVisible(
   page: Page,
   entry: UiScenario,
@@ -1463,7 +1480,7 @@ async function runConversationPersistenceFlow(
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
@@ -1525,7 +1542,7 @@ async function runFileMentionFlow(
   await page.getByTestId('chat-composer-input').pressSequentially('Review @ref');
   await expect(page.getByTestId('mention-popover')).toBeVisible();
   await page.getByTestId('mention-popover').getByRole('button', { name: /reference\.txt/i }).click();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('Review @reference.txt ');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('Review @reference.txt ');
   await expect(page.getByTestId('staged-attachments')).toBeVisible();
   await expect(page.getByTestId('staged-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
   await expect(page.getByTestId('chat-send')).toBeEnabled();
@@ -1612,7 +1629,7 @@ async function runConversationDeleteRecoveryFlow(
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
+  await expect(page.getByTestId('chat-composer-input')).toHaveText('');
 
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);

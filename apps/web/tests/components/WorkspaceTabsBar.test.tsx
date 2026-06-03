@@ -255,6 +255,130 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(navigate).toHaveBeenCalledWith(homeRoute);
   });
 
+  it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    const allowedDefault = fireEvent.keyDown(document, {
+      key: 't',
+      metaKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Home'))).toBe(true);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+    expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('maps the browser close-tab shortcut to the active workspace tab', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    const allowedDefault = fireEvent.keyDown(document, {
+      key: 'w',
+      ctrlKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]).toContain('Home');
+    });
+    expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('switches tabs with browser-style next and previous tab shortcuts', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    const nextAllowedDefault = fireEvent.keyDown(document, {
+      key: 'Tab',
+      ctrlKey: true,
+    });
+
+    expect(nextAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(navigate).toHaveBeenLastCalledWith({
+        kind: 'project',
+        projectId: 'project-beta',
+        conversationId: null,
+        fileName: null,
+      });
+    });
+
+    const previousAllowedDefault = fireEvent.keyDown(document, {
+      key: 'Tab',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(previousAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(navigate).toHaveBeenLastCalledWith(projectRoute);
+    });
+  });
+
   it('dismisses tab search when a blank page area handles the mouse down', async () => {
     const outsideArea = document.createElement('div');
     outsideArea.setAttribute('data-testid', 'blank-workspace-area');

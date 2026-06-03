@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
+  ChatSessionMode,
   InstalledPluginRecord,
   ProjectMetadata,
 } from '@open-design/contracts';
@@ -41,6 +42,7 @@ export interface PluginLoopSubmit {
   projectKind?: 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other' | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;
+  conversationMode?: ChatSessionMode;
   // Files staged on Home before the project exists. App uploads them
   // into the created project's Design Files before the first auto-send.
   attachments?: File[];

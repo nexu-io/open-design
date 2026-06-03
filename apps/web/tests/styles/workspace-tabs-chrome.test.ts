@@ -37,8 +37,18 @@ describe('workspace tabs chrome styles', () => {
 
     expect(ruleValue(chrome, 'padding')).toBe('0 8px 0 6px');
     expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
-    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 0');
+    expect(ruleValue(projectChrome, 'padding')).toBe('0 10px 0 6px');
     expect(ruleValue(projectStrip, 'align-items')).toBe('flex-end');
+  });
+
+  it('keeps the project composer input inset and focus ring polished', () => {
+    const composerShell = cssDeclarations(routinesCss, '.app .composer-shell');
+    const focusedComposerShell = cssDeclarations(routinesCss, '.app .composer-shell:focus-within');
+
+    expect(ruleValue(composerShell, 'padding')).toBe('8px');
+    expect(ruleValue(composerShell, 'border-color')).toBe('color-mix(in srgb, var(--border) 84%, var(--border-strong))');
+    expect(ruleValue(composerShell, 'box-shadow')).toBe('var(--shadow-sm)');
+    expect(ruleValue(focusedComposerShell, 'box-shadow')).toBe('var(--shadow-sm), 0 0 0 3px var(--accent-soft)');
   });
 
   it('uses hairline dividers for the tab chrome and entry rail', () => {

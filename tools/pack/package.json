@@ -22,7 +22,7 @@
     "electron-builder": "26.8.1"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.0.9"
+    "@powerformer/vela-cli": "0.0.10"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
