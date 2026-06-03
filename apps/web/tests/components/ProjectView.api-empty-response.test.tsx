@@ -844,7 +844,7 @@ describe('ProjectView API empty response handling', () => {
     );
   });
 
-  it('does not reuse a prior relocated group for a different index artifact', async () => {
+  it('reuses the relocated group when the artifact wrapper title changes', async () => {
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -911,14 +911,13 @@ describe('ProjectView API empty response handling', () => {
     });
     const [, fileName, content, options] = mockedWriteProjectTextFile.mock.calls.at(-1) ?? [];
     expect(fileName).toBe('index.html');
-    expect(content).toContain('href="about.html"');
-    expect(content).not.toContain('href="about-2.html"');
+    expect(content).toContain('href="about-2.html"');
     expect(options?.artifactManifest?.metadata?.artifactGroupIdentifier).toBe(
-      'html-artifact:index.html',
+      'html-artifact:index-2.html',
     );
   });
 
-  it('does not reuse an unrelated relocated group when a new artifact has the same identifier and title', async () => {
+  it('reuses the relocated group when the document title changes', async () => {
     let currentFiles = [
       htmlProjectFile('index.html', 10, {
         artifactIdentifier: 'index',
@@ -951,8 +950,8 @@ describe('ProjectView API empty response handling', () => {
       '</artifact>';
     const secondArtifact =
       '<artifact identifier="index" type="text/html" title="Home">' +
-      '<!doctype html><html><head><title>Different Home</title></head><body>' +
-      '<main><h1>Different Home</h1><a href="about.html">About</a></main>' +
+      '<!doctype html><html><head><title>Pricing</title></head><body>' +
+      '<main><h1>Pricing</h1><a href="about.html">About</a></main>' +
       '</body></html>' +
       '</artifact>';
     let turn = 0;
@@ -985,10 +984,10 @@ describe('ProjectView API empty response handling', () => {
     });
     const [, fileName, content, options] = mockedWriteProjectTextFile.mock.calls.at(-1) ?? [];
     expect(fileName).toBe('index.html');
-    expect(content).toContain('href="about.html"');
-    expect(content).not.toContain('href="about-2.html"');
+    expect(content).toContain('<title>Pricing</title>');
+    expect(content).toContain('href="about-2.html"');
     expect(options?.artifactManifest?.metadata?.artifactGroupIdentifier).toBe(
-      'html-artifact:index.html',
+      'html-artifact:index-2.html',
     );
   });
 

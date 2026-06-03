@@ -4665,24 +4665,8 @@ function artifactBaseNameFor(art: Artifact): string {
 interface HtmlArtifactLineage {
   fileName: string;
   identifier: string;
-  title: string;
   artifactType: string;
   artifactGroupIdentifier: string;
-  identitySignature: string;
-}
-
-/**
- * Extract stable document identity signature from HTML content.
- * Uses only the normalized document <title> to identify the document,
- * ignoring body copy changes and local href topology changes.
- */
-function htmlArtifactIdentitySignature(html: string): string {
-  // Extract <title> text (case-insensitive, trim/collapse whitespace)
-  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const rawTitle = titleMatch?.[1] ?? '';
-  const title = rawTitle.replace(/\s+/g, ' ').trim();
-
-  return JSON.stringify({ title });
 }
 
 function htmlArtifactLineageFor(
@@ -4693,10 +4677,8 @@ function htmlArtifactLineageFor(
   return {
     fileName,
     identifier: art.identifier ?? '',
-    title: art.title ?? '',
     artifactType: art.artifactType ?? '',
     artifactGroupIdentifier,
-    identitySignature: htmlArtifactIdentitySignature(art.html ?? ''),
   };
 }
 
@@ -4707,7 +4689,6 @@ function matchingHtmlArtifactLineageFileName(
 ): string | null {
   if (!lineage) return null;
   if ((art.identifier ?? '') !== lineage.identifier) return null;
-  if ((art.title ?? '') !== lineage.title) return null;
   if ((art.artifactType ?? '') !== lineage.artifactType) return null;
   if (lineage.artifactGroupIdentifier === '') return null;
 
@@ -4719,10 +4700,6 @@ function matchingHtmlArtifactLineageFileName(
   const currentGroup =
     lineageFile.artifactManifest?.metadata?.artifactGroupIdentifier ?? '';
   if (currentGroup !== lineage.artifactGroupIdentifier) return null;
-
-  // Verify document identity signature matches
-  const currentSignature = htmlArtifactIdentitySignature(art.html ?? '');
-  if (currentSignature !== lineage.identitySignature) return null;
 
   return lineage.fileName;
 }
