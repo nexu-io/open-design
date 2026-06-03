@@ -160,7 +160,7 @@ const SHELL_TOOL_NAMES = new Set([
 // Leading binaries of a shell command that only inspect state.
 const READ_ONLY_SHELL_BINARIES = new Set([
   'cat', 'ls', 'grep', 'rg', 'egrep', 'fgrep', 'find', 'head', 'tail', 'pwd', 'echo', 'printf',
-  'which', 'type', 'wc', 'stat', 'file', 'tree', 'diff', 'jq', 'awk', 'env', 'date', 'test',
+  'which', 'type', 'wc', 'stat', 'file', 'tree', 'diff', 'jq', 'awk', 'date', 'test',
   'true', 'false', 'basename', 'dirname', 'realpath', 'readlink', 'cut', 'sort', 'uniq', 'column', 'cmp',
 ]);
 
@@ -168,6 +168,37 @@ const READ_ONLY_SHELL_BINARIES = new Set([
 function shellHead(segment: string): string {
   const match = segment.trim().match(/^[A-Za-z0-9_./-]+/u);
   return (match?.[0] ?? '').toLowerCase().replace(/^.*\//u, '');
+}
+
+/**
+ * Strip a leading `env [flags] KEY=VALUE...` wrapper so the REAL subcommand is
+ * what gets classified. `env CI=1 sed -i ...` mutates via sed, and
+ * `env NODE_ENV=production pnpm install` via pnpm, not via env, so the head we
+ * test must be the wrapped command, not `env`. A bare `env` (or one with only
+ * assignments) just prints the environment, so it unwraps to nothing and stays
+ * an inspection. (PR #3375 review: env-prefixed fixes were read as a read-only
+ * `env` inspection, so a real fix between failing checks never cleared the
+ * repeated-failure tally and a healthy run could still halt.)
+ */
+function unwrapEnvPrefix(segment: string): string {
+  let rest = segment.trim();
+  while (shellHead(rest) === 'env') {
+    const after = rest.replace(/^\s*(?:[A-Za-z0-9_./-]*\/)?env\b/u, '').trim();
+    const tokens = after.length ? after.split(/\s+/u) : [];
+    let index = 0;
+    while (index < tokens.length) {
+      const token = tokens[index];
+      if (token === undefined) break;
+      if (token === '-u' || token === '--unset') { index += 2; continue; } // takes a name argument
+      if (token.startsWith('-')) { index += 1; continue; } // other env flags (-i, -S, …)
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(token)) { index += 1; continue; } // KEY=VALUE assignment
+      break;
+    }
+    const next = tokens.slice(index).join(' ');
+    if (next === rest) break; // defensive: no progress, do not loop forever
+    rest = next;
+  }
+  return rest;
 }
 
 /**
@@ -184,7 +215,8 @@ export function isReadOnlyShellCommand(command: string): boolean {
   // A surviving output redirection writes a real file (ignore >/dev/null, 2>&1).
   const redirs = cmd.replace(/\d*>\s*\/dev\/null/gu, '').replace(/\d*>&\d+/gu, '');
   if (/>/u.test(redirs)) return false;
-  for (const seg of cmd.split(/\|\||&&|[;|]/u)) {
+  for (const rawSeg of cmd.split(/\|\||&&|[;|]/u)) {
+    const seg = unwrapEnvPrefix(rawSeg);
     const head = shellHead(seg);
     if (!head) continue;
     if (head === 'sed' || head === 'perl') {

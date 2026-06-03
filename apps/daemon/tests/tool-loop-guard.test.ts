@@ -178,6 +178,27 @@ describe('createToolLoopGuard — repeated-failure trigger', () => {
     expect(tripped).toBeNull();
     expect(guard.halted).toBe(false);
   });
+
+  it('does not halt when an env-prefixed mutating Bash fix lands between failing checks', () => {
+    // PR #3375 review: `env CI=1 sed -i ...` and `env NODE_ENV=production pnpm install`
+    // mutate via the wrapped command, not via `env`. The classifier must unwrap the
+    // env prefix so a successful fix clears the tally, instead of reading it as a
+    // read-only `env` inspection that lets stale failures accumulate to a halt.
+    const guard = createToolLoopGuard({ mode: 'halt' });
+    const check = { command: 'pnpm test' };
+    let tripped = null;
+    for (let i = 0; i < 12; i += 1) {
+      const verdict = fail(guard, `chk-${i}`, 'Bash', check); // same failing check
+      if (verdict) tripped = verdict;
+      const fix = i % 2 === 0
+        ? `env CI=1 sed -i 's/old/new/' src/file-${i}.ts`
+        : 'env NODE_ENV=production pnpm install';
+      ok(guard, `fix-${i}`, 'Bash', { command: fix }); // env-wrapped fix = progress
+    }
+    expect(tripped).toBeNull();
+    expect(guard.halted).toBe(false);
+    expect(guard.warned).toBe(false);
+  });
 });
 
 describe('isReadOnlyShellCommand / isProgressSuccess', () => {
@@ -185,6 +206,7 @@ describe('isReadOnlyShellCommand / isProgressSuccess', () => {
     for (const cmd of [
       'cat x.ts', 'ls -la', 'grep foo x', 'rg needle', 'wc -l x', 'sed -n p x',
       'git status', 'git diff HEAD', 'find . -name x',
+      'env', 'env FOO=1 cat x', // bare env / env-wrapped inspection stays read-only
     ]) {
       expect(isReadOnlyShellCommand(cmd)).toBe(true);
     }
@@ -195,6 +217,7 @@ describe('isReadOnlyShellCommand / isProgressSuccess', () => {
       'sed -i s/a/b/ x', 'mv a b', 'rm x', 'mkdir y', 'pnpm install', 'npm run build',
       'git commit -m x', 'git add .', 'echo hi > f.txt',
       'python3 -c "open(\'x\',\'w\').write(\'1\')"', 'node -e "require(\'fs\').writeFileSync(\'x\',\'1\')"',
+      'env CI=1 sed -i s/a/b/ x', 'env NODE_ENV=production pnpm install', // env prefix must unwrap to the real cmd
     ]) {
       expect(isReadOnlyShellCommand(cmd)).toBe(false);
     }
