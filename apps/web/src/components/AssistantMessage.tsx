@@ -2009,6 +2009,7 @@ function MessageTextBlock({
   locallySubmitted,
   suppressDirectionForms,
   onSubmitForm,
+  onOpenQuestions,
   onRequestOpenFile,
 }: {
   text: string;
@@ -2018,6 +2019,7 @@ function MessageTextBlock({
   locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
   onSubmitForm: (formId: string, text: string) => void;
+  onOpenQuestions?: () => void;
   onRequestOpenFile?: (path: string) => void;
 }) {
   return (
@@ -2029,6 +2031,7 @@ function MessageTextBlock({
       locallySubmitted={locallySubmitted}
       suppressDirectionForms={suppressDirectionForms}
       onSubmitForm={onSubmitForm}
+      onOpenQuestions={onOpenQuestions}
       onRequestOpenFile={onRequestOpenFile}
     />
   );
