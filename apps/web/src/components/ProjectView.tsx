@@ -139,10 +139,11 @@ import {
   mergeAttachedComments,
   removeAttachedComment,
 } from '../comments';
+import { filterImplicitProducedFiles } from '../produced-files';
 import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
-import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { HandoffButton } from './HandoffButton';
+import { Icon } from './Icon';
 import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
 import { ChatPane } from './ChatPane';
 import type { ChatSendMeta } from './ChatComposer';
@@ -155,7 +156,6 @@ import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { FileWorkspace } from './FileWorkspace';
-import { Icon } from './Icon';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
@@ -2139,7 +2139,7 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
-                const diff = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+                const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 if (produced.length > 0) {
                   updateMessageById(
@@ -2698,7 +2698,7 @@ export function ProjectView({
               await persistArtifact(parsedArtifact, nextFiles);
               nextFiles = await refreshProjectFiles();
             }
-            const produced = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+            const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             setMessages((curr) => {
               const updated = curr.map((m) =>
                 m.id === assistantId
@@ -3148,6 +3148,7 @@ export function ProjectView({
     },
     [handleSend, currentConversationQueueDisabled],
   );
+  const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
     (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
@@ -3697,17 +3698,6 @@ export function ProjectView({
     [project.id, activeConversationId, onProjectsRefresh],
   );
 
-  const handleRenameConversation = useCallback(
-    async (id: string, title: string) => {
-      const trimmed = title.trim() || null;
-      setConversations((curr) =>
-        curr.map((c) => (c.id === id ? { ...c, title: trimmed } : c)),
-      );
-      await patchConversation(project.id, id, { title: trimmed });
-    },
-    [project.id],
-  );
-
   const handleProjectRename = useCallback(
     (newName: string) => {
       const trimmed = newName.trim();
@@ -3800,23 +3790,6 @@ export function ProjectView({
     },
     [project, onProjectChange, designSystems, analytics.track],
   );
-
-  const handleSaveInstructions = useCallback(async () => {
-    const value = instructionsDraft.trim() || undefined;
-    // After a save, land on the review panel so the saved value is read
-    // back immediately (#1822); collapse only when it was cleared.
-    const settle = () => setInstructionsMode(value ? 'review' : 'closed');
-    if (value === (project.customInstructions ?? undefined)) {
-      settle();
-      return;
-    }
-    setInstructionsSaving(true);
-    const result = await patchProject(project.id, { customInstructions: value ?? null });
-    setInstructionsSaving(false);
-    if (!result) return;
-    onProjectChange(result);
-    settle();
-  }, [project, onProjectChange, instructionsDraft]);
 
   const projectMeta = useMemo(() => {
     // Design system is rendered by the adjacent picker chip — keep the
@@ -4338,9 +4311,23 @@ export function ProjectView({
   // pipeline; this hook only governs whether the web layer renders the
   // resulting SSE stream.
   const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
-  const projectInstructions = (project.customInstructions ?? '').trim();
-  const hasProjectInstructions = projectInstructions.length > 0;
-  const projectInstructionsPreview = compactInlinePreview(projectInstructions);
+
+  // CLI / agent selector lives below the chat conversation (composer footer),
+  // not in the top-right header.
+  const executionControls = (
+    <AvatarMenu
+      config={config}
+      agents={agents}
+      daemonLive={daemonLive}
+      onModeChange={onModeChange}
+      onAgentChange={onAgentChange}
+      onAgentModelChange={onAgentModelChange}
+      onOpenSettings={onOpenSettings}
+      onRefreshAgents={onRefreshAgents}
+      onBack={onBack}
+      placement="up"
+    />
+  );
 
   return (
     <div className="app">
@@ -4348,153 +4335,6 @@ export function ProjectView({
         projectId={project.id}
         enabled={critiqueTheaterEnabled}
       />
-      <AppChromeHeader
-        showTrafficSpace={false}
-        onBack={onBack}
-        backLabel={t('project.backToProjects')}
-        fileActionsBefore={(
-          <div
-            className="app-chrome-file-actions-before workspace-tabs-file-actions"
-            data-app-chrome-file-actions="true"
-          />
-        )}
-        actions={(
-          <>
-            <button
-              type="button"
-              className="settings-icon-btn"
-              data-testid="project-settings-trigger"
-              title={t('project.customInstructions')}
-              aria-label={t('project.customInstructions')}
-              aria-expanded={instructionsMode !== 'closed'}
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode(hasProjectInstructions ? 'review' : 'edit');
-              }}
-            >
-              <Icon name="sliders" size={16} />
-            </button>
-            <HandoffButton projectId={project.id} />
-            <AvatarMenu
-              config={config}
-              agents={agents}
-              daemonLive={daemonLive}
-              onModeChange={onModeChange}
-              onAgentChange={onAgentChange}
-              onAgentModelChange={onAgentModelChange}
-              onOpenSettings={onOpenSettings}
-              onRefreshAgents={onRefreshAgents}
-              onBack={onBack}
-            />
-          </>
-        )}
-      >
-        <div className="app-project-title">
-          <span className="app-project-title-line">
-            <span
-              className="title editable"
-              data-testid="project-title"
-              title={project.name}
-              tabIndex={0}
-              role="textbox"
-              suppressContentEditableWarning
-              contentEditable
-              onBlur={(e) => handleProjectRename(e.currentTarget.textContent ?? '')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  (e.currentTarget as HTMLElement).blur();
-                }
-              }}
-            >
-              {project.name}
-            </span>
-            {projectMeta !== t('project.metaFreeform') ? (
-              <span className="meta" data-testid="project-meta">{projectMeta}</span>
-            ) : null}
-            <ProjectDesignSystemPicker
-              designSystems={designSystems}
-              selectedId={project.designSystemId ?? null}
-              onChange={handleChangeDesignSystemId}
-            />
-            {hasProjectInstructions ? (
-              <button
-                type="button"
-                className={`project-instructions-chip${instructionsMode !== 'closed' ? ' is-open' : ''}`}
-                data-testid="project-instructions-chip"
-                title={projectInstructions}
-                aria-label={t('project.customInstructions')}
-                aria-expanded={instructionsMode !== 'closed'}
-                onClick={() => setInstructionsMode((m) => (m === 'closed' ? 'review' : 'closed'))}
-              >
-                <Icon name="sliders" size={11} />
-                <span>&quot;{projectInstructionsPreview}&quot;</span>
-              </button>
-            ) : null}
-          </span>
-        </div>
-      </AppChromeHeader>
-      {instructionsMode === 'review' && (
-        <div className="project-instructions-bar project-instructions-review">
-          <div className="project-instructions-bar-head">
-            <label className="project-instructions-label">{t('project.customInstructions')}</label>
-            <span className="project-instructions-status">
-              <Icon name="check" size={11} />
-              {t('project.instructionsActive')}
-            </span>
-          </div>
-          <div className="project-instructions-preview" data-testid="project-instructions-preview">
-            {project.customInstructions}
-          </div>
-          <div className="project-instructions-actions">
-            <button
-              type="button"
-              className="btn-sm"
-              onClick={() => setInstructionsMode('closed')}
-            >
-              {t('common.close')}
-            </button>
-            <button
-              type="button"
-              className="btn-sm btn-primary"
-              data-testid="project-instructions-edit"
-              onClick={() => {
-                setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsMode('edit');
-              }}
-            >
-              {t('common.edit')}
-            </button>
-          </div>
-        </div>
-      )}
-      {instructionsMode === 'edit' && (
-        <div className="project-instructions-bar">
-          <label className="project-instructions-label">{t('project.customInstructions')}</label>
-          <textarea
-            className="project-instructions-input"
-            data-testid="project-instructions-textarea"
-            rows={3}
-            maxLength={5000}
-            placeholder={t('project.customInstructionsPlaceholder')}
-            value={instructionsDraft}
-            onChange={(e) => setInstructionsDraft(e.target.value)}
-            disabled={instructionsSaving}
-            autoFocus
-          />
-          <div className="project-instructions-actions">
-            <button type="button" className="btn-sm" disabled={instructionsSaving} onClick={() => {
-              setInstructionsDraft(project.customInstructions ?? '');
-              setInstructionsMode((project.customInstructions ?? '').trim() ? 'review' : 'closed');
-            }}>
-              {t('common.cancel')}
-            </button>
-            <button type="button" className="btn-sm btn-primary" data-testid="project-instructions-save" disabled={instructionsSaving} onClick={handleSaveInstructions}>
-              {t('common.save')}
-            </button>
-          </div>
-        </div>
-      )}
       {/* ProjectActionsToolbar removed per 00efdcba — hide finalize-design
           toolbar from project header. Restore from cf1cd9bb if product
           wants the Finalize + Continue-in-CLI buttons back in the chrome. */}
@@ -4566,7 +4406,6 @@ export function ProjectView({
               activeConversationId={activeConversationId}
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
-              onRenameConversation={handleRenameConversation}
               onOpenSettings={onOpenSettings}
               onOpenAmrSettings={onOpenAmrSettings}
               onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
@@ -4611,7 +4450,41 @@ export function ProjectView({
               onShowToast={(message) => {
                 setProjectActionsToast({ message, details: null });
               }}
-              onCollapse={() => setWorkspaceFocused(true)}
+              onBack={onBack}
+              backLabel={t('project.backToProjects')}
+              composerFooterAccessory={executionControls}
+              projectHeader={(
+                <span className="chat-project-title-line">
+                  <span
+                    className="title editable"
+                    data-testid="project-title"
+                    title={project.name}
+                    tabIndex={0}
+                    role="textbox"
+                    suppressContentEditableWarning
+                    contentEditable
+                    onBlur={(e) => handleProjectRename(e.currentTarget.textContent ?? '')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLElement).blur();
+                      }
+                    }}
+                  >
+                    {project.name}
+                  </span>
+                  {projectMeta !== t('project.metaFreeform') ? (
+                    <span className="meta" data-testid="project-meta">{projectMeta}</span>
+                  ) : null}
+                </span>
+              )}
+              designSystemPicker={(
+                <ProjectDesignSystemPicker
+                  designSystems={designSystems}
+                  selectedId={project.designSystemId ?? null}
+                  onChange={handleChangeDesignSystemId}
+                />
+              )}
             />
           ) : (
             <div className="pane" data-testid="chat-pane-loading">
@@ -4651,6 +4524,7 @@ export function ProjectView({
           isDeck={isDeck}
           onExportAsPptx={handleExportAsPptx}
           streaming={currentConversationActionDisabled}
+          commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}
           liveArtifactEvents={liveArtifactEvents}
@@ -4680,6 +4554,23 @@ export function ProjectView({
           artifactHtml={artifact?.html}
           conversationError={error}
           onRetry={handleRetry}
+          onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
+          onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+          conversationId={activeConversationId}
+          headerActions={(
+            <>
+              <button
+                type="button"
+                className="settings-icon-btn"
+                onClick={() => onOpenSettings('execution')}
+                title={t('chat.cliSettingsTitle')}
+                aria-label={t('chat.cliSettingsAria')}
+              >
+                <Icon name="settings" size={16} />
+              </button>
+              <HandoffButton projectId={project.id} />
+            </>
+          )}
         />
       </div>
       {projectActionsToast ? (
@@ -4825,10 +4716,6 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
-}
-
-function compactInlinePreview(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
 }
 
 export interface RetryTarget {
@@ -5014,7 +4901,7 @@ export function computeProducedFiles(
 ): ProjectFile[] | undefined {
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
-  return next.filter((f) => !set.has(f.name));
+  return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
 }
 
 // Reattach with a recovered (on-disk) artifact must still include any

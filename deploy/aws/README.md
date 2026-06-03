@@ -1,6 +1,6 @@
 # Open Design AWS Deployment
 
-This directory contains an AWS CloudFormation template (`template.yaml`) to deploy Open Design into your AWS environment using Amazon Elastic Container Service (ECS) with AWS Fargate. 
+This directory contains an AWS CloudFormation template (`template.yaml`) to deploy Open Design into your AWS environment using Amazon Elastic Container Service (ECS) with AWS Fargate.
 
 ## Architecture Overview
 
@@ -12,7 +12,7 @@ The template provisions a robust, fault-tolerant, and secure architecture for Op
     *   The **Open Design** app container.
     *   An **Nginx Auth Proxy** sidecar container that securely attaches the Open Design API Token to incoming `/api/` requests.
 *   **Storage:** Amazon Elastic File System (EFS) is mounted to the Fargate containers to durably store the Open Design `.od` SQLite database and file artifacts. It is configured with deletion protection (`Retain`) to prevent accidental data loss.
-*   **Security:** 
+*   **Security:**
     *   **Secrets Manager:** Securely stores the Open Design API Token, preventing it from being exposed in plain text.
     *   **Security Groups:** Restrict traffic flow. The ALB requires an explicitly configured CIDR — ensure this is your VPN or corporate range to avoid unintended public exposure. Fargate only accepts traffic from the ALB; EFS only accepts traffic from Fargate.
 *   **Logging:** Amazon CloudWatch Log Group captures container logs for easy debugging.

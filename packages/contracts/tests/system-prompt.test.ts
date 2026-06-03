@@ -33,6 +33,40 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
   });
 });
 
+describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', () => {
+  it('uses the single-shot task-type form shape from the daemon prompt', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('<question-form id="task-type"');
+    for (const id of ['taskType', 'audience', 'brand', 'scale', 'constraints']) {
+      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"id": "${id}"`);
+    }
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'This form is intentionally a **single-shot brief**',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
+      /do NOT emit a second `<question-form id="discovery">` \/ "Quick brief — 30 seconds" form/,
+    );
+  });
+
+  it('routes task-type form answers through the same RULE 2 / RULE 3 path as discovery answers', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
+      /\[form answers — discovery\][^.]*\[form answers — task-type\]/,
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'Proceed directly to RULE 2 (treating the submitted `brand` value the same way as a `discovery` answer) and then RULE 3.',
+    );
+  });
+
+  it('keeps artifact emission conditional on writing a new canonical HTML file', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain('## Artifact emission is conditional');
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'only when this turn wrote a new canonical HTML file',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'If this turn only edited an existing HTML file',
+    );
+  });
+});
+
 describe('composeSystemPrompt', () => {
   it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
@@ -113,5 +147,19 @@ describe('composeSystemPrompt', () => {
     expect(prompt.indexOf('## Active design system visual direction')).toBeGreaterThan(
       prompt.indexOf('### direction-picker'),
     );
+  });
+
+  it('does not include the HTML discovery layer for media surfaces', () => {
+    const prompt = composeSystemPrompt({
+      metadata: {
+        kind: 'image',
+        imageModel: 'fal/imagen4',
+        imageAspect: '16:9',
+      } as any,
+    });
+
+    expect(prompt).not.toContain('# OD core directives');
+    expect(prompt).not.toContain('<question-form id="discovery"');
+    expect(prompt).toContain('## Media generation contract');
   });
 });

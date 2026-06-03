@@ -134,4 +134,52 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toContain('choose reasonable defaults for any missing details');
     });
   });
+
+  // Regression coverage for #3257 — example-prompt discovery skip must be
+  // honored in API/BYOK mode (which composes prompts through this contracts
+  // composer), not only in daemon-backed runs. Without the examplePrompt
+  // handling here, the same unmodified gallery prompt skipped discovery in
+  // daemon mode but still asked discovery questions in API mode.
+  describe('example prompt mode (#3257)', () => {
+    it('injects the example-prompt override and skips discovery when metadata.examplePrompt is true', () => {
+      const prompt = composeSystemPrompt({
+        metadata: { kind: 'prototype', examplePrompt: true },
+      });
+      expect(prompt).toContain('Example prompt mode — full-quality direct generation');
+      expect(prompt).toMatch(/do NOT emit `?<question-form id="discovery">`?/i);
+    });
+
+    it('interpolates the curated title and pre-filled brief', () => {
+      const prompt = composeSystemPrompt({
+        metadata: {
+          kind: 'prototype',
+          examplePrompt: true,
+          examplePromptTitle: 'Neon dashboard',
+          examplePromptBrief: { target_audience: 'developers', fidelity: 'high' },
+        },
+      });
+      expect(prompt).toContain('Selected example: "Neon dashboard"');
+      expect(prompt).toContain('target audience: developers');
+      expect(prompt).toContain('fidelity: high');
+    });
+
+    it('pins the example-prompt override above the discovery layer in API mode', () => {
+      const prompt = composeSystemPrompt({
+        streamFormat: 'plain',
+        metadata: { kind: 'prototype', examplePrompt: true },
+      });
+      const overrideIdx = prompt.indexOf('Example prompt mode — full-quality direct generation');
+      const discoveryIdx = prompt.indexOf('# OD core directives');
+      expect(overrideIdx).toBeGreaterThanOrEqual(0);
+      expect(overrideIdx).toBeLessThan(discoveryIdx);
+    });
+
+    it('prefers the example-prompt override over the plain skip-discovery override', () => {
+      const prompt = composeSystemPrompt({
+        metadata: { kind: 'prototype', examplePrompt: true, skipDiscoveryBrief: true },
+      });
+      expect(prompt).toContain('Example prompt mode — full-quality direct generation');
+      expect(prompt).not.toContain(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    });
+  });
 });

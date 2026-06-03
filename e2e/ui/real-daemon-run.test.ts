@@ -8,6 +8,7 @@ import type { FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
+const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';
 const CHUNKED_FILE = 'chunked-daemon-smoke.html';
@@ -16,6 +17,14 @@ const DELAYED_FILE = 'delayed-daemon-smoke.html';
 const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
+
+function artifactPreview(page: Page) {
+  return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
+}
+
+function artifactPreviewFrame(page: Page) {
+  return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
 
 test.describe.configure({ mode: 'serial' });
 
@@ -54,7 +63,7 @@ test.afterEach(async ({ page }) => {
   await resetDaemonAppConfig(page);
 });
 
-test('real daemon run streams, persists, and previews an artifact', async ({ page }) => {
+test('[P0] real daemon run streams, persists, and previews an artifact', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Real daemon run smoke');
   await expectWorkspaceReady(page);
@@ -63,8 +72,8 @@ test('real daemon run streams, persists, and previews an artifact', async ({ pag
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(artifactPreview(page)).toBeVisible();
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
 
   const rawResponse = await page.request.get(`/api/projects/${projectId}/raw/${GENERATED_FILE}`, {
@@ -78,7 +87,7 @@ test('real daemon run streams, persists, and previews an artifact', async ({ pag
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
-test('real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
+test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Chunked daemon run smoke');
   await expectWorkspaceReady(page);
@@ -87,13 +96,13 @@ test('real daemon run persists an artifact streamed across multiple chunks', asy
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [CHUNKED_FILE]);
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: CHUNKED_HEADING })).toBeVisible();
 
   await expectProjectFileToContain(page, projectId, CHUNKED_FILE, CHUNKED_HEADING);
 });
 
-test('real daemon run surfaces process/parser errors in chat', async ({ page }) => {
+test('[P0] real daemon run surfaces process/parser errors in chat', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Daemon error smoke');
   await expectWorkspaceReady(page);
@@ -101,10 +110,10 @@ test('real daemon run surfaces process/parser errors in chat', async ({ page }) 
   await sendPrompt(page, 'Return an intentional daemon smoke failure');
 
   await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure', { timeout: 15_000 });
-  await expect(page.locator('.status-pill', { hasText: 'intentional fake codex failure' })).toBeVisible();
+  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
 });
 
-test('real daemon run supports a follow-up turn in the same project', async ({ page }) => {
+test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Daemon follow-up smoke');
   await expectWorkspaceReady(page);
@@ -124,7 +133,7 @@ test('real daemon run supports a follow-up turn in the same project', async ({ p
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
 });
 
-test('real daemon run survives a mid-flight reload and restores the delayed artifact turn', async ({ page }) => {
+test('[P0] real daemon run survives a mid-flight reload and restores the delayed artifact turn', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Delayed daemon reload smoke', 'claude');
   await expectWorkspaceReady(page);
@@ -136,7 +145,7 @@ test('real daemon run survives a mid-flight reload and restores the delayed arti
   const { projectId, conversationId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [DELAYED_FILE], 20_000);
   await expect(page.getByText('I recovered the delayed reasoning path and will persist the artifact now.')).toBeVisible();
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: DELAYED_HEADING })).toBeVisible();
 
   const files = await listProjectFiles(page, projectId);
@@ -148,7 +157,7 @@ test('real daemon run survives a mid-flight reload and restores the delayed arti
   });
 });
 
-test('real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
+test('[P0] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Delayed daemon create-response reload smoke', 'claude');
   await expectWorkspaceReady(page);
@@ -168,7 +177,7 @@ test('real daemon run survives reload before the create response reaches the bro
   });
 });
 
-test('empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
+test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Empty daemon failure smoke');
   await expectWorkspaceReady(page);
@@ -177,7 +186,7 @@ test('empty daemon output fails cleanly, persists after reload, and does not lea
 
   const expectedError = 'Agent completed without producing any output.';
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('.status-pill', { hasText: expectedError })).toBeVisible();
+  await expect(page.locator('.msg.error')).toContainText(expectedError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
   await expect.poll(async () => {
@@ -189,11 +198,11 @@ test('empty daemon output fails cleanly, persists after reload, and does not lea
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
-  await expect(page.locator('.status-pill', { hasText: expectedError })).toBeVisible();
+  await expect(page.locator('.msg.error')).toContainText(expectedError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
-test('separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
+test('[P0] separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Real daemon isolation alpha');
   await expectWorkspaceReady(page);
@@ -230,7 +239,7 @@ test('separate projects keep daemon artifacts isolated across recent-project nav
   expect((await listProjectFiles(page, beta.projectId)).map((file) => file.name)).toEqual([FOLLOW_UP_FILE]);
 });
 
-test('real daemon run previews an artifact from a fake OpenCode runtime', async ({ page }) => {
+test('[P0] real daemon run previews an artifact from a fake OpenCode runtime', async ({ page }) => {
   await createProject(page, 'Fake OpenCode runtime smoke', 'opencode');
   await expectWorkspaceReady(page);
 
@@ -240,14 +249,14 @@ test('real daemon run previews an artifact from a fake OpenCode runtime', async 
   const fileName = 'fake-agent-runtime-opencode.html';
   const heading = 'Fake Agent Runtime opencode';
   await expect(page.getByTestId('file-workspace').getByText(fileName, { exact: true })).toBeVisible({ timeout: 15_000 });
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: heading })).toBeVisible();
 
   const { projectId } = currentProject(page);
   await expectProjectFileToContain(page, projectId, fileName, heading);
 });
 
-test('plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
+test('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
   await configureFakeAgent(page, 'codex');
   await installBrowserAgentConfig(page, 'codex');
   await gotoEntryHome(page);
@@ -302,7 +311,7 @@ test('plugin authoring produces a generated-plugin scaffold with action cards', 
   await expect(page.getByTestId('design-plugin-folder-contribute-generated-plugin')).toBeVisible();
 });
 
-test('real daemon run supports fake non-Codex runtime protocols', async ({ page }) => {
+test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ page }) => {
   test.setTimeout(180_000);
 
   for (const agentId of FAKE_AGENT_RUNTIME_IDS) {

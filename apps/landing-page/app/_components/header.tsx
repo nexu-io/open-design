@@ -12,15 +12,18 @@
 
 import {
   DEFAULT_LOCALE,
+  LANDING_LOCALES,
   getCommonCopy,
   getHeaderProductMenuCopy,
+  getLocaleDefinition,
+  localePath,
   localizedHref,
+  stripLocaleFromPath,
   type HeaderCopy,
   type LandingLocaleCode,
 } from '../i18n';
 
 const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_RELEASES = `${REPO}/releases`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
 const AMR_URL = 'https://open-design.ai/amr/';
@@ -72,6 +75,16 @@ export interface HeaderProps {
   copy?: HeaderCopy;
   /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
   brandHref?: string;
+  /**
+   * Current request pathname (e.g. `/zh/blog/x/`). Used to build the
+   * language-switcher hrefs server-side so each option points at the
+   * localized version of the CURRENT page rather than the homepage.
+   * Defaults to `/` (correct for the homepage); sub-page callers thread
+   * `Astro.url.pathname` through. The client script in
+   * `locale-switcher-script.astro` then only handles persistence + menu
+   * behavior instead of patching wrong hrefs.
+   */
+  currentPath?: string;
 }
 
 export function Header({
@@ -81,6 +94,7 @@ export function Header({
   locale = DEFAULT_LOCALE,
   copy,
   brandHref = '#top',
+  currentPath = '/',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
     active === key ? 'is-active' : undefined;
@@ -88,15 +102,24 @@ export function Header({
   const href = (path: string) => localizedHref(path, locale);
   const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
   const productMenuCopy = getHeaderProductMenuCopy(locale);
+  const localeDef = getLocaleDefinition(locale);
+  const localeBasePath = stripLocaleFromPath(currentPath).pathname;
+  const localeOptions = LANDING_LOCALES.map((entry) => ({
+    ...entry,
+    href: localePath(entry.code, localeBasePath),
+  }));
 
   return (
     <header className='nav' data-od-id='nav'>
       <div className='container nav-inner'>
         <a href={homeBrandHref} className='brand'>
-          <span className='brand-mark'>
-            <img src='/logo.webp' alt='' width={44} height={44} />
-          </span>
-          <span className='brand-name'>Open Design</span>
+          <img
+            className='brand-logo'
+            src='/open-design-logo-new.svg'
+            alt='Open Design'
+            width={150}
+            height={61}
+          />
         </a>
         {/*
           Mobile / tablet hamburger. Hidden by CSS at ≥1100px (the desktop
@@ -276,8 +299,15 @@ export function Header({
           </ul>
         </nav>
         <div className='nav-side'>
+          <a
+            className='nav-amr'
+            href={AMR_URL}
+            aria-label={`${productMenuCopy.amrName}: ${productMenuCopy.amrBlurb}`}
+          >
+            <img src='/amr-nav-logo.svg' alt='' width={66} height={24} aria-hidden='true' />
+          </a>
           {/*
-            Discord + X icon buttons live before Download / Star so the
+            Discord + X icon buttons live near Download / Star so the
             community channels are reachable from every page without
             burning a nav text slot. The icons are aria-labeled and
             otherwise unlabeled. At ≤1080px they collapse alongside the
@@ -308,27 +338,7 @@ export function Header({
             </svg>
           </a>
           <a
-            className='nav-amr'
-            href={AMR_URL}
-            aria-label={`${productMenuCopy.amrName}: ${productMenuCopy.amrBlurb}`}
-          >
-            <img src='/amr-logo.svg' alt='' width={28} height={28} aria-hidden='true' />
-            <span className='nav-amr-copy'>
-              <span className='nav-amr-title'>AMR</span>
-              <span className='nav-amr-kicker'>{productMenuCopy.amrKicker}</span>
-            </span>
-          </a>
-          <a
-            className='nav-cta ghost'
-            href={REPO_RELEASES}
-            aria-label={headerCopy.downloadAria}
-            title={headerCopy.downloadTitle}
-            {...ext}
-          >
-            {headerCopy.download}
-          </a>
-          <a
-            className='nav-cta'
+            className='nav-cta ghost is-star'
             href={REPO}
             aria-label={headerCopy.starAria}
             title={headerCopy.starTitle}
@@ -337,7 +347,60 @@ export function Header({
             {headerCopy.starPrefix} ·{' '}
             <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
           </a>
-          <span className='status-dot' aria-hidden='true' />
+          <a
+            className='nav-cta ghost is-download'
+            href={href('/download/')}
+            aria-label={headerCopy.downloadAria}
+            title={headerCopy.downloadTitle}
+            data-download-cta
+            data-download-page
+          >
+            {headerCopy.download}
+            <span className='download-arch' data-download-arch hidden />
+          </a>
+          <details className='locale-switch nav-locale' data-locale-switch>
+            <summary
+              className='locale-trigger'
+              aria-label={getCommonCopy(locale).topbar.languageSwitcherLabel}
+            >
+              <span className='locale-trigger-code'>{localeDef.shortLabel}</span>
+              <svg
+                className='locale-trigger-caret'
+                viewBox='0 0 8 5'
+                aria-hidden='true'
+                focusable='false'
+              >
+                <path
+                  d='M0.5 0.75 L4 4 L7.5 0.75'
+                  fill='none'
+                  stroke='currentColor'
+                  strokeWidth='1'
+                  strokeLinecap='square'
+                />
+              </svg>
+            </summary>
+            <div className='locale-menu' role='menu'>
+              {localeOptions.map((entry) => (
+                <a
+                  className={`locale-menu-item${
+                    entry.code === locale ? ' is-active' : ''
+                  }`}
+                  role='menuitem'
+                  data-locale-link
+                  data-locale-code={entry.code}
+                  href={entry.href}
+                  lang={entry.htmlLang}
+                  aria-current={entry.code === locale ? 'true' : undefined}
+                  key={entry.code}
+                >
+                  <span className='locale-menu-code'>
+                    {entry.code.toUpperCase()}
+                  </span>
+                  <span className='locale-menu-label'>{entry.label}</span>
+                </a>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
     </header>

@@ -225,6 +225,7 @@ export interface Dict {
   'settings.test': string;
   'settings.testTitle': string;
   'settings.testRunning': string;
+  'settings.byokReadyToTest': string;
   'settings.testCancel': string;
   'settings.testRetry': string;
   'settings.required': string;
@@ -276,9 +277,13 @@ export interface Dict {
   'settings.amrSigningIn': string;
   'settings.amrCancelSignIn': string;
   'settings.amrAccountStatus': string;
+  'settings.amrConsole': string;
   'settings.amrLoginErrorCompact': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
+  'settings.providerPreset': string;
+  'settings.protocolGroupProtocols': string;
+  'settings.protocolGroupGateways': string;
   'settings.customProvider': string;
   'settings.apiKey': string;
   'settings.apiKeyGetLink': string;
@@ -288,7 +293,10 @@ export interface Dict {
   'settings.hide': string;
   'settings.model': string;
   'settings.apiKeyInvalid': string;
+  'settings.apiKeyCleaned': string;
   'settings.modelsLoadedFromAccount': string;
+  'settings.modelSourceAccount': string;
+  'settings.modelSourceSuggested': string;
   'settings.fetchModels': string;
   'settings.fetchModelsTitle': string;
   'settings.fetchModelsRunning': string;
@@ -310,6 +318,7 @@ export interface Dict {
   'settings.azureBaseUrlPlaceholder': string;
   'settings.azureBaseUrlHint': string;
   'settings.azureDeploymentModel': string;
+  'settings.azureCustomDeploymentName': string;
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
@@ -338,6 +347,7 @@ export interface Dict {
   'settings.reasoningPicker': string;
   'settings.modelPickerHint': string;
   'settings.modelPickerLiveHint': string;
+  'settings.modelPickerLiveCatalogOnlyHint': string;
   'settings.modelPickerFallbackHint': string;
   'settings.cliEnvTitle': string;
   'settings.cliEnvHint': string;
@@ -1675,6 +1685,8 @@ export interface Dict {
   'avatar.useApi': string;
   'avatar.codeAgent': string;
   'avatar.rescan': string;
+  'avatar.amrConsole': string;
+  'avatar.amrConsoleMeta': string;
   'avatar.settings': string;
   'avatar.backToProjects': string;
   'avatar.metaActive': string;
@@ -1935,14 +1947,15 @@ export interface Dict {
   'generationPreview.stepUnderstand': string;
   'generationPreview.stepGenerate': string;
   'generationPreview.stepPrepare': string;
-  'generationPreview.elapsed': string;
-  'generationPreview.estimate': string;
-  'generationPreview.progressAria': string;
   'generationPreview.retry': string;
   'generationPreview.awaitingTitle': string;
   'generationPreview.awaitingLead': string;
   'generationPreview.stoppedTitle': string;
   'generationPreview.stoppedLead': string;
+  'generationPreview.reasonAuth': string;
+  'generationPreview.reasonRateLimited': string;
+  'generationPreview.reasonService': string;
+  'generationPreview.reasonBalance': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
@@ -2085,6 +2098,7 @@ export interface Dict {
   'manualEdit.title': string;
   'manualEdit.fallbackTitle': string;
   'manualEdit.movePanel': string;
+  'manualEdit.editParams': string;
   'manualEdit.closePanel': string;
   'manualEdit.selectLayer': string;
   'manualEdit.empty': string;
@@ -2158,6 +2172,11 @@ export interface Dict {
   'fileViewer.shareMenuPresentation': string;
   'fileViewer.shareMenuSourceFiles': string;
   'fileViewer.shareMenuSave': string;
+  'fileViewer.copyShareLink': string;
+  'fileViewer.openSharePage': string;
+  'fileViewer.shareLinkRequiresDeploy': string;
+  'fileViewer.shareLinkPublishGuide': string;
+  'fileViewer.shareAfterGenerationComplete': string;
   'fileViewer.copyProviderLink': string;
   'fileViewer.copyCloudflareLink': string;
   'fileViewer.screenshotCopying': string;

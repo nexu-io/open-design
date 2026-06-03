@@ -85,7 +85,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('chat composer switches the project design system mid-chat', async ({ page }) => {
+test('[P1] chat composer switches the project design system mid-chat', async ({ page }) => {
   // Capture every outbound run-create request so we can prove the chat
   // turn *after* the switch composes with the new design system rather
   // than stale in-memory state. The run + its SSE stream are stubbed so

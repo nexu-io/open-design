@@ -25,13 +25,18 @@
   padding: 32px 0 8px;
 }
 .home-hero__brand {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   color: var(--text-muted);
   font-size: 13px;
 }
 .home-hero__brand-mark {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -258,7 +263,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   padding: 14px 14px 10px;
   display: flex;
   flex-direction: column;
@@ -272,11 +277,11 @@
 }
 .home-hero__input-card:focus-within {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 .home-hero__input-card.is-drag-active {
   border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-md);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .home-hero__active {
   display: flex;
@@ -866,7 +871,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px dashed var(--border-soft);
+  border-top: 0;
   padding-top: 8px;
 }
 .home-hero__attachments {
@@ -1845,11 +1850,8 @@
   appearance: none;
   min-width: 0;
   min-height: 112px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  display: flex;
+  align-items: flex-start;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1869,18 +1871,8 @@
     box-shadow 140ms ease;
 }
 .home-hero__prompt-example span {
-  grid-column: 1 / -1;
-  align-self: start;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.home-hero__prompt-example svg {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: end;
-  justify-self: end;
-  color: var(--text-faint);
-  transition: color 140ms ease, transform 140ms ease;
 }
 .home-hero__prompt-example:hover,
 .home-hero__prompt-example:focus-visible {
@@ -1890,11 +1882,6 @@
   color: var(--text-strong);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
-}
-.home-hero__prompt-example:hover svg,
-.home-hero__prompt-example:focus-visible svg {
-  color: var(--accent);
-  transform: translate(1px, -1px);
 }
 
 .home-hero__plugin-presets-wrap {

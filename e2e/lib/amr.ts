@@ -9,6 +9,18 @@ export type FakeVelaOptions = {
 };
 
 const DEFAULT_ASSISTANT_TEXT = 'Hello from the e2e fake vela.';
+const PRESET_MODELS_JSON = JSON.stringify({
+  source: 'preset',
+  data: [
+    { id: 'glm-5' },
+  ],
+});
+const REMOTE_MODELS_JSON = JSON.stringify({
+  source: 'remote',
+  data: [
+    { id: 'glm-5' },
+  ],
+});
 
 export async function writeFakeVelaBin(root: string, options: FakeVelaOptions = {}): Promise<string> {
   await mkdir(root, { recursive: true });
@@ -124,6 +136,16 @@ if (argv[2] === 'login') {
 
 if (argv[2] === 'models') {
   stdout.write('public_model_glm_5    vela\\n');
+  exit(0);
+}
+
+if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && argv[5] === 'json') {
+  stdout.write(${JSON.stringify(PRESET_MODELS_JSON)} + '\\n');
+  exit(0);
+}
+
+if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
+  stdout.write(${JSON.stringify(REMOTE_MODELS_JSON)} + '\\n');
   exit(0);
 }
 

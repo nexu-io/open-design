@@ -181,6 +181,10 @@ export function createChatRunService({
   };
 
   const start = (run, starter) => {
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      startRequestedAt: Date.now(),
+    };
     void starter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });

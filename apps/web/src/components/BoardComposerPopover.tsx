@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { Button, Textarea } from '@open-design/components';
 import { useRef } from 'react';
 
 import type { PreviewCommentSnapshot } from '../comments';
@@ -205,13 +206,31 @@ function annotationHoverAnchorStyle(target: PreviewCommentSnapshot, scale: numbe
   };
 }
 
-export function AnnotationHoverPopover({ target, scale }: { target: PreviewCommentSnapshot; scale: number }) {
+export function AnnotationHoverPopover({
+  target,
+  scale,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  target: PreviewCommentSnapshot;
+  scale: number;
+  // The card floats over the preview iframe at the cursor. Moving onto it pulls
+  // the pointer off the iframe, which fires mouseout and would otherwise unmount
+  // the card — the cursor then lands back on the iframe and re-triggers it,
+  // flickering forever. The host uses these to pin the card while it is hovered
+  // (ignoring the iframe's leave) so the tooltip stays put and its values stay
+  // selectable/copyable.
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
   return (
     <div
       className="comment-popover annotation-hover-popover"
       data-testid="annotation-hover-popover"
       role="tooltip"
       style={annotationHoverAnchorStyle(target, scale)}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <AnnotationStyleSummary target={target} testId="annotation-hover-style-summary" />
     </div>
@@ -233,6 +252,8 @@ export function BoardComposerPopover({
   onHoverMember,
   onDeleteComment,
   sending,
+  queueOnSend = false,
+  sendDisabled = false,
   t,
   scale = 1,
   bounds,
@@ -254,6 +275,8 @@ export function BoardComposerPopover({
   onHoverMember?: (elementId: string | null) => void;
   onDeleteComment?: (commentId: string) => void | Promise<void>;
   sending: boolean;
+  queueOnSend?: boolean;
+  sendDisabled?: boolean;
   t: TranslateFn;
   scale?: number;
   bounds?: PopoverBounds;
@@ -265,7 +288,12 @@ export function BoardComposerPopover({
   const hasCommentChange = !existing || draft.trim() !== existing.note.trim();
   const podMembers = target.podMembers ?? [];
   const composingRef = useRef(false);
-  const sendDisabled = pendingCount === 0 || sending;
+  const submitDisabled = pendingCount === 0 || sending || sendDisabled;
+  const primaryLabel = sending
+    ? t('chat.comments.sending')
+    : queueOnSend
+      ? t('chat.annotationQueue')
+      : t('chat.comments.sendToChat');
   return (
     <div
       className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
@@ -325,14 +353,14 @@ export function BoardComposerPopover({
               {notes.map((note, index) => (
                 <div key={`${target.elementId}-${index}`} className="board-note-item">
                   <span>{note}</span>
-                  <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
+                  <Button variant="ghost" onClick={() => onRemoveQueuedNote(index)}>
                     {t('chat.comments.remove')}
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
           ) : null}
-          <textarea
+          <Textarea
             data-testid="comment-popover-input"
             value={draft}
             autoFocus
@@ -354,7 +382,7 @@ export function BoardComposerPopover({
                 (event.metaKey || event.ctrlKey)
               ) {
                 event.preventDefault();
-                if (sendDisabled) return;
+                if (submitDisabled) return;
                 void onSendBatch();
               }
             }}
@@ -385,35 +413,32 @@ export function BoardComposerPopover({
             </div>
             <div className="comment-popover-actions-end">
               {target.selectionKind === 'pod' ? (
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="ghost"
                   data-testid="comment-popover-add-note"
                   disabled={!draft.trim()}
                   onClick={onAddDraft}
                 >
                   {t('chat.comments.addNote')}
-                </button>
+                </Button>
               ) : (
-                <button
-                  type="button"
-                  className="ghost"
+                <Button
+                  variant="ghost"
                   data-testid="comment-popover-save"
                   disabled={!draft.trim() || !hasCommentChange}
                   onClick={() => void onSaveComment()}
                 >
                   {t('chat.comments.comment')}
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
-                className="primary"
+              <Button
+                variant="primary"
                 data-testid="comment-add-send"
-                disabled={sendDisabled}
+                disabled={submitDisabled}
                 onClick={() => void onSendBatch()}
               >
-                {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
-              </button>
+                {primaryLabel}
+              </Button>
             </div>
           </div>
         </section>

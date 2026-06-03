@@ -472,6 +472,7 @@
   height: min(720px, calc(100vh - 64px));
   padding: 0;
   gap: 0;
+  overflow: hidden;
   /* Anchor for the absolutely-positioned `.settings-chrome` strip
      (close button + autosave indicator). Without this the chrome
      would escape to the viewport on long-scrolling sections. */
@@ -1108,9 +1109,27 @@
 .protocol-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 10px 14px;
   margin: 4px 0 8px;
   padding: 0;
+  min-width: 0;
+}
+.protocol-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.protocol-chip-group-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.protocol-chip-group-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   min-width: 0;
 }
 .protocol-chip {

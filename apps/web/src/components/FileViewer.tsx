@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   anonymizeArtifactId,
@@ -68,6 +69,7 @@ import {
   requestPreviewSnapshot,
   type ImageExportFormat,
 } from '../runtime/exports';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
@@ -93,8 +95,12 @@ import { Toast } from './Toast';
 import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import {
   buildBoardCommentAttachments,
+  commentSnapshotEqual,
   commentTargetDisplayName,
+  commentVisibleOnDeckSlide,
   commentsToAttachments,
+  isValidCommentOverlayPosition,
+  liveCommentTargetMapsEqual,
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
   selectionKindLabel,
@@ -177,7 +183,6 @@ type DeployProviderOption = {
     | 'fileViewer.cloudflareApiTokenPlaceholder';
   tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
   tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
-  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
     | 'fileViewer.cloudflareApiToken';
@@ -271,6 +276,11 @@ type InspectTarget = {
 const MAX_CACHED_SLIDE_STATES = 64;
 const htmlPreviewSlideState = new Map<string, SlideState>();
 const MAX_CACHED_PREVIEW_VIEWPORTS = 128;
+// Grace window before the inspect hover card is torn down. Long enough to absorb
+// the async iframe mouseout (od:comment-leave) that fires when the pointer slides
+// onto the card or hops back onto the element under it, short enough to read as
+// an immediate dismiss when the pointer really leaves.
+const HOVER_CARD_DISMISS_DELAY_MS = 80;
 const htmlPreviewViewportState = new Map<string, PreviewViewportId>();
 const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
@@ -286,7 +296,6 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
     tokenRequiredKey: 'fileViewer.vercelTokenRequired',
-    previewHintKey: 'fileViewer.vercelPreviewOnly',
     tokenLabelKey: 'fileViewer.vercelToken',
   },
   {
@@ -297,7 +306,6 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
     tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
-    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
@@ -644,6 +652,50 @@ function manualEditPreviewShellStyle(
   return previewScaleShellStyle(viewport, previewScale);
 }
 
+function deploymentTimestamp(deployment: WebDeploymentInfo): number {
+  const maybeDeployedAt = (deployment as WebDeploymentInfo & { deployedAt?: number | string }).deployedAt;
+  const candidates = [maybeDeployedAt, deployment.updatedAt, deployment.createdAt];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+    if (typeof candidate === 'string') {
+      const parsed = Date.parse(candidate);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function compareDeploymentsByNewest(a: WebDeploymentInfo, b: WebDeploymentInfo): number {
+  return deploymentTimestamp(b) - deploymentTimestamp(a);
+}
+
+function shareUrlForDeployment(deployment: WebDeploymentInfo): string {
+  const customDomain = deployment.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
+    ? deployment.cloudflarePages?.customDomain
+    : undefined;
+  if (customDomain?.status === 'ready' && customDomain.url?.trim()) {
+    return customDomain.url.trim();
+  }
+  return deployment.url?.trim() || '';
+}
+
+function resolveShareUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (typeof window === 'undefined') return trimmed;
+  return new URL(trimmed, window.location.origin).toString();
+}
+
+function pickLatestShareDeployment(
+  deploymentsByProvider: Partial<Record<WebDeployProviderId, WebDeploymentInfo>>,
+): WebDeploymentInfo | null {
+  return Object.values(deploymentsByProvider)
+    .filter((deployment): deployment is WebDeploymentInfo =>
+      Boolean(deployment && shareUrlForDeployment(deployment) && deployResultState(deployment.status) !== 'failed'))
+    .sort(compareDeploymentsByNewest)[0] ?? null;
+}
+
 function manualEditFloatingPanelStyle(
   target: ManualEditTarget,
   previewScale: number,
@@ -667,13 +719,42 @@ function manualEditFloatingPanelStyle(
     pad,
     Math.min(targetTop, Math.max(pad, canvasHeight - panelHeight - pad)),
   );
+  // Height is left to the content (auto): a short inspector (e.g. typography
+  // only) should be a compact card, not a tall half-empty panel. The cap only
+  // engages for long inspectors, at which point the scroll body takes over.
   return {
     left,
     top,
     width: panelWidth,
-    height: panelHeight,
-    maxHeight: `calc(100% - ${pad * 2}px)`,
+    maxHeight: panelHeight,
   };
+}
+
+// Anchors the hover "edit params" affordance to the top-right corner of the
+// hovered element, just inside its bounds so moving the cursor from the
+// element onto the icon does not drop the hover. Uses the same iframe→canvas
+// coordinate basis as the floating inspector panel.
+function manualEditHoverIconStyle(
+  target: ManualEditTarget,
+  previewScale: number,
+  canvasSize: PreviewCanvasSize | undefined,
+): CSSProperties {
+  const scale = Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
+  const iconSize = 26;
+  const inset = 4;
+  const canvasWidth = canvasSize?.width ?? 1200;
+  const canvasHeight = canvasSize?.height ?? 800;
+  const targetTop = target.rect.y * scale;
+  const targetRight = (target.rect.x + target.rect.width) * scale;
+  const left = Math.max(
+    inset,
+    Math.min(targetRight - iconSize - inset, canvasWidth - iconSize - inset),
+  );
+  const top = Math.max(
+    inset,
+    Math.min(targetTop + inset, canvasHeight - iconSize - inset),
+  );
+  return { left, top, width: iconSize, height: iconSize };
 }
 
 export function cancelManualEditPendingStyleSnapshot(
@@ -771,6 +852,7 @@ interface Props {
   isDeck?: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
+  commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
@@ -794,6 +876,7 @@ export function FileViewer({
   isDeck,
   onExportAsPptx,
   streaming,
+  commentQueueOnSend = false,
   commentSendDisabled = false,
   previewComments = [],
   onSavePreviewComment,
@@ -835,6 +918,7 @@ export function FileViewer({
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
+        commentQueueOnSend={commentQueueOnSend}
         commentSendDisabled={commentSendDisabled}
         previewComments={previewComments}
         onSavePreviewComment={onSavePreviewComment}
@@ -2156,6 +2240,8 @@ export function CommentSidePanel({
   onSendSelected,
   onCreateComment,
   sending,
+  queueOnSend = false,
+  sendDisabled = false,
   t,
   composer,
 }: {
@@ -2171,6 +2257,8 @@ export function CommentSidePanel({
   onSendSelected: () => void | Promise<void>;
   onCreateComment?: (note: string) => boolean | Promise<boolean>;
   sending: boolean;
+  queueOnSend?: boolean;
+  sendDisabled?: boolean;
   t: TranslateFn;
   composer?: ReactNode;
 }) {
@@ -2184,7 +2272,7 @@ export function CommentSidePanel({
   const expandedToggleRef = useRef<HTMLButtonElement | null>(null);
   const pendingToggleFocusRef = useRef<'collapsed' | 'expanded' | null>(null);
   const panelId = useId();
-  const canCreateComment = Boolean(onCreateComment) && newCommentDraft.trim().length > 0 && !sending;
+  const canCreateComment = Boolean(onCreateComment) && newCommentDraft.trim().length > 0 && !sending && !sendDisabled;
   const submitNewComment = async () => {
     if (!onCreateComment || !newCommentDraft.trim()) return;
     const saved = await onCreateComment(newCommentDraft.trim());
@@ -2312,18 +2400,21 @@ export function CommentSidePanel({
       {selectedCount > 0 ? (
         <div className="comment-side-selectbar" data-testid="comment-side-selectbar">
           <span className="comment-side-selectcount">{t('chat.comments.nSelected', { n: selectedCount })}</span>
-          <button type="button" className="ghost" onClick={onClearSelection}>
+          <Button variant="ghost" onClick={onClearSelection}>
             {t('chat.comments.clear')}
-          </button>
-          <button
-            type="button"
-            className="primary"
+          </Button>
+          <Button
+            variant="primary"
             data-testid="comment-side-send-claude"
-            disabled={sending}
+            disabled={sending || sendDisabled}
             onClick={() => void onSendSelected()}
           >
-            {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
-          </button>
+            {sending
+              ? t('chat.comments.sending')
+              : queueOnSend
+                ? t('chat.annotationQueue')
+                : t('chat.comments.sendToChat')}
+          </Button>
         </div>
       ) : null}
       {composer ? <div className="comment-side-composer">{composer}</div> : null}
@@ -2403,6 +2494,8 @@ function CommentSideDock({
   onSendSelected,
   onCreateComment,
   sending,
+  queueOnSend = false,
+  sendDisabled = false,
   t,
   composer,
 }: {
@@ -2418,6 +2511,8 @@ function CommentSideDock({
   onSendSelected: () => void | Promise<void>;
   onCreateComment?: (note: string) => boolean | Promise<boolean>;
   sending: boolean;
+  queueOnSend?: boolean;
+  sendDisabled?: boolean;
   t: TranslateFn;
   composer?: ReactNode;
 }) {
@@ -2439,6 +2534,8 @@ function CommentSideDock({
         onSendSelected={onSendSelected}
         onCreateComment={onCreateComment}
         sending={sending}
+        queueOnSend={queueOnSend}
+        sendDisabled={sendDisabled}
         t={t}
         composer={composer}
       />
@@ -2566,9 +2663,9 @@ function InspectPanel({
           <strong title={target.label || target.elementId}>{target.label || target.elementId}</strong>
           <code title={target.selector}>{target.elementId}</code>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">
+        <Button variant="ghost" onClick={onClose} aria-label="Close inspect">
           ×
-        </button>
+        </Button>
       </header>
 
       {target.clickedDescendant ? (
@@ -2591,14 +2688,14 @@ function InspectPanel({
         <div className="inspect-section-label">Colors</div>
         <div className="inspect-row">
           <label htmlFor="ip-color">Text</label>
-          <input
+          <Input
             id="ip-color"
             data-testid="inspect-color"
             type="color"
             value={colorHex}
             onChange={(e) => setVal('color', e.target.value)}
           />
-          <input
+          <Input
             type="text"
             value={colorHex}
             onChange={(e) => setVal('color', e.target.value)}
@@ -2607,14 +2704,14 @@ function InspectPanel({
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-bg">Background</label>
-          <input
+          <Input
             id="ip-bg"
             data-testid="inspect-bg"
             type="color"
             value={bgHex}
             onChange={(e) => setVal('background-color', e.target.value)}
           />
-          <input
+          <Input
             type="text"
             value={bgHex}
             onChange={(e) => setVal('background-color', e.target.value)}
@@ -2641,7 +2738,7 @@ function InspectPanel({
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-fw">Weight</label>
-          <select
+          <Select
             id="ip-fw"
             value={fontWeight}
             onChange={(e) => setVal('font-weight', e.target.value)}
@@ -2649,11 +2746,11 @@ function InspectPanel({
             {['100', '300', '400', '500', '600', '700', '800', '900'].map((w) => (
               <option key={w} value={w}>{w}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="inspect-row">
           <label htmlFor="ip-ta">Align</label>
-          <select
+          <Select
             id="ip-ta"
             value={textAlign}
             onChange={(e) => setVal('text-align', e.target.value)}
@@ -2661,7 +2758,7 @@ function InspectPanel({
             {['left', 'center', 'right', 'justify'].map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </section>
 
@@ -2698,25 +2795,23 @@ function InspectPanel({
       </section>
 
       <footer className="inspect-panel-footer">
-        <button
-          type="button"
-          className="ghost"
+        <Button
+          variant="ghost"
           onClick={() => {
             setDraft({});
             onResetElement(target.elementId);
           }}
         >
           Reset element
-        </button>
-        <button
-          type="button"
-          className="primary"
+        </Button>
+        <Button
+          variant="primary"
           data-testid="inspect-save"
           disabled={saving}
           onClick={onSaveToSource}
         >
           {saving ? 'Saving…' : justSaved ? 'Saved ✓' : 'Save to source'}
-        </button>
+        </Button>
       </footer>
       {error ? <div className="inspect-panel-error">{error}</div> : null}
     </aside>
@@ -3162,6 +3257,7 @@ function CommentPreviewOverlays({
   offsetX,
   offsetY,
   strokePoints,
+  activeSlideIndex = null,
   onOpenComment,
 }: {
   comments: PreviewComment[];
@@ -3175,10 +3271,12 @@ function CommentPreviewOverlays({
   offsetX: number;
   offsetY: number;
   strokePoints: StrokePoint[];
+  activeSlideIndex?: number | null;
   onOpenComment: (comment: PreviewComment, snapshot: PreviewCommentSnapshot) => void;
 }) {
   const overlayOffset = { x: offsetX, y: offsetY };
   const visibleComments = comments
+    .filter((comment) => commentVisibleOnDeckSlide(comment, activeSlideIndex))
     .map((comment, index) => ({
       comment,
       index,
@@ -4015,7 +4113,8 @@ function HtmlViewer({
   isDeck,
   onExportAsPptx,
   streaming,
-  commentSendDisabled,
+  commentQueueOnSend = false,
+  commentSendDisabled = false,
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
@@ -4032,7 +4131,8 @@ function HtmlViewer({
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
-  commentSendDisabled: boolean;
+  commentQueueOnSend?: boolean;
+  commentSendDisabled?: boolean;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
@@ -4054,8 +4154,11 @@ function HtmlViewer({
       | 'pptx'
       | 'zip'
       | 'html'
+      | 'image'
       | 'markdown'
       | 'template'
+      | 'share_link'
+      | 'share_page'
       | 'vercel'
       | 'cloudflare_pages',
     fn: () => Promise<unknown> | unknown,
@@ -4063,6 +4166,7 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
     const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
+    const trackingFormat = format as Exclude<typeof format, 'image'>;
     trackShareOptionPopoverClick(
       analytics.track,
       {
@@ -4070,7 +4174,7 @@ function HtmlViewer({
         area: 'share_option_popover',
         artifact_id: artifactId,
         artifact_kind: artifactKind,
-        element: format,
+        element: trackingFormat,
         project_id: projectId,
         project_kind: projectKind,
       },
@@ -4087,7 +4191,7 @@ function HtmlViewer({
           artifact_kind: artifactKind,
           project_id: projectId,
           project_kind: projectKind,
-          export_format: format,
+          export_format: trackingFormat,
           result,
           ...(errorCode ? { error_code: errorCode } : {}),
           export_duration_ms: Math.round(performance.now() - started),
@@ -4095,7 +4199,7 @@ function HtmlViewer({
         { requestId },
       );
     };
-    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'markdown']);
+    const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
     try {
       const out = fn();
       if (out && typeof (out as Promise<unknown>).then === 'function') {
@@ -4186,7 +4290,8 @@ function HtmlViewer({
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
-  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [deployMenuOpen, setDeployMenuOpen] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
   const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
@@ -4222,6 +4327,7 @@ function HtmlViewer({
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
   const deployProviderLoadSeqRef = useRef(0);
+  const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [boardMode, setBoardMode] = useState(false);
@@ -4387,6 +4493,8 @@ function HtmlViewer({
   }, []);
 const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
+  const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
+  const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
   const selectedManualEditTargetIdRef = useRef<string | null>(null);
   const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
@@ -4412,7 +4520,45 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   );
   const [activeCommentTarget, setActiveCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
   const [hoveredCommentTarget, setHoveredCommentTarget] = useState<PreviewCommentSnapshot | null>(null);
+  // True while the pointer is physically over the floating hover card. The card
+  // sits on top of the preview iframe, so reaching it makes the iframe fire a
+  // mouseout -> od:comment-leave. We ignore that leave while pinned so the card
+  // (and its selectable values) stays put instead of unmounting and flickering.
+  // The pointer cannot be over the iframe and the host card at once, so a fresh
+  // od:comment-hover never races this; only the card's own leave clears it.
+  const hoverCardPinnedRef = useRef(false);
+  // Tearing the card down is always deferred by a beat rather than done
+  // synchronously. The iframe's mouseout (od:comment-leave) arrives async via
+  // postMessage; the card's own mouseenter and the next od:comment-hover are the
+  // signals that the pointer actually landed on the card or back on the element
+  // it overlaps. Deferring lets those cancel the dismiss before it lands.
+  // Synchronous teardown raced ahead of them: the card flickered on the way in
+  // and vanished the moment you moved off it back onto the element it described.
+  const hoverCardDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHoverCardDismiss = useCallback(() => {
+    if (hoverCardDismissTimerRef.current !== null) {
+      clearTimeout(hoverCardDismissTimerRef.current);
+      hoverCardDismissTimerRef.current = null;
+    }
+  }, []);
+  const scheduleHoverCardDismiss = useCallback(() => {
+    if (hoverCardDismissTimerRef.current !== null) clearTimeout(hoverCardDismissTimerRef.current);
+    hoverCardDismissTimerRef.current = setTimeout(() => {
+      hoverCardDismissTimerRef.current = null;
+      // hoverCardPinnedRef tracks "pointer is physically over the card". If it
+      // got (re-)pinned while we waited, this now-stale dismiss must not fire.
+      if (!hoverCardPinnedRef.current) setHoveredCommentTarget(null);
+    }, HOVER_CARD_DISMISS_DELAY_MS);
+  }, []);
   const [hoveredPodMemberId, setHoveredPodMemberId] = useState<string | null>(null);
+  // If the card unmounts for any other reason while the pointer is still over
+  // it (its onMouseLeave never fires), drop the pin so later leaves dismiss
+  // normally instead of being swallowed forever.
+  useEffect(() => {
+    if (!hoveredCommentTarget) hoverCardPinnedRef.current = false;
+  }, [hoveredCommentTarget]);
+  // Don't let a pending dismiss outlive the component.
+  useEffect(() => cancelHoverCardDismiss, [cancelHoverCardDismiss]);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
   const [liveCommentTargets, setLiveCommentTargets] = useState<Map<string, PreviewCommentSnapshot>>(() => new Map());
   const liveCommentTargetsRef = useRef(liveCommentTargets);
@@ -4443,6 +4589,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
+  const [deployActionToast, setDeployActionToast] = useState<string | null>(null);
   const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
   const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
   const [imageExportBusy, setImageExportBusy] = useState(false);
@@ -4453,6 +4600,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   const imageExportPrepareIdRef = useRef(0);
   const [exportToast, setExportToast] = useState<string | null>(null);
+  const [shareLinkFeedback, setShareLinkFeedback] = useState<'copied' | 'failed' | null>(null);
+  const [shareGuideToast, setShareGuideToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -4473,9 +4622,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   function deploymentMapForCurrentFile(items: WebDeploymentInfo[]) {
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
     for (const option of DEPLOY_PROVIDER_OPTIONS) {
-      const deploymentForProvider = items.find(
-        (item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim(),
-      );
+      const deploymentForProvider = items
+        .filter((item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim())
+        .sort(compareDeploymentsByNewest)[0];
       if (deploymentForProvider) next[option.id] = deploymentForProvider;
     }
     return next;
@@ -5098,25 +5247,30 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       data.targets.forEach((item) => {
         const elementId = String(item?.elementId || '');
         if (!elementId) return;
+        const position = {
+          x: clampBridgeCoordinate(item?.position?.x),
+          y: clampBridgeCoordinate(item?.position?.y),
+          width: clampBridgeCoordinate(item?.position?.width),
+          height: clampBridgeCoordinate(item?.position?.height),
+        };
+        if (!isValidCommentOverlayPosition(position)) return;
         next.set(elementId, {
           filePath: file.name,
           elementId,
           selector: String(item?.selector || ''),
           label: String(item?.label || ''),
           text: String(item?.text || ''),
-          position: {
-            x: clampBridgeCoordinate(item?.position?.x),
-            y: clampBridgeCoordinate(item?.position?.y),
-            width: clampBridgeCoordinate(item?.position?.width),
-            height: clampBridgeCoordinate(item?.position?.height),
-          },
+          position,
           htmlHint: String(item?.htmlHint || ''),
           style: normalizeAnnotationStyle(item?.style),
           selectionKind: 'element',
           memberCount: undefined,
+          ...(typeof item?.slideIndex === 'number' ? { slideIndex: item.slideIndex } : {}),
         });
       });
-      setLiveCommentTargets(next);
+      setLiveCommentTargets((current) => (
+        liveCommentTargetMapsEqual(current, next) ? current : next
+      ));
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -5223,6 +5377,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       selectionKind: data.selectionKind === 'pod' ? 'pod' : 'element',
       memberCount: finiteBridgeInteger(data.memberCount),
       podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
+      ...(typeof data.slideIndex === 'number' ? { slideIndex: data.slideIndex } : {}),
     });
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
@@ -5236,52 +5391,80 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         const next = new Map<string, PreviewCommentSnapshot>();
         data.targets.forEach((item) => {
           const snapshot = snapshotFromData(item);
-          if (snapshot.elementId) next.set(snapshot.elementId, snapshot);
+          if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+          next.set(snapshot.elementId, snapshot);
         });
-        setLiveCommentTargets(next);
-        setActiveCommentTarget((current) => (
-          current
-            ? current.selectionKind === 'pod'
-              ? current
-              : next.get(current.elementId) ?? current
-            : null
+        setLiveCommentTargets((current) => (
+          liveCommentTargetMapsEqual(current, next) ? current : next
         ));
-        setHoveredCommentTarget((current) => (
-          current
-            ? current.selectionKind === 'pod'
-              ? current
-              : next.get(current.elementId) ?? null
-            : null
-        ));
+        setActiveCommentTarget((current) => {
+          if (!current) return null;
+          if (current.selectionKind === 'pod') return current;
+          const updated = next.get(current.elementId);
+          if (!updated || !isValidCommentOverlayPosition(updated.position)) return null;
+          return commentSnapshotEqual(current, updated) ? current : updated;
+        });
+        setHoveredCommentTarget((current) => {
+          if (!current) return null;
+          if (current.selectionKind === 'pod') return current;
+          const updated = next.get(current.elementId);
+          if (!updated || !isValidCommentOverlayPosition(updated.position)) return null;
+          return commentSnapshotEqual(current, updated) ? current : updated;
+        });
         return;
       }
       if (data.type === 'od:comment-active-target-update') {
         const snapshot = snapshotFromData(data);
-        if (!snapshot.elementId) return;
-        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        setLiveCommentTargets((current) => {
+          const existing = current.get(snapshot.elementId);
+          if (existing && commentSnapshotEqual(existing, snapshot)) return current;
+          return new Map(current).set(snapshot.elementId, snapshot);
+        });
         setActiveCommentTarget((current) => (
-          current && current.elementId === snapshot.elementId ? snapshot : current
+          current && current.elementId === snapshot.elementId && !commentSnapshotEqual(current, snapshot)
+            ? snapshot
+            : current
         ));
         setHoveredCommentTarget((current) => (
-          current && current.elementId === snapshot.elementId ? snapshot : current
+          current && current.elementId === snapshot.elementId && !commentSnapshotEqual(current, snapshot)
+            ? snapshot
+            : current
         ));
         return;
       }
       if (data.type === 'od:comment-leave') {
-        setHoveredCommentTarget(null);
+        // Already firmly on the card — nothing to dismiss.
+        if (hoverCardPinnedRef.current) return;
+        // The pointer left the element. It may be sliding onto the floating card
+        // (which overlaps the iframe) or hopping toward an adjacent element —
+        // both should keep the card up. Defer the dismiss so the card's
+        // mouseenter or the next comment-hover can cancel it; only a leave with
+        // nothing following actually tears the card down.
+        scheduleHoverCardDismiss();
         return;
       }
       if (data.type === 'od:comment-hover') {
         const snapshot = snapshotFromData(data);
-        if (!snapshot.elementId) return;
-        setHoveredCommentTarget(snapshot);
-        setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
+        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        // Pointer landed on an element — cancel any deferred dismiss so moving
+        // from the card back onto the element it describes keeps the card.
+        cancelHoverCardDismiss();
+        setHoveredCommentTarget((current) => (
+          current && commentSnapshotEqual(current, snapshot) ? current : snapshot
+        ));
+        setLiveCommentTargets((current) => {
+          const existing = current.get(snapshot.elementId);
+          if (existing && commentSnapshotEqual(existing, snapshot)) return current;
+          return new Map(current).set(snapshot.elementId, snapshot);
+        });
         return;
       }
       if (data.type === 'od:comment-target') {
         const snapshot = snapshotFromData(data);
-        if (!snapshot.elementId) return;
+        if (!snapshot.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
         const shouldOpenComposer = boardMode || commentCreateMode;
+        cancelHoverCardDismiss();
         setActiveCommentTarget((current) => (shouldOpenComposer ? snapshot : current));
         setHoveredCommentTarget(snapshot);
         setLiveCommentTargets((current) => new Map(current).set(snapshot.elementId, snapshot));
@@ -5330,7 +5513,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeCommentTarget, boardMode, boardTool, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments]);
+  }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, scheduleHoverCardDismiss]);
 
   useEffect(() => {
     if (!boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
@@ -5345,6 +5528,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     if (!manualEditMode) {
       setManualEditTargets([]);
       setSelectedManualEditTarget(null);
+      setManualEditHoverTarget(null);
+      setManualEditPageStylesOpen(false);
       setManualEditPanelPosition(null);
       setManualEditError(null);
       manualEditPendingStyleRef.current = null;
@@ -5371,12 +5556,27 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         return;
       }
       if (data.type === 'od-edit-select') {
+        setManualEditHoverTarget(null);
         void selectManualEditTarget(data.target);
         return;
       }
       if (data.type === 'od-edit-hover') {
-        if (data.target.id !== selectedManualEditTargetIdRef.current) {
-          void selectManualEditTarget(data.target);
+        // Hover only surfaces a lightweight "edit params" affordance; it must
+        // NOT switch the pinned inspector. The panel changes only when the
+        // user clicks that affordance (or a container/image body), so moving
+        // the cursor across the canvas never yanks the panel away mid-edit.
+        setManualEditHoverTarget(
+          data.target.id === selectedManualEditTargetIdRef.current ? null : data.target,
+        );
+        return;
+      }
+      if (data.type === 'od-edit-background') {
+        // Clicking empty canvas deselects and opens the compact page-styles
+        // card — only meaningful for full HTML documents.
+        setManualEditHoverTarget(null);
+        if (typeof source === 'string' && isManualEditFullHtmlDocument(source)) {
+          void clearManualEditTargetSelection();
+          setManualEditPageStylesOpen(true);
         }
         return;
       }
@@ -5516,19 +5716,19 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     return true;
   }
 
-  function cancelManualEditModeAndExit() {
-    cancelManualEditStyleDraft();
-    selectedManualEditTargetIdRef.current = null;
-    setSelectedManualEditTarget(null);
-    setManualEditPanelPosition(null);
-    setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
-    setManualEditError(null);
-    setManualEditMode(false);
-    refreshSrcDocPreviewAfterManualEditExit();
-    postSelectedManualEditTargetToIframe(null);
+  // Clears the hover affordance and re-arms the iframe's per-element hover
+  // dedupe so re-entering the same element re-announces it. Called from the
+  // workspace's own mouseleave (host-side), NOT the iframe's mouseleave — the
+  // affordance overlays the iframe, so reacting to the iframe leaving would
+  // yank it out from under the cursor and strobe on/off.
+  function clearManualEditHover() {
+    setManualEditHoverTarget(null);
+    const win = iframeRef.current?.contentWindow;
+    if (win) win.postMessage({ type: 'od-edit-hover-reset' }, '*');
   }
 
   async function selectManualEditTarget(target: ManualEditTarget) {
+    setManualEditPageStylesOpen(false);
     if (manualEditPendingStyleRef.current?.id !== target.id) cancelManualEditStyleDraft();
     const base = sourceRef.current ?? '';
     const fields = readManualEditFields(base, target.id);
@@ -5552,6 +5752,26 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setManualEditPanelPosition(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
     setManualEditError(null);
+  }
+
+  // The inspector is scoped to one element (or the page). Closing it should
+  // only collapse the panel and keep the user in edit mode — exiting edit is
+  // the toolbar toggle's job. Dismiss flushes any in-flight tweak first so
+  // nothing is lost; cancel reverts the in-flight unsaved tweak instead.
+  async function dismissManualEditPanel() {
+    const ok = await flushManualEditStyleSave();
+    if (!ok) return;
+    if (selectedManualEditTarget) void clearManualEditTargetSelection();
+    else setManualEditPageStylesOpen(false);
+  }
+
+  function cancelManualEditPanel() {
+    if (selectedManualEditTarget) {
+      void clearManualEditTargetSelection();
+    } else {
+      cancelManualEditStyleDraft();
+      setManualEditPageStylesOpen(false);
+    }
   }
 
   async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
@@ -5755,6 +5975,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     win.postMessage({ type: 'od:slide', action }, '*');
   }
 
+  function syncCachedSlideStateToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
+    const active = htmlPreviewSlideState.get(previewStateKey)?.active;
+    const win = target?.contentWindow;
+    if (!win || typeof active !== 'number') return;
+    win.postMessage({ type: 'od:slide', action: 'go', index: active }, '*');
+  }
+
   function postInspectSet(elementId: string, selector: string, prop: string, value: string) {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
@@ -5923,13 +6150,17 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }, [agentToolsOpen]);
 
   useEffect(() => {
-    if (!shareMenuOpen) return;
+    if (!deployMenuOpen && !downloadMenuOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (!shareRef.current) return;
-      if (!shareRef.current.contains(e.target as Node)) setShareMenuOpen(false);
+      if (shareRef.current.contains(e.target as Node)) return;
+      setDeployMenuOpen(false);
+      setDownloadMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShareMenuOpen(false);
+      if (e.key !== 'Escape') return;
+      setDeployMenuOpen(false);
+      setDownloadMenuOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
@@ -5937,7 +6168,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
     };
-  }, [shareMenuOpen]);
+  }, [deployMenuOpen, downloadMenuOpen]);
 
   useEffect(() => {
     if (!inTabPresent) return;
@@ -5960,10 +6191,10 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   // Snapshot this project as a reusable template. The daemon snapshots
   // EVERY html/text/code file in the project (not just the file open in
   // the viewer), so the template captures the whole design, not a single
-  // page. Surfaced here in the Share menu because that's where the user's
-  // share / export mental model already lives.
+  // page. Surfaced here in the Download menu because templates are saved
+  // from the same artifact output surface as files.
   function openSaveAsTemplateModal() {
-    setShareMenuOpen(false);
+    setDownloadMenuOpen(false);
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
     setTemplateName(defaultName);
@@ -6006,9 +6237,10 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }
 
   async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
-    setShareMenuOpen(false);
+    setDeployMenuOpen(false);
     setDeployModalOpen(true);
     setDeployError(null);
+    setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
     await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
@@ -6024,10 +6256,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   async function saveDeployConfig() {
     setSavingDeployConfig(true);
     setDeployError(null);
+    setDeployActionToast(null);
     try {
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
         if (!deployToken.trim()) {
-          throw new Error(t('fileViewer.cloudflareApiTokenRequired'));
+          setDeployActionToast(t('fileViewer.cloudflareApiTokenRequired'));
+          deployTokenInputRef.current?.focus();
+          return null;
         }
         if (!cloudflareAccountId.trim()) {
           throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
@@ -6072,6 +6307,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
+    setDeployActionToast(null);
     setCopiedDeployLink(null);
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
@@ -6117,9 +6353,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
-      setDeployError(
-        err instanceof Error ? err.message : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) }),
-      );
+      const message = err instanceof Error
+        ? err.message
+        : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) });
+      if (message === t(option.tokenRequiredKey, { provider: t(option.labelKey) })) {
+        setDeployActionToast(message);
+        deployTokenInputRef.current?.focus();
+      } else {
+        setDeployError(message);
+      }
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -6166,6 +6408,23 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     window.setTimeout(() => {
       setCopiedDeployLink((current) => (current === safeUrl ? null : current));
     }, 1800);
+  }
+
+  async function copyShareLink(url: string) {
+    const safeUrl = url.trim();
+    if (!safeUrl) {
+      setShareLinkFeedback('failed');
+      setExportToast(t('useEverywhere.copyFailed'));
+      return false;
+    }
+    const ok = await copyToClipboard(safeUrl);
+    const feedback = ok ? 'copied' : 'failed';
+    setShareLinkFeedback(feedback);
+    if (!ok) setExportToast(t('useEverywhere.copyFailed'));
+    window.setTimeout(() => {
+      setShareLinkFeedback((current) => (current === feedback ? null : current));
+    }, 1800);
+    return ok;
   }
 
   function presentInThisTab() {
@@ -6337,6 +6596,12 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     setCommentDraft('');
   }
 
+  function withDeckSlideIndex(target: PreviewCommentTarget): PreviewCommentTarget {
+    if (!effectiveDeck || typeof slideState?.active !== 'number') return target;
+    if (typeof target.slideIndex === 'number') return target;
+    return { ...target, slideIndex: slideState.active };
+  }
+
   async function sendBoardBatch() {
     if (!activeCommentTarget || !onSendBoardCommentAttachments) return;
     const nextNotes = [...queuedBoardNotes];
@@ -6346,7 +6611,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     try {
       const accepted = await onSendBoardCommentAttachments(
         buildBoardCommentAttachments({
-          target: targetFromSnapshot(activeCommentTarget),
+          target: withDeckSlideIndex(targetFromSnapshot(activeCommentTarget)),
           notes: nextNotes,
         }),
       );
@@ -6362,8 +6627,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     const isFreePin = activeCommentTarget.elementId.startsWith('pin-');
     setSendingBoardBatch(true);
     try {
+      const target = withDeckSlideIndex(targetFromSnapshot(activeCommentTarget));
       const saved = await onSavePreviewComment(
-        targetFromSnapshot(activeCommentTarget),
+        target,
         commentDraft.trim(),
         false,
       );
@@ -6412,9 +6678,26 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }
 
   const showPresent = source !== null;
-  const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
-  const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
+  const artifactKind = file.artifactManifest?.kind ?? file.artifactKind ?? null;
+  const rendererId = file.artifactManifest?.renderer ?? null;
+  const isDeckArtifact = isDeck || artifactKind === 'deck' || rendererId === 'deck-html' || file.kind === 'presentation';
+  const isMarkdownArtifact =
+    artifactKind === 'markdown-document' ||
+    rendererId === 'markdown' ||
+    file.kind === 'text' && /\.mdx?$/i.test(file.name);
+  const isShareableArtifact =
+    file.kind === 'html' ||
+    isDeckArtifact ||
+    artifactKind === 'html' ||
+    rendererId === 'html';
+  const canShare = source !== null && isShareableArtifact;
+  const canDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
+  const canPptx = canShare && isDeckArtifact && Boolean(onExportAsPptx) && !streaming;
+  const showPptxExport = canShare && isDeckArtifact;
+  const showMarkdownExport = source !== null && isMarkdownArtifact;
+  const showImageExport = canShare;
+
   useEffect(() => {
     const nudgeKey = `${projectId}\n${file.name}`;
     if (!canShare || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
@@ -6426,11 +6709,19 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     return () => window.clearTimeout(timeout);
   }, [canShare, file.name, projectId]);
 
-  const openExportMenu = () => {
+  const openDownloadMenu = () => {
     fireArtifactHeaderClick('share_dropdown');
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
-    setShareMenuOpen((v) => !v);
+    setDeployMenuOpen(false);
+    setDownloadMenuOpen((v) => !v);
+  };
+  const openDeployMenu = () => {
+    fireArtifactHeaderClick('share_dropdown');
+    setExportReadyNudge(false);
+    markExportReadyNudgeSeen(projectId, file.name);
+    setDownloadMenuOpen(false);
+    setDeployMenuOpen((v) => !v);
   };
   const captureExportImageSnapshot = useCallback(async () => {
     if (!useUrlLoadPreview) {
@@ -6490,7 +6781,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
   }, [captureExportImageSnapshot, t]);
 
   const openImageExportModal = () => {
-    setShareMenuOpen(false);
+    setDownloadMenuOpen(false);
     setImageExportError(null);
     setImageExportPreparedBlob(null);
     imageExportSnapshotDataUrlRef.current = null;
@@ -6554,6 +6845,14 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     const stillOpen = visibleSideComments.some((comment) => comment.id === activePreviewCommentId);
     if (!stillOpen) clearBoardComposer();
   }, [activePreviewCommentId, boardMode, visibleSideComments]);
+  useEffect(() => {
+    if (!effectiveDeck || slideState == null || !boardMode) return;
+    if (!activePreviewCommentId) return;
+    const activeComment = visibleSideComments.find((comment) => comment.id === activePreviewCommentId);
+    if (activeComment && !commentVisibleOnDeckSlide(activeComment, slideState.active)) {
+      clearBoardComposer();
+    }
+  }, [activePreviewCommentId, boardMode, effectiveDeck, slideState?.active, visibleSideComments]);
   const activeDeployment = deployResult || deployment;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
@@ -6621,27 +6920,55 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
-  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
-    providerId: option.id,
-    providerLabel: t(option.labelKey),
-    url: deploymentsByProvider[option.id]?.url?.trim() || '',
-  })).filter((item) => item.url);
+  const deployActionIconFor = (providerId: WebDeployProviderId) => {
+    if (providerId === 'cloudflare-pages') return 'pages-line';
+    return 'upload-cloud-line';
+  };
+  const latestShareDeployment = useMemo(
+    () => pickLatestShareDeployment(deploymentsByProvider),
+    [deploymentsByProvider],
+  );
+  const latestDeployedShareUrl = latestShareDeployment
+    ? shareUrlForDeployment(latestShareDeployment)
+    : '';
+  const latestShareState = latestShareDeployment
+    ? deployResultState(latestShareDeployment.status)
+    : null;
+  const sharePageUrl = useMemo(
+    () => resolveShareUrl(latestDeployedShareUrl),
+    [latestDeployedShareUrl],
+  );
+  const canCopyShareLink = !streaming && Boolean(sharePageUrl);
+  const canOpenSharePage = !streaming && Boolean(sharePageUrl) && latestShareState !== 'delayed';
+  const shareLinkStatusHint =
+    streaming
+      ? t('fileViewer.shareAfterGenerationComplete')
+      : latestShareState === 'delayed'
+      ? t('fileViewer.deployLinkDelayed')
+      : latestShareState === 'protected'
+        ? t('fileViewer.deployLinkProtected')
+        : '';
+  const shareUnavailableHint = streaming
+    ? t('fileViewer.shareAfterGenerationComplete')
+    : t('fileViewer.shareLinkRequiresDeploy');
+  const copyShareLinkLabel =
+    shareLinkFeedback === 'copied'
+      ? t('fileViewer.copied')
+      : shareLinkFeedback === 'failed'
+        ? t('useEverywhere.copyFailed')
+        : t('fileViewer.copyShareLink');
+  const shareMenuLabel = t('fileViewer.shareLabel');
+  const deployMenuLabel = t('fileViewer.deployModalTitle') || 'Deploy';
   const deployButtonLabel =
     deployPhase === 'deploying'
       ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
       : deployPhase === 'preparing-link'
         ? t('fileViewer.preparingPublicLink')
-        : deployActionLabelFor(deployProviderId);
+        : deployMenuLabel;
   const copyDeployLabel = (url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
       : t('fileViewer.copyDeployLink');
-  const copyDeployMenuLabel = (providerLabel: string, url: string) =>
-    copiedDeployLink === url.trim()
-      ? t('fileViewer.copied')
-      : providerLabel.toLowerCase().includes('cloudflare')
-        ? t('fileViewer.copyCloudflareLink')
-        : t('fileViewer.copyProviderLink', { provider: providerLabel });
   const statusLabelFor = (state: ReturnType<typeof deployResultState>) => {
     if (state === 'ready') return t('fileViewer.deployLinkReady');
     if (state === 'protected') return t('fileViewer.deployLinkProtectedLabel');
@@ -6656,7 +6983,14 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     localCommentSideDockActive && commentSidePanelCollapsed ? 'comment-preview-layer-dock-collapsed' : '',
     boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
   ].filter(Boolean).join(' ');
-  const manualEditPanel = manualEditMode ? (
+  // Edit mode opens clean: the inspector only appears once the user pins an
+  // element (click its hover affordance / a container) or opens page styles by
+  // clicking the empty canvas. No more full-height panel popping on toggle.
+  const manualEditPageCardActive =
+    manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
+  const manualEditPanelActive =
+    manualEditMode && (!!selectedManualEditTarget || manualEditPageCardActive);
+  const manualEditPanel = manualEditPanelActive ? (
     <ManualEditPanel
       targets={manualEditTargets}
       selectedTarget={selectedManualEditTarget}
@@ -6681,13 +7015,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         void clearManualEditTargetSelection();
       }}
       onExit={() => {
-        void exitManualEditModeAfterFlush();
+        void dismissManualEditPanel();
       }}
       onCancelDraft={() => {
-        cancelManualEditModeAndExit();
+        cancelManualEditPanel();
       }}
       onSaveDraft={() => {
-        void exitManualEditModeAfterFlush();
+        void dismissManualEditPanel();
       }}
       onUndo={() => {
         void undoManualEdit();
@@ -6695,6 +7029,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       onRedo={() => {
         void redoManualEdit();
       }}
+      floatingClassName={manualEditPageCardActive ? 'manual-edit-page-card' : undefined}
       floatingStyle={selectedManualEditTarget
         ? {
             ...manualEditFloatingPanelStyle(
@@ -6704,8 +7039,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
             ),
             ...(manualEditPanelPosition ?? {}),
           }
-        : undefined}
-      onFloatingPositionChange={setManualEditPanelPosition}
+        : { top: 12, right: 12, width: 320 }}
+      onFloatingPositionChange={selectedManualEditTarget ? setManualEditPanelPosition : undefined}
       onPickImage={async (pickedFile) => {
         const result = await uploadProjectFiles(projectId, [pickedFile]);
         const uploaded = result.uploaded[0];
@@ -6718,6 +7053,30 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }}
     />
   ) : null;
+  const manualEditHoverAffordance =
+    manualEditMode &&
+    manualEditHoverTarget &&
+    manualEditHoverTarget.id !== selectedManualEditTarget?.id ? (
+      <button
+        type="button"
+        className="manual-edit-hover-action"
+        data-testid="manual-edit-hover-open"
+        aria-label={t('manualEdit.editParams')}
+        title={t('manualEdit.editParams')}
+        style={manualEditHoverIconStyle(
+          manualEditHoverTarget,
+          overlayPreviewScale,
+          previewBodySize,
+        )}
+        onClick={() => {
+          const target = manualEditHoverTarget;
+          setManualEditHoverTarget(null);
+          void selectManualEditTarget(target);
+        }}
+      >
+        <Icon name="sliders" size={15} />
+      </button>
+    ) : null;
   const activeComposerComment = activePreviewCommentId
     ? visibleSideComments.find((comment) => comment.id === activePreviewCommentId) ?? null
     : null;
@@ -6755,8 +7114,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         });
         setActivePreviewCommentId((current) => (current === commentId ? null : current));
       } : undefined}
-      sending={sendingBoardBatch || commentSendDisabled}
-
+      sending={sendingBoardBatch}
+      queueOnSend={commentQueueOnSend}
+      sendDisabled={commentSendDisabled}
       t={t}
       scale={overlayPreviewScale}
       offset={{ x: overlayPreviewTransform.offsetX, y: overlayPreviewTransform.offsetY }}
@@ -6800,6 +7160,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           selectionKind: comment.selectionKind ?? 'element',
           memberCount: comment.memberCount,
           podMembers: comment.podMembers,
+          ...(typeof comment.slideIndex === 'number' ? { slideIndex: comment.slideIndex } : {}),
         };
         setActiveCommentTarget(snapshot);
         setHoveredCommentTarget(snapshot);
@@ -6827,7 +7188,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         }
       }}
       onCreateComment={savePanelComment}
-      sending={sendingBoardBatch || commentSendDisabled}
+      sending={sendingBoardBatch}
+      queueOnSend={commentQueueOnSend}
+      sendDisabled={commentSendDisabled}
       t={t}
       composer={null}
     />
@@ -6999,33 +7362,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               ) : null}
             </>
           ) : null}
-          {!showPreviewToolbarControls ? (
-            <>
-              <button
-                type="button"
-                className={`viewer-action viewer-comment-toggle${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
-                data-testid="board-mode-toggle"
-                title={t('fileViewer.comment')}
-                aria-label={t('fileViewer.comment')}
-                aria-pressed={boardMode && !commentCreateMode && boardTool === 'inspect'}
-                onClick={activateCommentTool}
-              >
-                <RemixIcon name="chat-new-line" size={14} />
-                <span>{t('fileViewer.comment')}</span>
-              </button>
-              <button
-                type="button"
-                className={`viewer-action viewer-comment-toggle${boardMode && commentCreateMode ? ' active' : ''}`}
-                data-testid="comment-panel-toggle"
-                title={t('chat.tabComments')}
-                aria-pressed={boardMode && commentCreateMode}
-                onClick={activateCommentCreateTool}
-              >
-                <RemixIcon name="message-3-line" size={14} />
-                <span>{t('chat.tabComments')}</span>
-              </button>
-            </>
-          ) : null}
         </div>
       </div>
       {((filePrimaryActions: ReactNode) => (
@@ -7065,83 +7401,146 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               ) : null}
             </div>
           ) : null}
-          {canShare ? (
-            <div className="share-menu chrome-share-menu" ref={shareRef}>
-              <button
-                type="button"
-                className={
-                  'chrome-action chrome-action-primary chrome-action-export' +
-                  (exportReadyNudge ? ' export-ready-nudge' : '')
-                }
-                aria-haspopup="menu"
-                aria-expanded={shareMenuOpen}
-                onClick={openExportMenu}
-              >
-                <Icon name="download" size={13} />
-                <span>{t('fileViewer.shareLabel')}</span>
-                <Icon name="chevron-down" size={11} />
-              </button>
-              {shareMenuOpen ? (
-                <div className="share-menu-popover" role="menu">
-                  {deployCopyLinks.length > 0 ? (
-                    <>
+          {canShare || canDownload ? (
+            <div className="chrome-file-action-menus" ref={shareRef}>
+              {canShare ? (
+                <div className="share-menu chrome-share-menu">
+                  <button
+                    type="button"
+                    className="chrome-action chrome-action-secondary chrome-action-with-label"
+                    aria-haspopup="menu"
+                    aria-expanded={deployMenuOpen}
+                    aria-label={shareMenuLabel}
+                    onClick={openDeployMenu}
+                  >
+                    <RemixIcon name="share-forward-line" size={15} />
+                    <span>{shareMenuLabel}</span>
+                  </button>
+                  {deployMenuOpen ? (
+                    <div className="share-menu-popover" role="menu">
                       <div className="share-menu-section-label" role="presentation">
                         {t('fileViewer.shareMenuShareLink')}
                       </div>
-                      {deployCopyLinks.map((item) => (
+                      {sharePageUrl ? (
+                        <>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            disabled={!canCopyShareLink}
+                            title={!canCopyShareLink ? shareUnavailableHint : shareLinkStatusHint || undefined}
+                            onClick={() => {
+                              if (!canCopyShareLink || !sharePageUrl) return;
+                              fireShareExport('share_link', async () => {
+                                const ok = await copyShareLink(sharePageUrl);
+                                if (!ok) throw new Error('copy_share_link_failed');
+                              });
+                            }}
+                          >
+                            <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
+                            <span className="share-menu-text">
+                              <span>{copyShareLinkLabel}</span>
+                              {shareLinkStatusHint ? (
+                                <small>{shareLinkStatusHint}</small>
+                              ) : null}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="share-menu-item"
+                            role="menuitem"
+                            disabled={!canOpenSharePage}
+                            title={!canOpenSharePage ? shareLinkStatusHint || shareUnavailableHint : shareLinkStatusHint || undefined}
+                            onClick={() => {
+                              if (!canOpenSharePage || !sharePageUrl) return;
+                              setDeployMenuOpen(false);
+                              fireShareExport('share_page', () => {
+                                window.open(sharePageUrl, '_blank', 'noopener');
+                              });
+                            }}
+                          >
+                            <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
+                            <span className="share-menu-text">
+                              <span>{t('fileViewer.openSharePage')}</span>
+                              {shareLinkStatusHint ? (
+                                <small>{shareLinkStatusHint}</small>
+                              ) : null}
+                            </span>
+                          </button>
+                        </>
+                      ) : (
                         <button
-                          key={`copy-${item.providerId}`}
+                          type="button"
+                          className="share-menu-item share-menu-guide"
+                          role="menuitem"
+                          title={shareUnavailableHint}
+                          onClick={() => {
+                            setShareGuideToast(shareUnavailableHint);
+                          }}
+                        >
+                          <span className="share-menu-icon"><RemixIcon name="link" size={15} /></span>
+                          <span className="share-menu-text">
+                            <span>
+                              {streaming
+                                ? t('fileViewer.shareAfterGenerationComplete')
+                                : t('fileViewer.shareLinkPublishGuide')}
+                            </span>
+                          </span>
+                        </button>
+                      )}
+                      <div className="share-menu-divider" />
+                      <div className="share-menu-section-label" role="presentation">
+                        {t('fileViewer.shareMenuPublishOnline')}
+                      </div>
+                      {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                        <button
+                          key={option.id}
                           type="button"
                           className="share-menu-item"
                           role="menuitem"
                           onClick={() => {
-                            setShareMenuOpen(false);
-                            void copyDeployLink(item.url);
+                            const format =
+                              option.id === 'cloudflare-pages'
+                                ? 'cloudflare_pages'
+                                : option.id === 'vercel-self'
+                                  ? 'vercel'
+                                  : 'vercel';
+                            fireShareExport(format, () => openDeployModal(option.id));
                           }}
                         >
-                          <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                          <span>{copyDeployMenuLabel(item.providerLabel, item.url)}</span>
+                          <span className="share-menu-icon">
+                            <RemixIcon name={deployActionIconFor(option.id)} size={15} />
+                          </span>
+                          <span>{deployActionLabelFor(option.id)}</span>
                         </button>
                       ))}
-                      <div className="share-menu-divider" />
-                    </>
+                    </div>
                   ) : null}
-                  <div className="share-menu-section-label" role="presentation">
-                    {t('fileViewer.shareMenuPublishOnline')}
-                  </div>
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        const format =
-                          option.id === 'cloudflare-pages'
-                            ? 'cloudflare_pages'
-                            : option.id === 'vercel-self'
-                              ? 'vercel'
-                              : 'vercel';
-                        fireShareExport(format, () => openDeployModal(option.id));
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="upload-cloud-line" size={15} /></span>
-                      <span>{deployActionLabelFor(option.id)}</span>
-                    </button>
-                  ))}
-                  <div className="share-menu-divider" />
-                  <div className="share-menu-section-label" role="presentation">
-                    {t('fileViewer.shareMenuDownload')}
-                  </div>
-                  <div className="share-menu-subsection-label" role="presentation">
-                    {t('fileViewer.shareMenuPresentation')}
-                  </div>
+                </div>
+              ) : null}
+              {canDownload ? (
+                <div className="share-menu chrome-share-menu">
+                <button
+                  type="button"
+                  className={
+                    'chrome-action chrome-action-primary chrome-action-export' +
+                    (exportReadyNudge ? ' export-ready-nudge' : '')
+                  }
+                  aria-haspopup="menu"
+                  aria-expanded={downloadMenuOpen}
+                  onClick={openDownloadMenu}
+                >
+                  <RemixIcon name="download-line" size={15} />
+                  <span>{t('fileViewer.download')}</span>
+                </button>
+                {downloadMenuOpen ? (
+                  <div className="share-menu-popover" role="menu">
                   <button
                     type="button"
-                    className="share-menu-item share-menu-subitem"
+                    className="share-menu-item"
                     role="menuitem"
                     onClick={() => {
-                      setShareMenuOpen(false);
+                      setDownloadMenuOpen(false);
                       fireShareExport('pdf', () => exportProjectAsPdf({
                         deck: effectiveDeck,
                         fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
@@ -7152,52 +7551,49 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>
-                      {effectiveDeck
-                        ? t('fileViewer.exportPdfAllSlides')
-                        : t('fileViewer.exportPdf')}
-                    </span>
+                    <span>{t('fileViewer.exportPdf')}</span>
                   </button>
+                  {showPptxExport ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      disabled={!canPptx}
+                      title={
+                        onExportAsPptx
+                          ? streaming
+                            ? t('fileViewer.exportPptxBusy')
+                            : t('fileViewer.exportPptxHint')
+                          : t('fileViewer.exportPptxNa')
+                      }
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('pptx', () => {
+                          if (onExportAsPptx) onExportAsPptx(file.name);
+                        });
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
+                      <span>{t('fileViewer.exportPptx')}</span>
+                    </button>
+                  ) : null}
+                  {showImageExport ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={openImageExportModal}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
+                      <span>{t('fileViewer.exportImage')}</span>
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    className="share-menu-item share-menu-subitem"
-                    role="menuitem"
-                    disabled={!canPptx}
-                    title={
-                      onExportAsPptx
-                        ? streaming
-                          ? t('fileViewer.exportPptxBusy')
-                          : t('fileViewer.exportPptxHint')
-                        : t('fileViewer.exportPptxNa')
-                    }
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('pptx', () => {
-                        if (onExportAsPptx) onExportAsPptx(file.name);
-                      });
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                    <span>{t('fileViewer.exportPptx') + '…'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="share-menu-item share-menu-subitem"
-                    role="menuitem"
-                    onClick={openImageExportModal}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
-                    <span>{t('fileViewer.exportImage')}</span>
-                  </button>
-                  <div className="share-menu-subsection-label" role="presentation">
-                    {t('fileViewer.shareMenuSourceFiles')}
-                  </div>
-                  <button
-                    type="button"
-                    className="share-menu-item share-menu-subitem"
+                    className="share-menu-item"
                     role="menuitem"
                     onClick={() => {
-                      setShareMenuOpen(false);
+                      setDownloadMenuOpen(false);
                       fireShareExport('zip', () => exportProjectAsZip({
                         projectId,
                         filePath: file.name,
@@ -7211,34 +7607,30 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </button>
                   <button
                     type="button"
-                    className="share-menu-item share-menu-subitem"
+                    className="share-menu-item"
                     role="menuitem"
                     onClick={() => {
-                      setShareMenuOpen(false);
+                      setDownloadMenuOpen(false);
                       fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
                     <span>{t('fileViewer.exportHtml')}</span>
                   </button>
-                  {/* Export as Markdown — pass-through download of the
-                      artifact source with a `.md` extension. No conversion
-                      runs; the file body is identical to the Source view.
-                      Useful for piping the artifact into markdown-aware
-                      tooling (LLM context windows, vault apps). See
-                      issue #279. */}
-                  <button
-                    type="button"
-                    className="share-menu-item share-menu-subitem"
-                    role="menuitem"
-                    onClick={() => {
-                      setShareMenuOpen(false);
-                      fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>{t('fileViewer.exportMd')}</span>
-                  </button>
+                  {showMarkdownExport ? (
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                      <span>{t('fileViewer.exportMd')}</span>
+                    </button>
+                  ) : null}
                   <div className="share-menu-divider" />
                   <div className="share-menu-section-label" role="presentation">
                     {t('fileViewer.shareMenuSave')}
@@ -7264,6 +7656,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     </span>
                   </button>
                 </div>
+                ) : null}
+              </div>
               ) : null}
             </div>
           ) : null}
@@ -7276,13 +7670,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
             className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
+            onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
             {manualEditPanel}
+            {manualEditHoverAffordance}
             <div
               className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
               data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}
             >
-              <div className={manualEditMode ? undefined : 'comment-frame-clip'}>
+              <div className={manualEditMode ? undefined : 'comment-frame-clip'} style={manualEditMode ? {height: "100%"} : undefined}>
                 <div
                   style={
                     manualEditMode
@@ -7404,6 +7800,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                           }, '*');
                           replayInspectOverridesToIframe(frame);
                           syncBridgeModes(frame);
+                          syncCachedSlideStateToIframe(frame);
                           if (!useUrlLoadPreview) restorePreviewScrollPosition();
                         }}
                       />
@@ -7424,6 +7821,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   offsetX={overlayPreviewTransform.offsetX}
                   offsetY={overlayPreviewTransform.offsetY}
                   strokePoints={strokePoints}
+                  activeSlideIndex={effectiveDeck ? slideState?.active ?? null : null}
                   onOpenComment={(comment, snapshot) => {
                     setCommentPanelOpen(true);
                     setCommentSidePanelCollapsed(false);
@@ -7466,7 +7864,18 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               ) : null}
               {commentComposer}
               {boardMode && !commentCreateMode && hoveredCommentTarget && (!activeCommentTarget || commentPortalHost) ? (
-                <AnnotationHoverPopover target={hoveredCommentTarget} scale={overlayPreviewScale} />
+                <AnnotationHoverPopover
+                  target={hoveredCommentTarget}
+                  scale={overlayPreviewScale}
+                  onMouseEnter={() => {
+                    hoverCardPinnedRef.current = true;
+                    cancelHoverCardDismiss();
+                  }}
+                  onMouseLeave={() => {
+                    hoverCardPinnedRef.current = false;
+                    scheduleHoverCardDismiss();
+                  }}
+                />
               ) : null}
               {/*
                 Hint banner for Inspect / Picker modes. The bridge in
@@ -7732,13 +8141,11 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         <div className="modal-backdrop" role="presentation">
           <div className="modal deploy-modal deploy-flow-modal" role="dialog" aria-modal="true">
             <div className="modal-head">
-              <div className="kicker">{deployProviderLabel}</div>
               <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
-              <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
             </div>
             <div className="deploy-form">
               <label className="deploy-provider-field">
-                <span>{t('fileViewer.deployProviderLabel')}</span>
+                <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
                 <select
                   value={deployProviderId}
                   onChange={(e) => {
@@ -7752,32 +8159,25 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   ))}
                 </select>
               </label>
-              <div className="field-label-row">
-                <label htmlFor="deploy-token">{t(deployProvider.tokenLabelKey)}</label>
-                <div className="field-label-note">
-                  {deployConfig?.configured ? (
-                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
-                  ) : null}
-                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
-                  <a
-                    href={deployProvider.tokenLink}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    {t(deployProvider.tokenLinkKey)}
-                  </a>
-                </div>
+              <div className="field-label-row deploy-token-label-row">
+                <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
+                <a
+                  href={deployProvider.tokenLink}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {t(deployProvider.tokenLinkKey)}
+                </a>
               </div>
-              <input
-                id="deploy-token"
-                type="password"
-                value={deployToken}
-                placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
-                onChange={(e) => setDeployToken(e.target.value)}
-              />
-              <div className="deploy-config-actions">
+              <div className="deploy-token-input-row">
+                <input
+                  ref={deployTokenInputRef}
+                  id="deploy-token"
+                  type="password"
+                  value={deployToken}
+                  placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                  onChange={(e) => setDeployToken(e.target.value)}
+                />
                 <button
                   type="button"
                   className="ghost-link button-like"
@@ -7789,11 +8189,21 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
                 </button>
               </div>
+              {deployConfig?.configured || deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <div className="deploy-token-hints">
+                  {deployConfig?.configured ? (
+                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                  ) : null}
+                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                  ) : null}
+                </div>
+              ) : null}
               {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                 <>
                   <div className="deploy-field-grid single-field">
                     <label>
-                      <span>{t('fileViewer.cloudflareAccountId')}</span>
+                      <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
                       <input
                         value={cloudflareAccountId}
                         onChange={(e) => setCloudflareAccountId(e.target.value)}
@@ -7803,16 +8213,32 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </div>
                   <div className="deploy-field-grid cloudflare-domain-grid">
                     <label>
-                      <span>{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                      <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
                       <input
                         value={cloudflareDomainPrefix}
                         placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
                         onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
                       />
                     </label>
-                    <label>
-                      <span>{t('fileViewer.cloudflareZoneLabel')}</span>
+                    <div className="deploy-field-control">
+                      <span className="deploy-field-title-row">
+                        <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
+                          {t('fileViewer.cloudflareZoneLabel')}
+                        </label>
+                        <button
+                          type="button"
+                          className="ghost-link deploy-field-inline-action"
+                          disabled={cloudflareZonesLoading || !deployConfig?.configured}
+                          onClick={() => {
+                            void loadCloudflareZones();
+                          }}
+                        >
+                          <RemixIcon name="refresh-line" size={13} />
+                          {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                        </button>
+                      </span>
                       <select
+                        id="cloudflare-zone-select"
                         value={cloudflareZoneId}
                         disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
                         onChange={(e) => setCloudflareZoneId(e.target.value)}
@@ -7826,19 +8252,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                           </option>
                         ))}
                       </select>
-                    </label>
-                  </div>
-                  <div className="deploy-config-actions secondary">
-                    <button
-                      type="button"
-                      className="ghost-link button-like"
-                      disabled={cloudflareZonesLoading || !deployConfig?.configured}
-                      onClick={() => {
-                        void loadCloudflareZones();
-                      }}
-                    >
-                      {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
-                    </button>
+                    </div>
                   </div>
                   {cloudflareZonesError ? (
                     <p className="deploy-error">{cloudflareZonesError}</p>
@@ -7846,9 +8260,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
                   ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
                     <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
-                  ) : (
-                    <p className="hint">{t('fileViewer.cloudflareCustomDomainHint')}</p>
-                  )}
+                  ) : null}
                   {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
                     <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
                   ) : cloudflareHostnamePreview ? (
@@ -7860,7 +8272,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
               ) : (
                 <div className="deploy-field-grid">
                   <label>
-                    <span>{t('fileViewer.vercelTeamId')}</span>
+                    <span className="deploy-field-title">{t('fileViewer.vercelTeamId')}</span>
                     <input
                       value={teamId}
                       placeholder={t('fileViewer.optional')}
@@ -7868,7 +8280,7 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                     />
                   </label>
                   <label>
-                    <span>{t('fileViewer.vercelTeamSlug')}</span>
+                    <span className="deploy-field-title">{t('fileViewer.vercelTeamSlug')}</span>
                     <input
                       value={teamSlug}
                       placeholder={t('fileViewer.optional')}
@@ -7877,7 +8289,6 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                   </label>
                 </div>
               )}
-              <p className="hint">{t(deployProvider.previewHintKey)}</p>
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'
@@ -7999,6 +8410,16 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           onDismiss={() => setDeploySavedToast(null)}
         />
       ) : null}
+      {deployActionToast && typeof document !== 'undefined' ? createPortal(
+        <Toast
+          message={deployActionToast}
+          placement="top"
+          ttlMs={2400}
+          role="alert"
+          onDismiss={() => setDeployActionToast(null)}
+        />,
+        document.body,
+      ) : null}
       {imageExportSavedToast ? (
         <Toast
           message={imageExportSavedToast.message}
@@ -8008,6 +8429,15 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
           ttlMs={3600}
           onDismiss={() => setImageExportSavedToast(null)}
         />
+      ) : null}
+      {shareGuideToast && typeof document !== 'undefined' ? createPortal(
+        <Toast
+          message={shareGuideToast}
+          placement="top"
+          ttlMs={2200}
+          onDismiss={() => setShareGuideToast(null)}
+        />,
+        document.body,
       ) : null}
     </div>
   );
@@ -8609,12 +9039,14 @@ function MarkdownViewer({
   const [text, setText] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const markdownArticleRef = useRef<HTMLElement | null>(null);
   const copyBlockTimerRef = useRef<number | null>(null);
   const copiedMarkdownBlockRef = useRef<HTMLElement | null>(null);
   const status = file.artifactManifest?.status ?? 'complete';
   const isStreaming = status === 'streaming';
   const isError = status === 'error';
+  const exportTitle = file.name.replace(/\.mdx?$/i, '') || file.name;
 
   useEffect(() => {
     setText(null);
@@ -8719,6 +9151,36 @@ function MarkdownViewer({
             <Icon name={copied ? 'check' : 'copy'} size={13} />
             <span>{copied ? t('fileViewer.copied') : t('fileViewer.copy')}</span>
           </button>
+          {text !== null ? (
+            <div className="share-menu chrome-share-menu">
+              <button
+                type="button"
+                className="viewer-action"
+                aria-haspopup="menu"
+                aria-expanded={downloadMenuOpen}
+                onClick={() => setDownloadMenuOpen((v) => !v)}
+              >
+                <Icon name="download" size={13} />
+                <span>{t('fileViewer.download')}</span>
+              </button>
+              {downloadMenuOpen ? (
+                <div className="share-menu-popover" role="menu">
+                  <button
+                    type="button"
+                    className="share-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setDownloadMenuOpen(false);
+                      exportAsMd(text, exportTitle);
+                    }}
+                  >
+                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                    <span>{t('fileViewer.exportMd')}</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="viewer-body">

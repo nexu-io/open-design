@@ -81,6 +81,14 @@ export interface ProjectExportManifestResponse {
   artifacts: ProjectExportManifestArtifact[];
 }
 
+export interface ProjectPreviewUrlResponse {
+  url: string;
+  file: string;
+  csp: string;
+  iframeSandbox: string;
+  opaqueOrigin: true;
+}
+
 export interface ProjectFileResponse {
   file: ProjectFile;
 }

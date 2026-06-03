@@ -1,5 +1,6 @@
 import type { AgentEvent, ChatMessage, LiveArtifactSummary, ProjectFile } from '../types';
 import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
+import { resolveRunFailureUi, type RunFailureUi } from './amr-guidance';
 import { isTodoWriteToolName, latestTodosFromEvents, type TodoItem } from './todos';
 
 export type GenerationStepStatus = 'pending' | 'running' | 'succeeded' | 'failed';
@@ -17,7 +18,28 @@ export interface GenerationPreviewModel {
   phase: GenerationPhase;
   failed: boolean;
   errorMessage: string | null;
-  progressPercent: number;
+  /**
+   * Structured API error code carried on the failed run's error event
+   * (e.g. RATE_LIMITED, AGENT_AUTH_REQUIRED). Lets the failed surface name
+   * a recognizable cause instead of only echoing the raw upstream string.
+   * Only set when the run failed.
+   */
+  errorCode: string | null;
+  /**
+   * Per-case failure UI (which contextual action to offer) resolved from the
+   * error code + agent via the shared `resolveRunFailureUi`, so the preview
+   * surface mirrors the chat error card (authorize / recharge / terminal /
+   * retry). Only set when the run failed.
+   */
+  failureUi: RunFailureUi | null;
+  /**
+   * Whether to surface the "switch to AMR" promotion card on the failed
+   * surface. True for the non-AMR auth/quota cases where switching to the
+   * hosted gateway is a real recovery path — but deliberately NOT for
+   * `UPSTREAM_UNAVAILABLE`, since the same outage can hit AMR too and the
+   * card would offer no real fix there.
+   */
+  promoteAmrSwitch: boolean;
   /**
    * Latest human-readable activity snippet pulled from the streamed
    * events. Only set while actively generating so the waiting surface
@@ -76,17 +98,15 @@ export function deriveGenerationPreviewModel(input: {
   hasPreviewSurface: boolean;
   failed: boolean;
   errorMessage?: string | null;
-}): Pick<GenerationPreviewModel, 'steps' | 'progressPercent' | 'errorMessage'> {
+}): Pick<GenerationPreviewModel, 'steps' | 'errorMessage'> {
   const steps = derivePrototypeGenerationSteps({
     events: input.events,
     hasArtifactHtml: input.hasArtifactHtml,
     hasPreviewSurface: input.hasPreviewSurface,
     failed: input.failed,
   });
-  const progressPercent = generationPreviewProgress(steps);
   return {
     steps,
-    progressPercent,
     errorMessage: input.failed ? input.errorMessage?.trim() || failureMessageFromEvents(input.events) : null,
   };
 }
@@ -155,6 +175,13 @@ export function buildGenerationPreviewState(input: {
 
   const startedAt = latestAssistant.startedAt ?? latestAssistant.createdAt ?? Date.now();
 
+  const errorCode = failed ? latestErrorEventCode(events) : null;
+  const failureUi = failed ? resolveRunFailureUi(errorCode, latestAssistant.agentId) : null;
+  // Promote AMR for auth/quota failures only; an upstream outage can hit the
+  // hosted gateway too, so switching would not be a real fix there.
+  const promoteAmrSwitch =
+    (failureUi?.showSwitchCard ?? false) && errorCode !== 'UPSTREAM_UNAVAILABLE';
+
   const generating = phase === 'generating';
   const todos = generating ? latestTodosFromEvents(events) : [];
   const todoProgress =
@@ -173,7 +200,9 @@ export function buildGenerationPreviewState(input: {
     phase,
     failed,
     errorMessage: derived.errorMessage,
-    progressPercent: derived.progressPercent,
+    errorCode,
+    failureUi,
+    promoteAmrSwitch,
     activityLabel: generating ? latestActivityLabel(events) : null,
     detailLabel: generating ? generationDetailLabel(events, todos) : null,
     todoProgress,
@@ -240,13 +269,6 @@ export function derivePrototypeGenerationSteps(input: {
     { id: 'generate', status: generate },
     { id: 'prepare', status: prepare },
   ];
-}
-
-export function generationPreviewProgress(steps: GenerationPreviewStep[]): number {
-  if (steps.length === 0) return 8;
-  const weights = { pending: 0, running: 0.45, succeeded: 1, failed: 0.2 };
-  const score = steps.reduce((sum, step) => sum + weights[step.status], 0) / steps.length;
-  return Math.max(8, Math.min(steps.some((step) => step.status === 'failed') ? 72 : 92, Math.round(score * 100)));
 }
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
@@ -323,6 +345,20 @@ function eventsHaveStatus(events: AgentEvent[], labels: string[]): boolean {
       event.kind === 'status'
       && normalized.has(event.label.toLowerCase()),
   );
+}
+
+// The structured API error code rides on the failed run's error status
+// event (see PersistedAgentEvent: `{ kind:'status', label:'error', code }`).
+// Mirrors how the chat error card picks the code so both surfaces classify
+// the failure the same way.
+function latestErrorEventCode(events: AgentEvent[]): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.kind === 'status' && event.label === 'error') {
+      return event.code ?? null;
+    }
+  }
+  return null;
 }
 
 function failureMessageFromEvents(events: AgentEvent[]): string | null {

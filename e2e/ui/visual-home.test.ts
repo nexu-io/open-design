@@ -7,7 +7,7 @@ import {
   waitForVisualProjects,
 } from '@/playwright/visual';
 
-test('captures the visual home harness', async ({ page }) => {
+test('[P2] captures the visual home harness', async ({ page }) => {
   await configureVisualPage(page, { projects: [] });
   await gotoVisualHome(page);
 
@@ -18,7 +18,7 @@ test('captures the visual home harness', async ({ page }) => {
   await captureVisual(page, 'visual-home');
 });
 
-test('captures the home plugin catalog surface', async ({ page }) => {
+test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -29,7 +29,7 @@ test('captures the home plugin catalog surface', async ({ page }) => {
   await captureVisual(page, 'visual-home-catalog');
 });
 
-test('captures the home plugin filtered surface', async ({ page }) => {
+test('[P2] captures the home plugin filtered surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -39,7 +39,7 @@ test('captures the home plugin filtered surface', async ({ page }) => {
   await captureVisual(page, 'visual-home-plugin-filter');
 });
 
-test('captures the home plugin detail surface', async ({ page }) => {
+test('[P2] captures the home plugin detail surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -55,7 +55,7 @@ test('captures the home plugin detail surface', async ({ page }) => {
   await captureVisual(page, 'visual-plugin-details');
 });
 
-test('captures the home context picker surface', async ({ page }) => {
+test('[P2] captures the home context picker surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -66,7 +66,7 @@ test('captures the home context picker surface', async ({ page }) => {
   await captureVisual(page, 'visual-home-context-picker');
 });
 
-test('captures the new project modal surface', async ({ page }) => {
+test('[P2] captures the new project modal surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -78,7 +78,7 @@ test('captures the new project modal surface', async ({ page }) => {
   await captureVisual(page, 'visual-new-project-modal');
 });
 
-test('captures the projects page surface', async ({ page }) => {
+test('[P2] captures the projects page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -91,7 +91,7 @@ test('captures the projects page surface', async ({ page }) => {
   await captureVisual(page, 'visual-projects');
 });
 
-test('captures the projects kanban surface', async ({ page }) => {
+test('[P2] captures the projects kanban surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -104,7 +104,7 @@ test('captures the projects kanban surface', async ({ page }) => {
   await captureVisual(page, 'visual-projects-kanban');
 });
 
-test('captures the design systems page surface', async ({ page }) => {
+test('[P2] captures the design systems page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -119,7 +119,7 @@ test('captures the design systems page surface', async ({ page }) => {
   await captureVisual(page, 'visual-design-systems');
 });
 
-test('captures the plugins page surface', async ({ page }) => {
+test('[P2] captures the plugins page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -133,7 +133,7 @@ test('captures the plugins page surface', async ({ page }) => {
   await captureVisual(page, 'visual-plugins');
 });
 
-test('captures the integrations page surface', async ({ page }) => {
+test('[P2] captures the integrations page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -146,7 +146,7 @@ test('captures the integrations page surface', async ({ page }) => {
   await captureVisual(page, 'visual-integrations');
 });
 
-test('captures the integrations use everywhere surface', async ({ page }) => {
+test('[P2] captures the integrations use everywhere surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -159,7 +159,7 @@ test('captures the integrations use everywhere surface', async ({ page }) => {
   await captureVisual(page, 'visual-integrations-use-everywhere');
 });
 
-test('captures the tasks page surface', async ({ page }) => {
+test('[P2] captures the tasks page surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -172,7 +172,7 @@ test('captures the tasks page surface', async ({ page }) => {
   await captureVisual(page, 'visual-tasks');
 });
 
-test('captures the topbar execution switcher surface', async ({ page }) => {
+test('[P2] captures the topbar execution switcher surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
@@ -183,24 +183,26 @@ test('captures the topbar execution switcher surface', async ({ page }) => {
   await captureVisual(page, 'visual-topbar-execution-switcher');
 });
 
-test('captures the avatar menu surface', async ({ page }) => {
+test('[P2] captures the avatar menu surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
   const menu = await openAvatarMenu(page);
-  await expect(menu.getByRole('button', { name: /^Settings\b/i })).toBeVisible();
+  // Settings moved out of the avatar menu to the header gear (footer-toolbar
+  // layout); assert an agent option is present instead.
+  await expect(menu.locator('.avatar-item').first()).toBeVisible();
 
   await captureVisual(page, 'visual-avatar-menu');
 });
 
-test('captures the settings execution surface', async ({ page }) => {
+test('[P2] captures the settings execution surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const menu = await openAvatarMenu(page);
-  await menu.getByRole('button', { name: /^Settings\b/i }).click();
+  // Settings now opens from the header gear, not the avatar menu dropdown.
+  await page.locator('.settings-icon-btn').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('tab', { name: /Local CLI/i })).toBeVisible();
@@ -210,13 +212,13 @@ test('captures the settings execution surface', async ({ page }) => {
   await captureVisual(page, 'visual-settings-execution');
 });
 
-test('captures the settings BYOK surface', async ({ page }) => {
+test('[P2] captures the settings BYOK surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
-  const menu = await openAvatarMenu(page);
-  await menu.getByRole('button', { name: /^Settings\b/i }).click();
+  // Settings now opens from the header gear, not the avatar menu dropdown.
+  await page.locator('.settings-icon-btn').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('tab', { name: 'BYOK' }).click();

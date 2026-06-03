@@ -301,4 +301,94 @@ describe('AssistantMessage recovered produced files', () => {
 
     expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
   });
+
+  it('does not infer user sketches as turn output files', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'Claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus' } as ChatMessage['events'][number],
+          ],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'board.sketch.json',
+            path: 'board.sketch.json',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+            mime: 'application/json',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('board.sketch.json')).toBeNull();
+  });
+
+  it('still infers generated svg files classified as sketches', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'Claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus' } as ChatMessage['events'][number],
+          ],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'diagram.svg',
+            path: 'diagram.svg',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+            mime: 'image/svg+xml',
+          } as ProjectFile,
+          {
+            name: 'board.sketch.json',
+            path: 'board.sketch.json',
+            size: 2048,
+            mtime: 1700000004,
+            kind: 'sketch',
+            mime: 'application/json',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('diagram.svg')).toBeTruthy();
+    expect(screen.queryByText('board.sketch.json')).toBeNull();
+  });
+
+  it('keeps explicitly recorded sketch outputs visible', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          producedFiles: [
+            {
+              name: 'agent-sketch.sketch.json',
+              path: 'agent-sketch.sketch.json',
+              size: 2048,
+              mtime: 1700000004,
+              kind: 'sketch',
+              mime: 'application/json',
+            } as ProjectFile,
+          ],
+        })}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByText('agent-sketch.sketch.json')).toBeTruthy();
+  });
 });

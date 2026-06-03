@@ -663,6 +663,49 @@
   pointer-events: auto;
 }
 
+/* Page-styles card: a compact, content-height variant of the floating panel
+   anchored top-right. Opened by clicking the empty canvas so edit mode itself
+   stays clean instead of docking a full-height panel on open. */
+.manual-edit-workspace > .manual-edit-right.manual-edit-page-card {
+  right: 12px;
+  height: auto;
+  max-height: calc(100% - 24px);
+}
+.manual-edit-page-card .manual-edit-modal.cc-panel {
+  height: auto;
+}
+
+/* Hover affordance: a small "edit params" handle pinned to the hovered
+   element so click-to-pin selection stays discoverable without the panel
+   chasing the cursor. */
+.manual-edit-workspace > .manual-edit-hover-action {
+  position: absolute;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, #2563eb 55%, transparent);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: #2563eb;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+  opacity: 0;
+  transform: scale(0.9);
+  animation: manual-edit-hover-action-in 160ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  pointer-events: auto;
+}
+.manual-edit-workspace > .manual-edit-hover-action:hover {
+  background: color-mix(in srgb, #2563eb 12%, var(--bg-panel));
+}
+@keyframes manual-edit-hover-action-in {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Claude Code-style edit inspector panel. */
 .cc-panel { display: flex; flex-direction: column; gap: 0; padding: 8px 0; overflow: hidden; background: var(--bg-panel); }
 .cc-inspector { display: flex; flex-direction: column; gap: 12px; padding: 6px 12px; }
@@ -922,7 +965,11 @@
   scrollbar-gutter: stable;
 }
 .manual-edit-floating .manual-edit-modal.cc-panel {
-  height: 100%;
+  /* Fit content; the aside's max-height caps it and the scroll body engages
+     only when the inspector is taller than the cap. No fixed height so short
+     inspectors render as compact cards. */
+  height: auto;
+  max-height: 100%;
   padding-bottom: 10px;
   border-radius: 12px;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);

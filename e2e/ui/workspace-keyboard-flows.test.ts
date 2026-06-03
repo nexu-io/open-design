@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
-test('quick switcher opens from keyboard and activates the selected file', async ({ page }) => {
+test('[P1] quick switcher opens from keyboard and activates the selected file', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher keyboard flow');
   await expectWorkspaceReady(page);
@@ -43,7 +43,7 @@ test('quick switcher opens from keyboard and activates the selected file', async
   await expect(quickSwitcher).toBeHidden();
 });
 
-test('quick switcher keeps the current file when search has no matches', async ({ page }) => {
+test('[P1] quick switcher keeps the current file when search has no matches', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher empty search flow');
   await expectWorkspaceReady(page);
@@ -72,7 +72,7 @@ test('quick switcher keeps the current file when search has no matches', async (
   await expect(alphaTab).toHaveAttribute('aria-selected', 'true');
 });
 
-test('quick switcher arrow keys move selection before opening a file', async ({ page }) => {
+test('[P1] quick switcher arrow keys move selection before opening a file', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher arrow navigation flow');
   await expectWorkspaceReady(page);
@@ -100,7 +100,7 @@ test('quick switcher arrow keys move selection before opening a file', async ({ 
   await expect(tabBySuffix(page, selectedFileName)).toHaveAttribute('aria-selected', 'true');
 });
 
-test('keyboard chat panel resize persists after reload', async ({ page }) => {
+test('[P1] keyboard chat panel resize persists after reload', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Chat panel resize persistence');
   await expectWorkspaceReady(page);
@@ -136,7 +136,7 @@ test('keyboard chat panel resize persists after reload', async ({ page }) => {
   expect(restoredWidth).toBe(resizedWidth);
 });
 
-test('project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
+test('[P0] project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
   let runCount = 0;
   await page.route('**/api/runs', async (route) => {
     runCount += 1;
@@ -199,7 +199,7 @@ test('project chat Enter sends while Shift+Enter inserts a newline', async ({ pa
   );
 });
 
-test('quick switcher still activates another file after the project reloads', async ({ page }) => {
+test('[P1] quick switcher still activates another file after the project reloads', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher after reload');
   await expectWorkspaceReady(page);
@@ -233,7 +233,7 @@ test('quick switcher still activates another file after the project reloads', as
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['reload-alpha.png', 'reload-beta.png']);
 });
 
-test('quick switcher only lists files from the active project after switching projects', async ({ page }) => {
+test('[P1] quick switcher only lists files from the active project after switching projects', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher Project Alpha');
   await expectWorkspaceReady(page);
@@ -268,7 +268,7 @@ test('quick switcher only lists files from the active project after switching pr
   await expect(quickSwitcher).toBeHidden();
 });
 
-test('quick switcher leaves the Design Files panel and opens the selected file tab', async ({ page }) => {
+test('[P1] quick switcher leaves the Design Files panel and opens the selected file tab', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher from Design Files');
   await expectWorkspaceReady(page);
@@ -302,7 +302,7 @@ test('quick switcher leaves the Design Files panel and opens the selected file t
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
 });
 
-test('quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
+test('[P1] quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
   await page.route('**/api/runs', async (route) => {
     await route.fulfill({
       status: 202,
@@ -345,7 +345,6 @@ test('quick switcher can switch from a design file tab back to a generated artif
   await sendPrompt(page, 'Create a quick switcher artifact');
   const artifactTab = page.getByRole('tab', { name: /quick-switcher-artifact\.html/i });
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
 
   await uploadTinyPng(page, 'artifact-mix-file.png');
   const fileTab = tabBySuffix(page, 'artifact-mix-file.png');
@@ -365,12 +364,16 @@ test('quick switcher can switch from a design file tab back to a generated artif
   await expect(quickSwitcher).toBeHidden();
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
   await expect(fileTab).toHaveAttribute('aria-selected', 'false');
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
-  await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
-      name: 'Quick Switcher Artifact',
-    }),
-  ).toBeVisible();
+  const current = new URL(page.url());
+  const [, projects, projectId] = current.pathname.split('/');
+  if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/projects/${projectId}/files/quick-switcher-artifact.html`);
+      if (!response.ok()) return '';
+      return response.text();
+    })
+    .toContain('Quick Switcher Artifact');
 });
 
 

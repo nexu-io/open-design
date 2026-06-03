@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBoardCommentAttachments,
   buildVisualAnnotationAttachment,
+  commentSnapshotOverlayEqual,
+  commentVisibleOnDeckSlide,
   commentsToAttachments,
   historyWithCommentAttachmentContext,
+  liveCommentTargetMapsEqual,
   liveSnapshotForComment,
   mergeAttachedComments,
   messageContentWithCommentAttachments,
@@ -11,6 +14,7 @@ import {
   removeAttachedComment,
   targetFromSnapshot,
 } from '../src/comments';
+import type { PreviewCommentSnapshot } from '../src/comments';
 import type { ChatMessage, PreviewComment } from '../src/types';
 
 describe('preview comment attachment helpers', () => {
@@ -241,6 +245,47 @@ describe('preview comment attachment helpers', () => {
     });
   });
 
+  it('ignores collapsed live snapshots so deck slide changes do not jump markers to 0,0', () => {
+    const saved = comment({ filePath: 'index.html', elementId: 'hero-title' });
+    const snapshots = new Map([
+      ['hero-title', {
+        filePath: 'index.html',
+        elementId: 'hero-title',
+        selector: '[data-od-id="hero-title"]',
+        label: 'h1.hero-title',
+        text: '',
+        htmlHint: '',
+        position: { x: 0, y: 0, width: 0, height: 0 },
+      }],
+    ]);
+
+    expect(liveSnapshotForComment(saved, snapshots)).toBeNull();
+  });
+
+  it('shows deck comments only on their saved slide index', () => {
+    expect(commentVisibleOnDeckSlide({ slideIndex: 2 }, 2)).toBe(true);
+    expect(commentVisibleOnDeckSlide({ slideIndex: 2 }, 1)).toBe(false);
+    expect(commentVisibleOnDeckSlide({}, 1)).toBe(true);
+  });
+
+  it('keeps overlay equality separate from stored target metadata updates', () => {
+    const base: PreviewCommentSnapshot = {
+      filePath: 'index.html',
+      elementId: 'hero-title',
+      selector: '[data-od-id="hero-title"]',
+      label: 'h1.hero-title',
+      text: 'Hello',
+      htmlHint: '',
+      position: { x: 12, y: 24, width: 120, height: 32 },
+    };
+    const current = new Map([['hero-title', base]]);
+    const next = new Map([['hero-title', { ...base, text: 'Hello world' }]]);
+    expect(commentSnapshotOverlayEqual(base, next.get('hero-title')!)).toBe(true);
+    expect(liveCommentTargetMapsEqual(current, next)).toBe(false);
+    next.set('hero-title', { ...base, position: { x: 13, y: 24, width: 120, height: 32 } });
+    expect(liveCommentTargetMapsEqual(current, next)).toBe(false);
+  });
+
   it('serializes selected comments into API-mode prompt context without visible input', () => {
     const attachments = commentsToAttachments([
       comment({
@@ -265,6 +310,12 @@ describe('preview comment attachment helpers', () => {
     expect(content).toContain('computedStyle: color: rgb(26, 25, 22)');
     expect(content).toContain('fontSize: 13.5px');
     expect(content).toContain('comment: Only shorten this title');
+    // The hard-scope sentence IS the behavior change. Assert its key phrases
+    // so a future edit that softens or drops the directive lights the suite
+    // red instead of silently re-opening the over-broad edit bug.
+    expect(content).toContain('Hard scope: change ONLY');
+    expect(content).toContain('Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules');
+    expect(content).toContain('ask the user before proceeding');
   });
 
   it('adds hidden comment context only to the current user message sent to API providers', () => {

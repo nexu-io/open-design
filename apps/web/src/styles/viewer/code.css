@@ -538,6 +538,28 @@
   font-family: var(--mono);
   font-size: 0.92em;
 }
+.prose-block .md-color-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  vertical-align: -0.08em;
+  white-space: nowrap;
+}
+.prose-block .md-color-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+[data-theme="dark"] .prose-block .md-color-swatch {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.45);
+}
 .prose-block .md-code {
   background: var(--bg-subtle);
   border: 1px solid var(--border);

@@ -1,6 +1,6 @@
-import type { Express } from 'express';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import type { Express, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
@@ -1196,7 +1196,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 }
 
-export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts'> {}
+export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {}
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
@@ -1208,6 +1208,105 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { listFiles, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
+  const { projectPreviewScopes } = ctx;
+  const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
+  const projectPreviewCsp = [
+    `sandbox ${projectPreviewIframeSandbox}`,
+    "default-src 'self' data: blob:",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "connect-src 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+    "object-src 'none'",
+  ].join('; ');
+  const previewScopeRe = /^[A-Za-z0-9_-]{8,128}$/u;
+
+  function setProjectPreviewHeaders(res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', projectPreviewCsp);
+  }
+
+  async function sendProjectFile(
+    req: any,
+    res: Response,
+    projectId: string,
+    relPath: string,
+    metadata?: unknown,
+    beforeSend?: (mime: string) => void,
+    transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string,
+  ) {
+    const meta = await resolveProjectFilePath(
+      PROJECTS_DIR,
+      projectId,
+      relPath,
+      metadata,
+    );
+    beforeSend?.(meta.mime);
+
+    if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Type', meta.mime);
+
+      if (meta.size === 0) {
+        res.setHeader('Content-Length', '0');
+        return res.status(200).end();
+      }
+
+      const range = parseByteRange(req.headers.range, meta.size);
+
+      if (range === 'unsatisfiable') {
+        res.setHeader('Content-Range', `bytes */${meta.size}`);
+        return res.status(416).end();
+      }
+
+      let start;
+      let end;
+      let statusCode;
+      if (range) {
+        ({ start, end } = range);
+        statusCode = 206;
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+        res.setHeader('Content-Length', String(end - start + 1));
+      } else {
+        start = 0;
+        end = meta.size - 1;
+        statusCode = 200;
+        res.setHeader('Content-Length', String(meta.size));
+      }
+
+      res.status(statusCode);
+      const stream = fs.createReadStream(meta.filePath, { start, end });
+      stream.on('error', (streamErr: any) => {
+        if (!res.headersSent) {
+          sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
+        } else {
+          res.destroy(streamErr);
+        }
+      });
+      stream.pipe(res);
+      return;
+    }
+
+    const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, metadata);
+    res.type(file.mime).send(transformFile ? transformFile(file) : file.buffer);
+  }
+
+  function previewFilePathForProject(project: any, queryFile: unknown): string {
+    if (typeof queryFile === 'string' && queryFile.trim().length > 0) {
+      return queryFile;
+    }
+    const entryFile = project?.metadata?.entryFile;
+    return typeof entryFile === 'string' && entryFile.length > 0 ? entryFile : 'index.html';
+  }
+
+  function encodeProjectPathForUrl(filePath: string): string {
+    return filePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  }
 
   // Project files. Each project owns a flat folder under .od/projects/<id>/
   // containing every file the user has uploaded, pasted, sketched, or that
@@ -1266,6 +1365,83 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get('/api/projects/:id/preview-url', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const requestedPath = previewFilePathForProject(project, req.query.file);
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        project.id,
+        requestedPath,
+        project.metadata,
+      );
+      const scope = projectPreviewScopes.mint(project.id);
+      /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
+      const body = {
+        url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
+        file: meta.name,
+        csp: projectPreviewCsp,
+        iframeSandbox: projectPreviewIframeSandbox,
+        opaqueOrigin: true,
+      };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  app.get(/^\/api\/projects\/([^/]+)\/preview\/([^/]+)\/(.+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
+      const projectId = String(params[0] ?? '');
+      const scope = String(params[1] ?? '');
+      const relPath = String(params[2] ?? '');
+      if (!previewScopeRe.test(scope)) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'invalid preview scope');
+        return;
+      }
+      const project = getProject(db, projectId);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      if (!projectPreviewScopes.validate(project.id, scope)) {
+        sendApiError(res, 404, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
+        return;
+      }
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+      await sendProjectFile(
+        req,
+        res,
+        project.id,
+        relPath,
+        project.metadata,
+        () => setProjectPreviewHeaders(res),
+      );
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
 
   // Preflight for the raw file route. Current artifact fetches are simple GETs
   // (no preflight needed), but an explicit handler future-proofs the route if
@@ -1293,66 +1469,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res.header('Access-Control-Allow-Origin', '*');
       }
 
-      const meta = await resolveProjectFilePath(
-        PROJECTS_DIR,
+      await sendProjectFile(
+        req,
+        res,
         projectId,
         relPath,
         project?.metadata,
-      );
-
-      if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Content-Type', meta.mime);
-
-        if (meta.size === 0) {
-          res.setHeader('Content-Length', '0');
-          return res.status(200).end();
-        }
-
-        const range = parseByteRange(req.headers.range, meta.size);
-
-        if (range === 'unsatisfiable') {
-          res.setHeader('Content-Range', `bytes */${meta.size}`);
-          return res.status(416).end();
-        }
-
-        let start;
-        let end;
-        let statusCode;
-        if (range) {
-          ({ start, end } = range);
-          statusCode = 206;
-          res.setHeader('Content-Range', `bytes ${start}-${end}/${meta.size}`);
-          res.setHeader('Content-Length', String(end - start + 1));
-        } else {
-          start = 0;
-          end = meta.size - 1;
-          statusCode = 200;
-          res.setHeader('Content-Length', String(meta.size));
-        }
-
-        res.status(statusCode);
-        const stream = fs.createReadStream(meta.filePath, { start, end });
-        stream.on('error', (streamErr: any) => {
-          if (!res.headersSent) {
-            sendApiError(res, 500, 'STREAM_ERROR', String(streamErr));
-          } else {
-            res.destroy(streamErr);
+        undefined,
+        (file) => {
+          if (
+            wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) &&
+            /^text\/html(?:;|$)/i.test(file.mime)
+          ) {
+            return injectUrlPreviewScrollBridge(file.buffer.toString('utf8'));
           }
-        });
-        stream.pipe(res);
-        return;
-      }
-
-      const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
-      if (
-        wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) &&
-        /^text\/html(?:;|$)/i.test(file.mime)
-      ) {
-        res.type(file.mime).send(injectUrlPreviewScrollBridge(file.buffer.toString('utf8')));
-        return;
-      }
-      res.type(file.mime).send(file.buffer);
+          return file.buffer;
+        },
+      );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
       sendApiError(

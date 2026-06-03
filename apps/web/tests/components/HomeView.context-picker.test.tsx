@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
   type InstalledPluginRecord,
+  type ConnectorDetail,
+  type McpServerConfig,
   type SkillSummary,
 } from '@open-design/contracts';
 import { HomeView } from '../../src/components/HomeView';
@@ -35,6 +37,21 @@ const DECK_SKILL: SkillSummary = {
 };
 
 const WEB_PROTOTYPE_PLUGIN = makePlugin('example-web-prototype', 'Web Prototype');
+const MCP_SERVER: McpServerConfig = {
+  id: 'linear',
+  label: 'Linear',
+  transport: 'stdio',
+  enabled: true,
+  command: 'npx',
+};
+const CONNECTOR: ConnectorDetail = {
+  id: 'slack',
+  name: 'Slack',
+  provider: 'Composio',
+  category: 'Communication',
+  status: 'connected',
+  tools: [],
+};
 
 function makePlugin(id: string, title: string): InstalledPluginRecord {
   return {
@@ -372,5 +389,73 @@ describe('HomeView context picker', () => {
       skillId: null,
       projectKind: 'prototype',
     })));
+  });
+
+  it('submits selected MCP servers and connectors as first-turn context', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [MCP_SERVER], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        connectors={[CONNECTOR]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    const input = await screen.findByTestId('home-hero-input');
+    fireEvent.change(input, { target: { value: '@lin' } });
+    fireEvent.mouseDown(screen.getByRole('option', { name: /linear/i }));
+
+    await waitFor(() => {
+      expect((input as HTMLTextAreaElement).value).toBe('@Linear');
+    });
+
+    fireEvent.change(input, { target: { value: '@Linear @sla' } });
+    fireEvent.mouseDown(screen.getByRole('option', { name: /slack/i }));
+
+    await waitFor(() => {
+      expect((input as HTMLTextAreaElement).value).toBe('@Linear @Slack');
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: '@Linear @Slack',
+      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      contextMcpServers: [
+        expect.objectContaining({ id: 'linear', label: 'Linear', transport: 'stdio' }),
+      ],
+      contextConnectors: [
+        expect.objectContaining({
+          id: 'slack',
+          name: 'Slack',
+          provider: 'Composio',
+          category: 'Communication',
+          status: 'connected',
+        }),
+      ],
+    }));
   });
 });
