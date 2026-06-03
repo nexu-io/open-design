@@ -11,7 +11,7 @@ import type {
   ApplyResult,
   InstalledPluginRecord,
 } from '@open-design/contracts';
-import { applyPlugin, listPlugins } from '../state/projects';
+import { applyPluginRequest, listPlugins } from '../state/projects';
 import { useI18n } from '../i18n';
 
 interface Props {
@@ -68,18 +68,16 @@ export function InlinePluginsRail(props: Props) {
   const onClick = async (record: InstalledPluginRecord) => {
     setPendingId(record.id);
     setError(null);
-    const result = await applyPlugin(record.id, {
+    const outcome = await applyPluginRequest(record.id, {
       ...(props.projectId ? { projectId: props.projectId } : {}),
       locale,
     });
     setPendingId(null);
-    if (!result) {
-      setError(
-        `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
-      );
+    if (!outcome.ok) {
+      setError(`Failed to apply ${record.title}: ${outcome.message}`);
       return;
     }
-    props.onApplied(record, result);
+    props.onApplied(record, outcome.result);
   };
 
   if (plugins.length === 0) {

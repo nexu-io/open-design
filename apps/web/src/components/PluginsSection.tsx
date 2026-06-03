@@ -36,8 +36,9 @@ import type {
   InstalledPluginRecord,
 } from '@open-design/contracts';
 import {
-  applyPlugin,
+  applyPluginRequest,
   renderPluginBriefTemplate,
+  type ApplyPluginFailure,
 } from '../state/projects';
 import { useI18n } from '../i18n';
 import { ContextChipStrip } from './ContextChipStrip';
@@ -96,9 +97,11 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
     const [applied, setApplied] = useState<ApplyResult | null>(null);
     const [activeRecord, setActiveRecord] = useState<InstalledPluginRecord | null>(null);
     const [pluginInputs, setPluginInputs] = useState<Record<string, unknown>>({});
+    const [applyError, setApplyError] = useState<string | null>(null);
 
     const handleApplied = useCallback(
       (record: InstalledPluginRecord | null, result: ApplyResult) => {
+        setApplyError(null);
         setActiveRecord(record);
         setApplied(result);
         const initialInputs: Record<string, unknown> = {};
@@ -127,6 +130,7 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
       setApplied(null);
       setActiveRecord(null);
       setPluginInputs({});
+      setApplyError(null);
       props.onCleared?.();
     }, [props]);
 
@@ -141,13 +145,17 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
       ref,
       () => ({
         applyById: async (pluginId, record = null) => {
-          const result = await applyPlugin(pluginId, {
+          setApplyError(null);
+          const outcome = await applyPluginRequest(pluginId, {
             ...(props.projectId ? { projectId: props.projectId } : {}),
             locale,
           });
-          if (!result) return null;
-          handleApplied(record, result);
-          return result;
+          if (!outcome.ok) {
+            setApplyError(formatApplyPluginFailure(pluginId, record, outcome));
+            return null;
+          }
+          handleApplied(record, outcome.result);
+          return outcome.result;
         },
         clear,
         getActiveRecord: () => activeRecord,
@@ -185,6 +193,11 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
 
     return (
       <div className="plugins-section" data-testid="plugins-section">
+        {applyError ? (
+          <div role="alert" className="plugins-section__error">
+            {applyError}
+          </div>
+        ) : null}
         {applied ? (
           <div className="plugins-section__active" data-active-plugin-id={activeRecord?.id}>
             <ContextChipStrip
@@ -214,3 +227,20 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
     );
   },
 );
+
+function formatApplyPluginFailure(
+  pluginId: string,
+  record: InstalledPluginRecord | null,
+  failure: ApplyPluginFailure,
+): string {
+  const title = record?.title ?? pluginId;
+  if (failure.error === 'missing_inputs') {
+    const labels = failure.missingInputFields.map((name) => {
+      const field = record?.manifest?.od?.inputs?.find((input) => input.name === name);
+      return field?.label ?? name;
+    });
+    const suffix = labels.length > 0 ? `: ${labels.join(', ')}` : '';
+    return `${title} needs required inputs before it can be applied${suffix}.`;
+  }
+  return `Failed to apply ${title}: ${failure.message}`;
+}

@@ -225,6 +225,15 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border);
 }
+.plugins-section__error {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--danger, #c33);
+  padding: 7px 9px;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--danger, #c33) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger, #c33) 28%, transparent);
+}
 
 /* Strip rail — single-row horizontal scroller, intended for the
    ChatComposer mount where vertical space is precious. Cards collapse

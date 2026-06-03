@@ -12,9 +12,14 @@
 //   3. Editing an input field re-fires onApplied with the new brief.
 //   4. Removing a chip clears the active plugin and invokes onCleared.
 
+import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { PluginsSection } from '../../src/components/PluginsSection';
+import type { InstalledPluginRecord } from '@open-design/contracts';
+import {
+  PluginsSection,
+  type PluginsSectionHandle,
+} from '../../src/components/PluginsSection';
 
 const PLUGIN_ROW = {
   id: 'sample-plugin',
@@ -23,13 +28,18 @@ const PLUGIN_ROW = {
   trust: 'restricted' as const,
   sourceKind: 'local' as const,
   source: '/tmp/sample',
+  capabilitiesGranted: [],
+  fsPath: '/tmp/sample',
+  installedAt: 0,
+  updatedAt: 0,
   manifest: {
     name: 'sample-plugin',
+    version: '1.0.0',
     title: 'Sample Plugin',
     description: 'A fixture',
-    od: { taskKind: 'new-generation', mode: 'deck' },
+    od: { taskKind: 'new-generation' as const, mode: 'deck' },
   },
-};
+} satisfies InstalledPluginRecord;
 
 const APPLY_RESULT = {
   ok: true,
@@ -62,6 +72,23 @@ const APPLY_RESULT = {
   },
   projectMetadata: {},
 };
+
+function RefApplyHarness({ record = PLUGIN_ROW }: { record?: InstalledPluginRecord }) {
+  const sectionRef = useRef<PluginsSectionHandle | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          void sectionRef.current?.applyById(record.id, record);
+        }}
+      >
+        Apply via composer
+      </button>
+      <PluginsSection ref={sectionRef} showRail={false} projectId="project-1" />
+    </>
+  );
+}
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -138,5 +165,32 @@ describe('PluginsSection', () => {
     await waitFor(() => expect(onCleared).toHaveBeenCalled());
     expect(screen.queryByTestId('context-chip-strip')).toBeNull();
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+  });
+
+  it('surfaces missing required inputs from imperative composer applies', async () => {
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(
+          JSON.stringify({
+            error: 'missing_inputs',
+            fields: ['product_name', 'tagline'],
+          }),
+          {
+            status: 422,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    render(<RefApplyHarness />);
+    fireEvent.click(screen.getByText('Apply via composer'));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Sample Plugin');
+    expect(alert.textContent).toContain('product_name');
+    expect(alert.textContent).toContain('tagline');
+    expect(screen.queryByTestId('context-chip-strip')).toBeNull();
   });
 });

@@ -1258,15 +1258,29 @@ async function readPluginMarketplaceOutcome(
   };
 }
 
-export async function applyPlugin(
+interface ApplyPluginOptions {
+  inputs?: Record<string, unknown>;
+  projectId?: string;
+  grantCaps?: string[];
+  locale?: string;
+}
+
+export interface ApplyPluginFailure {
+  ok: false;
+  status?: number;
+  error?: string;
+  message: string;
+  missingInputFields: string[];
+}
+
+export type ApplyPluginOutcome =
+  | { ok: true; result: ApplyResult }
+  | ApplyPluginFailure;
+
+export async function applyPluginRequest(
   pluginId: string,
-  options: {
-    inputs?: Record<string, unknown>;
-    projectId?: string;
-    grantCaps?: string[];
-    locale?: string;
-  } = {},
-): Promise<ApplyResult | null> {
+  options: ApplyPluginOptions = {},
+): Promise<ApplyPluginOutcome> {
   try {
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/apply`,
@@ -1281,12 +1295,81 @@ export async function applyPlugin(
         }),
       },
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) return readApplyPluginFailure(resp);
     const json = (await resp.json()) as ApplyResult & { ok?: boolean };
-    return json;
-  } catch {
+    return { ok: true, result: json };
+  } catch (err) {
+    return {
+      ok: false,
+      message: (err as Error).message,
+      missingInputFields: [],
+    };
+  }
+}
+
+export async function applyPlugin(
+  pluginId: string,
+  options: ApplyPluginOptions = {},
+): Promise<ApplyResult | null> {
+  const outcome = await applyPluginRequest(pluginId, options);
+  if (!outcome.ok) {
     return null;
   }
+  return outcome.result;
+}
+
+async function readApplyPluginFailure(resp: Response): Promise<ApplyPluginFailure> {
+  let payload: Record<string, unknown> | null = null;
+  try {
+    const json = (await resp.json()) as unknown;
+    if (json && typeof json === 'object') {
+      payload = json as Record<string, unknown>;
+    }
+  } catch {
+    // Use the HTTP status text below.
+  }
+
+  const rawError = payload?.error;
+  const objectError =
+    rawError && typeof rawError === 'object'
+      ? (rawError as { message?: unknown; data?: { errors?: unknown } })
+      : null;
+  const error =
+    typeof rawError === 'string'
+      ? rawError
+      : typeof objectError?.message === 'string'
+        ? objectError.message
+        : undefined;
+  const fields = Array.isArray(payload?.fields)
+    ? payload.fields.filter(
+      (field): field is string => typeof field === 'string' && field.length > 0,
+    )
+    : [];
+  const payloadMessage =
+    typeof payload?.message === 'string'
+      ? payload.message
+      : typeof objectError?.message === 'string'
+        ? objectError.message
+        : undefined;
+  const details = extractErrorDetails(objectError?.data?.errors, payload?.errors);
+  let message =
+    payloadMessage ??
+    (error === 'missing_inputs' ? 'Missing required plugin inputs' : error) ??
+    resp.statusText ??
+    `HTTP ${resp.status}`;
+  if (error === 'missing_inputs' && fields.length > 0) {
+    message = `Missing required plugin inputs: ${fields.join(', ')}`;
+  } else if (details.length > 0) {
+    message = `${message}: ${details.join('; ')}`;
+  }
+
+  return {
+    ok: false,
+    status: resp.status,
+    ...(error ? { error } : {}),
+    message,
+    missingInputFields: fields,
+  };
 }
 
 async function readErrorMessage(resp: Response): Promise<string> {
