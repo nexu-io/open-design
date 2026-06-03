@@ -25,6 +25,7 @@
     "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@open-design/components": "workspace:*",
     "@open-design/daemon": "workspace:*",
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",

@@ -20,6 +20,9 @@ importers:
 
   .:
     devDependencies:
+      '@open-design/components':
+        specifier: workspace:*
+        version: link:packages/components
       '@open-design/daemon':
         specifier: workspace:*
         version: link:apps/daemon
