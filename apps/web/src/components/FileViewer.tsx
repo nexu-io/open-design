@@ -14254,7 +14254,10 @@ function HtmlViewer({
     }
     const selection: WebDisplayDevDeploySelection = {};
     if (displayDevDeployTouched.name && name) selection.name = name;
-    if (displayDevDeployTouched.visibility) selection.visibility = displayDevVisibility;
+    if (displayDevDeployTouched.visibility) {
+      selection.visibility = displayDevVisibility;
+      if (displayDevVisibility !== 'private') selection.sharedWith = [];
+    }
     if (displayDevVisibility === 'private' && displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
     if (displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
     return Object.keys(selection).length > 0 ? selection : undefined;
