@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reportRunCompletedFromDaemon } from '../src/langfuse-bridge.js';
+import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
 interface FakeMessage {
   id: string;
@@ -271,6 +272,56 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(trace.metadata.success).toBe(true);
   });
 
+  it('forwards run prompt telemetry into trace and generation metadata', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt:
+        '# Instructions\n\nUse /Users/alice/project\n\n---\n# User request\n\ndesign a coffee landing page',
+      sections: [
+        { kind: 'daemonSystemPrompt', content: 'Use /Users/alice/project' },
+        { kind: 'userRequest', content: 'design a coffee landing page' },
+      ],
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [{ id: 'msg-1', role: 'assistant', content: 'Here is a draft …' }],
+        }),
+        dataDir,
+        run: makeRun({ promptTelemetry } as any) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    expect(trace.input).toBe('design a coffee landing page');
+    expect(generation.input).toBe('design a coffee landing page');
+    expect(trace.metadata.promptStack.sections[0].redactedContent).toContain(
+      '[REDACTED:path]',
+    );
+    expect(generation.metadata.promptStack).toEqual(trace.metadata.promptStack);
+    expect(
+      trace.metadata.promptStack.sections.some(
+        (section: { kind: string }) => section.kind === 'userRequest',
+      ),
+    ).toBe(true);
+    expect(trace.metadata.promptStack_section_userRequest_present).toBeUndefined();
+  });
+
   it('attaches turn-level config (model / reasoning / skill / DS) to trace + generation', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
@@ -430,7 +481,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(generation.usage.total).toBe(512);
   });
 
-  it('leaves model unknown for a default-model run with no status/model event', async () => {
+  it('uses the default model bucket for a default-model run with no status/model event', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-4',
       telemetry: { metrics: true, content: true, artifactManifest: false },
@@ -442,8 +493,8 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     process.env.LANGFUSE_SECRET_KEY = 'sk';
     try {
       // Request never pinned a concrete model (the `default` placeholder) and
-      // the agent never reported one, so the resolved model is genuinely
-      // unknown. Forwarding `default` would manufacture a fake model bucket.
+      // the agent never reported one. Keep this aligned with PostHog's
+      // model_id bucket so Langfuse traces remain filterable by model state.
       await reportRunCompletedFromDaemon({
         db: makeDbWithListMessages({ 'conv-1': [] }),
         dataDir,
@@ -458,11 +509,9 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     const batch = JSON.parse(init.body as string).batch as any[];
     const trace = batch[0].body;
     const generation = bodyOf(batch, 'generation-create', 'llm');
-    expect(trace.metadata.model).toBeUndefined();
-    expect((trace.tags as string[]).some((t) => t.startsWith('model:'))).toBe(
-      false,
-    );
-    expect(generation.model).toBeUndefined();
+    expect(trace.metadata.model).toBe('default');
+    expect(trace.tags).toEqual(expect.arrayContaining(['model:default']));
+    expect(generation.model).toBe('default');
   });
 
   it('omits artifacts when that gate is off', async () => {

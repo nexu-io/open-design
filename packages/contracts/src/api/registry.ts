@@ -50,6 +50,16 @@ export interface AgentsResponse {
   agents: AgentInfo[];
 }
 
+export type AmrModelsSource = 'preset' | 'remote';
+
+export interface AmrModelsResponse {
+  source: AmrModelsSource;
+  models: AgentModelOption[];
+  refreshing: boolean;
+  stale?: boolean;
+  remoteError?: string;
+}
+
 export type SkillSource = 'built-in' | 'user';
 
 export interface SkillSummary {

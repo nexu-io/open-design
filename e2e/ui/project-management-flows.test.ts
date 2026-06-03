@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
+const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
 const AGENTS = [
   {
@@ -61,6 +62,16 @@ const TAB_SKILLS = [
 ];
 
 test.beforeEach(async ({ page }) => {
+  let appConfig = {
+    onboardingCompleted: true,
+    mode: 'daemon',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    agentModels: { codex: { model: 'default' } },
+    agentCliEnv: {},
+  };
+
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
@@ -79,21 +90,18 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 
   await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
+    if (route.request().method() === 'PUT') {
+      const next = route.request().postDataJSON() as Record<string, unknown>;
+      appConfig = {
+        ...appConfig,
+        ...next,
+      };
+      await route.fulfill({ json: { config: appConfig } });
       return;
     }
     await route.fulfill({
       json: {
-        config: {
-          onboardingCompleted: true,
-          mode: 'daemon',
-          agentId: 'codex',
-          skillId: null,
-          designSystemId: null,
-          agentModels: { codex: { model: 'default' } },
-          agentCliEnv: {},
-        },
+        config: appConfig,
       },
     });
   });
@@ -107,7 +115,15 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('new project tabs switch visible form sections and preserve drafts', async ({ page }) => {
+function artifactPreview(page: Page) {
+  return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
+}
+
+function artifactPreviewFrame(page: Page) {
+  return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
+}
+
+test('[P1] new project tabs switch visible form sections and preserve drafts', async ({ page }) => {
   await page.route('**/api/skills', async (route) => {
     await route.fulfill({ json: { skills: TAB_SKILLS } });
   });
@@ -158,7 +174,7 @@ test('new project tabs switch visible form sections and preserve drafts', async 
   await expect(page.getByText('Aspect', { exact: true })).toBeVisible();
 });
 
-test('projects empty state create action opens the new project flow', async ({ page }) => {
+test('[P0] projects empty state create action opens the new project flow', async ({ page }) => {
   await page.route('**/api/skills', async (route) => {
     await route.fulfill({ json: { skills: TAB_SKILLS } });
   });
@@ -186,7 +202,7 @@ test('projects empty state create action opens the new project flow', async ({ p
   await expect(page.locator('.newproj-title')).toContainText('New prototype');
 });
 
-test('design system multi-select stores primary and inspiration metadata', async ({ page }) => {
+test('[P1] design system multi-select stores primary and inspiration metadata', async ({ page }) => {
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
   });
@@ -225,7 +241,7 @@ test('design system multi-select stores primary and inspiration metadata', async
   ]);
 });
 
-test('design system picker searches and switches the single selected system', async ({ page }) => {
+test('[P1] design system picker searches and switches the single selected system', async ({ page }) => {
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
   });
@@ -258,7 +274,7 @@ test('design system picker searches and switches the single selected system', as
   expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
-test('project detail header keeps the title, design system picker, and execution controls aligned on one row', async ({ page }) => {
+test('[P2] project detail header keeps the title, design system picker, and execution controls aligned on one row', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Header controls stay pinned');
   await expectWorkspaceReady(page);
@@ -290,7 +306,7 @@ test('project detail header keeps the title, design system picker, and execution
   expect(Math.max(...yValues) - Math.min(...yValues)).toBeLessThan(24);
 });
 
-test('project detail header design system picker switches the active project design system', async ({ page }) => {
+test('[P1] project detail header design system picker switches the active project design system', async ({ page }) => {
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
   });
@@ -320,7 +336,7 @@ test('project detail header design system picker switches the active project des
   expect(body.designSystemId).toBe('editorial-noir');
 });
 
-test('project detail header design system switch carries into the next run request', async ({ page }) => {
+test('[P0] project detail header design system switch carries into the next run request', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
     const raw = route.request().postData();
@@ -372,7 +388,69 @@ test('project detail header design system switch carries into the next run reque
   expect(runRequestBodies[0]?.designSystemId).toBe('editorial-noir');
 });
 
-test('project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
+test('[P0] project instructions flow into the next API run as project-level system prompt context', async ({ page }) => {
+  let capturedSystemPrompt = '';
+  const apiConfig = {
+    onboardingCompleted: true,
+    mode: 'api',
+    apiProtocol: 'openai',
+    apiKey: 'sk-project-test',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4.1-mini',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ([key, config]) => {
+      window.localStorage.setItem(key, JSON.stringify(config));
+    },
+    [STORAGE_KEY, apiConfig] as const,
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { config: apiConfig } });
+  });
+  await page.route('**/api/proxy/openai/stream', async (route) => {
+    const body = route.request().postDataJSON() as { systemPrompt?: string };
+    capturedSystemPrompt = body.systemPrompt ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: [
+        'event: delta',
+        `data: ${JSON.stringify({ text: 'ok' })}`,
+        '',
+        'event: done',
+        'data: {}',
+        '',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Project instruction run context');
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('project-instructions-add').click();
+  await page.getByTestId('project-instructions-textarea').fill('Use tabs for indentation and keep CTA copy terse.');
+  await page.getByTestId('project-instructions-save').click();
+  await expect(page.getByTestId('project-instructions-preview')).toContainText('Use tabs for indentation and keep CTA copy terse.');
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Generate the onboarding screen.');
+  await page.getByTestId('chat-send').click();
+
+  await expect.poll(() => capturedSystemPrompt).toContain('## Custom instructions (project-level)');
+  expect(capturedSystemPrompt).toContain('Use tabs for indentation and keep CTA copy terse.');
+});
+
+test('[P0] project detail avatar menu lets the user switch Local CLI agents and models', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Header agent switch');
   await expectWorkspaceReady(page);
@@ -386,14 +464,119 @@ test('project detail avatar menu lets the user switch Local CLI agents and model
   await claudeButton.click();
 
   await expect(claudeButton).toHaveAttribute('aria-current', 'true');
-  const modelSelect = menu.locator('.avatar-model-section .avatar-select').first();
+  const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await expect(modelSelect).toBeVisible();
-  await expect(modelSelect).toHaveValue('default');
-  await modelSelect.selectOption('sonnet');
-  await expect(modelSelect).toHaveValue('sonnet');
+  await expect(modelSelect).toContainText(/default/i);
+  await modelSelect.click();
+  await page.getByRole('option', { name: /Sonnet/i }).click();
+  await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
-test('project title rename persists after reload and ignores blank titles', async ({ page }) => {
+test('[P0] project detail agent and model switches carry into the next daemon run request', async ({ page }) => {
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/runs', async (route) => {
+    const raw = route.request().postData();
+    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"agent-model-run"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Header agent switch run context');
+  await expectWorkspaceReady(page);
+
+  const trigger = page.locator('.avatar-menu .avatar-agent-trigger');
+  await trigger.click();
+  const menu = page.locator('.avatar-popover[role="dialog"]');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('button', { name: /Claude Code/i }).click();
+  const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
+  await modelSelect.click();
+  await page.getByRole('option', { name: /Sonnet/i }).click();
+  await expect(modelSelect).toContainText(/Sonnet/i);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Use the selected local agent for this run.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  expect(runRequestBodies.length).toBeGreaterThan(0);
+  expect(runRequestBodies[0]?.agentId).toBe('claude');
+  expect(runRequestBodies[0]?.model).toBe('sonnet');
+});
+
+test('[P0] clearing the project design system removes designSystemId from the next run request', async ({ page }) => {
+  const patchBodies: Array<Record<string, unknown>> = [];
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+  await page.route('**/api/projects/*', async (route) => {
+    if (route.request().method() !== 'PATCH') {
+      await route.continue();
+      return;
+    }
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    patchBodies.push(body);
+    await route.continue();
+  });
+  await page.route('**/api/runs', async (route) => {
+    const raw = route.request().postData();
+    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"design-system-clear-run"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Header design system clear run context');
+  await expectWorkspaceReady(page);
+
+  const trigger = page.getByTestId('project-ds-picker-trigger');
+  await trigger.click();
+  await page.getByTestId('project-ds-picker-search').fill('editorial');
+  await page.getByTestId('project-ds-picker-option-editorial-noir').click();
+  await expect(trigger).toContainText(/Editorial Noir/i);
+
+  await trigger.click();
+  await page.locator('.project-ds-picker-option').first().click();
+  await expect(trigger).not.toContainText(/Editorial Noir/i);
+
+  expect(patchBodies.some((body) => Object.prototype.hasOwnProperty.call(body, 'designSystemId') && body.designSystemId === null)).toBe(true);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Generate this without an active design system.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  expect(runRequestBodies.length).toBeGreaterThan(0);
+  expect(runRequestBodies[0]?.designSystemId).toBeNull();
+});
+
+test('[P1] project title rename persists after reload and ignores blank titles', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Original rename title');
   await expectWorkspaceReady(page);
@@ -416,7 +599,7 @@ test('project title rename persists after reload and ignores blank titles', asyn
 });
 
 
-test('project header keeps the settings, handoff, and avatar controls pinned on compact desktop widths', async ({ page }) => {
+test('[P2] project header keeps the settings, handoff, and avatar controls pinned on compact desktop widths', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await page.goto('/');
   await createProject(page, 'Header controls stay pinned');
@@ -449,7 +632,7 @@ test('project header keeps the settings, handoff, and avatar controls pinned on 
   expect(layout.avatarRight).toBeLessThanOrEqual(layout.viewportWidth - 8);
 });
 
-test('canceling design file deletion keeps the file and open tab', async ({ page }) => {
+test('[P1] canceling design file deletion keeps the file and open tab', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Design file delete cancel flow');
   await expectWorkspaceReady(page);
@@ -475,7 +658,7 @@ test('canceling design file deletion keeps the file and open tab', async ({ page
   expect(files.map((file) => file.name)).toContain(uploadedName);
 });
 
-test('project detail workspace keeps design file tabs and preview controls visible for uploaded html artifacts', async ({ page }) => {
+test('[P1] project detail workspace keeps design file tabs and preview controls visible for uploaded html artifacts', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Workspace preview structure');
   await expectWorkspaceReady(page);
@@ -487,20 +670,14 @@ test('project detail workspace keeps design file tabs and preview controls visib
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: 'Design Files' })).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
-  const fileRow = rowByFileName(page, uploadedName);
-  await expect(fileRow).toBeVisible();
-  await fileRow.getByRole('button').first().click();
-  const previewCard = page.getByTestId('design-file-preview');
-  await expect(previewCard).toBeVisible();
-  await previewCard.getByRole('button', { name: 'Open' }).click();
+  await openUploadedHtmlArtifactPreview(page, uploadedName);
 
   const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewModeTabs.getByRole('tab', { name: 'Preview' })).toBeVisible();
   await expect(viewModeTabs.getByRole('tab', { name: 'Code' })).toBeVisible();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'Workspace Preview Structure' }),
+    artifactPreviewFrame(page).getByRole('heading', { name: 'Workspace Preview Structure' }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: /Preview viewport/i })).toBeVisible();
 
@@ -511,10 +688,152 @@ test('project detail workspace keeps design file tabs and preview controls visib
   await expect(sourceViewer).toContainText('<!doctype html>');
 
   await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
 });
 
-test('home design card deletion supports cancel and confirm flows', async ({ page }) => {
+test('[P0] project detail share menu copies the current share link for uploaded html artifacts', async ({ page }) => {
+  let uploadedName = '';
+  await page.addInitScript(() => {
+    const store: string[] = [];
+    Object.defineProperty(window, '__copiedTexts', {
+      value: store,
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText(text: string) {
+          store.push(text);
+          return Promise.resolve();
+        },
+      },
+      configurable: true,
+    });
+  });
+  await page.route('**/api/projects/*/deployments', async (route) => {
+    await route.fulfill({
+      json: {
+        deployments: uploadedName
+          ? [{
+              id: 'ready-share-link',
+              projectId: getProjectIdFromApiPath(route.request().url()),
+              fileName: uploadedName,
+              providerId: 'vercel-self',
+              url: 'https://share-preview.example',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              createdAt: 1,
+              updatedAt: 2,
+            }]
+          : [],
+      },
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Share link copy flow');
+  await expectWorkspaceReady(page);
+
+  uploadedName = await uploadTinyHtml(page, 'share-link-copy.html', '<!doctype html><html><body><h1>Share link copy</h1></body></html>');
+  await openUploadedHtmlArtifactPreview(page, uploadedName);
+
+  await page.getByRole('button', { name: /^Share$/i }).click();
+  await page.getByRole('menuitem', { name: /^Copy share link$/i }).click();
+  await expect(page.getByRole('menuitem', { name: /^Copied!$/i })).toBeVisible();
+
+  const copied = await page.evaluate(() => (window as typeof window & { __copiedTexts?: string[] }).__copiedTexts ?? []);
+  expect(copied.at(-1)).toBe('https://share-preview.example');
+});
+
+test('[P0] project detail share menu opens the current share page for uploaded html artifacts', async ({ page }) => {
+  let uploadedName = '';
+  await page.addInitScript(() => {
+    const opened: string[] = [];
+    Object.defineProperty(window, '__openedUrls', {
+      value: opened,
+      configurable: true,
+    });
+    const originalOpen = window.open.bind(window);
+    window.open = ((...args: Parameters<typeof window.open>) => {
+      if (typeof args[0] === 'string') opened.push(args[0]);
+      return originalOpen(...args);
+    }) as typeof window.open;
+  });
+  await page.route('**/api/projects/*/deployments', async (route) => {
+    await route.fulfill({
+      json: {
+        deployments: uploadedName
+          ? [{
+              id: 'protected-share-link',
+              projectId: getProjectIdFromApiPath(route.request().url()),
+              fileName: uploadedName,
+              providerId: 'vercel-self',
+              url: 'https://protected-share.example',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'protected',
+              createdAt: 1,
+              updatedAt: 2,
+            }]
+          : [],
+      },
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Open share page flow');
+  await expectWorkspaceReady(page);
+
+  uploadedName = await uploadTinyHtml(page, 'share-page-open.html', '<!doctype html><html><body><h1>Open share page</h1></body></html>');
+  await openUploadedHtmlArtifactPreview(page, uploadedName);
+
+  await page.getByRole('button', { name: /^Share$/i }).click();
+  await page.getByRole('menuitem', { name: /Open share page/i }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as typeof window & { __openedUrls?: string[] }).__openedUrls ?? []),
+    )
+    .toContain('https://protected-share.example');
+});
+
+test('[P0] project detail share menu publish action opens the deploy flow for the selected provider', async ({ page }) => {
+  let deployConfigUrl: string | null = null;
+  await page.route('**/api/projects/*/deployments', async (route) => {
+    await route.fulfill({ json: { deployments: [] } });
+  });
+  await page.route('**/api/deploy/config?providerId=*', async (route) => {
+    deployConfigUrl = route.request().url();
+    const url = new URL(route.request().url());
+    await route.fulfill({
+      json: {
+        configured: false,
+        providerId: url.searchParams.get('providerId'),
+        tokenMask: '',
+        teamId: '',
+        teamSlug: '',
+      },
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Deploy action flow');
+  await expectWorkspaceReady(page);
+
+  const uploadedName = await uploadTinyHtml(page, 'deploy-action.html', '<!doctype html><html><body><h1>Deploy action</h1></body></html>');
+  await openUploadedHtmlArtifactPreview(page, uploadedName);
+
+  await page.getByRole('button', { name: /^Share$/i }).click();
+  await page.getByRole('menuitem', { name: /^Deploy to Vercel$/i }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /Deploy to Vercel/i })).toBeVisible();
+  await expect(dialog.locator('select').first()).toHaveValue('vercel-self');
+  expect(deployConfigUrl).toContain('providerId=vercel-self');
+});
+
+test('[P1] home design card deletion supports cancel and confirm flows', async ({ page }) => {
   const projectName = `Home delete design flow ${Date.now()}`;
   await page.goto('/');
   await createProject(page, projectName);
@@ -552,7 +871,7 @@ test('home design card deletion supports cancel and confirm flows', async ({ pag
   expect(response.status()).toBe(404);
 });
 
-test('home designs view toggle switches between grid and kanban and persists', async ({ page }) => {
+test('[P2] home designs view toggle switches between grid and kanban and persists', async ({ page }) => {
   const projectName = `Home view toggle flow ${Date.now()}`;
   await page.goto('/');
   await createProject(page, projectName);
@@ -585,7 +904,7 @@ test('home designs view toggle switches between grid and kanban and persists', a
   await expect(page.getByTestId('designs-view-grid')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('home designs search filters projects and recovers from no results', async ({ page }) => {
+test('[P1] home designs search filters projects and recovers from no results', async ({ page }) => {
   const stamp = Date.now();
   const alphaName = `Home search alpha ${stamp}`;
   const betaName = `Home search beta ${stamp}`;
@@ -627,7 +946,7 @@ test('home designs search filters projects and recovers from no results', async 
   );
 });
 
-test('projects sub tabs switch between Recent and Your designs ordering', async ({ page }) => {
+test('[P2] projects sub tabs switch between Recent and Your designs ordering', async ({ page }) => {
   const now = Date.now();
   const projects = [
     makeProjectsTabProject({
@@ -686,7 +1005,7 @@ test('projects sub tabs switch between Recent and Your designs ordering', async 
   );
 });
 
-test('projects grid card rename updates the card title and persists after reload', async ({ page }) => {
+test('[P1] projects grid card rename updates the card title and persists after reload', async ({ page }) => {
   const originalName = `Projects rename flow ${Date.now()}`;
   const renamedName = `${originalName} renamed`;
   await page.goto('/');
@@ -719,7 +1038,7 @@ test('projects grid card rename updates the card title and persists after reload
   expect(project.name).toBe(renamedName);
 });
 
-test('projects select mode supports multi-select delete with cancel and confirm', async ({ page }) => {
+test('[P1] projects select mode supports multi-select delete with cancel and confirm', async ({ page }) => {
   const firstName = `Batch delete A ${Date.now()}`;
   const secondName = `Batch delete B ${Date.now()}`;
   await page.goto('/');
@@ -764,7 +1083,7 @@ test('projects select mode supports multi-select delete with cancel and confirm'
   expect(secondResponse.status()).toBe(404);
 });
 
-test('projects kanban cards open projects and support delete cancel and confirm', async ({ page }) => {
+test('[P1] projects kanban cards open projects and support delete cancel and confirm', async ({ page }) => {
   const projectName = `Kanban flow ${Date.now()}`;
   await page.goto('/');
   await createProject(page, projectName);
@@ -807,7 +1126,7 @@ test('projects kanban cards open projects and support delete cancel and confirm'
   expect(response.status()).toBe(404);
 });
 
-test('projects page shows the empty state when there are no projects', async ({ page }) => {
+test('[P2] projects page shows the empty state when there are no projects', async ({ page }) => {
   await page.route('**/api/projects', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { projects: [] } });
@@ -824,7 +1143,7 @@ test('projects page shows the empty state when there are no projects', async ({ 
   await expect(page.locator('.design-kanban-board')).toHaveCount(0);
 });
 
-test('projects page shows the no-results state and recovers when search is cleared', async ({ page }) => {
+test('[P2] projects page shows the no-results state and recovers when search is cleared', async ({ page }) => {
   const projects = [
     makeProjectsTabProject({
       id: 'proj-search-1',
@@ -859,7 +1178,7 @@ test('projects page shows the no-results state and recovers when search is clear
   await expect(homeDesignCard(page, 'Searchable Prototype')).toBeVisible();
 });
 
-test('projects grid overflow menu closes on outside click and Escape', async ({ page }) => {
+test('[P2] projects grid overflow menu closes on outside click and Escape', async ({ page }) => {
   const projects = [
     makeProjectsTabProject({
       id: 'proj-menu-1',
@@ -899,7 +1218,7 @@ test('projects grid overflow menu closes on outside click and Escape', async ({ 
   await expect(menu).toHaveCount(0);
 });
 
-test('projects kanban view groups cards into status columns', async ({ page }) => {
+test('[P2] projects kanban view groups cards into status columns', async ({ page }) => {
   const now = Date.now();
   const projects = [
     makeProjectsTabProject({
@@ -971,7 +1290,7 @@ test('projects kanban view groups cards into status columns', async ({ page }) =
   );
 });
 
-test('projects page shows live artifact cards, supports search, and opens the live artifact project', async ({ page }) => {
+test('[P1] projects page shows live artifact cards, supports search, and opens the live artifact project', async ({ page }) => {
   const liveProject = makeProjectsTabProject({
     id: 'proj-live',
     name: 'Orbit Daily Digest',
@@ -1056,11 +1375,11 @@ test('projects page shows live artifact cards, supports search, and opens the li
   await expect(homeDesignCard(page, 'Regular Prototype')).toHaveCount(0);
 
   await liveCard.click();
-  await expect(page).toHaveURL(/\/projects\/proj-live$/);
+  await expect(page).toHaveURL(/\/projects\/proj-live\/files\/live%3Aartifact-1$/);
   await expect(page.getByTestId('project-title')).toContainText('Orbit Daily Digest');
 });
 
-test('change pet opens pet settings and updates the custom companion draft', async ({ page }) => {
+test('[P2] change pet opens pet settings and updates the custom companion draft', async ({ page }) => {
   await seedAdoptedPet(page);
   await page.route('**/api/codex-pets', async (route) => {
     await route.fulfill({ json: { pets: [], rootDir: '' } });
@@ -1201,6 +1520,16 @@ async function uploadTinyPng(
   return uploaded!.name;
 }
 
+async function openUploadedHtmlArtifactPreview(page: Page, uploadedName: string) {
+  await page.getByTestId('design-files-tab').click();
+  const fileRow = rowByFileName(page, uploadedName);
+  await expect(fileRow).toBeVisible();
+  await fileRow.getByRole('button').first().click();
+  const previewCard = page.getByTestId('design-file-preview');
+  await expect(previewCard).toBeVisible();
+  await previewCard.getByRole('button', { name: 'Open' }).click();
+}
+
 function tabBySuffix(page: Page, name: string): Locator {
   return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') });
 }
@@ -1298,6 +1627,13 @@ function getProjectContextFromUrl(page: Page) {
   const [, projectId] = url.pathname.match(/\/projects\/([^/]+)/) ?? [];
   if (!projectId) throw new Error(`unexpected project route: ${url.pathname}`);
   return { projectId };
+}
+
+function getProjectIdFromApiPath(rawUrl: string) {
+  const url = new URL(rawUrl);
+  const [, projectId] = url.pathname.match(/\/api\/projects\/([^/]+)/) ?? [];
+  if (!projectId) throw new Error(`unexpected project api path: ${url.pathname}`);
+  return projectId;
 }
 
 function escapeRegExp(value: string): string {

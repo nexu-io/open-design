@@ -1,19 +1,24 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AvatarMenu } from '../../src/components/AvatarMenu';
-import { I18nProvider } from '../../src/i18n';
-import type { AgentInfo, AppConfig } from '../../src/types';
+import type { AgentInfo, AppConfig, ExecMode } from '../../src/types';
+
+vi.mock('../../src/i18n', () => ({
+  useT: () => (key: string) => key,
+}));
 
 const codexAgent: AgentInfo = {
   id: 'codex',
   name: 'Codex CLI',
   bin: 'codex',
   available: true,
+  version: '0.134.0',
   models: [
-    { id: 'default', label: 'Default' },
+    { id: 'default', label: 'Default (CLI config)' },
     {
       id: 'gpt-5.5',
       label: 'GPT-5.5',
@@ -21,7 +26,22 @@ const codexAgent: AgentInfo = {
     },
     { id: 'gpt-5.4', label: 'GPT-5.4' },
   ],
-  reasoningOptions: [{ id: 'medium', label: 'Medium' }],
+  reasoningOptions: [
+    { id: 'default', label: 'Default' },
+    { id: 'high', label: 'High' },
+  ],
+};
+
+const claudeAgent: AgentInfo = {
+  id: 'claude',
+  name: 'Claude Code',
+  bin: 'claude',
+  available: true,
+  version: '2.1.131',
+  models: [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'sonnet', label: 'Sonnet (alias)' },
+  ],
 };
 
 const baseConfig: AppConfig = {
@@ -30,63 +50,192 @@ const baseConfig: AppConfig = {
   apiProtocol: 'anthropic',
   apiVersion: '',
   baseUrl: 'https://api.anthropic.com',
-  model: 'claude-sonnet-4-5',
   apiProviderBaseUrl: 'https://api.anthropic.com',
   apiProtocolConfigs: {},
+  model: 'claude-sonnet-4-5',
   agentId: 'codex',
   skillId: null,
   designSystemId: null,
   onboardingCompleted: true,
   mediaProviders: {},
-  agentModels: { codex: { model: 'gpt-5.5' } },
+  agentModels: { codex: { model: 'default', reasoning: 'default' } },
   agentCliEnv: {},
 };
 
-function renderAvatarMenu(
-  config: AppConfig = baseConfig,
-  onAgentModelChange = vi.fn(),
-) {
+type ModeChangeHandler = (mode: ExecMode) => void;
+type AgentChangeHandler = (id: string) => void;
+type AgentModelChangeHandler = (
+  id: string,
+  choice: { model?: string; reasoning?: string; serviceTier?: string },
+) => void;
+type VoidHandler = () => void;
+
+function renderMenu({
+  config = baseConfig,
+  agents = [codexAgent, claudeAgent],
+  daemonLive = true,
+  onModeChange = vi.fn<ModeChangeHandler>(),
+  onAgentChange = vi.fn<AgentChangeHandler>(),
+  onAgentModelChange = vi.fn<AgentModelChangeHandler>(),
+  onOpenSettings = vi.fn<VoidHandler>(),
+  onRefreshAgents = vi.fn<VoidHandler>(),
+}: {
+  config?: AppConfig;
+  agents?: AgentInfo[];
+  daemonLive?: boolean;
+  onModeChange?: ReturnType<typeof vi.fn<ModeChangeHandler>>;
+  onAgentChange?: ReturnType<typeof vi.fn<AgentChangeHandler>>;
+  onAgentModelChange?: ReturnType<typeof vi.fn<AgentModelChangeHandler>>;
+  onOpenSettings?: ReturnType<typeof vi.fn<VoidHandler>>;
+  onRefreshAgents?: ReturnType<typeof vi.fn<VoidHandler>>;
+} = {}) {
   render(
-    <I18nProvider initial="en">
-      <AvatarMenu
-        config={config}
-        agents={[codexAgent]}
-        daemonLive={true}
-        onModeChange={vi.fn()}
-        onAgentChange={vi.fn()}
-        onAgentModelChange={onAgentModelChange}
-        onOpenSettings={vi.fn()}
-        onRefreshAgents={vi.fn()}
-      />
-    </I18nProvider>,
+    <AvatarMenu
+      config={config}
+      agents={agents}
+      daemonLive={daemonLive}
+      onModeChange={onModeChange}
+      onAgentChange={onAgentChange}
+      onAgentModelChange={onAgentModelChange}
+      onOpenSettings={onOpenSettings}
+      onRefreshAgents={onRefreshAgents}
+    />,
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Account & settings' }));
-  return { onAgentModelChange };
+  return {
+    onModeChange,
+    onAgentChange,
+    onAgentModelChange,
+    onOpenSettings,
+    onRefreshAgents,
+  };
 }
 
-describe('AvatarMenu service tier picker', () => {
+function openMenu() {
+  fireEvent.click(screen.getByRole('button', { name: 'avatar.title' }));
+  return screen.getByRole('dialog', { name: 'avatar.title' });
+}
+
+describe('AvatarMenu', () => {
   afterEach(() => {
     cleanup();
+    vi.clearAllMocks();
   });
 
-  it('shows service tier choices only when the selected model supports them', () => {
-    const { onAgentModelChange } = renderAvatarMenu();
+  it('opens execution settings when Local CLI is selected while the daemon is offline', () => {
+    const onOpenSettings = vi.fn();
+    renderMenu({
+      daemonLive: false,
+      onOpenSettings,
+    });
 
-    const serviceTierSelect = screen.getByRole('combobox', { name: 'Service tier' });
-    expect(serviceTierSelect).toBeTruthy();
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: /avatar.useLocal/i }));
 
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('rescans agents and re-renders newly available CLI entries', async () => {
+    function Harness() {
+      const [agents, setAgents] = useState<AgentInfo[]>([
+        codexAgent,
+        { ...claudeAgent, available: false },
+      ]);
+      return (
+        <AvatarMenu
+          config={baseConfig}
+          agents={agents}
+          daemonLive={true}
+          onModeChange={vi.fn()}
+          onAgentChange={vi.fn()}
+          onAgentModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onRefreshAgents={() => {
+            setAgents([codexAgent, claudeAgent]);
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    openMenu();
+    expect(screen.queryByRole('button', { name: /Claude Code/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'avatar.rescan' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Claude Code/i })).toBeTruthy();
+    });
+  });
+
+  it('routes reasoning selection changes through onAgentModelChange', () => {
+    const onAgentModelChange = vi.fn();
+    renderMenu({ onAgentModelChange });
+
+    openMenu();
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[1]!, { target: { value: 'high' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      reasoning: 'high',
+    });
+  });
+
+  it('routes service tier selection changes through onAgentModelChange', () => {
+    const onAgentModelChange = vi.fn();
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentModels: { codex: { model: 'gpt-5.5', reasoning: 'default' } },
+      },
+      onAgentModelChange,
+    });
+
+    openMenu();
+    const serviceTierSelect = screen.getByRole('combobox', {
+      name: 'avatar.serviceTierLabel',
+    });
     fireEvent.change(serviceTierSelect, { target: { value: 'priority' } });
+
     expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
       serviceTier: 'priority',
     });
   });
 
   it('hides service tier choices for models without service tiers', () => {
-    renderAvatarMenu({
-      ...baseConfig,
-      agentModels: { codex: { model: 'gpt-5.4' } },
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentModels: { codex: { model: 'gpt-5.4', reasoning: 'default' } },
+      },
     });
 
-    expect(screen.queryByRole('combobox', { name: 'Service tier' })).toBeNull();
+    openMenu();
+    expect(
+      screen.queryByRole('combobox', { name: 'avatar.serviceTierLabel' }),
+    ).toBeNull();
+  });
+
+  it('keeps a custom saved model visible when it is not in the declared agent model list', () => {
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentModels: { codex: { model: 'custom-codex-model', reasoning: 'default' } },
+      },
+    });
+
+    openMenu();
+    // The model picker is a SearchableModelSelect: a combobox button whose
+    // label shows the active selection, backed by a popover listbox. A custom
+    // saved model that isn't in the agent's declared list is injected as an
+    // additional option so it stays selectable instead of silently dropping.
+    const modelCombobox = screen.getAllByRole('combobox')[0] as HTMLButtonElement;
+    expect(modelCombobox.textContent).toContain('custom-codex-model');
+
+    fireEvent.click(modelCombobox);
+    const popover = screen.getByTestId('avatar-model-popover');
+    expect(
+      within(popover).getByRole('option', { name: /custom-codex-model/i }),
+    ).toBeTruthy();
   });
 });

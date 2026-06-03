@@ -474,8 +474,17 @@ const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
 const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
 const e2eAllowedScripts = [
   "test",
+  "test:p0",
+  "test:p0p1",
+  "test:p1",
+  "test:p2",
+  "test:ui",
   "test:ui:critical",
   "test:ui:extended",
+  "test:ui:p0",
+  "test:ui:p0p1",
+  "test:ui:p1",
+  "test:ui:p2",
   "typecheck",
 ];
 

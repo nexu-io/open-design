@@ -89,6 +89,66 @@ describe('structured agent stream fixtures', () => {
     });
   });
 
+  it('emits live tool_input_delta fragments while a Write streams, plus the final tool_use', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu-1', name: 'Write' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: '{"file_path":"page.html",' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: '"content":"<html>"}' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_stop', index: 0 },
+    })}\n${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [{ type: 'tool_use', id: 'toolu-1', name: 'Write', input: {} }],
+      },
+    })}\n`);
+    handler.flush();
+
+    const inputDeltas = events.filter(
+      (event): event is { type: string; id: string; name: string; delta: string } =>
+        typeof event === 'object' && event !== null && (event as { type?: string }).type === 'tool_input_delta',
+    );
+    expect(inputDeltas).toEqual([
+      { type: 'tool_input_delta', id: 'toolu-1', name: 'Write', delta: '{"file_path":"page.html",' },
+      { type: 'tool_input_delta', id: 'toolu-1', name: 'Write', delta: '"content":"<html>"}' },
+    ]);
+
+    const toolUses = events.filter(
+      (event) => typeof event === 'object' && event !== null && (event as { type?: string }).type === 'tool_use',
+    );
+    expect(toolUses).toContainEqual({
+      type: 'tool_use',
+      id: 'toolu-1',
+      name: 'Write',
+      input: { file_path: 'page.html', content: '<html>' },
+    });
+  });
+
   it('preserves Claude Code tool input from content_block_start when no delta arrives', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));

@@ -290,12 +290,13 @@
   color: var(--danger, #c33);
 }
 
-/* Context chip strip — small pill list of typed context items the
-   active plugin contributed. Sits inside `.plugins-section__active`. */
+/* Context chip strip — pill list of typed context items the active plugin
+   contributed. Lives in .plugins-section__active. Per-kind hue/tint set
+   once via --c-hue/--c-tint; dot + tint + border + text all derive. */
 .context-chip-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
+  gap: 5px 6px;
   align-items: center;
 }
 .context-chip-strip__empty {
@@ -303,133 +304,360 @@
   color: var(--text-muted);
 }
 .context-chip-strip__chip {
+  --c-hue: var(--accent);
+  --c-tint: var(--accent-tint);
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 0 2px 0 0;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  gap: 1px;
+  padding: 0 3px 0 0;
+  border-radius: var(--radius-pill);
+  background: var(--c-tint);
+  border: 1px solid color-mix(in srgb, var(--c-hue) 22%, var(--border));
   font-size: 11px;
-  color: var(--text);
+  color: color-mix(in srgb, var(--c-hue) 70%, var(--text-strong));
   max-width: 240px;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Per-kind accent stripe — keeps the chip recognisable at a glance
-   without leaning on color-only differentiation (the icon does most
-   of the work). Uses border-left for skill, design-system, etc. */
-.context-chip-strip__chip[data-kind='skill'] {
-  border-left: 3px solid var(--accent, #6e7bff);
+.context-chip-strip__chip:hover {
+  border-color: color-mix(in srgb, var(--c-hue) 38%, var(--border));
+}
+/* Per-kind hue map — one assignment drives the whole chip. */
+.context-chip-strip__chip[data-kind='skill'],
+.context-chip-strip__chip[data-kind='plugin'] {
+  --c-hue: var(--accent); --c-tint: var(--accent-tint);
 }
 .context-chip-strip__chip[data-kind='design-system'] {
-  border-left: 3px solid #d6a648;
+  --c-hue: var(--amber); --c-tint: var(--amber-bg);
 }
 .context-chip-strip__chip[data-kind='craft'] {
-  border-left: 3px solid #6dbf6d;
+  --c-hue: var(--green); --c-tint: var(--green-bg);
 }
 .context-chip-strip__chip[data-kind='asset'] {
-  border-left: 3px solid #8a8a8a;
+  --c-hue: var(--text-soft); --c-tint: var(--bg-subtle);
 }
 .context-chip-strip__chip[data-kind='mcp'] {
-  border-left: 3px solid #c47bd9;
+  --c-hue: var(--purple); --c-tint: var(--purple-bg);
 }
 .context-chip-strip__chip[data-kind='claude-plugin'] {
-  border-left: 3px solid #d97757;
+  --c-hue: var(--accent-strong); --c-tint: var(--accent-tint);
 }
 .context-chip-strip__chip[data-kind='atom'] {
-  border-left: 3px solid #5fb8d1;
-}
-.context-chip-strip__chip[data-kind='plugin'] {
-  border-left: 3px solid var(--accent, #6e7bff);
+  --c-hue: var(--blue); --c-tint: var(--blue-bg);
 }
 .context-chip-strip__body {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px 2px 8px;
+  gap: 5px;
+  padding: 3px 7px 3px 9px;
   background: transparent;
   border: none;
   color: inherit;
   font: inherit;
   cursor: default;
   text-align: left;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   min-width: 0;
 }
-.context-chip-strip__chip.is-interactive .context-chip-strip__body {
-  cursor: pointer;
-}
+.context-chip-strip__chip.is-interactive .context-chip-strip__body { cursor: pointer; }
 .context-chip-strip__chip.is-interactive .context-chip-strip__body:hover {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  background: color-mix(in srgb, var(--c-hue) 12%, transparent);
 }
+/* Leading type dot — replaces the old border-left stripe; matches the
+   @mention pill grammar. Sits before the existing <Icon> (no JSX change). */
 .context-chip-strip__icon {
   display: inline-flex;
   align-items: center;
-  color: var(--text-muted);
+  color: var(--c-hue);
 }
-.context-chip-strip__chip.is-interactive .context-chip-strip__body:hover
-  .context-chip-strip__icon {
-  color: var(--accent, var(--text));
+.context-chip-strip__icon::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--c-hue);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-hue) 20%, transparent);
+  flex: 0 0 auto;
 }
 .context-chip-strip__kind {
-  font-size: 10px;
+  font-size: 9.5px;
+  font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  color: color-mix(in srgb, var(--c-hue) 60%, var(--text-muted));
 }
 .context-chip-strip__label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text);
+  font-weight: 550;
 }
 .context-chip-strip__remove {
   appearance: none;
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--c-hue) 50%, var(--text-muted));
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
-  padding: 0 4px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  opacity: 0; /* hover-reveal */
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+.context-chip-strip__chip:hover .context-chip-strip__remove,
+.context-chip-strip__remove:focus-visible { opacity: 1; }
 .context-chip-strip__remove:hover {
-  color: var(--text);
+  background: color-mix(in srgb, var(--c-hue) 16%, transparent);
+  color: color-mix(in srgb, var(--c-hue) 85%, var(--text-strong));
 }
 
-/* Plugin inputs form — appears when the active plugin declares
-   `od.inputs[]`. Compact stacked label/input pairs. */
+/* Plugin inputs form — appears when the active plugin declares od.inputs[]
+   ("Artifact kind", "Brief", …). Compact stacked label/input pairs, a
+   hairline separating them from the chip strip above. */
 .plugin-inputs-form {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
 }
 .plugin-inputs-form__field {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .plugin-inputs-form__label {
-  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 .plugin-inputs-form__required {
-  color: var(--danger, #c33);
-  margin-left: 2px;
+  color: var(--red);
+  margin-left: 3px;
+  font-weight: 700;
 }
 .plugin-inputs-form__input {
   font: inherit;
   font-size: 12.5px;
-  padding: 5px 8px;
+  line-height: 1.45;
+  padding: 7px 9px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+.plugin-inputs-form__input::placeholder { color: var(--text-faint); }
+.plugin-inputs-form__input:hover:not(:focus) { border-color: var(--border-strong); }
 .plugin-inputs-form__input:focus {
-  outline: 1px solid var(--accent);
-  outline-offset: 0;
-  border-color: var(--accent);
+  outline: none;
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+  background: var(--bg-panel);
 }
 .plugin-inputs-form__input--textarea {
-  min-height: 56px;
+  min-height: 64px;
   resize: vertical;
+}
+select.plugin-inputs-form__input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+.plugin-inputs-form__field[data-field-type='boolean'] {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-inputs-form__field[data-field-type='boolean'] .plugin-inputs-form__input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.plugin-inputs-form__field[data-field-type='boolean'] .plugin-inputs-form__label {
+  order: 1;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text);
+}
+.plugin-inputs-form__file-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.plugin-inputs-form__file-shell:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--text);
+}
+.plugin-inputs-form__file-shell:focus-within {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+.plugin-inputs-form__input--file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
+}
+.plugin-inputs-form__file-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plugin-inputs-form__field[data-filled='true'] .plugin-inputs-form__label {
+  color: var(--text);
+}
+
+/* Chat composer mount: the active plugin block behaves like a compact
+   tool configuration surface, not a full settings card. */
+.composer-shell .plugins-section {
+  gap: 0;
+  margin-top: -1px;
+}
+.composer-shell .plugins-section__active {
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border-soft));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-subtle) 64%, var(--bg-panel));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 82%, transparent);
+}
+/* Composer context bar — the applied plugin reads like a single, refined
+   file-context chip: a small type icon + the name + a hover-reveal ×. No
+   chunky icon badge, no categorized KIND prefix, no inner shadow. */
+.composer-shell .context-chip-strip {
+  gap: 6px;
+}
+.composer-shell .context-chip-strip__chip {
+  min-height: 24px;
+  max-width: 100%;
+  gap: 0;
+  padding: 0 3px 0 0;
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--c-tint));
+  border-color: color-mix(in srgb, var(--c-hue) 16%, var(--border-soft));
+}
+.composer-shell .context-chip-strip__body {
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 6px 2px 8px;
+}
+/* Drop the badge box — let a small, hue-tinted type icon lead, exactly
+   like a file context chip. */
+.composer-shell .context-chip-strip__icon {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: color-mix(in srgb, var(--c-hue) 80%, var(--text));
+}
+.composer-shell .context-chip-strip__icon::before {
+  display: none; /* the type icon already leads — no redundant dot */
+}
+/* A single applied plugin is a context, not a category — hide the
+   PLUGIN/DESIGN/ASSET prefix so the chip mirrors a plain file chip. */
+.composer-shell .context-chip-strip__kind {
+  display: none;
+}
+.composer-shell .context-chip-strip__label {
+  max-width: 168px;
+  font-size: 11.5px;
+  font-weight: 550;
+}
+.composer-shell .context-chip-strip__remove {
+  width: 18px;
+  height: 18px;
+}
+.composer-shell .plugin-inputs-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(154px, 1fr));
+  gap: 8px;
+  margin-top: 0;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.composer-shell .plugin-inputs-form__field {
+  min-width: 0;
+  gap: 5px;
+}
+.composer-shell .plugin-inputs-form__field[data-field-type='text'],
+.composer-shell .plugin-inputs-form__field[data-field-type='file'] {
+  grid-column: 1 / -1;
+}
+.composer-shell .plugin-inputs-form__label {
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.07em;
+  color: var(--text-soft);
+}
+.composer-shell .plugin-inputs-form__input {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-color: color-mix(in srgb, var(--border) 82%, var(--border-strong));
+  border-radius: 7px;
+  background-color: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 88%, transparent);
+}
+.composer-shell .plugin-inputs-form__input:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+}
+.composer-shell .plugin-inputs-form__input:focus {
+  border-color: var(--selected);
+  background-color: var(--bg-panel);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+.composer-shell .plugin-inputs-form__input--textarea {
+  min-height: 70px;
+}
+.composer-shell .plugin-inputs-form__field[data-field-type='boolean'] .plugin-inputs-form__input {
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
 }

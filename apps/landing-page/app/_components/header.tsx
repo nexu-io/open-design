@@ -24,7 +24,6 @@ import {
 } from '../i18n';
 
 const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_RELEASES = `${REPO}/releases`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const X_TWITTER = 'https://x.com/nexudotio';
 const AMR_URL = 'https://open-design.ai/amr/';
@@ -350,11 +349,11 @@ export function Header({
           </a>
           <a
             className='nav-cta ghost is-download'
-            href={REPO_RELEASES}
+            href={href('/download/')}
             aria-label={headerCopy.downloadAria}
             title={headerCopy.downloadTitle}
             data-download-cta
-            {...ext}
+            data-download-page
           >
             {headerCopy.download}
             <span className='download-arch' data-download-arch hidden />

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import type { ProjectFile, ProjectFileKind } from '../../src/types';
@@ -52,27 +54,43 @@ function generateFiles(count: number): ProjectFile[] {
   });
 }
 
-function renderPanel(files: ProjectFile[]) {
+function renderPanel(
+  files: ProjectFile[],
+  overrides: Partial<ComponentProps<typeof DesignFilesPanel>> = {},
+) {
   const onOpenFile = vi.fn();
   const onDeleteFiles = vi.fn();
+  const onUploadFiles = vi.fn();
+  const onRenameFile = vi.fn();
+  const onClearUploadError = vi.fn();
   const result = render(
     <DesignFilesPanel
       projectId="test-project"
       files={files}
+      folders={[]}
       liveArtifacts={[]}
       onRefreshFiles={vi.fn()}
       onOpenFile={onOpenFile}
       onOpenLiveArtifact={vi.fn()}
-      onRenameFile={vi.fn()}
+      onRenameFile={onRenameFile}
       onDeleteFile={vi.fn()}
       onDeleteFiles={onDeleteFiles}
       onUpload={vi.fn()}
-      onUploadFiles={vi.fn()}
+      onUploadFiles={onUploadFiles}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
+      onClearUploadError={onClearUploadError}
+      {...overrides}
     />,
   );
-  return { ...result, onDeleteFiles, onOpenFile };
+  return {
+    ...result,
+    onDeleteFiles,
+    onOpenFile,
+    onRenameFile,
+    onUploadFiles,
+    onClearUploadError,
+  };
 }
 
 function getPageInfo(container: HTMLElement): string {
@@ -508,6 +526,31 @@ describe('DesignFilesPanel large-list regression', () => {
     expect(onDeleteFiles).toHaveBeenCalledWith([firstName, secondName]);
   });
 
+  it('drops hidden selections before batch delete when a kind filter narrows the file list', () => {
+    const files = [
+      file({ name: 'landing.html', kind: 'html', mime: 'text/html' }),
+      file({ name: 'hero.png', kind: 'image', mime: 'image/png' }),
+    ];
+    const { onDeleteFiles } = renderPanel(files);
+
+    fireEvent.click(screen.getByTestId('design-file-row-landing.html').querySelector('.df-row-check')!);
+    fireEvent.click(screen.getByTestId('design-file-row-hero.png').querySelector('.df-row-check')!);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by kind' }));
+    const filterDialog = screen.getByRole('dialog', { name: 'Filter by kind' });
+    const imageFilterLabel = within(filterDialog).getByText('Image').closest('label');
+    if (!imageFilterLabel) throw new Error('Missing image filter label');
+    fireEvent.click(imageFilterLabel.querySelector('input')!);
+
+    expect(screen.queryByTestId('design-file-row-landing.html')).toBeNull();
+    expect(screen.getByTestId('design-file-row-hero.png')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('design-files-batch-delete'));
+
+    expect(onDeleteFiles).toHaveBeenCalledTimes(1);
+    expect(onDeleteFiles).toHaveBeenCalledWith(['hero.png']);
+  });
+
   it('renders 500 files within a reasonable time', () => {
     const files = generateFiles(500);
     const start = performance.now();
@@ -624,6 +667,57 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
   });
 
+  it('returns to root after batch deleting the last files in the current subdirectory', async () => {
+    const deleteSpy = vi.fn();
+
+    function Harness() {
+      const [files, setFiles] = useState<ProjectFile[]>([
+        file({ name: 'assets/logo.png', kind: 'image' }),
+        file({ name: 'assets/hero.png', kind: 'image' }),
+        file({ name: 'top.html', kind: 'html' }),
+      ]);
+
+      return (
+        <DesignFilesPanel
+          projectId="test-project"
+          files={files}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={async (names) => {
+            deleteSpy(names);
+            setFiles((current) => current.filter((candidate) => !names.includes(candidate.name)));
+          }}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
+
+    fireEvent.click(screen.getByTestId('design-file-row-assets/logo.png').querySelector('.df-row-check')!);
+    fireEvent.click(screen.getByTestId('design-file-row-assets/hero.png').querySelector('.df-row-check')!);
+    fireEvent.click(screen.getByTestId('design-files-batch-delete'));
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith(['assets/logo.png', 'assets/hero.png']);
+    });
+    await waitFor(() => {
+      expect(document.querySelector('.df-breadcrumbs')).toBeNull();
+    });
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+    expect(document.querySelectorAll('.df-file-row.selected').length).toBe(0);
+  });
+
   it('does not show the select-all header as checked when the page contains only directory rows', () => {
     renderPanel([
       file({ name: 'assets/logo.png', kind: 'image' }),
@@ -631,5 +725,121 @@ describe('DesignFilesPanel directory navigation', () => {
 
     const headerCheck = document.querySelector('.df-th-check .df-row-check');
     expect(headerCheck?.textContent).toBe('☐');
+  });
+
+  it('shows persisted empty folders', () => {
+    renderPanel([], {
+      folders: [{ name: 'assets', path: 'assets', type: 'dir', size: 0, mtime: Date.now() }],
+    });
+
+    const dirRows = document.querySelectorAll('.df-dir-row');
+    expect(dirRows.length).toBe(1);
+    expect(dirRows[0]!.textContent).toContain('assets');
+    expect(dirRows[0]!.textContent).toContain('0');
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  it('creates a folder in the current directory', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => {
+      throw new Error('prompt should not be used for folder creation');
+    });
+    const onCreateFolder = vi.fn(async () => ({
+      name: 'assets/untitled-folder',
+      path: 'assets/untitled-folder',
+      type: 'dir' as const,
+      size: 0 as const,
+      mtime: Date.now(),
+    }));
+
+    renderPanel([file({ name: 'assets/logo.png', kind: 'image' })], { onCreateFolder });
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Folder' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(onCreateFolder).toHaveBeenCalledWith('assets/untitled-folder');
+    });
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(document.querySelector('.df-breadcrumb-current')?.textContent).toBe('untitled-folder');
+    promptSpy.mockRestore();
+  });
+
+  it('searches nested file paths across the project', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search files…' }));
+    fireEvent.change(screen.getByLabelText('Search files…'), { target: { value: 'logo' } });
+
+    expect(screen.getByTestId('design-file-row-assets/logo.png')).toBeTruthy();
+    expect(screen.queryByTestId('design-file-row-top.html')).toBeNull();
+    expect(screen.getByText('assets/logo.png')).toBeTruthy();
+  });
+
+  it('keeps Design Files search compact until focused and clearable', () => {
+    renderPanel([
+      file({ name: 'assets/logo.png', kind: 'image' }),
+      file({ name: 'top.html', kind: 'html' }),
+    ]);
+
+    expect(document.querySelector('.df-search-control')?.className).not.toContain('is-expanded');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search files…' }));
+    const input = screen.getByLabelText('Search files…');
+    fireEvent.change(input, { target: { value: 'logo' } });
+
+    expect(document.querySelector('.df-search-control')?.className).toContain('is-expanded');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByTestId('design-file-row-top.html')).toBeTruthy();
+
+    fireEvent.blur(input, { relatedTarget: document.body });
+    expect(document.querySelector('.df-search-control')?.className).not.toContain('is-expanded');
+  });
+
+  it('accepts dropped files anywhere on the design files panel', async () => {
+    const upload = new File(['hello'], 'hello.txt', { type: 'text/plain' });
+    const { container, onUploadFiles } = renderPanel([]);
+
+    fireEvent.drop(container.querySelector('.df-panel')!, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [upload],
+      },
+    });
+
+    await waitFor(() => {
+      expect(onUploadFiles).toHaveBeenCalledWith([upload]);
+    });
+  });
+
+  it('moves dragged files into a folder row', async () => {
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      types: [] as string[],
+      effectAllowed: '',
+      dropEffect: '',
+      setData(type: string, value: string) {
+        if (!this.types.includes(type)) this.types.push(type);
+        data.set(type, value);
+      },
+      getData(type: string) {
+        return data.get(type) ?? '';
+      },
+    };
+    const onRenameFile = vi.fn(async (_from: string, to: string) => file({ name: to, kind: 'image' }));
+    renderPanel([
+      file({ name: 'assets/.keep', kind: 'text' }),
+      file({ name: 'logo.png', kind: 'image' }),
+    ], { onRenameFile });
+
+    fireEvent.dragStart(screen.getByTestId('design-file-row-logo.png'), { dataTransfer });
+    fireEvent.dragOver(document.querySelector('.df-dir-row')!, { dataTransfer });
+    fireEvent.drop(document.querySelector('.df-dir-row')!, { dataTransfer });
+
+    await waitFor(() => {
+      expect(onRenameFile).toHaveBeenCalledWith('logo.png', 'assets/logo.png');
+    });
   });
 });

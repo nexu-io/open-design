@@ -95,7 +95,7 @@ async function gotoAutomations(page: Page) {
 }
 
 test.describe('Automations page', () => {
-  test('renders the page hero, summary metrics, filters, and saved rows', async ({ page }) => {
+  test('[P1] renders the page hero, summary metrics, filters, and saved rows', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines = [
@@ -183,7 +183,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toContainText('No templates in this category yet.');
   });
 
-  test('creates an automation from the page and runs it into a project conversation', async ({ page }) => {
+  test('[P1] creates an automation from the page and runs it into a project conversation', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
@@ -296,7 +296,7 @@ test.describe('Automations page', () => {
     await expect(page).toHaveURL(/\/projects\/proj-run/);
   });
 
-  test('places a newly created automation at the top of the list and highlights it', async ({ page }) => {
+  test('[P1] places a newly created automation at the top of the list and highlights it', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
@@ -397,7 +397,7 @@ test.describe('Automations page', () => {
     await expect(view.getByTestId('automation-row-routine-newest-1')).toHaveClass(/is-focused/);
   });
 
-  test('keeps saved automations ordered by newest createdAt first', async ({ page }) => {
+  test('[P1] keeps saved automations ordered by newest createdAt first', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const now = Date.now();
@@ -489,7 +489,7 @@ test.describe('Automations page', () => {
     ]);
   });
 
-  test('keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
+  test('[P1] keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     await page.route('**/api/projects', async (route) => {
@@ -559,7 +559,7 @@ test.describe('Automations page', () => {
     await expect(view.getByText('No automations yet')).toBeVisible();
   });
 
-  test('shows a page error and keeps the row usable when Run fails', async ({ page }) => {
+  test('[P1] shows a page error and keeps the row usable when Run fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const routines = [
@@ -635,7 +635,7 @@ test.describe('Automations page', () => {
     await expect(row.getByRole('button', { name: 'Pause' })).toBeVisible();
   });
 
-  test('pauses, expands history, and deletes an automation from the saved list', async ({ page }) => {
+  test('[P1] pauses, expands history, and deletes an automation from the saved list', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines = [
@@ -760,7 +760,7 @@ test.describe('Automations page', () => {
     await expect(view.getByText('No automations yet')).toBeVisible();
   });
 
-  test('shows a page error and keeps the row usable when Pause fails', async ({ page }) => {
+  test('[P1] shows a page error and keeps the row usable when Pause fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const routines = [
@@ -840,7 +840,7 @@ test.describe('Automations page', () => {
     await expect(row.getByRole('button', { name: 'Run' })).toBeVisible();
   });
 
-  test('shows a page error and keeps the row visible when Delete fails', async ({ page }) => {
+  test('[P1] shows a page error and keeps the row visible when Delete fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const routines = [
@@ -923,7 +923,7 @@ test.describe('Automations page', () => {
     await expect(row.getByRole('button', { name: 'Delete automation' })).toBeVisible();
   });
 
-  test('edits an automation title from the saved list and keeps the updated row visible', async ({ page }) => {
+  test('[P1] edits an automation title from the saved list and keeps the updated row visible', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines = [
@@ -1017,7 +1017,7 @@ test.describe('Automations page', () => {
     await expect(view.getByText('Daily digest edited')).toBeVisible();
   });
 
-  test('switches template filters and updates the visible template cards', async ({ page }) => {
+  test('[P1] switches template filters and updates the visible template cards', async ({ page }) => {
     await seedAutomationsBase(page);
 
     await page.route('**/api/projects', async (route) => {
@@ -1074,7 +1074,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toHaveCount(0);
   });
 
-  test('renders the routine target and last-run status in the row summary', async ({ page }) => {
+  test('[P1] renders the routine target and last-run status in the row summary', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const projects = [{ id: 'proj-shared-1', name: 'Shared Release Project' }];

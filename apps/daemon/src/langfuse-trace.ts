@@ -19,6 +19,11 @@
 import { randomUUID } from 'node:crypto';
 
 import type { TelemetryPrefs } from './app-config.js';
+import {
+  buildPromptStackFlatMetadata,
+  promptStackWithoutContent,
+  type PromptStackTelemetry,
+} from './prompt-telemetry.js';
 import type { RunTimingAnalytics } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
 
@@ -186,6 +191,8 @@ export interface ReportContext {
   turn?: TurnInfo;
   /** Process- / build-level info collected once per daemon process. */
   runtime?: RuntimeInfo;
+  /** Redacted section-level prompt diagnostics captured before agent spawn. */
+  promptTelemetry?: PromptStackTelemetry;
   extraTags?: string[];
 }
 
@@ -343,7 +350,7 @@ function buildTagList(ctx: ReportContext): string[] {
 }
 
 export function buildTracePayload(ctx: ReportContext): unknown[] {
-  const wantsContent = ctx.prefs.content === true;
+  const wantsContent = ctx.prefs.metrics === true && ctx.prefs.content === true;
   const wantsArtifacts = ctx.prefs.artifactManifest === true;
 
   const sessionId =
@@ -399,6 +406,14 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     ctx.langfuse ?? deriveLangfuseDeliveryState(ctx.prefs, readTelemetrySinkConfig());
   const agentSpanId = `${ctx.run.runId}-agent`;
   const generationId = `${ctx.run.runId}-gen`;
+  const promptStack = ctx.promptTelemetry
+    ? wantsContent
+      ? ctx.promptTelemetry
+      : promptStackWithoutContent(ctx.promptTelemetry)
+    : undefined;
+  const promptStackFlatMetadata = promptStack
+    ? buildPromptStackFlatMetadata(promptStack)
+    : {};
 
   // Trace metadata is the queryable + exportable fact-sheet for each turn.
   // Anything we want to slice on for evals or dataset construction lives
@@ -432,6 +447,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     osRelease: ctx.runtime?.osRelease,
     arch: ctx.runtime?.arch,
     clientType: ctx.runtime?.clientType,
+    promptStack,
+    ...promptStackFlatMetadata,
   };
 
   // Generation-level model parameters mirror the Langfuse schema so the UI
@@ -502,6 +519,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         usage,
         metadata: {
           durationMs: ctx.eventsSummary.durationMs,
+          promptStack,
+          ...promptStackFlatMetadata,
         },
       },
     },

@@ -114,6 +114,99 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   return out;
 }
 
+export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
+  const metadata = opts?.metadata;
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const out = [];
+  const skipDirs = metadata?.baseDir ? isIgnoredProjectDirName : undefined;
+  await collectFolders(dir, '', out, skipDirs);
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) => boolean) {
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return;
+    throw err;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('.')) continue;
+    if (shouldSkipDir?.(e.name)) continue;
+    const rel = relDir ? `${relDir}/${e.name}` : e.name;
+    const full = path.join(dir, e.name);
+    const st = await stat(full);
+    out.push({
+      name: rel,
+      path: rel,
+      type: 'dir',
+      size: 0,
+      mtime: st.mtimeMs,
+    });
+    await collectFolders(full, rel, out, shouldSkipDir);
+  }
+}
+
+export async function createProjectFolder(projectsRoot, projectId, name, metadata?) {
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
+  const safeName = sanitizePath(name);
+  const target = await resolveSafeReal(dir, safeName);
+  await mkdir(target, { recursive: true });
+  const st = await stat(target);
+  if (!st.isDirectory()) {
+    const err = new Error('target path is not a folder');
+    err.code = 'ENOTDIR';
+    throw err;
+  }
+  return {
+    name: safeName,
+    path: safeName,
+    type: 'dir',
+    size: 0,
+    mtime: st.mtimeMs,
+  };
+}
+
+// Resolve (and create) a subdirectory under a project root, confined to the
+// project sandbox. Returns the absolute directory plus the sanitized,
+// forward-slash relative path ('' when no subdir was requested). Used by the
+// upload route so attachments dropped/picked while viewing a folder land in
+// that folder instead of the project root.
+export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metadata?) {
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
+  const raw = typeof subdir === 'string' ? subdir.trim() : '';
+  if (!raw) return { absDir: dir, relDir: '' };
+  const relDir = sanitizePath(raw);
+  const target = await resolveSafeReal(dir, relDir);
+  await mkdir(target, { recursive: true });
+  return { absDir: target, relDir };
+}
+
+// Recursively delete a folder (and everything under it) within the project
+// sandbox. Refuses to delete the project root itself. resolveSafeReal confines
+// the target to the project tree even across descendant symlinks.
+export async function deleteProjectFolder(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const safeName = sanitizePath(name);
+  const target = await resolveSafeReal(dir, safeName);
+  const dirReal = await realpath(dir).catch(() => dir);
+  if (target === dirReal) {
+    const err = new Error('cannot delete project root');
+    err.code = 'EINVAL';
+    throw err;
+  }
+  const st = await stat(target);
+  if (!st.isDirectory()) {
+    const err = new Error('target is not a folder');
+    err.code = 'ENOTDIR';
+    throw err;
+  }
+  await rm(target, { recursive: true, force: true });
+}
+
 // Best-effort entry-file detector — looks for index.html at the root,
 // then any *.html file. Returns null if nothing obvious is found, in
 // which case the project simply opens to the file panel with no

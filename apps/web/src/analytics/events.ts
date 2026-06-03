@@ -49,6 +49,7 @@ import type {
   IntegrationsUseEverywhereTabClickProps,
   ChatPanelClickProps,
   RunFailedToastClickProps,
+  AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   FileManagerClickProps,
@@ -173,6 +174,13 @@ export function trackRunFailedToastSurfaceView(
 export function trackRunFailedToastGoAmrClick(
   track: Track,
   props: RunFailedToastClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackAmrEntryClick(
+  track: Track,
+  props: AmrEntryClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

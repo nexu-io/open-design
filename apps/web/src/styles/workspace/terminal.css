@@ -1,0 +1,4 @@
+/* xterm.js ships global structural selectors such as `.xterm-helper-textarea`;
+   keep them in the global cascade so its hidden textarea does not inherit the
+   app's visible form-field primitive styles. */
+@import '@xterm/xterm/css/xterm.css';

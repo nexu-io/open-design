@@ -77,6 +77,81 @@ describe('preview comment persistence', () => {
     expect(listPreviewComments(db, 'project-1', 'conversation-1')).toHaveLength(1);
   });
 
+  it('round-trips image attachments through save and list (echo bug #regression)', () => {
+    const db = seededDb();
+    const saved = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title' }),
+      note: 'Match this reference',
+      attachments: [
+        { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+        { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+      ],
+    });
+    expect(saved).not.toBeNull();
+    if (!saved) throw new Error('comment upsert failed');
+    // Attachments survive the save itself...
+    expect(saved.attachments).toEqual([
+      { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+      { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+    ]);
+    // ...and the re-fetch (the "回显" path that previously dropped images).
+    const [listed] = listPreviewComments(db, 'project-1', 'conversation-1');
+    expect(listed?.attachments).toEqual([
+      { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+      { path: 'uploads/ref-b.png', name: 'ref-b.png' },
+    ]);
+  });
+
+  it('preserves image attachments when updating an existing comment without new files', () => {
+    const db = seededDb();
+    const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title' }),
+      note: 'Match this reference',
+      attachments: [
+        { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+      ],
+    });
+    const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title' }),
+      note: 'Still match this reference',
+    });
+
+    expect(first?.id).toBe(second?.id);
+    expect(second?.attachments).toEqual([
+      { path: 'uploads/ref-a.png', name: 'ref-a.png' },
+    ]);
+  });
+
+  it('lists preview comments in creation order even when older comments are updated later', () => {
+    const db = seededDb();
+    const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title' }),
+      note: 'Created first',
+    });
+    const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-subtitle' }),
+      note: 'Created second',
+    });
+    if (!first || !second) throw new Error('comment upsert failed');
+
+    db.prepare(`UPDATE preview_comments SET created_at = ?, updated_at = ? WHERE id = ?`).run(10, 100, first.id);
+    db.prepare(`UPDATE preview_comments SET created_at = ?, updated_at = ? WHERE id = ?`).run(20, 20, second.id);
+
+    expect(listPreviewComments(db, 'project-1', 'conversation-1').map((comment) => comment.note)).toEqual([
+      'Created first',
+      'Created second',
+    ]);
+  });
+
+  it('defaults attachments to an empty array when none are provided', () => {
+    const db = seededDb();
+    const saved = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({}),
+      note: 'No images here',
+    });
+    expect(saved?.attachments).toEqual([]);
+  });
+
   it('keeps the same deck element on different slides as distinct comments', () => {
     const db = seededDb();
     const firstSlide = upsertPreviewComment(db, 'project-1', 'conversation-1', {
@@ -271,6 +346,71 @@ describe('preview comment persistence', () => {
     expect(listMessages(db, 'conversation-1')[0]?.commentAttachments).toEqual([attachment]);
   });
 
+  it('persists user message session mode and plugin context snapshot', () => {
+    const db = seededDb();
+    const appliedPluginSnapshot = {
+      snapshotId: 'snap-1',
+      pluginId: 'deck-plugin',
+      pluginVersion: '1.0.0',
+      manifestSourceDigest: 'a'.repeat(64),
+      inputs: {},
+      resolvedContext: {
+        items: [
+          {
+            kind: 'asset',
+            path: 'template.json',
+            label: 'template.json',
+          },
+        ],
+      },
+      capabilitiesGranted: ['prompt:inject'],
+      capabilitiesRequired: ['prompt:inject'],
+      assetsStaged: [],
+      taskKind: 'new-generation',
+      appliedAt: 1,
+      connectorsRequired: [],
+      connectorsResolved: [],
+      mcpServers: [],
+      status: 'fresh',
+      pluginTitle: 'Deck Plugin',
+    };
+
+    upsertMessage(db, 'conversation-1', {
+      id: 'message-1',
+      role: 'user',
+      content: 'make the deck',
+      sessionMode: 'design',
+      runContext: {
+        workspaceItems: [
+          {
+            id: 'browser:tab-1',
+            kind: 'browser',
+            label: 'Dribbble',
+            tabId: 'tab-1',
+            url: 'https://dribbble.com/',
+          },
+        ],
+      },
+      appliedPluginSnapshot,
+    });
+
+    expect(listMessages(db, 'conversation-1')[0]).toMatchObject({
+      sessionMode: 'design',
+      runContext: {
+        workspaceItems: [
+          {
+            id: 'browser:tab-1',
+            kind: 'browser',
+            label: 'Dribbble',
+            tabId: 'tab-1',
+            url: 'https://dribbble.com/',
+          },
+        ],
+      },
+      appliedPluginSnapshot,
+    });
+  });
+
   it('persists assistant feedback on messages', () => {
     const db = seededDb();
     const feedback = {
@@ -319,6 +459,43 @@ describe('preview comment agent payload', () => {
     expect(hint).toContain('Hard scope: change ONLY');
     expect(hint).toContain('Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules');
     expect(hint).toContain('ask the user before proceeding');
+  });
+
+  it('keeps image attachments in saved comment payloads without requiring a note', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'c1',
+        comment: '',
+        imageAttachments: [
+          { path: 'uploads/reference.png', name: 'reference.png' },
+        ],
+      }),
+    ]);
+
+    const hint = renderCommentAttachmentHint(normalized);
+
+    expect(normalized[0]).toMatchObject({
+      comment: 'Use the attached image as the comment reference.',
+      imageAttachments: [{ path: 'uploads/reference.png', name: 'reference.png' }],
+    });
+    expect(hint).toContain('imageAttachments: 1');
+    expect(hint).toContain('image.1: uploads/reference.png | reference.png');
+  });
+
+  it('omits comment text from context when the UI sends it as the task query', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'c1',
+        comment: '',
+        commentContext: 'query',
+      }),
+    ]);
+
+    const hint = renderCommentAttachmentHint(normalized);
+
+    expect(normalized[0]).toMatchObject({ comment: '', commentContext: 'query' });
+    expect(hint).toContain('selector: [data-od-id="hero-title"]');
+    expect(hint).not.toContain('comment:');
   });
 
   it('renders pod attachments with grouped member context', () => {

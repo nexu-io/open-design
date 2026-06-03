@@ -177,7 +177,7 @@ async function openLocalCliSettings(
 }
 
 test.describe('Settings Local CLI Codex fallback UX', () => {
-  test('shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
+  test('[P0] shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
     const configuredPath = '/bad/codex';
     const detectedPath = '/usr/local/bin/codex';
     let lastRequest: Record<string, unknown> | null = null;
@@ -238,7 +238,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
   });
 
-  test('can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
+  test('[P0] can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
     const configuredPath = '/Applications/Codex.app/Contents/Resources/codex';
     const detectedPath = '/opt/homebrew/bin/codex';
 

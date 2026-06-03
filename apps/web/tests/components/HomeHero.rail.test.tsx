@@ -8,7 +8,7 @@
 //   - The active + pending UI states light up the right chip and
 //     disable all chips while a plugin is mid-apply.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
@@ -18,6 +18,11 @@ import {
   HOME_HERO_CHIPS,
   findChip,
 } from '../../src/components/home-hero/chips';
+// HomeHero's prompt input is now the project composer's Lexical
+// contenteditable (data-testid="home-hero-input"), not a <textarea>. It has no
+// `.value`, so editor-text assertions read through the Lexical-aware helper
+// which serializes the editor's nodes back to plain text.
+import { homeHeroPromptText } from '../helpers/home-hero-lexical';
 
 afterEach(() => {
   cleanup();
@@ -188,7 +193,7 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-active-example').textContent).toContain('...');
   });
 
-  it('clears the prompt input when the selected example chip is removed', () => {
+  it('clears the prompt input when the selected example chip is removed', async () => {
     function StatefulHero() {
       const [prompt, setPrompt] = useState('');
       return (
@@ -215,16 +220,31 @@ describe('HomeHero intent rail', () => {
 
     render(<StatefulHero />);
 
-    const examples = screen.getAllByTestId('home-hero-prompt-example');
-    fireEvent.click(examples[0]!);
+    // Picking an example seeds the prompt: HomeHero now drives the Lexical
+    // editor via `editorRef.current?.setText(...)` (it used to set the textarea
+    // value). Read the editor text through the Lexical-aware helper instead of
+    // the removed `.value`, awaiting the onChange → state flush.
+    await act(async () => {
+      fireEvent.click(screen.getAllByTestId('home-hero-prompt-example')[0]!);
+      await Promise.resolve();
+    });
 
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
-    expect(input.value).toContain('Research the market opportunity');
+    expect(homeHeroPromptText()).toContain('Research the market opportunity');
     expect(screen.getByTestId('home-hero-active-example')).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('home-hero-active-example').querySelector('.home-hero__active-clear')!);
+    // Removing the example chip calls `editorRef.current?.clear()` (formerly a
+    // textarea reset). The editor serializes back to empty text.
+    await act(async () => {
+      fireEvent.click(
+        screen.getByTestId('home-hero-active-example').querySelector('.home-hero__active-clear')!,
+      );
+      await Promise.resolve();
+    });
 
-    expect(input.value).toBe('');
+    // An emptied Lexical editor serializes to a single empty paragraph (jsdom
+    // keeps a `<br>` placeholder), so assert on trimmed text — the project
+    // composer's clear-empty convention (`composerText().trim()` === '').
+    expect(homeHeroPromptText().trim()).toBe('');
     expect(screen.queryByTestId('home-hero-active-example')).toBeNull();
   });
 

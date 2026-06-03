@@ -603,7 +603,7 @@ fsTest('detectAgents prefers configured AMR live models over stale fallback defa
         fakeVela,
         `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "vela custom-live"; exit 0; fi
-if [ "$1" = "models" ]; then printf "%s\n" "public_model_deepseek_v4_flash    vela" "public_model_glm_5    vela"; exit 0; fi
+if [ "$1" = "model" ] && [ "$2" = "list" ]; then echo '{"source":"remote","data":[{"id":"deepseek-v4-flash"},{"id":"glm-5"}]}'; exit 0; fi
 exit 0
 `,
       );

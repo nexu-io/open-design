@@ -5,6 +5,7 @@ interface ByokProviderBaseUrlProps {
   apiProtocol: ApiProtocol;
   inputRef: Ref<HTMLInputElement>;
   baseUrl: string;
+  baseUrlError: string | null;
   baseUrlInvalid: boolean;
   baseUrlPlaceholder?: string;
   baseUrlReadOnly: boolean;
@@ -26,6 +27,7 @@ export function ByokProviderBaseUrl({
   apiProtocol,
   inputRef,
   baseUrl,
+  baseUrlError,
   baseUrlInvalid,
   baseUrlPlaceholder,
   baseUrlReadOnly,
@@ -35,13 +37,29 @@ export function ByokProviderBaseUrl({
   onCustomize,
   onFocus,
 }: ByokProviderBaseUrlProps) {
+  const stateClassName = baseUrlReadOnly
+    ? ' settings-base-url-readonly'
+    : baseUrl.trim()
+      ? ''
+      : ' settings-base-url-empty';
+  const hasBaseUrlError = baseUrlInvalid || Boolean(baseUrlError);
+
   return (
-    <label className={'field' + (baseUrlReadOnly ? ' settings-base-url-readonly' : '')}>
-      <span className="field-label">
+    <label className={'field' + stateClassName}>
+      <span className="field-label settings-byok-field-label">
         {labels.baseUrl}
         <span className="field-required" aria-label={labels.required}>
           *
         </span>
+        {baseUrlError ? (
+          <span
+            id="settings-base-url-error"
+            className="field-label-error"
+            role="alert"
+          >
+            {baseUrlError}
+          </span>
+        ) : null}
       </span>
       <div className="field-row">
         <input
@@ -52,9 +70,9 @@ export function ByokProviderBaseUrl({
           value={baseUrl}
           placeholder={baseUrlPlaceholder}
           readOnly={baseUrlReadOnly || undefined}
-          aria-invalid={baseUrlInvalid || undefined}
+          aria-invalid={hasBaseUrlError || undefined}
           aria-describedby={
-            baseUrlInvalid ? 'settings-base-url-error' : undefined
+            hasBaseUrlError ? 'settings-base-url-error' : undefined
           }
           onFocus={onFocus}
           onBlur={onBlur}
@@ -70,15 +88,6 @@ export function ByokProviderBaseUrl({
           </button>
         ) : null}
       </div>
-      {baseUrlInvalid ? (
-        <span
-          id="settings-base-url-error"
-          className="settings-field-error"
-          role="alert"
-        >
-          {labels.invalid}
-        </span>
-      ) : null}
       {baseUrlReadOnly ? (
         <span className="field-inline-status">
           {labels.defaultHint}
