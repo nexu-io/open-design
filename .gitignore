@@ -76,4 +76,7 @@ docs/superpowers/
 # on every deploy. Should not be committed (~70MB of PNGs).
 apps/landing-page/public/previews/
 
+# Ad-hoc local e2e scripts and their screenshots
+e2e/scripts/test-fal-webui.ts
+e2e/scripts/fal-webui-*.png
 growth/**

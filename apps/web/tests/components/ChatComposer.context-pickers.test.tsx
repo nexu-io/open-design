@@ -460,6 +460,72 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
+  it('clears an attachment upload error after a later retry succeeds', async () => {
+    let uploadAttempts = 0;
+    fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers, templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/skills') {
+        return new Response(JSON.stringify({ skills }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects/project-1/upload' && init?.method === 'POST') {
+        uploadAttempts += 1;
+        if (uploadAttempts === 1) {
+          return new Response(JSON.stringify({ error: 'storage offline' }), {
+            status: 503,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          files: [{ name: 'recovered.txt', path: 'uploads/recovered.txt', size: 24 }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderComposer();
+    const input = screen.getByTestId('chat-file-input') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['first failure'], 'failed.txt', { type: 'text/plain' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['retry works'], 'recovered.txt', { type: 'text/plain' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeNull();
+    });
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('recovered.txt');
+  });
+
   it('lets the tools panel switch between Official and My plugins', async () => {
     renderComposer();
     fireEvent.click(screen.getByLabelText('Open CLI and model settings'));

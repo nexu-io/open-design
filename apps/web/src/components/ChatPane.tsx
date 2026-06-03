@@ -15,7 +15,7 @@ import {
 } from '../design-system-auto-prompt';
 import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -329,6 +329,12 @@ interface Props {
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
   composerFooterAccessory?: ReactNode;
+  // Forwarded straight to the chat composer's mid-chat design-system
+  // switcher. ProjectView owns the project record so the parent is the
+  // natural place to mirror the patched project after a PATCH lands.
+  currentDesignSystemId?: string | null;
+  onActiveDesignSystemChange?: (project: Project) => void;
+  onShowToast?: (message: string) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -405,6 +411,9 @@ export function ChatPane({
   byokImageModel,
   onChangeByokImageModel,
   composerFooterAccessory,
+  currentDesignSystemId,
+  onActiveDesignSystemChange,
+  onShowToast,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -429,7 +438,30 @@ export function ChatPane({
   // We key the dismissal on the snapshot (serialized TodoWrite input) so
   // the next time the agent emits a different snapshot the card returns,
   // but the same snapshot stays hidden across renders / streaming ticks.
-  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(null);
+  // Persisted to sessionStorage so the dismissal survives tab switches and
+  // component remounts (the ChatPane key includes conversationId, so switching
+  // conversations unmounts and remounts the component).
+  const dismissedStorageKey = `dismissedTodo:${activeConversationId ?? 'none'}`;
+  const [dismissedPinnedTodoKey, setDismissedPinnedTodoKey] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(dismissedStorageKey);
+    } catch {
+      return null;
+    }
+  });
+  
+  // Sync dismissed state when conversationId changes (e.g., tab switching).
+  // The parent key includes conversationId so unmount/remount resets this,
+  // but if conversationId changes without unmounting or the storage key
+  // changes, re-read to keep the dismissed state in sync.
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(dismissedStorageKey);
+      setDismissedPinnedTodoKey(stored);
+    } catch {
+      // sessionStorage access can fail in private browsing
+    }
+  }, [dismissedStorageKey]);
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const hasActiveRunMessage = messages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
@@ -464,7 +496,10 @@ export function ChatPane({
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
   // AMR promotion card payload (only the non-AMR model/auth/quota case).
   const amrSwitchPayload =
-    runFailureUi?.showSwitchCard && retryAssistant && failedRunErrorEvent?.code
+    runFailureUi?.showSwitchCard
+    && failedRunErrorEvent?.code !== 'UPSTREAM_UNAVAILABLE'
+    && retryAssistant
+    && failedRunErrorEvent?.code
       ? {
           errorCode: failedRunErrorEvent.code,
           projectId: projectId ?? '',
@@ -1276,7 +1311,18 @@ export function ChatPane({
             messages={messages}
             streaming={streaming}
             dismissedKey={dismissedPinnedTodoKey}
-            onDismiss={setDismissedPinnedTodoKey}
+            onDismiss={(key) => {
+              setDismissedPinnedTodoKey(key);
+              try {
+                if (key) {
+                  sessionStorage.setItem(dismissedStorageKey, key);
+                } else {
+                  sessionStorage.removeItem(dismissedStorageKey);
+                }
+              } catch {
+                // sessionStorage access can fail in private browsing / sandboxed contexts
+              }
+            }}
             containerRef={pinnedTodoRef}
           />
           <QueuedSendStrip
@@ -1320,6 +1366,9 @@ export function ChatPane({
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
             footerAccessory={composerFooterAccessory}
+            currentDesignSystemId={currentDesignSystemId}
+            onActiveDesignSystemChange={onActiveDesignSystemChange}
+            onShowToast={onShowToast}
           />
         </>
       ) : null}
@@ -2014,6 +2063,16 @@ export function conversationMetaLabel(
   t: TranslateFn,
 ): string {
   const latestRun = conversation.latestRun;
+  if (
+    latestRun &&
+    (latestRun.status === 'succeeded' ||
+      latestRun.status === 'failed' ||
+      latestRun.status === 'canceled') &&
+    typeof conversation.totalDurationMs === 'number' &&
+    Number.isFinite(conversation.totalDurationMs)
+  ) {
+    return formatDurationShort(conversation.totalDurationMs);
+  }
   if (
     latestRun &&
     (latestRun.status === 'succeeded' ||

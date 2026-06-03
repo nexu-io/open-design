@@ -158,6 +158,70 @@ describe('PreviewDrawOverlay', () => {
     expect(scrollBy).toHaveBeenCalledWith({ left: 12, top: 180, behavior: 'auto' });
   });
 
+  it('uses the postMessage scroll bridge for sandboxed preview iframes', () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <iframe title="preview" sandbox="allow-scripts allow-downloads" />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector('canvas');
+    const iframe = container.querySelector('iframe');
+    expect(canvas).toBeTruthy();
+    expect(iframe?.contentWindow).toBeTruthy();
+
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe!.contentWindow!, 'postMessage', {
+      value: postMessage,
+      configurable: true,
+    });
+
+    fireEvent.wheel(canvas!, {
+      deltaX: 8,
+      deltaY: 96,
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'od:preview-scroll-by', left: 8, top: 96 },
+      '*',
+    );
+  });
+
+  it('falls back to the scroll bridge when direct frame scroll is cross-origin blocked', () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <iframe title="preview" />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector('canvas');
+    const iframe = container.querySelector('iframe');
+    expect(canvas).toBeTruthy();
+    expect(iframe?.contentWindow).toBeTruthy();
+
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe!.contentWindow!, 'postMessage', {
+      value: postMessage,
+      configurable: true,
+    });
+    Object.defineProperty(iframe!.contentWindow!, 'scrollBy', {
+      get() {
+        throw new DOMException('Blocked a frame from accessing a cross-origin frame.', 'SecurityError');
+      },
+      configurable: true,
+    });
+
+    fireEvent.wheel(canvas!, {
+      deltaX: 4,
+      deltaY: 72,
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'od:preview-scroll-by', left: 4, top: 72 },
+      '*',
+    );
+  });
+
   it('closes the draw toolbar from an explicit close button', async () => {
     const onActiveChange = vi.fn();
     const { getByRole } = render(

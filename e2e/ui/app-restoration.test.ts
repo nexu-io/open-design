@@ -597,12 +597,14 @@ test('switching between conversations keeps the composer usable while navigating
 
   await sendPrompt(page, firstPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  const firstContext = await getCurrentProjectContext(page);
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toHaveValue('');
   await sendPrompt(page, secondPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
+  const secondContext = await getCurrentProjectContext(page);
 
   const composerInput = page.getByTestId('chat-composer-input');
   await composerInput.fill(secondDraft);
@@ -619,6 +621,7 @@ test('switching between conversations keeps the composer usable while navigating
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}$`));
 
   await composerInput.fill(firstDraft);
   await expect(composerInput).toHaveValue(firstDraft);
@@ -633,6 +636,7 @@ test('switching between conversations keeps the composer usable while navigating
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt }).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/projects/${secondContext.projectId}/conversations/${secondContext.conversationId}$`));
 
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
@@ -644,6 +648,13 @@ test('switching between conversations keeps the composer usable while navigating
     .click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}$`));
+
+  await page.reload();
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}$`));
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
+  await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
 });
 
 test('reloading an older conversation route keeps the composer visible on that route', async ({ page }) => {

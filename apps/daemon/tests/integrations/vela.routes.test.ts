@@ -371,6 +371,61 @@ describe('POST /api/integrations/vela/login', () => {
     }
   });
 
+
+  it('uses the same Settings-configured AMR env for login and subsequent status reads', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    process.env.OPEN_DESIGN_AMR_PROFILE = 'prod';
+    process.env.VELA_PROFILE = 'prod';
+    process.env.FAKE_VELA_LOGIN_USER_EMAIL = 'settings-roundtrip@example.com';
+    await writeAppConfig(dataDir, {
+      ...previous,
+      agentCliEnv: {
+        ...(previous.agentCliEnv ?? {}),
+        amr: {
+          ...((previous.agentCliEnv?.amr as Record<string, string>) ?? {}),
+          VELA_BIN: FAKE_VELA,
+          OPEN_DESIGN_AMR_PROFILE: 'local',
+        },
+      },
+    });
+    try {
+      const before = await getJson<{
+        loggedIn: boolean;
+        profile: string;
+        user: { email?: string } | null;
+      }>(`${baseUrl}/api/integrations/vela/status`);
+      expect(before.status).toBe(200);
+      expect(before.body.loggedIn).toBe(false);
+      expect(before.body.profile).toBe('local');
+
+      const login = await postJson<{
+        pid: number;
+        profile: string;
+      }>(`${baseUrl}/api/integrations/vela/login`);
+      expect(login.status).toBe(202);
+      expect(login.body.profile).toBe('local');
+
+      for (let i = 0; i < 50; i += 1) {
+        const current = await getJson<{
+          loggedIn: boolean;
+          profile: string;
+          user: { email?: string } | null;
+        }>(`${baseUrl}/api/integrations/vela/status`);
+        if (current.body.loggedIn) {
+          expect(current.body.profile).toBe('local');
+          expect(current.body.user?.email).toBe('settings-roundtrip@example.com');
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error('expected configured-profile AMR login to become visible via /status');
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+      delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
+    }
+  });
+
   it('returns 409 when a login subprocess is already in flight', async () => {
     // Use the stub's delay knob so the first login is still running when
     // the second request arrives; without this the first exits before the

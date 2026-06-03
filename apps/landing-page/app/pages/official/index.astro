@@ -45,9 +45,9 @@ const sources = [
   { ...page.sources[4], href: DISCORD },
   { ...page.sources[5], href: DOCS },
   { ...page.sources[6], href: REPO_LICENSE },
-  { ...page.sources[7], href: href('/skills/') },
-  { ...page.sources[8], href: href('/systems/') },
-  { ...page.sources[9], href: href('/templates/') },
+  { ...page.sources[7], href: href('/plugins/skills/') },
+  { ...page.sources[8], href: href('/plugins/systems/') },
+  { ...page.sources[9], href: href('/plugins/templates/') },
 ];
 
 const jsonLd = [
@@ -140,8 +140,8 @@ const jsonLd = [
         <li><a class="inline-link" href={href('/quickstart/')}>{page.nextItems[0].label}</a> — {page.nextItems[0].body}</li>
         <li><a class="inline-link" href={href('/agents/')}>{page.nextItems[1].label}</a> — {page.nextItems[1].body}</li>
         <li><a class="inline-link" href={href('/alternatives/claude-design/')}>{page.nextItems[2].label}</a> — {page.nextItems[2].body}</li>
-        <li><a class="inline-link" href={href('/skills/')}>{page.nextItems[3].label}</a> — {page.nextItems[3].body}</li>
-        <li><a class="inline-link" href={href('/systems/')}>{page.nextItems[4].label}</a> — {page.nextItems[4].body}</li>
+        <li><a class="inline-link" href={href('/plugins/skills/')}>{page.nextItems[3].label}</a> — {page.nextItems[3].body}</li>
+        <li><a class="inline-link" href={href('/plugins/systems/')}>{page.nextItems[4].label}</a> — {page.nextItems[4].body}</li>
       </ul>
     </section>
   </article>

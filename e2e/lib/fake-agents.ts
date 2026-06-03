@@ -141,6 +141,14 @@ async function emitRun(promptText) {
     emitFailure();
     return;
   }
+  if (promptText.includes('Return a daemon 429 service failure')) {
+    emitServiceFailure(429);
+    return;
+  }
+  if (promptText.includes('Return a daemon 503 service failure')) {
+    emitServiceFailure(503);
+    return;
+  }
   if (promptText.includes('Return an empty daemon smoke response')) {
     emitEmptySuccess();
     return;
@@ -377,6 +385,31 @@ function emitFailure() {
       return;
     default:
       process.stderr.write('intentional fake ' + agentId + ' failure\\n');
+      process.exitCode = 1;
+      exitSoon(1);
+  }
+}
+
+function emitServiceFailure(statusCode) {
+  const message =
+    statusCode === 429
+      ? 'HTTP 429 Too Many Requests: rate limit exceeded for the current provider.'
+      : 'HTTP 503 Service Unavailable: upstream model provider is temporarily unavailable.';
+  switch (agentId) {
+    case 'codex':
+      writeJson({ type: 'thread.started' });
+      writeJson({ type: 'turn.started' });
+      writeJson({ type: 'turn.failed', error: { message } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    case 'opencode':
+      writeJson({ type: 'error', error: { data: { message } } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    default:
+      process.stderr.write(message + '\\n');
       process.exitCode = 1;
       exitSoon(1);
   }

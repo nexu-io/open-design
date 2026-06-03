@@ -3,6 +3,7 @@ import {
   __forTestResolveRunProjectKindForAnalytics,
   __forTestScanRunEventsForFinishedProps,
 } from '../src/server.js';
+import { hasExplicitRequestedModelForAnalytics } from '../src/run-analytics-observability.js';
 
 describe('run lifecycle analytics', () => {
   it('falls back to stored project metadata when analytics hints omit project kind', () => {
@@ -93,6 +94,14 @@ describe('scanRunEventsForFinishedProps', () => {
     // ignores it when reqBodyModel is set — no assertion on its value here.
   });
 
+  it('treats synthetic default request model as unresolved and reads the agent model', () => {
+    const events = [initializingEvent('gpt-5.4-mini'), usageEvent(30, 40)];
+    const result = __forTestScanRunEventsForFinishedProps(events, 'default');
+    expect(result.agentReportedModel).toBe('gpt-5.4-mini');
+    expect(result.inputTokens).toBe(30);
+    expect(result.outputTokens).toBe(40);
+  });
+
   it('returns null agentReportedModel when no status event is present', () => {
     const events = [usageEvent(5, 10)];
     const result = __forTestScanRunEventsForFinishedProps(events, '');
@@ -121,5 +130,14 @@ describe('scanRunEventsForFinishedProps', () => {
     expect(result.agentReportedModel).toBe('claude-opus-4');
     expect(result.inputTokens).toBe(500);
     expect(result.outputTokens).toBe(750);
+  });
+});
+
+describe('hasExplicitRequestedModelForAnalytics', () => {
+  it('only treats concrete non-default model strings as explicit selections', () => {
+    expect(hasExplicitRequestedModelForAnalytics(null)).toBe(false);
+    expect(hasExplicitRequestedModelForAnalytics('')).toBe(false);
+    expect(hasExplicitRequestedModelForAnalytics(' default ')).toBe(false);
+    expect(hasExplicitRequestedModelForAnalytics('claude-opus-4-7')).toBe(true);
   });
 });

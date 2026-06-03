@@ -72,7 +72,7 @@ function renderHtmlPreview() {
 }
 
 function openImageExportDialog() {
-  fireEvent.click(screen.getByRole('button', { name: /share/i }));
+  fireEvent.click(screen.getByRole('button', { name: /download/i }));
   fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
   expect(screen.getByRole('dialog', { name: /export as image/i })).toBeTruthy();
 }

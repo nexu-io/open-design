@@ -102,6 +102,10 @@ export interface ManualEditHoverMessage {
   target: ManualEditTarget;
 }
 
+export interface ManualEditBackgroundMessage {
+  type: 'od-edit-background';
+}
+
 export interface ManualEditPreviewAppliedMessage {
   type: 'od-edit-preview-style-applied';
   id: string;
@@ -120,6 +124,7 @@ export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
   | ManualEditHoverMessage
+  | ManualEditBackgroundMessage
   | ManualEditPreviewAppliedMessage
   | ManualEditTextCommitMessage;
 

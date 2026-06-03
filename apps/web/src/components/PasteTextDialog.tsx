@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, Input, Textarea } from '@open-design/components';
 import { useT } from '../i18n';
 
 interface Props {
@@ -25,7 +26,7 @@ export function PasteTextDialog({ onSave, onClose }: Props) {
         <p className="hint">{t('pasteDialog.hint')}</p>
         <label>
           {t('pasteDialog.fileNameLabel')}
-          <input
+          <Input
             type="text"
             value={name}
             placeholder={t('pasteDialog.namePlaceholder')}
@@ -35,7 +36,7 @@ export function PasteTextDialog({ onSave, onClose }: Props) {
         </label>
         <label>
           {t('pasteDialog.contentLabel')}
-          <textarea
+          <Textarea
             rows={10}
             value={content}
             placeholder={t('pasteDialog.contentPlaceholder')}
@@ -43,10 +44,10 @@ export function PasteTextDialog({ onSave, onClose }: Props) {
           />
         </label>
         <div className="row">
-          <button onClick={onClose}>{t('pasteDialog.cancel')}</button>
-          <button className="primary" onClick={commit} disabled={!content.trim()}>
+          <Button onClick={onClose}>{t('pasteDialog.cancel')}</Button>
+          <Button variant="primary" onClick={commit} disabled={!content.trim()}>
             {t('pasteDialog.save')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

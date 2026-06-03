@@ -23,7 +23,13 @@ import { createRoleMarkerGuard, type RoleMarkerGuard } from './role-marker-guard
 
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
-type BlockState = { type?: unknown; name?: unknown; id?: unknown; input: string };
+type BlockState = {
+  type?: unknown;
+  name?: unknown;
+  id?: unknown;
+  input: string;
+  inputValue?: unknown;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -257,7 +263,13 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     if (ev.type === 'content_block_start' && isRecord(ev.content_block)) {
       const key = blockKey(ev.index);
       const block = ev.content_block;
-      blocks.set(key, { type: block.type, name: block.name, id: block.id, input: '' });
+      blocks.set(key, {
+        type: block.type,
+        name: block.name,
+        id: block.id,
+        input: '',
+        inputValue: 'input' in block ? block.input : undefined,
+      });
       if (block.type === 'thinking') {
         onEvent({ type: 'thinking_start' });
       }
@@ -304,6 +316,19 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
           // Fall through to the final assistant wrapper's input if the
           // streamed JSON is malformed or incomplete.
         }
+      } else if (
+        state &&
+        state.type === 'tool_use' &&
+        typeof state.id === 'string' &&
+        state.inputValue !== undefined
+      ) {
+        onEvent({
+          type: 'tool_use',
+          id: state.id,
+          name: state.name,
+          input: state.inputValue,
+        });
+        streamedToolUseIds.add(state.id);
       }
       blocks.delete(key);
       return;

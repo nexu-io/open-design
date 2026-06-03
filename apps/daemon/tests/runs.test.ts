@@ -62,6 +62,27 @@ describe('chat run service shutdown', () => {
       runs.list({ projectId: 'project-1', conversationId: 'conv-b', status: 'active' }),
     ).toEqual([runB]);
   });
+  it('cancels a queued run immediately without waiting for child process shutdown', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-queued' });
+
+    const wait = runs.wait(run);
+    runs.cancel(run);
+
+    expect(run.status).toBe('canceled');
+    expect(run.cancelRequested).toBe(true);
+    expect(run.signal).toBe('SIGTERM');
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { status: 'canceled', signal: 'SIGTERM' },
+    });
+    await expect(wait).resolves.toMatchObject({
+      status: 'canceled',
+      signal: 'SIGTERM',
+    });
+  });
+
+
 
   it('stores effective media execution policy on run status bodies', () => {
     const runs = createRuns();
@@ -78,6 +99,45 @@ describe('chat run service shutdown', () => {
     expect(runs.statusBody(scopedRun)).toMatchObject({
       mediaExecution: { mode: 'enabled', allowedSurfaces: ['image'] },
     });
+  });
+
+  it('stores a run-scoped tool bundle and returns a redacted status summary', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-a',
+      toolBundle: {
+        mcpServers: [
+          {
+            id: 'run-tools',
+            transport: 'stdio',
+            command: 'node',
+            args: ['server.js', '--token=secret'],
+            env: { API_TOKEN: 'secret' },
+          },
+        ],
+      },
+    }) as any;
+
+    expect(run.toolBundle.mcpServers).toHaveLength(1);
+    expect(run.toolBundle.mcpServers[0]).toMatchObject({
+      id: 'run-tools',
+      command: 'node',
+      env: { API_TOKEN: 'secret' },
+    });
+
+    const status = runs.statusBody(run);
+    expect(status.toolBundle).toEqual({
+      mcpServers: [
+        {
+          id: 'run-tools',
+          transport: 'stdio',
+          enabled: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(status)).not.toContain('secret');
+    expect(JSON.stringify(status)).not.toContain('server.js');
   });
 
   it('cancels active runs and terminates their child process during daemon shutdown', async () => {

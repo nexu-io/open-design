@@ -3,6 +3,7 @@
 @import './styles/design-system-flow.css';
 @import './styles/tokens.css';
 @import './styles/base.css';
+@import '@open-design/components/styles.css';
 @import './styles/primitives.css';
 @import './styles/shell.css';
 @import './styles/chat.css';

@@ -236,11 +236,31 @@ function installDesktopMenu(
       },
       {
         label: "Help",
+        role: "help",
         submenu: [
           {
-            label: "Open Design",
+            label: "Documentation",
             click() {
-              void shell.openExternal("https://github.com/nexu-io/open-design");
+              void shell.openExternal("https://github.com/nexu-io/open-design#readme");
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Contact Us",
+            click() {
+              void shell.openExternal("https://x.com/nexudotio");
+            },
+          },
+          {
+            label: "Report Issue",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
+            },
+          },
+          {
+            label: "Join Discord",
+            click() {
+              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
             },
           },
           { type: "separator" },

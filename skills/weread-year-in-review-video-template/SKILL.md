@@ -48,12 +48,14 @@ keywords, and a reading persona into a shareable 9:16 video.
 weread-year-in-review-video-template/
 ├── SKILL.md
 ├── assets/
-│   ├── template.html
-│   └── default-showcase.mp4
+│   └── template.html
 ├── references/
 │   └── checklist.md
 └── example.html
 ```
+
+The rendered MP4 showcase used by `example.html` is hosted at
+`https://repo-assets.open-design.ai/resources/videos/skills/weread-year-in-review-video-template/default-showcase.mp4`.
 
 ## Workflow
 
@@ -90,4 +92,3 @@ Emit one short orientation sentence, then a single HTML artifact:
 <html>...</html>
 </artifact>
 ```
-

@@ -119,6 +119,8 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('schedulePostPreviewScroll');
     expect(srcdoc).toContain("type: 'od:preview-scroll'");
     expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-by'");
+    expect(srcdoc).toContain('previewScrollBy(data.left, data.top)');
     expect(srcdoc).toContain('data-od-selection-bridge-style');
     expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
     expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');

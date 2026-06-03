@@ -77,6 +77,7 @@ export const API_ERROR_CODES = [
   'REDACTION_REQUIRED',
   // Connector catalog, connection, safety, and execution failures.
   'CONNECTOR_NOT_FOUND',
+  'CONNECTOR_AUTH_CONFIG_REQUIRED',
   'CONNECTOR_NOT_CONNECTED',
   'CONNECTOR_DISABLED',
   'CONNECTOR_TOOL_NOT_FOUND',

@@ -53,6 +53,11 @@ export interface RoutineDeps {
   routineService: RoutineRoutesService;
 }
 
+export interface ProjectPreviewScopeDeps {
+  mint: (projectId: string) => string;
+  validate: (projectId: string, scope: string) => boolean;
+}
+
 export interface TelemetryDeps {
   reportFinalizedMessage: (saved: any, body?: any) => void;
   /**
@@ -101,6 +106,7 @@ export interface ServerContext {
   mcp: any;
   resources: ResourceDeps;
   routines: RoutineDeps;
+  projectPreviewScopes: ProjectPreviewScopeDeps;
   telemetry?: TelemetryDeps;
   validation: any;
   finalize: any;

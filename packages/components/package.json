@@ -1,0 +1,37 @@
+{
+  "name": "@open-design/components",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Open Design React UI primitives.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/styles.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.28",
+    "esbuild": "0.28.0",
+    "tsx": "4.22.3",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

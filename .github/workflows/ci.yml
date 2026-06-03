@@ -61,7 +61,7 @@ jobs:
               if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 daemon_tests_required=true
               fi
-              if [[ "$file" == "apps/web/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+              if [[ "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 web_tests_required=true
               fi
               if [[ "$file" == "scripts/"* || "$file" == "assets/"* || "$file" == "skills/"* || "$file" == "prompt-templates/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* ]]; then
@@ -71,7 +71,7 @@ jobs:
               if [[ "$file" == "tools/dev/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_dev_tests_required=true
               fi
-              if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+              if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/components/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
               if [[ "$file" == "package.json" || "$file" == "apps/daemon/package.json" || "$file" == "apps/web/package.json" || "$file" == "apps/desktop/package.json" || "$file" == "apps/packaged/package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
@@ -81,7 +81,7 @@ jobs:
                 tools_pack_tests_required=true
               fi
               # Keep this filter in sync with flake.nix daemonWorkspacePaths / webWorkspacePaths.
-              if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
+              if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
                 nix_validation_required=true
               fi
               case "$file" in
@@ -133,6 +133,76 @@ jobs:
             echo "nix_validation_required=$nix_validation_required"
             echo "workspace_validation_required=$workspace_validation_required"
           } >> "$GITHUB_OUTPUT"
+
+  blob_guard:
+    name: Guard changed file sizes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check changed tracked file sizes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_CHANGED_FILE_BYTES: "1048576"
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$RUNNER_TEMP/blob-guard-changed-files.txt"
+          : > "$changed_files"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            gh api --paginate \
+              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+              --jq '.[].filename' > "$changed_files"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            git diff --name-only --diff-filter=AMR \
+              "${{ github.event.merge_group.base_sha }}" \
+              "${{ github.event.merge_group.head_sha }}" > "$changed_files"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+            if [[ "$before" =~ ^0+$ ]]; then
+              git ls-files > "$changed_files"
+            else
+              git diff --name-only --diff-filter=AMR "$before" "$after" > "$changed_files"
+            fi
+          else
+            git ls-files > "$changed_files"
+          fi
+
+          oversized="$RUNNER_TEMP/blob-guard-oversized.txt"
+          : > "$oversized"
+
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            [ -f "$file" ] || continue
+            if ! git ls-files --error-unmatch -- "$file" >/dev/null 2>&1; then
+              continue
+            fi
+            size="$(wc -c < "$file" | tr -d '[:space:]')"
+            if [ "$size" -gt "$MAX_CHANGED_FILE_BYTES" ]; then
+              printf '%s\t%s\n' "$size" "$file" >> "$oversized"
+            fi
+          done < "$changed_files"
+
+          if [ -s "$oversized" ]; then
+            {
+              echo "Changed tracked files exceed the current blob guard threshold (${MAX_CHANGED_FILE_BYTES} bytes):"
+              while IFS=$'\t' read -r size file; do
+                echo "- ${size} bytes	${file}"
+              done < "$oversized"
+              echo
+              echo "Move large generated/media assets to repository-assets R2 or add a narrow, reviewed exception for source-owned runtime binaries."
+            } >&2
+            exit 1
+          fi
+
+          echo "Changed-file blob guard passed at ${MAX_CHANGED_FILE_BYTES} bytes."
 
   nix_validation:
     name: Validate Nix flake
@@ -424,6 +494,7 @@ jobs:
     name: Validate workspace
     needs:
       - change_scopes
+      - blob_guard
       - preflight
       - nix_validation
       - workspace_unit_tests

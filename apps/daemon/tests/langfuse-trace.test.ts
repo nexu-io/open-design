@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFeedbackPayload,
   buildTracePayload,
+  deriveLangfuseDeliveryState,
   readLangfuseConfig,
   readTelemetrySinkConfig,
   reportRunCompleted,
@@ -31,8 +32,16 @@ function makeCtx(overrides: Partial<ReportContext> = {}): ReportContext {
       output: 'Here is a landing page draft …',
       usage: {
         inputTokens: 1234,
+        inputTokensProvider: 1234,
+        inputTokensEffective: 1484,
         outputTokens: 567,
-        totalTokens: 1801,
+        totalTokens: 2051,
+        cacheReadInputTokens: 200,
+        cacheCreationInputTokens: 50,
+        uncachedInputTokens: 1234,
+        estimatedContextTokens: 1350,
+        cacheHitRatio: 0.1347708894878706,
+        cacheTokenSource: 'anthropic',
       },
     },
     artifacts: [],
@@ -188,6 +197,59 @@ describe('readTelemetrySinkConfig', () => {
   });
 });
 
+describe('deriveLangfuseDeliveryState', () => {
+  it('marks traces not expected when metrics consent is off', () => {
+    expect(
+      deriveLangfuseDeliveryState(
+        { metrics: false, content: true, artifactManifest: true },
+        { kind: 'langfuse', ...TEST_CONFIG },
+      ),
+    ).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'metrics_consent_off',
+    });
+  });
+
+  it('marks traces not expected when content consent is off', () => {
+    expect(
+      deriveLangfuseDeliveryState(
+        { metrics: true, content: false, artifactManifest: true },
+        { kind: 'langfuse', ...TEST_CONFIG },
+      ),
+    ).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'content_consent_off',
+    });
+  });
+
+  it('marks traces not expected when no sink is configured', () => {
+    expect(
+      deriveLangfuseDeliveryState(
+        { metrics: true, content: true, artifactManifest: true },
+        null,
+      ),
+    ).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'missing_sink_config',
+    });
+  });
+
+  it('marks eligible traces as queued at run-finished time', () => {
+    expect(
+      deriveLangfuseDeliveryState(
+        { metrics: true, content: true, artifactManifest: true },
+        { kind: 'langfuse', ...TEST_CONFIG },
+      ),
+    ).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'queued',
+    });
+  });
+});
+
 describe('buildTracePayload', () => {
   it('emits a trace with nested agent + generation observations', () => {
     const batch = buildTracePayload(makeCtx());
@@ -333,13 +395,21 @@ describe('buildTracePayload', () => {
     const gen = bodyOf(batch, 'generation-create', 'llm');
     expect(trace.metadata.tokens).toEqual({
       input: 1234,
+      inputProvider: 1234,
+      inputEffective: 1484,
       output: 567,
-      total: 1801,
+      total: 2051,
+      cacheReadInput: 200,
+      cacheCreationInput: 50,
+      uncachedInput: 1234,
+      estimatedContext: 1350,
+      cacheHitRatio: 0.1347708894878706,
+      cacheTokenSource: 'anthropic',
     });
     expect(gen.usage).toEqual({
-      input: 1234,
+      input: 1484,
       output: 567,
-      total: 1801,
+      total: 2051,
       unit: 'TOKENS',
     });
   });
@@ -472,6 +542,70 @@ describe('buildTracePayload', () => {
     expect((batch[0] as any).body.metadata.success).toBe(false);
   });
 
+  it('mirrors structured failure fields into trace metadata', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-rate-limit',
+          status: 'failed',
+          startedAt: 1,
+          endedAt: 2,
+          error: 'session limit reached',
+          errorCode: 'RATE_LIMITED',
+          failure: {
+            failure_category: 'rate_limit',
+            failure_detail: 'hard_quota',
+            failure_stage: 'session_init',
+            retryable: false,
+            user_action: 'none',
+          },
+        },
+      }),
+    );
+    const metadata = (batch[0] as any).body.metadata;
+    expect(metadata.error_code).toBe('RATE_LIMITED');
+    expect(metadata.langfuse_trace_id).toBe('run-rate-limit');
+    expect(metadata.langfuse_expected).toBe(false);
+    expect(metadata.langfuse_delivery_status).toBe('not_expected');
+    expect(metadata.langfuse_drop_reason).toBe('content_consent_off');
+    expect(metadata.failure_category).toBe('rate_limit');
+    expect(metadata.failure_detail).toBe('hard_quota');
+    expect(metadata.failure_stage).toBe('session_init');
+    expect(metadata.retryable).toBe(false);
+    expect(metadata.user_action).toBe('none');
+  });
+
+  it('mirrors run timing fields into trace metadata', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-timing',
+          status: 'succeeded',
+          startedAt: 1,
+          endedAt: 2,
+          timings: {
+            queue_duration_ms: 10,
+            pre_spawn_duration_ms: 20,
+            process_spawn_duration_ms: 30,
+            time_to_first_token_ms: 40,
+            spawn_to_first_token_ms: 50,
+            generation_duration_ms: 60,
+            tool_call_count: 2,
+            tool_duration_ms: 70,
+            finalize_duration_ms: 5,
+            total_duration_ms: 100,
+          },
+        },
+      }),
+    );
+    const metadata = (batch[0] as any).body.metadata;
+    expect(metadata.queue_duration_ms).toBe(10);
+    expect(metadata.process_spawn_duration_ms).toBe(30);
+    expect(metadata.time_to_first_token_ms).toBe(40);
+    expect(metadata.tool_call_count).toBe(2);
+    expect(metadata.total_duration_ms).toBe(100);
+  });
+
   it('passes through anonymous installationId as userId', () => {
     const batch = buildTracePayload(makeCtx({ installationId: null }));
     expect((batch[0] as any).body.userId).toBeUndefined();
@@ -492,29 +626,39 @@ describe('reportRunCompleted', () => {
 
   it('does nothing when metrics gate is off', async () => {
     const fetchSpy = vi.fn();
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: false, content: true, artifactManifest: true },
       }),
       { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
     );
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'metrics_consent_off',
+    });
   });
 
   it('does nothing when content gate is off', async () => {
     const fetchSpy = vi.fn();
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: false, artifactManifest: true },
       }),
       { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
     );
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'content_consent_off',
+    });
   });
 
   it('does nothing when no Langfuse config is available', async () => {
     const fetchSpy = vi.fn();
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -524,13 +668,18 @@ describe('reportRunCompleted', () => {
       },
     );
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'missing_sink_config',
+    });
   });
 
   it('POSTs to /api/public/ingestion with Basic auth and a JSON batch body', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('{}', { status: 200 }),
     );
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -556,6 +705,44 @@ describe('reportRunCompleted', () => {
       'span-create',
       'span-create',
     ]);
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+  });
+
+  it('keeps stderr out of trace input/output and stores only a redacted metadata tail', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+        run: {
+          runId: 'run-err',
+          status: 'failed',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          error: 'provider failed',
+          stderr: {
+            tail: 'HTTP 429 OPENAI_API_KEY=[REDACTED:openai_key]',
+            lineCount: 12,
+            truncated: true,
+          },
+        },
+      }),
+    ) as any[];
+
+    const trace = bodyOf(batch, 'trace-create');
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+
+    expect(trace.input).toBe('Make a landing page for a coffee shop.');
+    expect(trace.output).toBe('Here is a landing page draft …');
+    expect(generation.input).toBe('Make a landing page for a coffee shop.');
+    expect(generation.output).toBe('Here is a landing page draft …');
+    expect(trace.metadata.stderr).toEqual({
+      tail: 'HTTP 429 OPENAI_API_KEY=[REDACTED:openai_key]',
+      lineCount: 12,
+      truncated: true,
+    });
+    expect(JSON.stringify(batch)).not.toContain('sk-raw');
   });
 
   it('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
@@ -568,7 +755,7 @@ describe('reportRunCompleted', () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('{}', { status: 200 }),
     );
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -588,6 +775,10 @@ describe('reportRunCompleted', () => {
     expect(init.headers['X-Open-Design-Telemetry']).toBe('langfuse-ingestion-v1');
     const body = JSON.parse(init.body as string);
     expect(Array.isArray(body.batch)).toBe(true);
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
   });
 
   it('warns when the relay returns per-event errors', async () => {
@@ -603,7 +794,7 @@ describe('reportRunCompleted', () => {
         { status: 207 },
       ),
     );
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -615,6 +806,136 @@ describe('reportRunCompleted', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Relay per-event errors (1)'),
     );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'langfuse_4xx',
+    });
+  });
+
+
+  it('classifies relay 413 responses as relay_413', async () => {
+    const relayConfig: TelemetrySinkConfig = {
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      timeoutMs: 20_000,
+      retries: 0,
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response('payload too large', { status: 413 }),
+    );
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: relayConfig,
+        fetchImpl: fetchSpy as any,
+      },
+    );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'relay_413',
+    });
+  });
+
+  it('classifies relay 5xx responses as relay_5xx', async () => {
+    const relayConfig: TelemetrySinkConfig = {
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      timeoutMs: 20_000,
+      retries: 0,
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response('upstream unavailable', { status: 503 }),
+    );
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: relayConfig,
+        fetchImpl: fetchSpy as any,
+      },
+    );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'relay_5xx',
+    });
+  });
+
+  it('classifies direct Langfuse 5xx responses as langfuse_5xx', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response('server error', { status: 503 }),
+    );
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'langfuse_5xx',
+    });
+  });
+
+  it('classifies relay per-event 429s separately from generic 4xx', async () => {
+    const relayConfig: TelemetrySinkConfig = {
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+      timeoutMs: 20_000,
+      retries: 0,
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ successes: [], errors: [{ id: 'throttled', status: 429 }] }),
+        { status: 207 },
+      ),
+    );
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: relayConfig,
+        fetchImpl: fetchSpy as any,
+      },
+    );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'relay_429',
+    });
+  });
+
+  it('classifies direct Langfuse per-event 5xx responses as langfuse_5xx', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ successes: [], errors: [{ id: 'lf-down', status: 503 }] }),
+        { status: 207 },
+      ),
+    );
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'langfuse_5xx',
+    });
   });
 
   it('warns and drops when serialized batch exceeds the hard cap', async () => {
@@ -627,7 +948,7 @@ describe('reportRunCompleted', () => {
       type: 'html',
       sizeBytes: 1,
     }));
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         artifacts: fatArtifacts,
         prefs: { metrics: true, content: true, artifactManifest: true },
@@ -638,6 +959,11 @@ describe('reportRunCompleted', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Batch too large'),
     );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'payload_too_large',
+    });
   });
 
   it('only warns (does not throw) when fetch rejects', async () => {
@@ -652,7 +978,11 @@ describe('reportRunCompleted', () => {
           fetchImpl: fetchSpy as any,
         },
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'network_error',
+    });
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Fetch error'),
     );
@@ -663,7 +993,7 @@ describe('reportRunCompleted', () => {
       .fn()
       .mockRejectedValueOnce(new Error('timeout'))
       .mockResolvedValueOnce(new Response('{}', { status: 207 }));
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -674,13 +1004,17 @@ describe('reportRunCompleted', () => {
     );
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(warnSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
   });
 
   it('only warns (does not throw) when ingestion responds non-2xx', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('rate limited', { status: 429 }),
     );
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -692,6 +1026,11 @@ describe('reportRunCompleted', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Ingestion failed 429'),
     );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'langfuse_4xx',
+    });
   });
 
   it('warns when 207 Multi-Status body lists per-event errors', async () => {
@@ -713,7 +1052,7 @@ describe('reportRunCompleted', () => {
         { status: 207 },
       ),
     );
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -725,6 +1064,11 @@ describe('reportRunCompleted', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('Per-event errors (1)'),
     );
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'langfuse_4xx',
+    });
   });
 
   it('does not warn when 207 body has empty errors array', async () => {
@@ -740,7 +1084,7 @@ describe('reportRunCompleted', () => {
         { status: 207 },
       ),
     );
-    await reportRunCompleted(
+    const result = await reportRunCompleted(
       makeCtx({
         prefs: { metrics: true, content: true, artifactManifest: false },
       }),
@@ -750,6 +1094,10 @@ describe('reportRunCompleted', () => {
       },
     );
     expect(warnSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
   });
 });
 

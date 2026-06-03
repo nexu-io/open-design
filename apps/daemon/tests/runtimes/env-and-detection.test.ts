@@ -1,6 +1,8 @@
 import { symlinkSync } from 'node:fs';
 import { test, vi } from 'vitest';
 import { homedir } from 'node:os';
+import { dirname, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as platform from '@open-design/platform';
 import {
   assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
@@ -8,18 +10,21 @@ import {
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
-// Issue #398: Claude Code prefers ANTHROPIC_API_KEY over `claude login`
-// credentials, silently billing API usage. Strip it for the claude
+// Issue #398: Claude Code prefers Anthropic API credentials over `claude login`
+// credentials, silently billing API usage. Strip them for the claude
 // adapter so the user's subscription wins.
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY for the claude adapter', () => {
+test('spawnEnvForAgent strips Anthropic API credentials for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
     PATH: '/usr/bin',
     OD_DAEMON_URL: 'http://127.0.0.1:7456',
   });
 
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
 });
@@ -29,6 +34,7 @@ test('spawnEnvForAgent applies configured Claude Code env before auth stripping'
     'claude',
     {
       ANTHROPIC_API_KEY: 'sk-leak',
+      ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
       PATH: '/usr/bin',
     },
     {
@@ -38,6 +44,7 @@ test('spawnEnvForAgent applies configured Claude Code env before auth stripping'
 
   assert.equal(env.CLAUDE_CONFIG_DIR, '/Users/test/.claude-2');
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -53,6 +60,113 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal(env.PATH, '/usr/bin');
   assert.equal('CODEX_HOME' in base, false);
   assert.equal('CODEX_BIN' in base, false);
+});
+
+test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-'));
+  try {
+    const codexEnv = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+      },
+    );
+    assert.equal(
+      codexEnv.CODEX_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.codex'),
+    );
+    assert.equal(codexEnv.HOME, join(dataDir, 'sandbox', 'agent-home'));
+
+    const claudeEnv = spawnEnvForAgent(
+      'claude',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CLAUDE_CONFIG_DIR: '/Users/test/.claude-host',
+      },
+    );
+    assert.equal(
+      claudeEnv.CLAUDE_CONFIG_DIR,
+      join(dataDir, 'sandbox', 'config', 'claude'),
+    );
+
+    const amrEnv = spawnEnvForAgent(
+      'amr',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        OPENCODE_TEST_HOME: '/Users/test/.opencode-host',
+      },
+    );
+    assert.equal(
+      amrEnv.OPENCODE_TEST_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.opencode'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent keeps sandbox roots pinned to the base OD_DATA_DIR', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-base-'));
+  try {
+    const env = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+        OD_DATA_DIR: '/host/path/.od',
+      },
+    );
+
+    assert.equal(env.OD_DATA_DIR, dataDir);
+    assert.equal(env.CODEX_HOME, join(dataDir, 'sandbox', 'agent-home', '.codex'));
+    assert.equal(env.HOME, join(dataDir, 'sandbox', 'agent-home'));
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent resolves relative OD_DATA_DIR before applying sandbox roots', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-relative-'));
+  try {
+    const relativeDataDir = relative(repoRoot, dataDir);
+    const env = spawnEnvForAgent(
+      'codex',
+      {
+        OD_DATA_DIR: relativeDataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        CODEX_HOME: '/Users/test/.codex-host',
+      },
+    );
+
+    assert.equal(
+      env.CODEX_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.codex'),
+    );
+    assert.equal(env.CLAUDE_CONFIG_DIR, join(dataDir, 'sandbox', 'config', 'claude'));
+    assert.equal(env.HOME, join(dataDir, 'sandbox', 'agent-home'));
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
 });
 
 test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
@@ -478,6 +592,56 @@ fsTest('detectAgents marks AMR available from packaged built-in Vela with the bu
   }
 });
 
+
+fsTest('detectAgents prefers configured AMR live models over stale fallback defaults', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-detect-amr-live-models-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'OD_RESOURCE_ROOT', 'VELA_OPENCODE_BIN'], async () => {
+      const fakeVela = join(root, 'vela');
+      const fakeOpenCode = join(root, 'opencode');
+      writeFileSync(
+        fakeVela,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "vela custom-live"; exit 0; fi
+if [ "$1" = "models" ]; then printf "%s\n" "public_model_deepseek_v4_flash    vela" "public_model_glm_5    vela"; exit 0; fi
+exit 0
+`,
+      );
+      writeFileSync(fakeOpenCode, `#!/bin/sh
+exit 0
+`);
+      chmodSync(fakeVela, 0o755);
+      chmodSync(fakeOpenCode, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'empty-home');
+      delete process.env.OD_RESOURCE_ROOT;
+      delete process.env.VELA_OPENCODE_BIN;
+
+      const agents = await detectAgents({
+        amr: {
+          VELA_BIN: fakeVela,
+          VELA_OPENCODE_BIN: fakeOpenCode,
+        },
+      });
+      const amrAgent = agents.find((agent) => agent.id === 'amr');
+
+      assert.ok(amrAgent);
+      assert.equal(amrAgent.available, true);
+      assert.equal(amrAgent.path, fakeVela);
+      assert.equal(amrAgent.version, 'vela custom-live');
+      assert.equal(amrAgent.modelsSource, 'live');
+      assert.deepEqual(amrAgent.models, [
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+        { id: 'glm-5', label: 'glm-5' },
+      ]);
+      assert.equal(amrAgent.models.some((model) => model.id === 'default'), false);
+      assert.equal(amrAgent.models.some((model) => model.id === 'gpt-5.4-mini'), false);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function codexNativeTargetTriple(): string {
   if (process.platform === 'darwin' && process.arch === 'arm64') return 'aarch64-apple-darwin';
   if (process.platform === 'darwin' && process.arch === 'x64') return 'x86_64-apple-darwin';
@@ -833,30 +997,55 @@ test('antigravity auth matcher covers agy print-mode + log-file auth signals', a
 // spreading process.env into a plain object loses Node's case-insensitive
 // accessor — a `Anthropic_Api_Key` key would survive a literal
 // `delete env.ANTHROPIC_API_KEY` and still reach Claude Code on Windows.
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY case-insensitively for the claude adapter', () => {
+test('spawnEnvForAgent strips Anthropic credentials case-insensitively for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     Anthropic_Api_Key: 'sk-mixed-case',
     anthropic_api_key: 'sk-lower-case',
+    Anthropic_Auth_Token: 'sk-token-mixed-case',
     PATH: '/usr/bin',
   });
 
   const remaining = Object.keys(env).filter(
-    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY',
+    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY' || k.toUpperCase() === 'ANTHROPIC_AUTH_TOKEN',
   );
   assert.deepEqual(remaining, []);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves ANTHROPIC_API_KEY for non-claude adapters', () => {
+test('spawnEnvForAgent preserves Anthropic credentials when claude resolves to OpenClaude fallback', () => {
+  const env = spawnEnvForAgent(
+    'claude',
+    {
+      ANTHROPIC_API_KEY: 'sk-openclaude',
+      ANTHROPIC_AUTH_TOKEN: 'sk-token-openclaude',
+      PATH: '/usr/bin',
+    },
+    {},
+    {},
+    { resolvedBin: '/tools/openclaude' },
+  );
+
+  assert.equal(env.ANTHROPIC_API_KEY, 'sk-openclaude');
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token-openclaude');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters', () => {
   for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {
       ANTHROPIC_API_KEY: 'sk-keep',
+      ANTHROPIC_AUTH_TOKEN: 'sk-token-keep',
       PATH: '/usr/bin',
     });
     assert.equal(
       env.ANTHROPIC_API_KEY,
       'sk-keep',
       `expected ${agentId} to preserve ANTHROPIC_API_KEY`,
+    );
+    assert.equal(
+      env.ANTHROPIC_AUTH_TOKEN,
+      'sk-token-keep',
+      `expected ${agentId} to preserve ANTHROPIC_AUTH_TOKEN`,
     );
   }
 });
@@ -1016,37 +1205,43 @@ test('spawnEnvForAgent strips stale configured OPENAI_API_KEY when configured ba
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is set', () => {
+test('spawnEnvForAgent preserves Anthropic API credentials when ANTHROPIC_BASE_URL is set', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-kimi',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token',
     ANTHROPIC_BASE_URL: 'https://api.moonshot.cn/v1',
     PATH: '/usr/bin',
   });
 
   assert.equal(env.ANTHROPIC_API_KEY, 'sk-kimi');
+  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token');
   assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.moonshot.cn/v1');
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is empty', () => {
+test('spawnEnvForAgent strips Anthropic API credentials when ANTHROPIC_BASE_URL is empty', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
     ANTHROPIC_BASE_URL: '',
     PATH: '/usr/bin',
   });
 
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent strips ANTHROPIC_API_KEY when ANTHROPIC_BASE_URL is whitespace', () => {
+test('spawnEnvForAgent strips Anthropic API credentials when ANTHROPIC_BASE_URL is whitespace', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
+    ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
     ANTHROPIC_BASE_URL: '   ',
     PATH: '/usr/bin',
   });
 
   assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 

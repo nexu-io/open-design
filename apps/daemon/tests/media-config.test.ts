@@ -30,6 +30,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   );
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  const originalSandboxMode = process.env.OD_SANDBOX_MODE;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
@@ -42,6 +43,7 @@ describe('media-config OpenAI auth-file fallback', () => {
     }
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
+    delete process.env.OD_SANDBOX_MODE;
   });
 
   afterEach(async () => {
@@ -66,6 +68,11 @@ describe('media-config OpenAI auth-file fallback', () => {
       delete process.env.OD_DATA_DIR;
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
+    }
+    if (originalSandboxMode == null) {
+      delete process.env.OD_SANDBOX_MODE;
+    } else {
+      process.env.OD_SANDBOX_MODE = originalSandboxMode;
     }
     homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });
@@ -121,6 +128,30 @@ describe('media-config OpenAI auth-file fallback', () => {
       configured: false,
       source: 'unset',
       apiKeyTail: '',
+    });
+  });
+
+  it('does not read host OpenAI auth files in sandbox mode', async () => {
+    process.env.OD_SANDBOX_MODE = '1';
+    await writeHomeJson('.hermes/auth.json', {
+      providers: {
+        'openai-codex': {
+          tokens: { access_token: 'hermes-oauth-token' },
+        },
+      },
+    });
+    await writeHomeJson('.codex/auth.json', {
+      tokens: { access_token: 'codex-oauth-token' },
+      OPENAI_API_KEY: 'host-codex-api-key',
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'openai');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('');
+    expect(openaiProvider(masked)).toMatchObject({
+      configured: false,
+      source: 'unset',
     });
   });
 

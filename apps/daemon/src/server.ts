@@ -25,7 +25,10 @@ import {
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
+import { resolveProjectRoot } from './project-root.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
+
+export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
 import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
@@ -47,6 +50,7 @@ import {
   rememberLiveModels,
   resolveModelForAgent,
 } from './runtimes/models.js';
+import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import {
   cancelVelaLogin,
   forgetVelaLogin,
@@ -89,7 +93,13 @@ import { installFromTarget, uninstallById, sanitizeRepoName } from './library-in
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
-import { parseMediaExecutionPolicyInput } from './media-policy.js';
+import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media-policy.js';
+import {
+  applySandboxRuntimeEnv,
+  ensureSandboxRuntimeDirs,
+  isSandboxModeEnabled,
+  resolveSandboxRuntimeConfig,
+} from './sandbox-mode.js';
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
@@ -228,15 +238,27 @@ import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+import { classifyRunFailure } from './run-failure-classification.js';
+import {
+  hasExplicitRequestedModelForAnalytics,
+  scanRunEventsForUsageAnalytics,
+  summarizeRunTimingAnalytics,
+} from './run-analytics-observability.js';
+import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
   countNewHtmlArtifacts,
   didRunCreateDesignSystemFile,
+  runAskedUserQuestion,
 } from './run-artifacts.js';
 import {
   reportRunCompletedFromDaemon,
   reportRunFeedbackFromDaemon,
 } from './langfuse-bridge.js';
+import {
+  deriveLangfuseDeliveryState,
+  readTelemetrySinkConfig,
+} from './langfuse-trace.js';
 import {
   createAnalyticsService,
   newInsertId,
@@ -252,6 +274,7 @@ import {
   type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
+  mergeNoProxyWithLoopbackDefaults,
   redactSecrets,
   testAgentConnection,
   testProviderConnection,
@@ -307,6 +330,11 @@ import {
   writeMcpConfig,
 } from './mcp-config.js';
 import {
+  parseRunToolBundleForRequest,
+  resolveExternalMcpServersForRun,
+  validateRunToolBundleForAgent,
+} from './run-tool-bundle.js';
+import {
   beginAuth,
   exchangeCodeForToken,
   PendingAuthCache,
@@ -335,8 +363,10 @@ import {
   buildBatchArchive,
   decodeMultipartFilename,
   deleteProjectFile,
+  assertSandboxProjectRootAvailable,
   detectEntryFile,
   ensureProject,
+  isRunTouchedProjectFile,
   isSafeId,
   listFiles,
   mimeFor,
@@ -346,6 +376,7 @@ import {
   renameProjectFile,
   removeProjectDir,
   resolveProjectDir,
+  SandboxImportedProjectError,
   sanitizeName,
   searchProjectFiles,
   resolveProjectDir,
@@ -433,6 +464,8 @@ import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
+import { installRouteRegistrationGuard } from './route-registration-guard.js';
+import { submitToolResultToRunState } from './run-tool-results.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
 import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
@@ -476,13 +509,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
-export function resolveProjectRoot(moduleDir: string): string {
-  const base = path.basename(moduleDir);
-  const daemonDir =
-    base === 'dist' || base === 'src' ? path.dirname(moduleDir) : moduleDir;
-  return path.resolve(daemonDir, '../..');
-}
-
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0
     ? path.resolve(value)
@@ -875,7 +901,7 @@ export function renderCommentAttachmentHint(commentAttachments) {
     '',
     '',
     '<attached-preview-comments>',
-    'Scope: treat each attachment as the default refinement target. For visual marks, inspect the screenshot and modify the marked region first. Preserve unrelated areas.',
+    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
   ];
   for (const item of commentAttachments) {
     const targetKind =
@@ -1328,8 +1354,14 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
   };
 }
 
-export function resolveDataDir(raw, projectRoot) {
-  if (!raw) return path.join(projectRoot, '.od');
+export function resolveDataDir(raw, projectRoot, options = {}) {
+  const value = raw?.trim();
+  if (!value) {
+    if (options.requireExplicit) {
+      throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+    }
+    return path.join(projectRoot, '.od');
+  }
   // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
   // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
   // Some launchers (systemd unit files, NixOS modules, certain Docker
@@ -1338,7 +1370,7 @@ export function resolveDataDir(raw, projectRoot) {
   // expandHomePrefix turns those (and the ~ shorthand, with both / and \
   // separators) into os.homedir() before path.resolve runs so launch
   // surfaces stay consistent.
-  const resolved = resolveProjectRelativePath(raw, projectRoot);
+  const resolved = resolveProjectRelativePath(value, projectRoot);
   try {
     fs.mkdirSync(resolved, { recursive: true });
     fs.accessSync(resolved, fs.constants.W_OK);
@@ -1364,7 +1396,12 @@ export function resolveDataDir(raw, projectRoot) {
   }
   return resolved;
 }
-const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT);
+const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
+const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
+  requireExplicit: SANDBOX_MODE_ENABLED,
+});
+const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
+ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
 // Canonical (realpath-resolved) form of RUNTIME_DATA_DIR for the few callers
 // that compare it against a user-supplied realpath() result. On macOS, /var
@@ -1623,15 +1660,25 @@ export function createAgentRuntimeEnv(
   toolTokenGrant: { token?: string } | null = null,
   nodeBin: string = process.execPath,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...baseEnv,
-    OD_DATA_DIR: RUNTIME_DATA_DIR,
-    OD_DAEMON_URL: daemonUrl,
-    OD_NODE_BIN: nodeBin,
-  };
+  const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
+    {
+      ...baseEnv,
+      OD_DATA_DIR: RUNTIME_DATA_DIR,
+      OD_DAEMON_URL: daemonUrl,
+      OD_NODE_BIN: nodeBin,
+    },
+    SANDBOX_RUNTIME,
+  );
   const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
   if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
     env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
+  }
+  if (SANDBOX_RUNTIME.enabled) {
+    const noProxy = mergeNoProxyWithLoopbackDefaults(env.NO_PROXY ?? env.no_proxy);
+    if (noProxy) {
+      env.NO_PROXY = noProxy;
+      if (process.platform !== 'win32') env.no_proxy = noProxy;
+    }
   }
 
   // Ensure the node binary directory is on PATH so agent sub-processes —
@@ -1980,39 +2027,12 @@ export function __forTestResolveRunProjectKindForAnalytics(args) {
 // usage tokens are found AND (the caller already has a model from reqBody
 // OR the agent-reported model has been found).
 function scanRunEventsForFinishedProps(events, reqBodyModel) {
-  let inputTokens;
-  let outputTokens;
-  let agentReportedModel = null;
-  const needAgentModel = !(typeof reqBodyModel === 'string' && reqBodyModel.trim());
-  let haveUsageTokens = false;
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const ev = events[i];
-    const data = ev?.data;
-    if (ev?.event === 'agent' && data?.type === 'usage' && data.usage && !haveUsageTokens) {
-      const u = data.usage;
-      if (typeof u.input_tokens === 'number') inputTokens = u.input_tokens;
-      if (typeof u.output_tokens === 'number') outputTokens = u.output_tokens;
-      if (inputTokens !== undefined || outputTokens !== undefined) haveUsageTokens = true;
-    }
-    if (
-      !agentReportedModel &&
-      ev?.event === 'agent' &&
-      data?.type === 'status' &&
-      (data.label === 'model' || data.label === 'initializing')
-    ) {
-      const candidate =
-        typeof data.model === 'string'
-          ? data.model
-          : typeof data.detail === 'string'
-            ? data.detail
-            : null;
-      if (candidate && candidate.trim()) {
-        agentReportedModel = candidate.trim();
-      }
-    }
-    if (haveUsageTokens && (!needAgentModel || agentReportedModel)) break;
-  }
-  return { inputTokens, outputTokens, agentReportedModel };
+  const usage = scanRunEventsForUsageAnalytics(events, reqBodyModel, 0);
+  return {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    agentReportedModel: usage.agent_reported_model,
+  };
 }
 
 export function __forTestScanRunEventsForFinishedProps(events, reqBodyModel) {
@@ -2808,6 +2828,54 @@ function isLoopbackPeerAddress(address) {
   return false;
 }
 
+const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
+const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
+
+function createProjectPreviewScopeRegistry() {
+  const scopes = new Map();
+
+  function pruneExpired(now = Date.now()) {
+    for (const [scope, entry] of scopes) {
+      if (entry.expiresAt <= now) scopes.delete(scope);
+    }
+  }
+
+  return {
+    mint(projectId) {
+      pruneExpired();
+      const scope = randomUUID();
+      scopes.set(scope, {
+        projectId: String(projectId),
+        expiresAt: Date.now() + PROJECT_PREVIEW_SCOPE_TTL_MS,
+      });
+      return scope;
+    },
+    validate(projectId, scope) {
+      const key = String(scope || '');
+      const entry = scopes.get(key);
+      if (!entry) return false;
+      if (entry.expiresAt <= Date.now()) {
+        scopes.delete(key);
+        return false;
+      }
+      return entry.projectId === String(projectId);
+    },
+  };
+}
+
+function parseProjectPreviewAssetPath(pathname) {
+  const match = PROJECT_PREVIEW_ASSET_PATH_RE.exec(String(pathname || ''));
+  if (!match) return null;
+  try {
+    return {
+      projectId: decodeURIComponent(match[1]),
+      scope: match[2],
+    };
+  } catch {
+    return null;
+  }
+}
+
 function localOriginFromHeader(value) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -3125,8 +3193,8 @@ function authorizeToolRequest(req, res, operation) {
   return validation.grant;
 }
 
-function optionalToolGrantFromRequest(req) {
-  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req));
+function optionalToolGrantFromRequest(req, options = {}) {
+  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), options);
   return validation.ok ? validation.grant : null;
 }
 
@@ -3835,19 +3903,41 @@ export async function startServer({
   }
 
   const app = express();
+  installRouteRegistrationGuard(app);
   app.use(express.json({ limit: '4mb' }));
+  const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — bearer-token middleware.
   //
   // Active only when OD_API_TOKEN is set. Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / version / status remain
-  // open so monitoring probes don't need the token.
+  // value matching `OD_API_TOKEN`. Health / readiness / version remain
+  // open so monitoring probes don't need the token. Server-minted
+  // project preview asset scopes are also accepted for GETs so sandboxed
+  // browser iframes can load HTML/CSS/JS without privileged headers.
+  // Rich daemon status stays authenticated because it includes local
+  // runtime paths.
   if (apiToken.length > 0) {
-    const openProbePaths = new Set(['/api/health', '/api/version', '/api/daemon/status']);
+    const openProbePaths = new Set([
+      '/health',
+      '/api/health',
+      '/ready',
+      '/api/ready',
+      '/version',
+      '/api/version',
+    ]);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
+      if (req.method === 'GET') {
+        const previewAsset = parseProjectPreviewAssetPath(req.path);
+        if (
+          previewAsset &&
+          projectPreviewScopes.validate(previewAsset.projectId, previewAsset.scope)
+        ) {
+          return next();
+        }
+      }
       // Loopback short-circuit. We ignore the proxied X-Forwarded-For
       // header here because a reverse proxy MUST always forward the
       // bearer; the loopback bypass exists for the localhost desktop
@@ -4135,7 +4225,7 @@ export async function startServer({
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -4356,6 +4446,16 @@ export async function startServer({
     res.json({ ok: true, version: versionInfo.version });
   });
 
+  app.get('/api/ready', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    const ready = !daemonShuttingDown;
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      ready,
+      version: versionInfo.version,
+    });
+  });
+
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
@@ -4409,6 +4509,10 @@ export async function startServer({
       port: Number(process.env.OD_PORT ?? 7456),
       dataDir: RUNTIME_DATA_DIR,
       mediaConfigDir: process.env.OD_MEDIA_CONFIG_DIR ?? null,
+      sandboxMode: SANDBOX_RUNTIME.enabled,
+      sandbox: SANDBOX_RUNTIME.enabled
+        ? { enabled: true, roots: SANDBOX_RUNTIME.roots }
+        : { enabled: false },
       pid: process.pid,
       shuttingDown: daemonShuttingDown,
       installedPlugins: (() => {
@@ -4667,7 +4771,11 @@ export async function startServer({
   app.get(
     DIAGNOSTICS_EXPORT_PATH,
     requireLocalDaemonRequest,
-    createDiagnosticsExportHandler({ runtime, projectRoot: PROJECT_ROOT }),
+    createDiagnosticsExportHandler({
+      runtime,
+      projectRoot: PROJECT_ROOT,
+      runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+    }),
   );
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -5680,6 +5788,7 @@ export async function startServer({
     events: projectEventDeps,
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
+    appConfig: appConfigDeps,
     validation: validationDeps,
   });
   registerImportRoutes(app, {
@@ -5728,7 +5837,7 @@ export async function startServer({
     auth: authDeps,
     http: httpDeps,
     paths: pathDeps,
-    projects: { getProject },
+    projects: { getProject: (id: string) => getProject(db, id) },
   });
   app.use('/artifacts', express.static(ARTIFACTS_DIR));
   registerDeployRoutes(app, {
@@ -5777,6 +5886,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
     documents: { buildDocumentPreview },
     artifacts: artifactDeps,
+    projectPreviewScopes,
   });
 
   registerMediaRoutes(app, {
@@ -5922,6 +6032,7 @@ export async function startServer({
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
+    reportFinalizedMessage(saved, m);
     res.json({ message: saved });
   });
 
@@ -9524,41 +9635,6 @@ export async function startServer({
     }
   });
 
-  app.post('/api/projects/:id/export/pdf', async (req, res) => {
-    if (typeof desktopPdfExporter !== 'function') {
-      return sendApiError(
-        res,
-        501,
-        'UPSTREAM_UNAVAILABLE',
-        'desktop PDF export is only available in the desktop runtime',
-      );
-    }
-    try {
-      const { fileName, title, deck } = req.body || {};
-      if (typeof fileName !== 'string' || fileName.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
-      }
-      const input = await buildDesktopPdfExportInput({
-        daemonUrl,
-        deck: deck === true,
-        fileName,
-        projectId: req.params.id,
-        projectsRoot: PROJECTS_DIR,
-        title: typeof title === 'string' ? title : undefined,
-      });
-      const result = await desktopPdfExporter(input);
-      res.json(result);
-    } catch (err) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
   app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
     try {
       const projectId = String(req.params[0] ?? '');
@@ -9856,96 +9932,6 @@ export async function startServer({
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.post('/api/projects/:id/media/generate', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({
-        error:
-          'cross-origin request rejected: media generation is restricted to the local UI / CLI',
-      });
-    }
-
-    try {
-      const projectId = req.params.id;
-      const project = getProject(db, projectId);
-      if (!project) return res.status(404).json({ error: 'project not found' });
-
-      const taskId = randomUUID();
-      const task = createMediaTask(db, taskId, projectId, {
-        surface: req.body?.surface,
-        model: req.body?.model,
-      });
-      console.error(
-        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
-          `surface=${req.body?.surface} ` +
-          `image=${req.body?.image ? 'yes' : 'no'} ` +
-          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
-      );
-
-      task.status = 'running';
-      persistMediaTask(db, task);
-      generateMedia({
-        projectRoot: PROJECT_ROOT,
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        surface: req.body?.surface,
-        model: req.body?.model,
-        prompt: req.body?.prompt,
-        output: req.body?.output,
-        aspect: req.body?.aspect,
-        length:
-          typeof req.body?.length === 'number' ? req.body.length : undefined,
-        duration:
-          typeof req.body?.duration === 'number'
-            ? req.body.duration
-            : undefined,
-        voice: req.body?.voice,
-        audioKind: req.body?.audioKind,
-        language: typeof req.body?.language === 'string' ? req.body.language : undefined,
-        compositionDir: req.body?.compositionDir,
-        image: req.body?.image,
-        onProgress: (line) => appendTaskProgress(db, task, line),
-      })
-        .then((meta) => {
-          task.status = 'done';
-          task.file = meta;
-          task.endedAt = Date.now();
-          persistMediaTask(db, task);
-          notifyTaskWaiters(db, task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
-              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
-          );
-        })
-        .catch((err) => {
-          task.status = 'failed';
-          task.error = {
-            message: String(err && err.message ? err.message : err),
-            status: typeof err?.status === 'number' ? err.status : 400,
-            code: err?.code,
-          };
-          task.endedAt = Date.now();
-          persistMediaTask(db, task);
-          notifyTaskWaiters(db, task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
-              `message=${(task.error.message || '').slice(0, 240)}`,
-          );
-        });
-
-      res.status(202).json({
-        taskId,
-        status: task.status,
-        startedAt: task.startedAt,
-      });
-    } catch (err) {
-      const status = typeof err?.status === 'number' ? err.status : 400;
-      const code = err?.code;
-      const body = { error: String(err && err.message ? err.message : err) };
-      if (code) body.code = code;
-      res.status(status).json(body);
     }
   });
 
@@ -10646,6 +10632,10 @@ export async function startServer({
   };
 
   const startChatRun = async (chatBody, run) => {
+    run.analyticsTelemetry = {
+      ...(run.analyticsTelemetry ?? {}),
+      startChatRunStartedAt: Date.now(),
+    };
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -10727,22 +10717,21 @@ export async function startServer({
     // doesn't exist yet). Without one we don't pass cwd to spawn — the
     // agent then runs in whatever inherited dir, which still lets API
     // mode work but loses file-tool addressability.
-    // For git-linked projects (metadata.baseDir), use that folder directly
-    // so the agent writes back to the user's original source tree.
+    // Project directory resolution lives in projects.ts so sandbox mode can
+    // consistently reject imported-folder metadata that has no managed copy.
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
       try {
         const chatProject = getProject(db, projectId);
         const chatMeta = chatProject?.metadata;
-        if (chatMeta?.baseDir) {
-          cwd = path.normalize(chatMeta.baseDir);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        } else {
-          cwd = await ensureProject(PROJECTS_DIR, projectId);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
+        assertSandboxProjectRootAvailable(chatMeta);
+        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return design.runs.fail(run, 'BAD_REQUEST', err.message);
         }
-      } catch {
         cwd = null;
       }
     }
@@ -10854,57 +10843,71 @@ export async function startServer({
     // values further down at .mcp.json write time — see the spawn block
     // below — instead of re-reading.
     let externalMcpConfig = { servers: [] };
-    try {
-      externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
-    } catch (err) {
-      console.warn(
-        '[mcp-config] read failed:',
-        err && err.message ? err.message : err,
-      );
+    if (!SANDBOX_RUNTIME.enabled) {
+      try {
+        externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
+      } catch (err) {
+        console.warn(
+          '[mcp-config] read failed:',
+          err && err.message ? err.message : err,
+        );
+      }
     }
-    const enabledExternalMcp = externalMcpConfig.servers.filter((s) => s.enabled);
+    const runScopedMcpServers = Array.isArray(run?.toolBundle?.mcpServers)
+      ? run.toolBundle.mcpServers
+      : [];
+    const {
+      enabledServers: enabledExternalMcp,
+      persistedTokenServerIds,
+    } = resolveExternalMcpServersForRun({
+      persistedServers: externalMcpConfig.servers,
+      runScopedServers: runScopedMcpServers,
+      sandboxMode: SANDBOX_RUNTIME.enabled,
+    });
     const oauthTokensForSpawn = {};
-    try {
-      const stored = await readAllTokens(RUNTIME_DATA_DIR);
-      for (const [serverId, tok] of Object.entries(stored)) {
-        if (!enabledExternalMcp.find((s) => s.id === serverId)) continue;
-        // Default to the persisted access token; null it out if expired so
-        // we never inject a stale `Authorization: Bearer …` header. The
-        // model treats a server with a Bearer pinned as connected and
-        // discourages re-auth, which is the worst possible UX when the
-        // token is going to 401 every call.
-        let access = isTokenExpired(tok) ? null : tok.accessToken;
-        if (isTokenExpired(tok) && tok.refreshToken) {
-          try {
-            const refreshed = await refreshAndPersistToken(
-              RUNTIME_DATA_DIR,
-              serverId,
-              tok,
-            );
-            if (refreshed) access = refreshed.accessToken;
-          } catch (err) {
+    if (persistedTokenServerIds.size > 0) {
+      try {
+        const stored = await readAllTokens(RUNTIME_DATA_DIR);
+        for (const [serverId, tok] of Object.entries(stored)) {
+          if (!persistedTokenServerIds.has(serverId)) continue;
+          // Default to the persisted access token; null it out if expired so
+          // we never inject a stale `Authorization: Bearer …` header. The
+          // model treats a server with a Bearer pinned as connected and
+          // discourages re-auth, which is the worst possible UX when the
+          // token is going to 401 every call.
+          let access = isTokenExpired(tok) ? null : tok.accessToken;
+          if (isTokenExpired(tok) && tok.refreshToken) {
+            try {
+              const refreshed = await refreshAndPersistToken(
+                RUNTIME_DATA_DIR,
+                serverId,
+                tok,
+              );
+              if (refreshed) access = refreshed.accessToken;
+            } catch (err) {
+              console.warn(
+                '[mcp-oauth] refresh failed for',
+                serverId,
+                err && err.message ? err.message : err,
+              );
+            }
+          }
+          if (access) {
+            oauthTokensForSpawn[serverId] = access;
+          } else {
             console.warn(
-              '[mcp-oauth] refresh failed for',
+              '[mcp-oauth] skipping expired token for',
               serverId,
-              err && err.message ? err.message : err,
+              '— reconnect required',
             );
           }
         }
-        if (access) {
-          oauthTokensForSpawn[serverId] = access;
-        } else {
-          console.warn(
-            '[mcp-oauth] skipping expired token for',
-            serverId,
-            '— reconnect required',
-          );
-        }
+      } catch (err) {
+        console.warn(
+          '[mcp-tokens] read failed:',
+          err && err.message ? err.message : err,
+        );
       }
-    } catch (err) {
-      console.warn(
-        '[mcp-tokens] read failed:',
-        err && err.message ? err.message : err,
-      );
     }
     const connectedExternalMcp = enabledExternalMcp
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
@@ -11239,6 +11242,18 @@ export async function startServer({
       configuredAgentEnv = {};
     }
 
+    let mmdRouteLaunchEnv = null;
+    if (def.id === 'claude' && safeModel) {
+      mmdRouteLaunchEnv = await loadMmdRouteLaunchEnv(
+        {
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        },
+        safeModel,
+      ).catch(() => null);
+    }
+
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
 
@@ -11268,6 +11283,8 @@ export async function startServer({
                 ...(def.env || {}),
               },
               configuredAgentEnv,
+              undefined,
+              { resolvedBin: agentLaunch.selectedPath },
             ),
             agentLaunch,
           )
@@ -11502,7 +11519,11 @@ export async function startServer({
         return `tool_use:${name}`;
       }
       if (type === 'text_delta' || type === 'thinking_delta') {
-        const text = typeof payload.text === 'string' ? payload.text : '';
+        const text = typeof payload.delta === 'string'
+          ? payload.delta
+          : typeof payload.text === 'string'
+            ? payload.text
+            : '';
         return `${type}:${text.length} chars`;
       }
       return type;
@@ -11650,6 +11671,8 @@ export async function startServer({
         ...(def.env || {}),
       },
       configuredAgentEnv,
+      undefined,
+      { resolvedBin: agentLaunch.selectedPath },
     );
     if (def.id === 'amr') {
       const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
@@ -11711,6 +11734,7 @@ export async function startServer({
           : 'ignore';
       const env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
+        ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
@@ -11732,6 +11756,10 @@ export async function startServer({
         args,
         env,
       });
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        processSpawnStartedAt: Date.now(),
+      };
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
@@ -11742,6 +11770,10 @@ export async function startServer({
         // breaks paths containing spaces (issue #315).
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        processSpawnedAt: Date.now(),
+      };
       run.child = child;
       // Schedule release of the antigravity model lock once agy's
       // --log-file confirms the chosen model was propagated to the
@@ -12048,6 +12080,13 @@ export async function startServer({
     // in the close handler suppresses the buffer when the output is an
     // OAuth prompt; otherwise the flush below sends the chunks in order.
     const plaintextStdoutBuffer: string[] = [];
+    // Arrival time of the first buffered plain-text stdout chunk
+    // (antigravity). First-token timing is stamped from this value only
+    // when the buffer is actually flushed to the client at close time. If
+    // the auth-prompt guard suppresses the buffer (the OAuth login URL is
+    // printed to stdout), no token ever reaches the user, so TTFT must not
+    // be recorded for that failure mode. See PR #3412.
+    let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
     // visible content. Only the streams routed through `sendAgentEvent`
     // contribute to this flag; ACP sessions and plain stdout streams are
@@ -12068,6 +12107,29 @@ export async function startServer({
       'tool_result',
       'artifact',
     ]);
+    // First-token timing must reflect when the user actually starts seeing
+    // model output, so only token-producing events qualify. `tool_use` is
+    // deliberately excluded: a run that opens with a Read/Glob/MCP call would
+    // otherwise stamp `firstTokenAt` before any `text_delta` streamed,
+    // making `time_to_first_token_ms` / `spawn_to_first_token_ms` under-report
+    // TTFT for tool-first runs. `thinking_delta` stays in because it is the
+    // first visible model activity the user perceives.
+    const FIRST_TOKEN_AGENT_EVENT_TYPES = new Set([
+      'text_delta',
+      'thinking_delta',
+    ]);
+    const noteFirstTokenAt = (timestamp = Date.now()) => {
+      if (run.analyticsTelemetry?.firstTokenAt) return;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        firstTokenAt: timestamp,
+      };
+    };
+    const noteFirstTokenFromAgentEvent = (ev) => {
+      if (ev?.type && FIRST_TOKEN_AGENT_EVENT_TYPES.has(ev.type)) {
+        noteFirstTokenAt();
+      }
+    };
 
     // Per-run role-marker guard for non-Claude structured streams (#3247).
     // Claude has its own per-message guards in claude-stream.ts.
@@ -12184,6 +12246,7 @@ export async function startServer({
       }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
+      noteFirstTokenFromAgentEvent(ev);
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
       }
@@ -12199,6 +12262,7 @@ export async function startServer({
       const claude = createClaudeStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
+        noteFirstTokenFromAgentEvent(ev);
         send('agent', ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
         // run-scoped guard above, so its `fabricated_role_marker` events
@@ -12267,6 +12331,7 @@ export async function startServer({
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
+        noteFirstTokenFromAgentEvent(ev);
         if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
           emitGuardedTextDelta(ev.delta);
           return;
@@ -12329,6 +12394,7 @@ export async function startServer({
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         send: (event, data) => {
           noteAgentActivity();
+          if (event === 'agent') noteFirstTokenFromAgentEvent(data);
           if (def.id === 'amr' && event === 'error') {
             const failure = classifyAmrAccountFailure(
               [
@@ -12370,9 +12436,13 @@ export async function startServer({
       // the OAuth URL before forwarding it to the client as assistant
       // text. agy exits 0 after printing the auth URL on stdout, so the
       // chunks would otherwise arrive before the close-time classifier
-      // detects them as an auth prompt.
+      // detects them as an auth prompt. First-token timing is deliberately
+      // NOT stamped here — only the first chunk's arrival time is recorded,
+      // and `firstTokenAt` is stamped from it at flush time so the
+      // suppressed OAuth-prompt path never reports a TTFT (PR #3412).
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
+        if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = Date.now();
         plaintextStdoutBuffer.push(String(chunk));
       });
     } else {
@@ -12382,6 +12452,7 @@ export async function startServer({
         const text = typeof chunk === 'string' ? chunk : String(chunk);
         const safe = guardTextDelta(text);
         if (safe.length > 0) {
+          noteFirstTokenAt();
           send('stdout', { chunk: safe });
         }
         if (runGuard.contaminated && !runWarned) {
@@ -12603,6 +12674,7 @@ export async function startServer({
           stderrTail: agentStderrTail,
           stdoutTail: agentStdoutTail,
           env: spawnedAgentEnv,
+          resolvedBin: agentLaunch.selectedPath,
         });
         // A non-zero exit whose output reads as an auth / quota / upstream
         // problem (typical of Claude Code, codex, …) gets the specific code
@@ -12679,7 +12751,7 @@ export async function startServer({
               try {
                 const filePath = path.join(dir, f.name);
                 const st = await fs.promises.stat(filePath);
-                if (st.mtimeMs < runStartTimeMs) continue;
+                if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
                 await reconcileHtmlArtifactManifest(
                   PROJECTS_DIR,
                   run.projectId,
@@ -12694,7 +12766,13 @@ export async function startServer({
       // Flush buffered plain-text stdout (antigravity) that was not
       // suppressed by the auth-prompt guard above. Send each chunk in
       // order before finishing so the assistant text arrives before the
-      // run's `finished` event.
+      // run's `finished` event. Stamp first-token timing here — and only
+      // here — using the first chunk's arrival time, so the OAuth-prompt
+      // path (which returns before this flush) never records a TTFT for
+      // output the user never saw (PR #3412).
+      if (plaintextStdoutBuffer.length > 0 && firstBufferedStdoutAt !== null) {
+        noteFirstTokenAt(firstBufferedStdoutAt);
+      }
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
       }
@@ -12749,48 +12827,12 @@ export async function startServer({
   const submitToolResultToRun = (runId, toolUseId, content, isError = false) => {
     const run = design.runs.get(runId);
     if (!run) return { ok: false, reason: 'not_found' };
-    if (design.runs.isTerminal(run.status)) {
-      return { ok: false, reason: 'run_terminal' };
-    }
-    if (!run.child || !run.child.stdin || run.child.stdin.destroyed) {
-      return { ok: false, reason: 'stdin_closed' };
-    }
-    if (!run.stdinOpen) {
-      return { ok: false, reason: 'stdin_text_mode' };
-    }
-    if (typeof toolUseId !== 'string' || !toolUseId) {
-      return { ok: false, reason: 'bad_tool_use_id' };
-    }
-    const safeContent = typeof content === 'string' ? content : String(content ?? '');
-    const userMessage = JSON.stringify({
-      type: 'user',
-      message: {
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: toolUseId,
-            content: safeContent,
-            is_error: !!isError,
-          },
-        ],
-      },
+    return submitToolResultToRunState(run, {
+      content,
+      isError,
+      isTerminal: design.runs.isTerminal(run.status),
+      toolUseId,
     });
-    try {
-      run.child.stdin.write(`${userMessage}\n`, 'utf8');
-    } catch (err) {
-      return { ok: false, reason: 'write_failed', error: err && err.message };
-    }
-    if (run.pendingHostAnswers) {
-      run.pendingHostAnswers.delete(toolUseId);
-      if (run.pendingHostAnswers.size === 0 && run.stdinOpen) {
-        if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
-          try { run.child.stdin.end(); } catch {}
-        }
-        run.stdinOpen = false;
-      }
-    }
-    return { ok: true };
   };
 
   orbitService.setRunHandler(async ({
@@ -12852,6 +12894,7 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `orbit-${trigger}-${randomUUID()}`,
       agentId,
+      mediaExecution: defaultMediaExecutionPolicy(),
     });
     upsertMessage(db, conversationId, {
       id: `orbit-user-${run.id}`,
@@ -12948,13 +12991,32 @@ export async function startServer({
     };
   });
 
+  function runToolBundleDeliveryTargetForProject(projectId, metadata) {
+    if (typeof projectId !== 'string' || !projectId || !isSafeId(projectId)) {
+      return 'none';
+    }
+    try {
+      const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata, {
+        allowUnavailableSandboxImportedProject: true,
+      });
+      return isManagedProjectCwd(cwd, PROJECTS_DIR) ? 'managed-project' : 'external-project';
+    } catch {
+      return 'none';
+    }
+  }
+
   app.post('/api/runs', async (req, res) => {
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const mediaExecution = parseMediaExecutionPolicyInput(req.body?.mediaExecution);
+    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
+    }
+    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
+    if (!toolBundle.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
     // Plan §3.A1 / spec §11.5: resolve any pluginId / appliedPluginSnapshotId
     // before the run is created. The resolver returns null when the body
@@ -12971,7 +13033,7 @@ export async function startServer({
     // bundled scenario that is not installed leaves the run plugin-less,
     // which matches the legacy path.
     let resolvedSnapshot = null;
-    if (typeof req.body?.projectId === 'string' && req.body.projectId) {
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let registryView;
       try {
         registryView = await loadPluginRegistryView();
@@ -12979,26 +13041,26 @@ export async function startServer({
         return res.status(500).json({ error: String(err) });
       }
       const explicitPlugin =
-        req.body && (req.body.pluginId || req.body.appliedPluginSnapshotId);
-      let runResolveBody = req.body;
+        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
+      let runResolveBody = requestBody;
       if (!explicitPlugin) {
-        const projectRow = getProject(db, req.body.projectId);
+        const projectRow = getProject(db, requestBody.projectId);
         const hasPin =
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
         if (!hasPin) {
           const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-            runResolveBody = { ...req.body, pluginId: fallbackPluginId };
+            runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
           }
         }
       }
       const resolved = resolvePluginSnapshot({
         db,
         body: runResolveBody,
-        projectId: req.body.projectId,
-        conversationId: typeof req.body.conversationId === 'string'
-          ? req.body.conversationId
+        projectId: requestBody.projectId,
+        conversationId: typeof requestBody.conversationId === 'string'
+          ? requestBody.conversationId
           : null,
         registry: registryView,
         connectorProbe: buildConnectorProbe(connectorService),
@@ -13006,7 +13068,7 @@ export async function startServer({
       if (resolved && !resolved.ok) {
         if (!explicitPlugin) {
           console.warn(
-            `[plugins] default-scenario fallback skipped for run on project ${req.body.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
+            `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
           );
         } else {
           return res.status(resolved.status).json(resolved.body);
@@ -13015,7 +13077,11 @@ export async function startServer({
         resolvedSnapshot = resolved;
       }
     }
-    const meta = { ...(req.body || {}), mediaExecution: mediaExecution.policy };
+    const meta = {
+      ...requestBody,
+      mediaExecution: mediaExecution.policy,
+      toolBundle: toolBundle.bundle,
+    };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
       if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
@@ -13026,6 +13092,53 @@ export async function startServer({
         ).trim();
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
+    }
+    let runProject = null;
+    if (typeof meta.projectId === 'string' && meta.projectId) {
+      try {
+        runProject = getProject(db, meta.projectId);
+        assertSandboxProjectRootAvailable(runProject?.metadata);
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+        }
+        throw err;
+      }
+    }
+    // MCP / SDK callers may omit agentId. Resolve it before any run-create
+    // side effects so unsupported run-scoped tool bundles can fail cleanly.
+    if (typeof meta.agentId !== 'string' || !meta.agentId) {
+      try {
+        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
+          ? appCfg.agentId
+          : null;
+        const agents = await detectAgents(appCfg.agentCliEnv ?? {}).catch(() => []);
+        const cfgAgentAvailable = cfgAgent
+          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
+          : false;
+        if (cfgAgent && cfgAgentAvailable) {
+          meta.agentId = cfgAgent;
+        } else {
+          const firstAvailable = agents.find((a) => a.available)?.id ?? null;
+          if (firstAvailable) meta.agentId = firstAvailable;
+        }
+      } catch (err) {
+        console.warn('[runs] agent id fallback failed', err);
+      }
+    }
+    const toolBundleSupport = validateRunToolBundleForAgent(
+      toolBundle.bundle,
+      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
+      {
+        deliveryTarget: runToolBundleDeliveryTargetForProject(
+          meta.projectId,
+          runProject?.metadata,
+        ),
+      },
+    );
+    if (!toolBundleSupport.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
     }
     // MCP / SDK callers POST /api/runs with just a projectId — no
     // conversationId, no pre-created assistantMessageId — because they
@@ -13051,7 +13164,18 @@ export async function startServer({
     ) {
       try {
         const convs = listConversations(db, meta.projectId);
-        const defaultConv = Array.isArray(convs) && convs.length > 0 ? convs[0] : null;
+        // listConversations is ordered for the UI by recent activity; this
+        // fallback must bind to the seeded default conversation instead.
+        const defaultConv = Array.isArray(convs) && convs.length > 0
+          ? [...convs].sort((a, b) => {
+              const aCreated = Number(a?.createdAt);
+              const bCreated = Number(b?.createdAt);
+              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+                return aCreated - bCreated;
+              }
+              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+            })[0]
+          : null;
         if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
           meta.conversationId = defaultConv.id;
           if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
@@ -13073,27 +13197,6 @@ export async function startServer({
         }
       } catch (err) {
         console.warn('[runs] mcp conversation fallback failed', err);
-      }
-    }
-    // MCP / SDK callers may omit agentId. Resolve it from the saved
-    // app-config agent (the user's configured default) or the first
-    // available CLI so the run does not immediately fail with
-    // "unknown agent: undefined" inside startChatRun.
-    if (typeof meta.agentId !== 'string' || !meta.agentId) {
-      try {
-        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
-        if (cfgAgent) {
-          meta.agentId = cfgAgent;
-        } else {
-          const agents = await detectAgents(appCfg.agentCliEnv ?? {}).catch(() => []);
-          const firstAvailable = agents.find((a) => a.available)?.id ?? null;
-          if (firstAvailable) meta.agentId = firstAvailable;
-        }
-      } catch (err) {
-        console.warn('[runs] agent id fallback failed', err);
       }
     }
     const run = design.runs.create(meta);
@@ -13178,7 +13281,6 @@ export async function startServer({
     if (analyticsContext) {
       const reqBody = (req.body || {}) as Record<string, unknown>;
       const runInsertId = newInsertId();
-      const runStartedAt = Date.now();
       // Configure-state triplet — v2 schema requires every event to carry
       // these so PostHog dashboards can split run lifecycle by execution
       // setup. Web-side captures inherit them from a PostHog global
@@ -13348,13 +13450,28 @@ export async function startServer({
         properties: baseProps,
         insertId: runInsertId,
       });
-      design.runs.wait(run).then((status: {
+      design.runs.wait(run).then(async (status: {
         status: string;
         error?: string | null;
         errorCode?: string | null;
         exitCode?: number | null;
         signal?: string | null;
       }) => {
+        // Langfuse eligibility must be re-derived at completion time, not
+        // reused from a launch-time snapshot. A long-running run can have the
+        // user flip telemetry consent or the relay config mid-flight; the
+        // Langfuse sink (`reportRunCompletedFromDaemon`) re-reads app config
+        // when the run ends, so PostHog's `langfuse_expected` /
+        // `langfuse_delivery_status` / `langfuse_drop_reason` must read the
+        // same completion-time eligibility to stay aligned. See PR #3412
+        // review.
+        const appCfgAtFinish = await readAppConfig(RUNTIME_DATA_DIR).catch(
+          () => ({} as Record<string, unknown>),
+        );
+        const langfuseDeliveryForAnalytics = deriveLangfuseDeliveryState(
+          (appCfgAtFinish as { telemetry?: Record<string, unknown> }).telemetry ?? {},
+          readTelemetrySinkConfig(),
+        );
         // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
         // it always returns a non-empty string so dashboards keyed on
         // `error_code` never see a blank cell. Live in `run-result.ts`
@@ -13362,22 +13479,39 @@ export async function startServer({
         // child close without error event, etc.).
         const result = runResultFromStatus(status.status);
         const errorCode = deriveRunErrorCode(status);
+        const failure = classifyRunFailure({
+          result,
+          status,
+          ...(errorCode ? { errorCode } : {}),
+          agentId: run.agentId,
+          events: run.events,
+        });
         // ACP reports { type:'status', label:'model', model:<id> } after
         // session/new; stream adapters report { type:'status',
         // label:'initializing', model:<id> } at run start. The scan must
         // not short-circuit on usage before reaching the model signal —
         // see `scanRunEventsForFinishedProps` for the invariant.
-        const { inputTokens, outputTokens, agentReportedModel } =
-          scanRunEventsForFinishedProps(run.events, reqBody.model);
-        const haveUsage = inputTokens !== undefined || outputTokens !== undefined;
-        const totalTokens =
-          inputTokens !== undefined && outputTokens !== undefined
-            ? inputTokens + outputTokens
-            : undefined;
-        const finishedModelId =
-          typeof reqBody.model === 'string' && reqBody.model.trim()
-            ? modelIdForTracking(reqBody.model)
-            : modelIdForTracking(agentReportedModel);
+        const usageAnalytics = scanRunEventsForUsageAnalytics(
+          run.events,
+          reqBody.model,
+          userQueryTokens,
+        );
+        const analyticsCapturedAt = Date.now();
+        const timingAnalytics = summarizeRunTimingAnalytics({
+          runCreatedAt: run.createdAt,
+          runUpdatedAt: run.updatedAt,
+          analyticsCapturedAt,
+          telemetry: run.analyticsTelemetry,
+          events: run.events,
+        });
+        const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
+          events: run.events,
+          exitCode: status.exitCode ?? null,
+          signal: status.signal ?? null,
+        });
+        const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
+          ? modelIdForTracking(reqBody.model)
+          : modelIdForTracking(usageAnalytics.agent_reported_model);
         design.analytics.capture({
           eventName: 'run_finished',
           context: analyticsContext,
@@ -13400,6 +13534,12 @@ export async function startServer({
             // for the dedup semantics; tested in
             // `tests/run-artifacts.test.ts`.
             artifact_count: countNewHtmlArtifacts(run.events),
+            // True when the run raised an AskUserQuestion clarification
+            // card. Clarification turns inherently produce no artifact, so
+            // the dashboard excludes them from the "run finished -> has
+            // artifact" funnel instead of counting them as failures. See
+            // `run-artifacts.ts`; tested in `tests/run-artifacts.test.ts`.
+            asked_user_question: runAskedUserQuestion(run.events),
             ...(isDesignSystemRun ? {
               // DS runs land a `DESIGN.md` write when generation
               // succeeded; the run-artifacts inspector reuses the
@@ -13413,12 +13553,47 @@ export async function startServer({
               // day one; can be sourced later from a font-audit hook.
               missing_font_count: 0,
             } : {}),
-            total_duration_ms: Date.now() - runStartedAt,
+            ...timingAnalytics,
+            ...diagnosticsAnalytics,
+            langfuse_trace_id: run.id,
+            ...langfuseDeliveryForAnalytics,
             ...(errorCode ? { error_code: errorCode } : {}),
-            ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
-            ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
-            ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
-            ...(haveUsage ? { token_count_source: 'provider_usage' } : {}),
+            ...(failure ?? {}),
+            ...(usageAnalytics.input_tokens !== undefined
+              ? { input_tokens: usageAnalytics.input_tokens }
+              : {}),
+            ...(usageAnalytics.input_tokens_provider !== undefined
+              ? { input_tokens_provider: usageAnalytics.input_tokens_provider }
+              : {}),
+            ...(usageAnalytics.input_tokens_effective !== undefined
+              ? { input_tokens_effective: usageAnalytics.input_tokens_effective }
+              : {}),
+            ...(usageAnalytics.output_tokens !== undefined
+              ? { output_tokens: usageAnalytics.output_tokens }
+              : {}),
+            ...(usageAnalytics.total_tokens !== undefined
+              ? { total_tokens: usageAnalytics.total_tokens }
+              : {}),
+            ...(usageAnalytics.cache_read_input_tokens !== undefined
+              ? { cache_read_input_tokens: usageAnalytics.cache_read_input_tokens }
+              : {}),
+            ...(usageAnalytics.cache_creation_input_tokens !== undefined
+              ? {
+                  cache_creation_input_tokens:
+                    usageAnalytics.cache_creation_input_tokens,
+                }
+              : {}),
+            ...(usageAnalytics.uncached_input_tokens !== undefined
+              ? { uncached_input_tokens: usageAnalytics.uncached_input_tokens }
+              : {}),
+            ...(usageAnalytics.estimated_context_tokens !== undefined
+              ? { estimated_context_tokens: usageAnalytics.estimated_context_tokens }
+              : {}),
+            ...(usageAnalytics.cache_hit_ratio !== undefined
+              ? { cache_hit_ratio: usageAnalytics.cache_hit_ratio }
+              : {}),
+            cache_token_source: usageAnalytics.cache_token_source,
+            token_count_source: usageAnalytics.token_count_source,
           },
           insertId: `${runInsertId}-finish`,
         });
@@ -13510,11 +13685,45 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const mediaExecution = parseMediaExecutionPolicyInput(req.body?.mediaExecution);
+    const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
     }
-    const meta = { ...(req.body || {}), mediaExecution: mediaExecution.policy };
+    const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
+    if (!toolBundle.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    let chatProject = null;
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      try {
+        chatProject = getProject(db, requestBody.projectId);
+        assertSandboxProjectRootAvailable(chatProject?.metadata);
+      } catch (err) {
+        if (err instanceof SandboxImportedProjectError) {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+        }
+        throw err;
+      }
+    }
+    const toolBundleSupport = validateRunToolBundleForAgent(
+      toolBundle.bundle,
+      typeof requestBody.agentId === 'string' ? getAgentDef(requestBody.agentId) : null,
+      {
+        deliveryTarget: runToolBundleDeliveryTargetForProject(
+          requestBody.projectId,
+          chatProject?.metadata,
+        ),
+      },
+    );
+    if (!toolBundleSupport.ok) {
+      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
+    }
+    const meta = {
+      ...requestBody,
+      mediaExecution: mediaExecution.policy,
+      toolBundle: toolBundle.bundle,
+    };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(meta, run));
@@ -13591,6 +13800,7 @@ export async function startServer({
     if (routine.target.mode === 'reuse') {
       const project = getProject(db, routine.target.projectId);
       if (!project) throw new Error(`Routine target project ${routine.target.projectId} not found`);
+      assertSandboxProjectRootAvailable(project.metadata);
       projectId = project.id;
       projectName = project.name;
       previousProjectSnapshotId = project.appliedPluginSnapshotId ?? null;
@@ -13685,6 +13895,7 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `routine-${trigger}-${randomUUID()}`,
       agentId,
+      mediaExecution: defaultMediaExecutionPolicy(),
       ...(resolvedRoutineSnapshot?.ok
         ? {
             appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,
@@ -13898,6 +14109,7 @@ export async function startServer({
       mimeFor,
     },
     routines: { routineService },
+    projectPreviewScopes,
     validation: validationDeps,
     finalize: finalizeDeps,
     handoff: handoffDeps,
