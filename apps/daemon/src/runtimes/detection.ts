@@ -270,6 +270,7 @@ function stripFns(
   // the runtime registry stays the only consumer.
   const {
     buildArgs,
+    transformPrompt,
     listModels,
     fetchModels,
     fallbackModels,

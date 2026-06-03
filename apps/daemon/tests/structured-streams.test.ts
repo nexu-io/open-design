@@ -717,6 +717,102 @@ describe('structured agent stream fixtures', () => {
     ]);
   });
 
+  it('passes through Claude Code workflow stream events for background task UI', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'workflow_progress',
+        run_id: 'wf-run-1',
+        task_id: 'task-1',
+        status: 'running',
+        summary: '2/4 agents complete',
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'claude_stream_event',
+      eventType: 'workflow_progress',
+      event: {
+        type: 'workflow_progress',
+        run_id: 'wf-run-1',
+        task_id: 'task-1',
+        status: 'running',
+        summary: '2/4 agents complete',
+      },
+    });
+  });
+
+  it('emits Claude Workflow tool_use and matching tool_result', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-wf-1',
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'wf-ask-1',
+            name: 'Workflow',
+            input: {
+              script: 'export const meta = { name: "audit", description: "Audit", phases: [] };',
+              args: { scope: 'src/routes' },
+            },
+          },
+        ],
+        stop_reason: 'tool_use',
+      },
+    })}\n${JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'wf-ask-1',
+            content: JSON.stringify({
+              status: 'async_launched',
+              taskId: 'task-1',
+              runId: 'wf-run-1',
+              transcriptDir: '/tmp/claude/workflows/wf-run-1',
+              scriptPath: '/tmp/claude/workflows/wf-run-1/workflow.js',
+            }),
+            is_error: false,
+          },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'tool_use',
+      id: 'wf-ask-1',
+      name: 'Workflow',
+      input: {
+        script: 'export const meta = { name: "audit", description: "Audit", phases: [] };',
+        args: { scope: 'src/routes' },
+      },
+    });
+    expect(events).toContainEqual({
+      type: 'tool_result',
+      toolUseId: 'wf-ask-1',
+      content: JSON.stringify({
+        status: 'async_launched',
+        taskId: 'task-1',
+        runId: 'wf-run-1',
+        transcriptDir: '/tmp/claude/workflows/wf-run-1',
+        scriptPath: '/tmp/claude/workflows/wf-run-1/workflow.js',
+      }),
+      isError: false,
+    });
+  });
+
   it('does not duplicate streamed Claude Code text or thinking when final assistant wrapper has no id', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));

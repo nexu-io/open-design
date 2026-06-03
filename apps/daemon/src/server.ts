@@ -2644,6 +2644,13 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
       isError: Boolean(data.isError),
     };
   }
+  if (type === 'claude_stream_event') {
+    return {
+      kind: 'status',
+      label: 'workflow',
+      detail: summarizeClaudeWorkflowEvent(data),
+    };
+  }
   if (type === 'usage') {
     const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
     return {
@@ -2663,6 +2670,31 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
   }
   if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
   return null;
+}
+
+function summarizeClaudeWorkflowEvent(data) {
+  const event = data?.event && typeof data.event === 'object' ? data.event : {};
+  const summary =
+    typeof event.summary === 'string'
+      ? event.summary
+      : typeof event.status === 'string'
+        ? event.status
+        : typeof event.name === 'string'
+          ? event.name
+          : typeof event.phase === 'string'
+            ? event.phase
+            : typeof data?.eventType === 'string'
+              ? data.eventType
+              : 'workflow event';
+  const id =
+    typeof event.run_id === 'string'
+      ? event.run_id
+      : typeof event.workflow_id === 'string'
+        ? event.workflow_id
+        : typeof event.task_id === 'string'
+          ? event.task_id
+          : '';
+  return id ? `${summary} (${id})` : summary;
 }
 
 function normalizePersistedToolInput(input) {
@@ -10440,6 +10472,12 @@ export async function startServer({
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const agentPrompt = typeof def.transformPrompt === 'function'
+      ? def.transformPrompt(composed, agentOptions, {
+          cwd: effectiveCwd,
+          hasPriorAssistantTurn,
+        })
+      : composed;
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
     // `od-plugin-authoring` plugin's turn-1 flow is to emit a
@@ -10841,7 +10879,7 @@ export async function startServer({
     // independently of whether the adapter binary happens to be on PATH
     // in the CI environment, and the user gets the actionable
     // adapter-named error even if /api/agents hadn't refreshed yet.
-    const promptBudgetError = checkPromptArgvBudget(def, composed);
+    const promptBudgetError = checkPromptArgvBudget(def, agentPrompt);
     if (promptBudgetError) {
       design.runs.emit(
         run,
@@ -11037,7 +11075,7 @@ export async function startServer({
       def.id === 'antigravity'
         ? path.join(os.tmpdir(), `od-agy-${run.id}.log`)
         : undefined;
-    const promptFile = await preparePromptFileForAgent(def, composed, run.id);
+    const promptFile = await preparePromptFileForAgent(def, agentPrompt, run.id);
     const cleanupPromptFile = () => {
       if (promptFile) promptFile.cleanup().catch(() => {});
     };
@@ -11067,7 +11105,7 @@ export async function startServer({
     let args;
     try {
       args = def.buildArgs(
-        composed,
+        agentPrompt,
         safeImages,
         extraAllowedDirs,
         agentOptions,
@@ -12141,7 +12179,7 @@ export async function startServer({
       trackingSubstantiveOutput = true;
       acpSession = attachPiRpcSession({
         child,
-        prompt: composed,
+        prompt: agentPrompt,
         cwd: effectiveCwd,
         model: safeModel,
         parentSession: agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
@@ -12179,7 +12217,7 @@ export async function startServer({
       const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
       acpSession = attachAcpSession({
         child,
-        prompt: composed,
+        prompt: agentPrompt,
         cwd: effectiveCwd,
         model: safeModel,
         imagePaths: def.supportsImagePaths ? amrStagedImages : [],
@@ -12671,7 +12709,7 @@ export async function startServer({
           type: 'user',
           message: {
             role: 'user',
-            content: [{ type: 'text', text: composed }],
+            content: [{ type: 'text', text: agentPrompt }],
           },
         });
         try {
@@ -12684,7 +12722,7 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8');
+        child.stdin.end(agentPrompt, 'utf8');
       }
     }
   };

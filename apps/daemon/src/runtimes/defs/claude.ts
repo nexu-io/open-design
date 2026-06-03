@@ -32,12 +32,28 @@ export const claudeAgentDef = {
       // Fixes issue #430: --add-dir never detected because it wasn't in global help.
       '--include-partial-messages': 'partialMessages',
       '--add-dir': 'addDir',
+      '--effort': 'effort',
     },
     // `claude` has no list-models subcommand. Prefer local mmd/MMS routes
     // when present so proxy-backed Claude-compatible models appear in the
     // picker, then keep the built-in aliases as fallback hints.
     fallbackModels: CLAUDE_FALLBACK_MODELS,
     fetchModels: async (_resolvedBin, env) => loadMmdRouteModels(env, CLAUDE_FALLBACK_MODELS),
+    reasoningOptions: [
+      { id: 'default', label: 'Default' },
+      { id: 'low', label: 'Low' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'high', label: 'High' },
+      { id: 'xhigh', label: 'XHigh' },
+      { id: 'max', label: 'Max' },
+      { id: 'ultracode', label: 'Ultracode (dynamic workflows)' },
+    ],
+    transformPrompt: (prompt, options = {}) => {
+      if (options.reasoning !== 'ultracode') return prompt;
+      const trimmed = prompt.trimStart();
+      if (/^ultracode\b\s*:/i.test(trimmed)) return prompt;
+      return `ultracode: ${prompt}`;
+    },
     // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
     // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
     // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
@@ -61,6 +77,14 @@ export const claudeAgentDef = {
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      if (
+        options.reasoning &&
+        options.reasoning !== 'default' &&
+        options.reasoning !== 'ultracode' &&
+        caps.effort === true
+      ) {
+        args.push('--effort', options.reasoning);
       }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,

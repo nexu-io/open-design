@@ -2014,13 +2014,17 @@ async function testAgentConnectionInternal(
       await prepareOpenCodeConnectionTestCwd(tempDir);
     }
     let args: string[];
+    const buildOptions = { model: input.model ?? null, reasoning: input.reasoning ?? null };
+    const smokePrompt = typeof def.transformPrompt === 'function'
+      ? def.transformPrompt(SMOKE_PROMPT, buildOptions, { cwd: tempDir })
+      : SMOKE_PROMPT;
     try {
-      promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
+      promptFile = await preparePromptFileForAgent(def, smokePrompt, 'connection-test');
       args = def.buildArgs(
-        SMOKE_PROMPT,
+        smokePrompt,
         [],
         [],
-        { model: input.model ?? null, reasoning: input.reasoning ?? null },
+        buildOptions,
         {
           cwd: tempDir,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
@@ -2134,7 +2138,7 @@ async function testAgentConnectionInternal(
     const { acpSession } = attachAgentStreamHandlers(
       def,
       child,
-      SMOKE_PROMPT,
+      smokePrompt,
       tempDir,
       input.model,
       env,
@@ -2336,7 +2340,7 @@ async function testAgentConnectionInternal(
           });
         }
       });
-      child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), 'utf8');
+      child.stdin.end(formatPromptForAgentStdin(def, smokePrompt), 'utf8');
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
       timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());

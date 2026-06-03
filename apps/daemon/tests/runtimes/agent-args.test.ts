@@ -4,6 +4,7 @@ import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
@@ -887,6 +888,50 @@ test('claude flags promptViaStdin and never embeds the prompt in argv', () => {
   // `-p` (print mode) must still be present; without it claude drops into
   // an interactive REPL that the daemon has no TTY for.
   assert.ok(args.includes('-p'), 'claude argv must include -p');
+});
+
+test('claude exposes ultracode workflow reasoning and prefixes the prompt trigger', () => {
+  assert.ok(
+    claude.reasoningOptions?.some((option) => option.id === 'ultracode'),
+    'Claude Code must expose an ultracode reasoning option for dynamic workflows',
+  );
+  assert.equal(
+    claude.transformPrompt?.('Audit the repo', { reasoning: 'ultracode' }),
+    'ultracode: Audit the repo',
+  );
+  assert.equal(
+    claude.transformPrompt?.('ultracode: Audit the repo', { reasoning: 'ultracode' }),
+    'ultracode: Audit the repo',
+  );
+  assert.equal(
+    claude.transformPrompt?.('Audit the repo', { reasoning: 'high' }),
+    'Audit the repo',
+  );
+});
+
+test('claude buildArgs passes ordinary reasoning effort but leaves ultracode to the prompt trigger', () => {
+  const previousCaps = agentCapabilities.get('claude');
+  agentCapabilities.set('claude', { effort: true });
+  try {
+    const highArgs = claude.buildArgs('', [], [], { reasoning: 'high' });
+    assert.deepEqual(
+      highArgs.slice(highArgs.indexOf('--effort'), highArgs.indexOf('--effort') + 2),
+      ['--effort', 'high'],
+    );
+
+    const ultracodeArgs = claude.buildArgs('', [], [], { reasoning: 'ultracode' });
+    assert.equal(
+      ultracodeArgs.includes('--effort'),
+      false,
+      '2.1.159 does not advertise --effort ultracode; use the prompt trigger for MVP compatibility',
+    );
+  } finally {
+    if (previousCaps) {
+      agentCapabilities.set('claude', previousCaps);
+    } else {
+      agentCapabilities.delete('claude');
+    }
+  }
 });
 
 // ---- Claude Code --add-dir capability (issue #430) -------------------------

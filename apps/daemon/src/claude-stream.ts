@@ -591,6 +591,14 @@ export function createClaudeStreamHandler(
       blocks.delete(key);
       return;
     }
+
+    if (isWorkflowStreamEvent(ev)) {
+      onEvent({
+        type: 'claude_stream_event',
+        eventType: typeof ev.type === 'string' ? ev.type : 'unknown',
+        event: ev,
+      });
+    }
   }
 
   function flushPendingArtifactText() {
@@ -607,6 +615,16 @@ export function createClaudeStreamHandler(
   }
 
   return { feed, flush };
+}
+
+function isWorkflowStreamEvent(ev: Record<string, unknown>): boolean {
+  const type = typeof ev.type === 'string' ? ev.type.toLowerCase() : '';
+  if (type.includes('workflow')) return true;
+  return (
+    typeof ev.run_id === 'string' ||
+    typeof ev.workflow_id === 'string' ||
+    typeof ev.task_id === 'string'
+  );
 }
 
 function stringifyToolResult(content: unknown): string {

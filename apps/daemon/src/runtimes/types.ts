@@ -19,6 +19,12 @@ export type RuntimeBuildOptions = {
   reasoning?: string | null;
 };
 
+export type RuntimePromptTransform = (
+  prompt: string,
+  options?: RuntimeBuildOptions,
+  runtimeContext?: RuntimeContext,
+) => string;
+
 export type RuntimeContext = {
   cwd?: string;
   // True when the current chat run has at least one prior persisted
@@ -103,6 +109,7 @@ export type RuntimeAgentDef = {
     options?: RuntimeBuildOptions,
     runtimeContext?: RuntimeContext,
   ) => string[];
+  transformPrompt?: RuntimePromptTransform;
   streamFormat: string;
   fallbackBins?: string[];
   versionProbeTimeoutMs?: number;
@@ -216,6 +223,7 @@ export type RuntimeAgentDef = {
 export type DetectedAgent = Omit<
   RuntimeAgentDef,
   | 'buildArgs'
+  | 'transformPrompt'
   | 'listModels'
   | 'fetchModels'
   | 'fallbackModels'
