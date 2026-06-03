@@ -1,0 +1,80 @@
+name: notify-release-feishu
+
+# On every push to a release/** branch, build a full nightly package by reusing
+# release-stable (channel=nightly), then post a Feishu card with the download
+# links (macOS arm64 + Intel, Windows, and Linux when enabled) and the changelog
+# since the previously published nightly. Consecutive pushes to the same branch
+# are debounced: a newer push cancels the in-flight build.
+
+on:
+  push:
+    branches:
+      - "release/**"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: feishu-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build nightly from release branch
+    if: github.repository == 'nexu-io/open-design'
+    uses: ./.github/workflows/release-stable.yml
+    secrets: inherit
+    with:
+      channel: nightly
+
+  notify:
+    name: Notify Feishu (release)
+    needs: build
+    if: ${{ !cancelled() && needs.build.outputs.release_version != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout built ref
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Compute changelog since last nightly
+        id: changelog
+        env:
+          PREV: ${{ needs.build.outputs.previous_commit }}
+          CUR: ${{ needs.build.outputs.commit }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/changelog.txt"
+          : > "$file"
+          if [ -n "$PREV" ] && git cat-file -e "${PREV}^{commit}" 2>/dev/null && git cat-file -e "${CUR}^{commit}" 2>/dev/null; then
+            git log --no-merges --pretty=format:'%s (%h)' "${PREV}..${CUR}" > "$file" || true
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Post Feishu card
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          CHANNEL_LABEL: "Nightly"
+          VERSION: ${{ needs.build.outputs.release_version }}
+          BRANCH: ${{ needs.build.outputs.branch }}
+          COMMIT: ${{ needs.build.outputs.commit }}
+          PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
+          CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
+          BUILD_STATE: ${{ needs.build.result }}
+          MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
+          MAC_INTEL_URL: ${{ needs.build.outputs.mac_intel_url }}
+          WIN_URL: ${{ needs.build.outputs.win_url }}
+          LINUX_URL: ${{ needs.build.outputs.linux_url }}
+          STREAM_LABEL: "release 分支推送"
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types .github/scripts/release/feishu/notify.ts

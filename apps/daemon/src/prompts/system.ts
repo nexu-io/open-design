@@ -36,7 +36,7 @@ import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
-import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
 const ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX = 'ElevenLabs voice list could not be loaded';
@@ -129,6 +129,9 @@ type ProjectMetadata = {
   platformTargets?: string[] | null;
   inspirationDesignSystemIds?: string[];
   skipDiscoveryBrief?: boolean | null;
+  examplePrompt?: boolean | null;
+  examplePromptTitle?: string | null;
+  examplePromptBrief?: Record<string, string> | null;
   imageModel?: string | null;
   imageAspect?: string | null;
   imageStyle?: string | null;
@@ -277,6 +280,35 @@ printf '%s\\n' "\$last"
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+
+export function buildExamplePromptOverride(
+  title?: string | null,
+  brief?: Record<string, string> | null,
+): string {
+  let text = `# Example prompt mode — full-quality direct generation
+
+The user selected a curated example prompt from the gallery and sent it without modification. This prompt is a complete, self-contained creative brief that has been carefully designed to produce a showcase-quality artifact.`;
+
+  if (title) {
+    text += `\n\nSelected example: "${title}"`;
+  }
+
+  if (brief && Object.keys(brief).length > 0) {
+    text += `\n\nPre-filled creative brief (treat as if the user already answered all discovery questions):`;
+    for (const [key, value] of Object.entries(brief)) {
+      text += `\n- ${key.replace(/_/g, ' ')}: ${value}`;
+    }
+  }
+
+  text += `\n\nRules:
+1. Do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask any clarifying questions.
+2. Treat the user's message as the FULL specification — it contains all visual direction, content themes, and structural intent needed.
+3. Generate the artifact at your absolute highest quality. This is a showcase piece — match or exceed the standard of a hand-crafted design.
+4. Infer any unspecified details (copy, layout choices, imagery descriptions) in a way that is maximally coherent with the stated creative direction.
+5. Proceed directly to planning and building. Output your TodoWrite plan and then the artifact immediately.`;
+
+  return text;
+}
 
 const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 
@@ -428,6 +460,10 @@ export interface ComposeInput {
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
+  // Per-conversation mode. Design mode keeps the artifact-first agent
+  // workflow; chat mode keeps the same context/tools but answers like a
+  // standard multi-turn assistant unless the user explicitly asks to build.
+  sessionMode?: ChatSessionMode | undefined;
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
@@ -463,6 +499,7 @@ export function composeSystemPrompt({
   activeStageBlocks,
   streamFormat,
   locale,
+  sessionMode,
   userInstructions,
   projectInstructions,
   mediaExecution,
@@ -495,6 +532,11 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  if (sessionMode === 'chat') {
+    parts.push(CHAT_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
   // Skip the HTML-artifact discovery layer for media surfaces (image / video /
   // audio). DISCOVERY_AND_PHILOSOPHY is ~3 000 tokens of rules about question
   // forms, brand extraction, direction pickers, and HTML artifact checklist —
@@ -510,7 +552,10 @@ export function composeSystemPrompt({
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
 
-  if (metadata?.skipDiscoveryBrief === true) {
+  if (metadata?.examplePrompt === true) {
+    parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
+    parts.push('\n\n---\n\n');
+  } else if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
   }
@@ -786,6 +831,14 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 - \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
+
+const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
+
+This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.com/invite/9ptkbbqRu.
+
+Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
+
+Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Open Design agent workflow and the same tools/capabilities available in Design mode.`;
 
 // Defense-in-depth against Claude Code's synthetic OAuth tools.
 //

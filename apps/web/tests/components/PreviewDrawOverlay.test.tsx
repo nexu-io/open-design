@@ -19,8 +19,88 @@ afterEach(() => {
   vi.mocked(requestPreviewSnapshot).mockClear();
 });
 
+function installImageCompositeMocks() {
+  const originalImage = globalThis.Image;
+  class MockImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+
+    set src(_value: string) {
+      window.setTimeout(() => this.onload?.(), 0);
+    }
+  }
+
+  Object.defineProperty(globalThis, 'Image', {
+    configurable: true,
+    value: MockImage,
+    writable: true,
+  });
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({
+    beginPath: vi.fn(),
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    fillText: vi.fn(),
+    lineCap: 'round',
+    lineJoin: 'round',
+    lineTo: vi.fn(),
+    lineWidth: 1,
+    measureText: vi.fn(() => ({ width: 0 })),
+    moveTo: vi.fn(),
+    restore: vi.fn(),
+    save: vi.fn(),
+    scale: vi.fn(),
+    setLineDash: vi.fn(),
+    stroke: vi.fn(),
+    strokeRect: vi.fn(),
+    fillStyle: '',
+    font: '',
+    strokeStyle: '',
+  }) as unknown as CanvasRenderingContext2D) as unknown as HTMLCanvasElement['getContext']);
+  const toBlob = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback: BlobCallback) => {
+    callback(new Blob(['png'], { type: 'image/png' }));
+  });
+
+  return () => {
+    getContext.mockRestore();
+    toBlob.mockRestore();
+    if (originalImage) {
+      Object.defineProperty(globalThis, 'Image', {
+        configurable: true,
+        value: originalImage,
+        writable: true,
+      });
+    } else {
+      delete (globalThis as { Image?: unknown }).Image;
+    }
+  };
+}
+
 describe('PreviewDrawOverlay', () => {
-  it('uses the visible primary send action when Enter submits a note', async () => {
+  it('keeps the draw toolbar responsive inside narrow preview surfaces', () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas');
+    const toolbar = container.querySelector<HTMLElement>('.preview-draw-toolbar');
+    const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
+
+    expect(canvas?.style.zIndex).toBe('80');
+    expect(toolbar?.style.zIndex).toBe('91');
+    expect(toolbar?.style.flexWrap).toBe('wrap');
+    expect(toolbar?.style.left).toBe('calc(50% - 52px)');
+    expect(toolbar?.style.maxWidth).toContain('100% - 144px');
+    expect(input?.style.flexGrow).toBe('1');
+    expect(input?.style.flexShrink).toBe('1');
+    expect(input?.style.flexBasis).toBe('280px');
+    expect(input?.style.minWidth).toBe('0px');
+    expect(input?.style.maxWidth).toBe('100%');
+  });
+
+  it('queues a note when Enter submits from the draw input', async () => {
     const annotation = vi.fn();
     window.addEventListener('opendesign:annotation', annotation);
 
@@ -39,7 +119,7 @@ describe('PreviewDrawOverlay', () => {
 
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0].detail).toMatchObject({
-        action: 'send',
+        action: 'queue',
         note: 'Please inspect this panel.',
       });
     } finally {
@@ -91,18 +171,55 @@ describe('PreviewDrawOverlay', () => {
 
       const sendButton = getByRole('button', { name: 'Send' }) as HTMLButtonElement;
       const queueButton = getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+      const addToInputButton = getByRole('button', { name: 'Add to input' }) as HTMLButtonElement;
       expect(sendButton.disabled).toBe(true);
       expect(sendButton.title).toBe('Task running');
       expect(queueButton.disabled).toBe(false);
+      expect(addToInputButton.disabled).toBe(false);
 
       fireEvent.keyDown(input!, { key: 'Enter' });
-      fireEvent.click(sendButton);
-      expect(annotation).not.toHaveBeenCalled();
-
-      fireEvent.click(queueButton);
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
         detail: expect.objectContaining({ action: 'queue' }),
+      });
+
+      fireEvent.click(sendButton);
+      expect(annotation).toHaveBeenCalledTimes(1);
+
+      fireEvent.change(input!, { target: { value: 'Queue another note.' } });
+      fireEvent.click(queueButton);
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(2));
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+    }
+  });
+
+  it('can append a note to the composer input instead of queueing or sending it', async () => {
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
+      expect(input).toBeTruthy();
+      fireEvent.change(input!, { target: { value: 'Keep this in the input.' } });
+
+      fireEvent.click(getByRole('button', { name: 'Add to input' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      expect(annotation.mock.calls[0]?.[0]).toMatchObject({
+        detail: expect.objectContaining({
+          action: 'draft',
+          note: 'Keep this in the input.',
+        }),
       });
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
@@ -251,5 +368,39 @@ describe('PreviewDrawOverlay', () => {
     await waitFor(() => expect(snapshot).toHaveBeenCalled());
     const usedIframe = snapshot.mock.calls[0]?.[0] as HTMLIFrameElement;
     expect(usedIframe.getAttribute('data-od-render-mode')).toBe('srcdoc');
+  });
+
+  it('hides draw chrome before a compositor annotation snapshot', async () => {
+    const restoreCompositeMocks = installImageCompositeMocks();
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    let host: HTMLElement | null = null;
+    const captureSnapshot = vi.fn(async () => {
+      expect(host?.querySelector('canvas')?.style.visibility).toBe('hidden');
+      expect(host?.querySelector<HTMLElement>('.preview-draw-toolbar')?.style.visibility).toBe('hidden');
+      return { dataUrl: 'data:image/png;base64,cG5n', w: 10, h: 10 };
+    });
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active captureViewport captureSnapshot={captureSnapshot}>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+      host = container;
+
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(captureSnapshot).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      expect(container.querySelector<HTMLElement>('.preview-draw-toolbar')?.style.visibility).toBe('');
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      restoreCompositeMocks();
+    }
   });
 });

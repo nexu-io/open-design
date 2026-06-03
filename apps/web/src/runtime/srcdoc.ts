@@ -227,6 +227,24 @@ function injectSnapshotBridge(doc: string): string {
         .replace(/@font-face\\s*\\{[^}]*\\}/gi, '');
     }
   }
+  function pruneHiddenSnapshotNodes(originalRoot, cloneRoot){
+    var originals = originalRoot.querySelectorAll('*');
+    var clones = cloneRoot.querySelectorAll('*');
+    var count = Math.min(originals.length, clones.length);
+    var removals = [];
+    for (var i = 0; i < count; i++){
+      var original = originals[i];
+      var clone = clones[i];
+      if (!original || !clone || !clone.parentNode) continue;
+      var computed = window.getComputedStyle(original);
+      if (computed && (computed.display === 'none' || computed.visibility === 'hidden')) {
+        removals.push(clone);
+      }
+    }
+    for (var r = removals.length - 1; r >= 0; r--){
+      if (removals[r].parentNode) removals[r].parentNode.removeChild(removals[r]);
+    }
+  }
   function waitForImages(){
     var imgs = Array.prototype.slice.call(document.images || []);
     return Promise.all(imgs.map(function(img){
@@ -248,15 +266,44 @@ function injectSnapshotBridge(doc: string): string {
   function escapeAttribute(value){
     return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   }
+  function snapshotBackgroundColor(){
+    try {
+      var probe = window.getComputedStyle(document.body || document.documentElement);
+      var bg = probe && probe.backgroundColor || '';
+      if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') return '#ffffff';
+      return bg;
+    } catch (_) { return '#ffffff'; }
+  }
+  // After painting, sample the canvas: a uniform (single-color) bitmap means
+  // the foreignObject rasterizer painted nothing — Chromium frequently refuses
+  // to paint <foreignObject> HTML loaded via <img>. Treating that as an honest
+  // 'empty-render' error (instead of shipping the background-only frame) lets
+  // the host fall back / surface a real failure rather than a silent black PNG.
+  function canvasLooksBlank(ctx, cw, ch){
+    try {
+      var data = ctx.getImageData(0, 0, cw, ch).data;
+      var step = Math.max(4, Math.floor((cw * ch) / 4096)) * 4;
+      var first = null, samples = 0;
+      for (var i = 0; i + 3 < data.length; i += step){
+        samples++;
+        if (!first){ first = [data[i], data[i+1], data[i+2], data[i+3]]; continue; }
+        if (Math.abs(data[i]-first[0]) > 6 || Math.abs(data[i+1]-first[1]) > 6 ||
+            Math.abs(data[i+2]-first[2]) > 6 || Math.abs(data[i+3]-first[3]) > 6) return false;
+      }
+      return samples > 8;
+    } catch (_) { return false; }
+  }
   function renderSnapshot(id){
     var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
     var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
     var dpr = window.devicePixelRatio || 1;
+    var bgColor = snapshotBackgroundColor();
     var docW = Math.max(w, document.documentElement.scrollWidth || 0, document.body ? document.body.scrollWidth : 0);
     var docH = Math.max(h, document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0);
     var clone = document.documentElement.cloneNode(true);
     clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
     inlineSnapshotStyles(document.documentElement, clone);
+    pruneHiddenSnapshotNodes(document.documentElement, clone);
     var scroll = scrollOffset();
     var cloneBody = clone.querySelector('body');
     var rootStyle = clone.getAttribute('style') || '';
@@ -279,7 +326,15 @@ function injectSnapshotBridge(doc: string): string {
         var ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('no 2d context');
         ctx.scale(dpr, dpr);
+        // Opaque base so a transparent (un-painted) raster never flattens to
+        // pure black in clipboards / PNG viewers.
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
+        if (canvasLooksBlank(ctx, canvas.width, canvas.height)) {
+          window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: 'empty-render' }, '*');
+          return;
+        }
         window.parent.postMessage({ type: 'od:snapshot:result', id: id, dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height }, '*');
       } catch (err) {
         window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: String(err && err.message || err) }, '*');
@@ -581,43 +636,49 @@ function annotateMissingOdIds(doc: string): string {
 
 function injectManualEditBridge(doc: string): string {
   const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
-  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(true));
+  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
-      return serializeHtmlDocument(parsed);
-    } catch { /* DOMParser failed; fall through to string path */ }
-  }
-  // String fallback: find the real </head> (last one before <body>)
-  // to skip </head> literals inside <script>/<style> in <head>.
+  // String-first: a plain splice before the real </head> (or after <head…>) is
+  // correct for well-formed documents and avoids a full DOMParser parse +
+  // re-serialize. Every bridge calls this, so the parse path was the dominant
+  // srcdoc-build cost; DOMParser is now only the fallback for head-less
+  // fragments where we can't locate an insertion point textually. Find the real
+  // </head> (last one before <body>) to skip </head> literals in <script>/<style>.
   const lower = doc.toLowerCase();
   const bodyStart = lower.indexOf('<body');
   const limit = bodyStart >= 0 ? bodyStart : lower.length;
   const idx = lower.lastIndexOf('</head>', limit - 1);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  // No recognizable <head>: let DOMParser normalize (it synthesizes a head).
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* fall through to prepend */ }
+  }
   return payload + doc;
 }
 
 function injectBeforeBodyEnd(doc: string, payload: string): string {
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
-      return serializeHtmlDocument(parsed);
-    } catch { /* DOMParser failed; fall through to string path */ }
-  }
-  // String fallback: find the real </body> (last one before </html>)
-  // to skip </body> literals inside <script>/<style> in <body>.
+  // String-first (see injectBeforeHeadEnd). Find the real </body> (last one
+  // before </html>) to skip </body> literals inside <script>/<style>.
   const lower = doc.toLowerCase();
   const htmlEnd = lower.lastIndexOf('</html>');
   const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
   const idx = lower.lastIndexOf('</body>', limit - 1);
   if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
+  // No recognizable </body>: let DOMParser normalize (it synthesizes a body).
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* fall through to append */ }
+  }
   return doc + payload;
 }
 
@@ -819,6 +880,7 @@ function injectSelectionBridge(
   var hoveredId = null;
   var drawing = false;
   var stroke = [];
+  var strokeFrame = null;
   var postTargetsTimer = null;
   // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
   var overrides = Object.create(null);
@@ -1239,6 +1301,17 @@ function meaningfulDomFallbackTarget(el) {
   function postStroke(type){
     window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
   }
+  // Coalesce live stroke updates to one post per frame. The stroke array still
+  // grows synchronously on every pointermove, but the host (which re-renders
+  // the comment overlay on each od:pod-stroke) only sees ~60 updates/sec
+  // instead of one per raw pointer event.
+  function schedulePostStroke(){
+    if (strokeFrame !== null) return;
+    strokeFrame = requestAnimationFrame(function(){
+      strokeFrame = null;
+      postStroke('od:pod-stroke');
+    });
+  }
   function canUseDomFallback(){
     return commentEnabled && !inspectEnabled;
   }
@@ -1518,11 +1591,12 @@ function meaningfulDomFallbackTarget(el) {
     stroke.push(point);
     ev.preventDefault();
     ev.stopPropagation();
-    postStroke('od:pod-stroke');
+    schedulePostStroke();
   }, true);
   function finishStroke(ev){
     if (!drawing || mode !== 'pod') return;
     drawing = false;
+    if (strokeFrame !== null) { cancelAnimationFrame(strokeFrame); strokeFrame = null; }
     if (ev) {
       ev.preventDefault();
       ev.stopPropagation();
@@ -1538,9 +1612,19 @@ function meaningfulDomFallbackTarget(el) {
     schedulePostPreviewScroll();
   }, true);
   var mo = new MutationObserver(schedulePostTargets);
-  mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true });
+  // childList only — NOT attributes/characterData. Re-walking every annotated
+  // target on every attribute/text mutation made an animated artifact (inline
+  // style/text changes per frame) churn schedulePostTargets continuously while
+  // in comment/inspect mode. Structural changes (childList) still re-walk, and
+  // scroll/resize already re-post geometry for layout shifts.
+  mo.observe(document.documentElement, { subtree: true, childList: true });
+  // The active comment marker still has to follow its own element's text and
+  // attribute edits, but schedulePostActiveCommentTarget re-posts exactly ONE
+  // element (the active comment), so it stays cheap even on animated artifacts —
+  // unlike the full allTargets() re-walk above. This is why attributes/
+  // characterData live on this targeted observer instead of the main observer.
   var textMo = new MutationObserver(schedulePostActiveCommentTarget);
-  textMo.observe(document.documentElement, { subtree: true, characterData: true });
+  textMo.observe(document.documentElement, { subtree: true, characterData: true, attributes: true });
   // Reflect the host-requested initial modes on the documentElement so
   // the cursor/hover styles match what the bridge picks up on click.
   if (commentEnabled) document.documentElement.toggleAttribute('data-od-comment-mode', true);

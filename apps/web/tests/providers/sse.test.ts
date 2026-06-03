@@ -102,6 +102,32 @@ describe('streamViaDaemon', () => {
     });
   });
 
+  it('sends the applied plugin snapshot id to the daemon', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'use the plugin' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      appliedPluginSnapshotId: 'snap-plugin-1',
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.appliedPluginSnapshotId).toBe('snap-plugin-1');
+  });
+
   it('drops prior assistant turns from another agent when composing daemon transcript', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

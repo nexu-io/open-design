@@ -170,3 +170,46 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
   });
 
 });
+
+describe('diagnostics export handler — run event logs', () => {
+  it('bundles recent per-run events.jsonl logs for agent stream forensics', async () => {
+    const root = join(tmpdir(), `od-diag-runs-${randomUUID()}`);
+    const runsDir = join(root, 'runs');
+    const runLogPath = join(runsDir, 'run-3165', 'events.jsonl');
+    const marker = 'Agent stalled without emitting any new output for 600s';
+    try {
+      await mkdir(dirname(runLogPath), { recursive: true });
+      await writeFile(
+        runLogPath,
+        JSON.stringify({
+          event: 'agent',
+          data: { type: 'raw', line: marker },
+        }) + '\n',
+        'utf8',
+      );
+
+      const handler = createDiagnosticsExportHandler({
+        runtime: null,
+        projectRoot: '/tmp/test-project',
+        runsDir,
+      });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const runEntry = zip.file('runs/run-3165/events.jsonl');
+      expect(runEntry).not.toBeNull();
+      expect(await runEntry!.async('string')).toContain(marker);
+
+      const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
+        files: { name: string; bytes: number; error?: string }[];
+      };
+      const runFile = manifest.files.find((file) => file.name === 'runs/run-3165/events.jsonl');
+      expect(runFile?.error).toBeUndefined();
+      expect(runFile?.bytes ?? 0).toBeGreaterThan(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

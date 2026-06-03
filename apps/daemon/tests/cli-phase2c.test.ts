@@ -188,7 +188,7 @@ describe('Phase 2C CLI wrappers', () => {
     expect(conversationBody.conversation.title).toBe('Follow-up');
   });
 
-  it('imports through the CLI when desktop import auth gate is active', async () => {
+  it('imports through CLI project import commands when desktop import auth gate is active', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
     const secret = randomBytes(32);
@@ -240,6 +240,36 @@ describe('Phase 2C CLI wrappers', () => {
       expect(importBody.project.metadata?.fromTrustedPicker).toBe(true);
       expect(importBody.conversationId).toBeTruthy();
       expect(importBody.entryFile).toBe('index.html');
+
+      const folderForImportFolder = makeFolder();
+      await writeFile(path.join(folderForImportFolder, 'index.html'), '<!doctype html>');
+      const importedFolder = await runCli(
+        [
+          'project',
+          'import-folder',
+          `  ${folderForImportFolder}  `,
+          '--name',
+          'Gated CLI Import Folder',
+          '--json',
+        ],
+        { env: wrapperEnv },
+      );
+      const importFolderBody = JSON.parse(importedFolder.stdout) as {
+        project: {
+          id: string;
+          name: string;
+          metadata?: { importedFrom?: string; fromTrustedPicker?: boolean };
+        };
+        conversationId: string;
+        entryFile: string | null;
+      };
+
+      expect(importFolderBody.project.id).toBeTruthy();
+      expect(importFolderBody.project.name).toBe('Gated CLI Import Folder');
+      expect(importFolderBody.project.metadata?.importedFrom).toBe('folder');
+      expect(importFolderBody.project.metadata?.fromTrustedPicker).toBe(true);
+      expect(importFolderBody.conversationId).toBeTruthy();
+      expect(importFolderBody.entryFile).toBe('index.html');
     } finally {
       resetDesktopAuthForTests();
     }

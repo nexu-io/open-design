@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import type { AgentInfo, AppConfig, ProviderModelOption } from '../../src/types';
 
 const baseConfig: AppConfig = {
@@ -48,24 +49,55 @@ const codexAgent: AgentInfo = {
 function renderSwitcher(
   config: Partial<AppConfig> = {},
   agents: AgentInfo[] = [amrAgent],
-  providerModelsCache?: Record<string, ProviderModelOption[]>,
+  providerModelsCache: Record<string, ProviderModelOption[]> = {},
 ) {
   const onAgentModelChange = vi.fn();
   const view = render(
     <InlineModelSwitcher
       config={{ ...baseConfig, ...config }}
       agents={agents}
+      providerModelsCache={providerModelsCache}
       daemonLive={true}
       onModeChange={vi.fn()}
       onAgentChange={vi.fn()}
       onAgentModelChange={onAgentModelChange}
       onApiProtocolChange={vi.fn()}
       onApiModelChange={vi.fn()}
-      providerModelsCache={providerModelsCache}
       onOpenSettings={vi.fn()}
     />,
   );
   return { ...view, onAgentModelChange };
+}
+
+function expectVelaLoginWithAttribution(
+  fetchMock: ReturnType<typeof vi.fn>,
+  sourceDetail: string,
+) {
+  const loginCall = fetchMock.mock.calls.find(([input, init]) => (
+    input.toString() === '/api/integrations/vela/login'
+    && (init as RequestInit | undefined)?.method === 'POST'
+  ));
+  expect(loginCall).toBeDefined();
+  const init = loginCall?.[1] as RequestInit | undefined;
+  expect(init).toEqual(expect.objectContaining({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: expect.any(String),
+  }));
+  const body = JSON.parse(String(init?.body)) as {
+    attribution?: {
+      entryId?: string;
+      sourceProduct?: string;
+      sourceDetail?: string;
+      occurredAt?: string;
+    };
+  };
+  expect(body.attribution).toEqual(expect.objectContaining({
+    entryId: expect.stringMatching(/^od-amr-/u),
+    sourceProduct: 'open_design',
+    sourceDetail,
+  }));
+  expect(Number.isFinite(Date.parse(body.attribution?.occurredAt ?? ''))).toBe(true);
 }
 
 describe('InlineModelSwitcher AMR row', () => {
@@ -266,7 +298,11 @@ describe('InlineModelSwitcher AMR row', () => {
       },
       [amrAgent, codexAgent],
       {
-        ['openai\nhttps://api.openai.com/v1\nsk-test\n']: [
+        [providerModelsCacheKey(
+          'openai',
+          'https://api.openai.com/v1',
+          'sk-test',
+        )]: [
           { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
           { id: 'gpt-4.1', label: 'gpt-4.1' },
           { id: 'gpt-5.5', label: 'gpt-5.5' },
@@ -307,7 +343,11 @@ describe('InlineModelSwitcher AMR row', () => {
       },
       [amrAgent, codexAgent],
       {
-        ['openai\nhttps://api.openai.com/v1\nsk-test\n']: [
+        [providerModelsCacheKey(
+          'openai',
+          'https://api.openai.com/v1',
+          'sk-test',
+        )]: [
           { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
           { id: 'gpt-4.1', label: 'gpt-4.1' },
           { id: 'gpt-5.5', label: 'gpt-5.5' },
@@ -438,7 +478,7 @@ describe('InlineModelSwitcher AMR row', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+    expectVelaLoginWithAttribution(fetchMock, 'inline_model_switcher_amr_row');
     expect(
       within(popover).getByRole('radio', { name: /^AMR\s+Signing in/i }),
     ).toBeTruthy();
@@ -493,7 +533,7 @@ describe('InlineModelSwitcher AMR row', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login', { method: 'POST' });
+    expectVelaLoginWithAttribution(fetchMock, 'inline_model_switcher_amr_row');
     expect(
       within(popover).getByRole('radio', { name: /^AMR\s+Signing in/i }),
     ).toBeTruthy();
@@ -680,5 +720,40 @@ describe('InlineModelSwitcher AMR row', () => {
       expect(loginCalls).toBe(1);
       expect(onAgentChange).toHaveBeenCalledWith('amr');
     });
+  });
+
+  it('lists fetched BYOK provider models from the shared cache', () => {
+    const cacheKey = providerModelsCacheKey(
+      'anthropic',
+      baseConfig.baseUrl,
+      'sk-test',
+      '',
+    );
+    renderSwitcher(
+      {
+        mode: 'api',
+        apiKey: 'sk-test',
+        model: 'claude-3-5-haiku-latest',
+      },
+      [amrAgent],
+      {
+        [cacheKey]: [
+          { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku' },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    const select = screen.getByTestId(
+      'inline-model-switcher-api-model',
+    );
+    fireEvent.click(select);
+    const modelPopover = screen.getByTestId(
+      'inline-model-switcher-api-model-popover',
+    );
+    expect(
+      within(modelPopover).getByRole('option', { name: 'Claude 3.5 Haiku' }),
+    ).toBeTruthy();
   });
 });

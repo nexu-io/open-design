@@ -692,6 +692,7 @@ export function attachAcpSession({
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let emittedTextChunk = false;
+  let emittedToolCall = false;
   let emittedTextBuffer = '';
   let finished = false;
   let fatal = false;
@@ -873,6 +874,16 @@ export function attachAcpSession({
         }
         return;
       }
+      if (
+        update.sessionUpdate === 'tool_call' ||
+        update.sessionUpdate === 'tool_call_update'
+      ) {
+        // The turn did real work (a tool call / file edit), which is valid output even
+        // when the model emits no closing assistant text. Track it so the prompt-complete
+        // handler does not misreport such a turn as "no output / model unavailable".
+        emittedToolCall = true;
+        return;
+      }
       return;
     }
     if (obj.id !== expectedId || !result) {
@@ -924,7 +935,7 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
-      if (!emittedTextChunk && modelUnavailableErrorCode) {
+      if (!emittedTextChunk && !emittedToolCall && modelUnavailableErrorCode) {
         fail(
           'ACP session completed without producing any assistant text. Refresh the AMR model list, choose a supported model, and retry this run.',
           { forceModelUnavailable: true },

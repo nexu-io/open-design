@@ -26,6 +26,7 @@ import { usePluginFacets } from './plugins-home/usePluginFacets';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
+import { AnimatePresence } from 'motion/react';
 
 const INITIAL_PLUGIN_RENDER_LIMIT = 60;
 const PLUGIN_RENDER_BATCH_SIZE = 60;
@@ -239,13 +240,15 @@ export function PluginsHomeSection({
           )}
         </>
       )}
-      {saveToast ? (
-        <Toast
-          message={saveToast}
-          ttlMs={2200}
-          onDismiss={() => setSaveToast(null)}
-        />
-      ) : null}
+      <AnimatePresence>
+        {saveToast ? (
+          <Toast
+            message={saveToast}
+            ttlMs={2200}
+            onDismiss={() => setSaveToast(null)}
+          />
+        ) : null}
+      </AnimatePresence>
     </section>
   );
 }

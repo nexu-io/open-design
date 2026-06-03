@@ -49,6 +49,7 @@ export type ToolsDevSuiteContext = {
 };
 
 export type ToolsDevSuiteOptions = {
+  env?: Record<string, string | undefined>;
   onFailure?: (input: {
     context: ToolsDevSuiteContext | null;
     error: unknown;
@@ -138,23 +139,23 @@ async function runToolsDevSuite(
     let start: ToolsDevStartResult | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        start = await toolsDev.startToolsDevWeb(suite, runtime);
+        start = await toolsDev.startToolsDevWeb(suite, runtime, options.env);
         break;
       } catch (error) {
         if (attempt === 3 || !toolsDev.isToolsDevPortConflict(error)) throw error;
         await runtime.release().catch(() => {});
-        await toolsDev.stopToolsDevWeb(suite).catch(() => {});
+        await toolsDev.stopToolsDevWeb(suite, options.env).catch(() => {});
         runtime = await toolsDev.allocateToolsDevRuntime();
       }
     }
     if (start == null) throw new Error('tools-dev start did not return a result');
     const webUrl = assertRuntimeUrl(start.web?.status.url, 'web');
-    const status = await toolsDev.inspectToolsDevStatus(suite);
+    const status = await toolsDev.inspectToolsDevStatus(suite, options.env);
     assertToolsDevStatus(suite, status);
 
     context = {
-      check: () => toolsDev.inspectToolsDevCheck(suite),
-      logs: () => toolsDev.readToolsDevLogs(suite),
+      check: () => toolsDev.inspectToolsDevCheck(suite, options.env),
+      logs: () => toolsDev.readToolsDevLogs(suite, options.env),
       runtime,
       start,
       status,
@@ -168,7 +169,7 @@ async function runToolsDevSuite(
     success = true;
   } catch (error) {
     caughtError = error;
-    diagnostics = await toolsDev.inspectToolsDevCheck(suite).catch((diagnosticError: unknown) => ({
+    diagnostics = await toolsDev.inspectToolsDevCheck(suite, options.env).catch((diagnosticError: unknown) => ({
       error: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
     }));
     await options.onFailure?.({ context, error, suite }).catch((failureHookError: unknown) => {
@@ -184,7 +185,7 @@ async function runToolsDevSuite(
     // next smoke run on a shared CI runner.
     let stopError: unknown = null;
     try {
-      await toolsDev.stopToolsDevWeb(suite);
+      await toolsDev.stopToolsDevWeb(suite, options.env);
     } catch (error) {
       stopError = error;
     }

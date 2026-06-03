@@ -469,6 +469,11 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
   assert.deepEqual(args, ['-p', '-']);
 
+  const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
+    agentLogFilePath: '/tmp/od-agy-test.log',
+  });
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
   // Pass a temp antigravitySettingsPath so buildArgs does not touch the
@@ -477,9 +482,12 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   try {
     const withModel = antigravity.buildArgs('hi', [], [], {
       model: 'Gemini 3.1 Pro (High)',
-    }, { antigravitySettingsPath: join(settingsDir, 'settings.json') });
+    }, {
+      agentLogFilePath: '/tmp/od-agy-test.log',
+      antigravitySettingsPath: join(settingsDir, 'settings.json'),
+    });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['-p', '-']);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }

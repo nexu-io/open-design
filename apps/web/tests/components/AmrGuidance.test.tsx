@@ -57,6 +57,7 @@ function renderGuidance(onActivate = vi.fn()) {
       conversationId="conv-1"
       assistantMessageId="msg-amr"
       runId="run-9"
+      sourceDetail="chat_error_switch_retry_card"
       onActivate={onActivate}
     />,
   );

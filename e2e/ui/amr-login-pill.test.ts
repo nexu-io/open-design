@@ -54,6 +54,9 @@ async function openSettingsDialog(page: Page) {
 
 interface VelaMockState {
   loggedIn: boolean;
+  loginRequests: number;
+  logoutRequests: number;
+  statusRequests: number;
 }
 
 async function wireDaemonMocks(page: Page, state: VelaMockState) {
@@ -87,6 +90,7 @@ async function wireDaemonMocks(page: Page, state: VelaMockState) {
   });
 
   await page.route('**/api/integrations/vela/status', async (route) => {
+    state.statusRequests += 1;
     const body = state.loggedIn
       ? {
           loggedIn: true,
@@ -113,11 +117,13 @@ async function wireDaemonMocks(page: Page, state: VelaMockState) {
     // that shape and flip the in-memory state so the next status poll
     // sees a logged-in user — equivalent to vela CLI completing the
     // device-auth flow and writing ~/.amr/config.json.
+    state.loginRequests += 1;
     state.loggedIn = true;
     await route.fulfill({ status: 202, json: { pid: 4242, startedAt: new Date().toISOString(), profile: 'local' } });
   });
 
   await page.route('**/api/integrations/vela/logout', async (route) => {
+    state.logoutRequests += 1;
     state.loggedIn = false;
     await route.fulfill({ json: { ok: true } });
   });
@@ -138,8 +144,8 @@ function baseStorageConfig() {
   };
 }
 
-test('AMR card shows Sign in when logged out, flips to Signed in after the daemon writes config, and back to Sign in on Sign out', async ({ page }) => {
-  const state: VelaMockState = { loggedIn: false };
+test('[P1] AMR card authorizes through daemon login status and returns to authorize on Sign out', async ({ page }) => {
+  const state: VelaMockState = { loggedIn: false, loginRequests: 0, logoutRequests: 0, statusRequests: 0 };
   await wireDaemonMocks(page, state);
 
   await page.addInitScript(
@@ -152,24 +158,30 @@ test('AMR card shows Sign in when logged out, flips to Signed in after the daemo
   await gotoEntryHome(page);
   const dialog = await openSettingsDialog(page);
 
-  const amrCard = dialog.locator('.amr-agent-card, .agent-card-installed').filter({ hasText: /AMR \(vela\)/i }).first();
+  const amrCard = dialog
+    .locator('.amr-agent-card, .agent-card-installed')
+    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .first();
   await expect(amrCard).toBeVisible();
 
-  // ---- Initial state: logged out → "Sign in" button visible on the pill ----
-  const signInBtn = amrCard.getByRole('button', { name: /^Sign in$/ });
+  // Initial state: logged out -> the authorization button is visible on the pill.
+  await expect.poll(() => state.statusRequests).toBeGreaterThan(0);
+  const signInBtn = amrCard.getByRole('button', { name: /^(Authorize|Sign in)$/ });
   await expect(signInBtn).toBeVisible();
 
-  // ---- Click Sign in → daemon returns 202, status starts reporting loggedIn=true ----
+  // Click Sign in -> daemon returns 202 and status starts reporting loggedIn=true.
   await signInBtn.click();
+  await expect.poll(() => state.loginRequests).toBe(1);
 
   // The pill polls /status every 2s; allow up to 10s for the flip. The
   // pill button gets aria-label="Sign out" once logged in regardless of
   // the hover state, so we can target it by accessible name.
   const signedInPill = amrCard.getByRole('button', { name: /^Sign out$/ });
   await expect(signedInPill).toBeVisible({ timeout: 10_000 });
-  await expect(amrCard).toContainText('Signed in');
+  await expect(amrCard).toContainText('pill-test@example.com');
 
-  // ---- Click Sign out → status flips back to loggedIn=false ----
+  // Click Sign out -> status flips back to loggedIn=false.
   await signedInPill.click();
-  await expect(amrCard.getByRole('button', { name: /^Sign in$/ })).toBeVisible({ timeout: 10_000 });
+  await expect.poll(() => state.logoutRequests).toBe(1);
+  await expect(amrCard.getByRole('button', { name: /^(Authorize|Sign in)$/ })).toBeVisible({ timeout: 10_000 });
 });
