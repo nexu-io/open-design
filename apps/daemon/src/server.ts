@@ -303,7 +303,7 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
-import { generateMedia, resolveProjectMediaModel } from './media.js';
+import { generateMedia } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';

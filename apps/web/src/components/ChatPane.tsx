@@ -481,7 +481,7 @@ export function ChatPane({
       return null;
     }
   });
-  
+
   // Sync dismissed state when conversationId changes (e.g., tab switching).
   // The parent key includes conversationId so unmount/remount resets this,
   // but if conversationId changes without unmounting or the storage key
