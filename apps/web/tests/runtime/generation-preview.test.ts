@@ -263,6 +263,49 @@ describe('generation preview helpers', () => {
     ).toBeNull();
   });
 
+  it('does not cover an available preview for a stale failed row without an error event', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: 'All done!',
+      runStatus: 'failed',
+      startedAt: Date.now() - 4_000,
+      events: [{ kind: 'text', text: 'All done!' }],
+    };
+    expect(
+      buildGenerationPreviewState({
+        designSystemProject: false,
+        messages: [assistant],
+        streaming: false,
+        activeTab: 'index.html',
+        projectFiles: [{ name: 'index.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' }],
+        liveArtifacts: [],
+      }),
+    ).toBeNull();
+  });
+
+  it('keeps an explicit failed state over a preview when the run has an error event', () => {
+    const assistant: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      runStatus: 'failed',
+      startedAt: Date.now() - 4_000,
+      events: [{ kind: 'status', label: 'error', detail: 'Generation failed', code: 'UNKNOWN' }],
+    };
+    const state = buildGenerationPreviewState({
+      designSystemProject: false,
+      messages: [assistant],
+      streaming: false,
+      activeTab: 'index.html',
+      projectFiles: [{ name: 'index.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' }],
+      liveArtifacts: [],
+    });
+    expect(state?.phase).toBe('failed');
+    expect(state?.errorMessage).toBe('Generation failed');
+    expect(state?.retryTarget).toBe(assistant);
+  });
+
   it('builds a failed state with a retry target', () => {
     const assistant: ChatMessage = {
       id: 'a1',
