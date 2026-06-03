@@ -20,6 +20,27 @@
 
 当前策略是明确的：继续增强 `extended` 的信号，但不把 `critical` 变成一个越来越慢的大杂烩。
 
+## 当前优先级执行方式
+
+现在优先级不再只靠文件分组，已经落到 case 级测试名：
+
+- `[P0]`
+- `[P1]`
+- `[P2]`
+
+对应脚本：
+
+- `pnpm -C e2e test:p0`
+- `pnpm -C e2e test:p0p1`
+- `pnpm -C e2e test:p1`
+- `pnpm -C e2e test:p2`
+- `pnpm -C e2e test:ui:p0`
+- `pnpm -C e2e test:ui:p0p1`
+- `pnpm -C e2e test:ui:p1`
+- `pnpm -C e2e test:ui:p2`
+
+这层过滤直接依赖测试标题前缀，适合后续逐步调整优先级，而不用同步维护一份越来越重的文件清单。
+
 ## 最近补强了什么
 
 ### 1. 资源驱动场景的 contract 断言

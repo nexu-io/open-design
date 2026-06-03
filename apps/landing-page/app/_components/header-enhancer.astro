@@ -1,4 +1,8 @@
-<script is:inline>
+---
+import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
+---
+
+<script is:inline define:vars={{ RELEASE_METADATA_URL }}>
   (() => {
     const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 
@@ -8,18 +12,24 @@
       return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     };
 
-    const formatVersion = (release) => {
+    const formatVersion = (metadata) => {
+      const fromVersion = (version) => {
+        if (typeof version !== 'string') return null;
+        const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
       const fromTag = (tag) => {
         if (typeof tag !== 'string') return null;
         const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
         return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
       };
-      const fromName = (name) => {
-        if (typeof name !== 'string') return null;
-        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-        return m ? `v${m[1]}` : null;
-      };
-      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+      return (
+        fromVersion(metadata?.releaseVersion) ??
+        fromVersion(metadata?.stableVersion) ??
+        fromVersion(metadata?.baseVersion) ??
+        fromTag(metadata?.versionTag) ??
+        null
+      );
     };
 
     // Best-effort OS + arch detection so the header download CTA points
@@ -37,7 +47,7 @@
       const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
       const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
       const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
-      if (isWindows) return { os: 'Windows', arch: 'Windows', match: (n) => /win.*setup\.exe$/.test(n) };
+      if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
       if (isMac) {
         const isIntel = (() => {
           try {
@@ -49,15 +59,15 @@
             return false;
           }
         })();
-        const suffix = isIntel ? 'mac-x64.dmg' : 'mac-arm64.dmg';
         const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
-        return { os: 'macOS', arch, match: (n) => n.endsWith(suffix) };
+        const key = isIntel ? 'macIntel' : 'mac';
+        return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
       }
-      if (isLinux) return { os: 'Linux', arch: '', match: () => false };
+      if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
       return null;
     };
 
-    const enhanceDownloadCtas = (release) => {
+    const enhanceDownloadCtas = (metadata) => {
       const ctas = document.querySelectorAll('[data-download-cta]');
       if (ctas.length === 0) return;
       const platform = detectPlatform();
@@ -70,17 +80,15 @@
         slot.textContent = `（${platform.arch}）`;
         slot.hidden = false;
       }
-      const assets = Array.isArray(release?.assets) ? release.assets : [];
-      const asset = assets.find(
-        (a) =>
-          a &&
-          typeof a.name === 'string' &&
-          typeof a.browser_download_url === 'string' &&
-          platform.match(a.name),
-      );
-      if (!asset) return;
+      const url = platform.artifact(metadata);
+      if (typeof url !== 'string' || url.length === 0) return;
       for (const cta of ctas) {
-        cta.href = asset.browser_download_url;
+        // CTAs that intentionally route to the /download page (the header nav
+        // button) opt out of direct-asset rewriting: they still get the arch
+        // label above, but keep their page href so JS-enabled visitors land on
+        // the full installer matrix instead of an immediate download.
+        if (cta.hasAttribute('data-download-page')) continue;
+        cta.href = url;
         cta.removeAttribute('target');
         cta.removeAttribute('rel');
       }
@@ -162,15 +170,16 @@
     const versionSlots = document.querySelectorAll('[data-github-version]');
     const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
     if (versionSlots.length > 0 || hasDownloadCtas) {
-      fetch(`${REPO_API}/releases/latest`, {
-        headers: { Accept: 'application/vnd.github+json' },
+      fetch(RELEASE_METADATA_URL, {
+        headers: { Accept: 'application/json' },
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-        .then((data) => {
-          enhanceDownloadCtas(data);
-          const label = formatVersion(data);
-          if (!label) return;
-          for (const slot of versionSlots) slot.textContent = label;
+        .then((metadata) => {
+          enhanceDownloadCtas(metadata);
+          const label = formatVersion(metadata);
+          if (label) {
+            for (const slot of versionSlots) slot.textContent = label;
+          }
         })
         .catch(() => {});
     }

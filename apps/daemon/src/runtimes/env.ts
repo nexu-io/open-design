@@ -25,7 +25,7 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 
 // Build the env passed to spawn() for a given agent adapter.
 //
-// The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
+// The claude adapter strips Anthropic API credentials so Claude Code's own auth
 // resolution (claude login / Pro/Max plan) wins instead of silently
 // falling back to API-key billing whenever the daemon happened to be
 // launched from a shell that exported the key for SDK or scripting use.
@@ -33,7 +33,7 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 //
 // However, when ANTHROPIC_BASE_URL is set the user is intentionally
 // routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
-// In that case claude login is meaningless, so preserve the API key so
+// In that case claude login is meaningless, so preserve the credential so
 // the child can authenticate against the custom base URL.
 //
 // The codex adapter has the symmetric problem: a stale BYOK
@@ -80,7 +80,10 @@ export function spawnEnvForAgent(
   }
   if (agentId === 'claude') {
     if (!isOpenClaudeExecutable(options.resolvedBin)) {
-      stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', ['ANTHROPIC_API_KEY']);
+      stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', [
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_AUTH_TOKEN',
+      ]);
     }
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }

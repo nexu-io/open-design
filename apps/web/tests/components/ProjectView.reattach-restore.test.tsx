@@ -151,6 +151,28 @@ describe('computeProducedFiles', () => {
     expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
   });
 
+  it('excludes user sketch files from turn output attribution', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 2, mtime: 2, kind: 'sketch', mime: 'application/json' },
+      { name: 'new.pptx', path: '/p/new.pptx', size: 3, mtime: 3, kind: 'pdf', mime: 'application/pdf' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
+  });
+
+  it('keeps generated svg files even when they are classified as sketches', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'diagram.svg', path: '/p/diagram.svg', size: 2, mtime: 2, kind: 'sketch', mime: 'image/svg+xml' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 3, mtime: 3, kind: 'sketch', mime: 'application/json' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['diagram.svg']);
+  });
+
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
   });

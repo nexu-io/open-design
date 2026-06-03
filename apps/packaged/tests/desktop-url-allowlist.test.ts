@@ -20,6 +20,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
   dialog: { showOpenDialog: vi.fn() },
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
+  session: { fromPartition: vi.fn() },
   shell: { openExternal: vi.fn() },
   app: { whenReady: vi.fn() },
 }));
@@ -28,6 +29,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isAllowedChildWindowUrl,
+  isAllowedEmbeddedBrowserUrl,
   isHttpUrl,
   resolveDesktopStatusUrl,
 } from '@open-design/desktop/main';
@@ -93,6 +95,31 @@ describe('isAllowedChildWindowUrl (issue #911)', () => {
   it('returns false for malformed URLs without throwing', () => {
     expect(isAllowedChildWindowUrl('not a url')).toBe(false);
     expect(isAllowedChildWindowUrl('')).toBe(false);
+  });
+});
+
+describe('isAllowedEmbeddedBrowserUrl', () => {
+  it('allows external http(s) references, project-served content, and about:blank', () => {
+    expect(isAllowedEmbeddedBrowserUrl('https://example.com')).toBe(true);
+    expect(isAllowedEmbeddedBrowserUrl('http://127.0.0.1:17579/index.html')).toBe(true);
+    expect(isAllowedEmbeddedBrowserUrl('about:blank')).toBe(true);
+  });
+
+  it('rejects file: URLs so the capture bridge cannot exfiltrate local files', () => {
+    // The design-browser surface can capture the webview region and persist
+    // the PNG into the project. Allowing `file://` would let a compromised
+    // renderer or pasted address load a local file such as `/etc/passwd` and
+    // exfiltrate its rendered pixels through the project files API. The
+    // reference board only needs http(s)/about:blank, so file: stays blocked.
+    expect(isAllowedEmbeddedBrowserUrl('file:///Users/pftom/example.html')).toBe(false);
+    expect(isAllowedEmbeddedBrowserUrl('file:///etc/passwd')).toBe(false);
+  });
+
+  it('rejects executable or privileged schemes for embedded browser startup', () => {
+    expect(isAllowedEmbeddedBrowserUrl('javascript:alert(1)')).toBe(false);
+    expect(isAllowedEmbeddedBrowserUrl('data:text/html,<script>alert(1)</script>')).toBe(false);
+    expect(isAllowedEmbeddedBrowserUrl('od://app/')).toBe(false);
+    expect(isAllowedEmbeddedBrowserUrl('not a url')).toBe(false);
   });
 });
 

@@ -122,7 +122,7 @@ body::before {
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 36px;
+  width: 46px;
   z-index: 3;
   pointer-events: none;
   display: flex;
@@ -177,7 +177,7 @@ body::before {
 
 /* top metadata strip */
 .topbar {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
   padding: 10px 0;
   background: var(--paper);
   /*
@@ -206,7 +206,12 @@ body::before {
 .topbar-inner > span { white-space: nowrap; }
 .topbar-inner .mid { display: inline-flex; gap: 26px; }
 .topbar-inner .mid > span { white-space: nowrap; }
-.topbar-inner .right { display: inline-flex; gap: 18px; align-items: center; }
+.topbar-inner .right {
+  display: inline-flex;
+  gap: 18px;
+  align-items: center;
+  margin-left: auto;
+}
 .topbar-inner .right > span,
 .topbar-inner .right > a { white-space: nowrap; }
 .topbar-link {
@@ -421,6 +426,15 @@ body::before {
 }
 .brand-name {
   white-space: nowrap;
+}
+.brand-logo {
+  width: 204px;
+  height: auto;
+  display: block;
+}
+.nav .brand-logo {
+  width: auto;
+  height: 42px;
 }
 .brand-mark img {
   width: 100%;
@@ -638,13 +652,15 @@ body::before {
 .nav-amr {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 13px 6px 7px;
+  justify-content: center;
+  height: 40.1484px;
+  min-height: 40.1484px;
+  padding: 0 16px;
   border-radius: 999px;
-  border: 1px solid rgba(35, 127, 0, 0.28);
-  background: linear-gradient(135deg, rgba(135, 234, 92, 0.26), rgba(247, 241, 222, 0.82));
-  color: var(--amr-green);
-  box-shadow: 0 10px 28px -22px rgba(35, 127, 0, 0.7);
+  border: 1px solid rgba(21, 20, 15, 0.18);
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
   font-family: var(--sans);
   text-decoration: none;
   white-space: nowrap;
@@ -657,13 +673,13 @@ body::before {
 }
 .nav-amr:hover {
   transform: translateY(-1px);
-  border-color: rgba(35, 127, 0, 0.42);
-  background: linear-gradient(135deg, rgba(135, 234, 92, 0.38), rgba(247, 241, 222, 0.92));
-  box-shadow: 0 14px 30px -20px rgba(35, 127, 0, 0.78);
+  background: rgba(21, 20, 15, 0.04);
+  border-color: rgba(21, 20, 15, 0.36);
+  box-shadow: none;
 }
 .nav-amr img {
-  width: 28px;
-  height: 28px;
+  width: 66px;
+  height: 24px;
   display: block;
   flex: 0 0 auto;
 }
@@ -723,31 +739,35 @@ body::before {
   color: var(--ink);
   font-size: 12px;
 }
-/* Download as the primary nav CTA: coral fill (matches the hero primary
-   button), carrying its own ↓ glyph regardless of the ghost/solid base. */
-.nav-cta.is-download {
-  background: var(--coral);
-  color: #fff;
-  box-shadow: 0 12px 22px -16px rgba(237, 111, 92, 1);
-  transition: background 160ms ease, transform 160ms ease;
-}
-.nav-cta.is-download:hover { background: #e25e4a; transform: translateY(-1px); }
-.nav-cta.is-download::after { content: '↓'; color: #fff; font-size: 12px; }
-/* Star demoted to the ghost/secondary slot but keeps its ★ glyph. */
+.nav-cta.is-download { gap: 4px; }
+.nav-cta.is-download::after { content: '↓'; color: var(--ink); font-size: 12px; }
 .nav-cta.ghost.is-star::after { content: '★'; color: var(--mustard); font-size: 11px; }
-.status-dot {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
+.download-arch {
+  margin-left: 0;
+  opacity: 0.62;
+  font-weight: 500;
+}
+.btn[data-download-cta] { gap: 2px; }
+.nav-locale {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
 }
-.status-dot::after {
-  content: '';
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--coral);
+.nav-locale .locale-trigger {
+  gap: 6px;
+}
+.nav-locale .locale-menu {
+  top: calc(100% + 14px);
 }
 
 /* ---------- typography primitives ---------- */
@@ -844,20 +864,23 @@ body::before {
   border-color: rgba(21, 20, 15, 0.2);
 }
 .btn-ghost:hover { background: rgba(21, 20, 15, 0.04); }
-/* Platform suffix appended to download CTAs, e.g. 下载桌面端（Apple Silicon）.
-   Injected + unhidden by the enhancer scripts once the OS is detected. */
-.download-arch {
-  margin-left: 0.3em;
-  opacity: 0.62;
-  font-weight: 500;
-}
 .btn .arrow {
   width: 16px; height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
+.btn .arrow-fill {
+  width: 24px;
+  height: 24px;
+}
 .btn .arrow svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.btn .arrow svg.icon-fill {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  stroke: none;
+}
 
 /* helper used inline in headlines */
 .code-inline {
@@ -893,7 +916,7 @@ body::before {
 }
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 36px;
   align-items: stretch;
   width: 100%;
@@ -903,7 +926,51 @@ body::before {
   padding: 4vh 0 4vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  max-width: 1120px;
+  margin: 0 auto;
   position: relative;
+  text-align: center;
+  z-index: 1;
+}
+.hero-angel {
+  position: absolute;
+  right: clamp(60px, 10vw, 140px);
+  bottom: 0;
+  width: clamp(240px, 28vw, 380px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+.hero-scene-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 32px;
+  width: 24px;
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0.8;
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+  line-height: 0;
+}
+.hero-scene {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.hero-dancer {
+  position: absolute;
+  left: clamp(188px, 10vw, 268px);
+  bottom: 0;
+  width: clamp(180px, 20vw, 280px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
 }
 .hero-discord-pill {
   align-self: flex-start;
@@ -935,21 +1002,40 @@ body::before {
   line-height: 1;
 }
 .hero-copy .label { margin-bottom: 28px; }
-.hero-copy .lead { margin-bottom: 30px; max-width: 38ch; font-size: 16px; }
+.hero-copy .lead {
+  margin-bottom: 30px;
+  max-width: none;
+  font-size: 16px;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Keep each BreakText line on a single row only on wider screens. On phones
+   the longer second line would otherwise overflow horizontally and clip
+   instead of wrapping at spaces, so let it reflow below the breakpoint. */
+@media (min-width: 768px) {
+  .hero-copy .lead span {
+    white-space: nowrap;
+  }
+}
 .hero h1 {
   font-size: clamp(44px, 5vw, 78px);
   line-height: 1.0;
   margin-bottom: 28px;
 }
+.hero-title-line {
+  font-size: 60px;
+}
 .hero-actions {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 14px;
-  margin-bottom: 38px;
+  margin-bottom: 40px;
 }
 .hero-stats {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 22px;
   flex-wrap: nowrap;
   margin-bottom: 28px;
@@ -980,6 +1066,7 @@ body::before {
 .hero-stats .stat-label b { display: block; font-weight: 700; color: var(--ink); font-size: 12px; }
 
 .hero-foot {
+  width: 100%;
   margin-top: auto;
   padding-top: 22px;
   border-top: 1px solid var(--line);
@@ -2569,9 +2656,9 @@ footer {
 @media (max-width: 1080px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
-  /* Hide AMR, Download + Discord/X icon buttons from the bar (Star stays). */
+  /* Hide AMR, Star + Discord/X icon buttons from the bar (Download stays). */
   .nav-side .nav-amr { display: none; }
-  .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-cta.ghost:not(.is-download) { display: none; }
   .nav-side .nav-icon { display: none; }
   /* Collapse the nav <ul> into a panel that drops below the header bar.
    * The header is `position: sticky`, so absolute-positioning the panel
@@ -2669,6 +2756,8 @@ footer {
   .hero { min-height: 0; padding: 32px 0 0; }
   .hero::before { display: none; }
   .hero-grid { gap: 36px; }
+  .hero-angel { display: none; }
+  .hero-dancer { display: none; }
   .hero-copy { padding: 18px 0 8px; }
   .hero-copy .lead { max-width: none; }
   .hero-art { height: auto; aspect-ratio: 4 / 5; max-height: none; margin: 0 -8px 0 0; }
@@ -2721,13 +2810,13 @@ footer {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta, Download,
-   * and the Discord/X icon buttons stay hidden; Star CTA still pings
-   * in the bar. */
+   * the hamburger panel introduced at ≤1080px. Brand meta, Star, AMR,
+   * and the Discord/X icon buttons stay hidden; Download CTA stays
+   * reachable in the bar. */
   .nav { padding: 16px 0; }
   .brand-meta { display: none; }
   .nav-side .nav-amr { display: none; }
-  .nav-side .nav-cta.ghost { display: none; }
+  .nav-side .nav-cta.ghost:not(.is-download) { display: none; }
   .nav-side .nav-icon { display: none; }
 }
 @media (max-width: 640px) {
@@ -2771,6 +2860,7 @@ footer {
   .nav-inner { gap: 12px; }
   .brand { font-size: 16px; gap: 8px; }
   .brand-mark { width: 32px; height: 32px; font-size: 16px; }
+  .brand-logo { width: 150px; }
   .read-more { margin-top: 36px; }
   .foot-mega .word { font-size: clamp(48px, 16vw, 88px); }
 }

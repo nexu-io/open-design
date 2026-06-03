@@ -215,7 +215,7 @@ async function routeDesignSystemsManager(
   return { persistedConfigs };
 }
 
-test('publishing a user design system promotes it to the default system in the manager', async ({ page }) => {
+test('[P1] publishing a user design system promotes it to the default system in the manager', async ({ page }) => {
   await seedEntryBase(page);
   const systems: UserSystem[] = [
     {
@@ -258,7 +258,7 @@ test('publishing a user design system promotes it to the default system in the m
     .toBe('brand-alpha');
 });
 
-test('filters user design systems by draft and published status in the manager', async ({ page }) => {
+test('[P1] filters user design systems by draft and published status in the manager', async ({ page }) => {
   await seedEntryBase(page);
   const systems: UserSystem[] = [
     {
@@ -301,7 +301,7 @@ test('filters user design systems by draft and published status in the manager',
   await expect(manager.getByText('Brand Beta')).toHaveCount(0);
 });
 
-test('deleting the active design system falls back to another user system', async ({ page }) => {
+test('[P1] deleting the active design system falls back to another user system', async ({ page }) => {
   await seedEntryBase(page, { designSystemId: 'brand-alpha' });
   const systems: UserSystem[] = [
     {

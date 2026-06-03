@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
+const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -60,6 +61,17 @@ async function readSavedConfig(page: Page) {
   }, STORAGE_KEY);
 }
 
+function modelCombobox(scope: Page | Locator) {
+  return scope.getByRole('combobox', { name: 'Model', exact: true });
+}
+
+async function expectModelComboboxText(
+  scope: Page | Locator,
+  pattern: RegExp | string,
+) {
+  await expect(modelCombobox(scope)).toContainText(pattern);
+}
+
 async function openExecutionSettingsWithAgents(
   page: Page,
   config: Record<string, unknown>,
@@ -90,7 +102,7 @@ async function openExecutionSettingsWithAgents(
   await openSettingsDialogFromEntry(page);
 }
 
-test('legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
+test('[P1] legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: 'sk-test',
@@ -111,22 +123,22 @@ test('legacy known OpenAI provider switches to the matching Anthropic preset', a
   const baseUrlInput = dialog.getByLabel('Base URL');
   // Use getByRole + exact so we only match the chat "Model" picker and
   // not the inline "Memory model" picker that sits next to it.
-  const modelSelect = dialog.getByRole('combobox', { name: 'Model', exact: true });
+  const modelSelect = modelCombobox(dialog);
 
   await expect(openAiTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com');
-  await expect(modelSelect).toHaveValue('deepseek-chat');
+  await expect(modelSelect).toContainText(/deepseek-chat/i);
 
   await anthropicTab.click();
 
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com/anthropic');
-  await expect(modelSelect).toHaveValue('deepseek-chat');
+  await expect(modelSelect).toContainText(/deepseek-chat/i);
 });
 
-test('legacy custom provider preserves custom baseUrl and model when switching protocols', async ({ page }) => {
+test('[P1] legacy custom provider preserves custom baseUrl and model when switching protocols', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: 'sk-test',
@@ -160,7 +172,7 @@ test('legacy custom provider preserves custom baseUrl and model when switching p
   await expect(customModelInput).toHaveValue('my-custom-model');
 });
 
-test('BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
+test('[P0] BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -181,8 +193,14 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  await dialog.getByLabel('Quick fill provider').selectOption('1');
-  await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('deepseek-chat');
+  const providerPicker = dialog.getByLabel('Quick fill provider');
+  const deepSeekValue = await providerPicker.locator('option').evaluateAll((options) => {
+    const match = options.find((option) => /deepseek/i.test((option as HTMLOptionElement).label));
+    return match ? (match as HTMLOptionElement).value : null;
+  });
+  expect(deepSeekValue).toBeTruthy();
+  await providerPicker.selectOption(deepSeekValue!);
+  await expectModelComboboxText(dialog, /deepseek-chat/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
 
   await dialog.getByRole('button', { name: 'Show' }).click();
@@ -217,13 +235,13 @@ test('BYOK quick fill provider updates fields and saved settings persist after c
   await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue('1');
-  await expect(reopenedDialog.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('deepseek-chat');
+  await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue(deepSeekValue!);
+  await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
 });
 
-test('BYOK save stays disabled until required fields are valid', async ({ page }) => {
+test('[P0] BYOK save stays disabled until required fields are valid', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -259,7 +277,7 @@ test('BYOK save stays disabled until required fields are valid', async ({ page }
   });
 });
 
-test('BYOK auto-loads provider models and reuses cached results for the same config', async ({ page }) => {
+test('[P0] BYOK auto-loads provider models and reuses cached results for the same config', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
   await page.route('**/api/provider/models', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -298,11 +316,11 @@ test('BYOK auto-loads provider models and reuses cached results for the same con
   });
 
   const dialog = page.getByRole('dialog');
-  const modelSelect = dialog.getByLabel('Model');
+  const modelSelect = modelCombobox(dialog);
   const apiKeyInput = dialog.getByLabel('API key');
 
   await expect(dialog.getByRole('button', { name: 'Fetch models' })).toHaveCount(0);
-  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
+  await expect(page.locator(MODEL_POPOVER_SELECTOR).getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
 
   await apiKeyInput.fill('sk-openai-test');
   await apiKeyInput.blur();
@@ -314,27 +332,32 @@ test('BYOK auto-loads provider models and reuses cached results for the same con
     apiKey: 'sk-openai-test',
   });
 
-  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
-  await expect(modelSelect.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toHaveCount(1);
-  await expect(modelSelect.getByRole('option', { name: 'ZZ Nightly Model (zz-nightly-model)' })).toHaveCount(1);
+  await modelSelect.click();
+  const modelPopover = page.locator(MODEL_POPOVER_SELECTOR).last();
+  await expect(modelPopover.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
+  await expect(modelPopover.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toHaveCount(1);
+  await expect(modelPopover.getByRole('option', { name: 'ZZ Nightly Model (zz-nightly-model)' })).toHaveCount(1);
+  await page.keyboard.press('Escape');
 
-  const fetchedValues = await modelSelect.locator('option').evaluateAll((options) =>
-    options.slice(0, 3).map((option) => (option as HTMLOptionElement).value),
-  );
-  expect(fetchedValues).toEqual([
-    'aa-nightly-model',
-    'mm-nightly-model',
-    'zz-nightly-model',
-  ]);
+  if ((await page.getByRole('dialog').count()) > 0) {
+    const closeButton = page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true });
+    if ((await closeButton.count()) > 0) {
+      await closeButton.click({ force: true });
+    }
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
 
-  await dialog.getByRole('tab', { name: 'Anthropic', exact: true }).click();
-  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
+  await openSettingsDialogFromEntry(page);
+  const reopenedDialog = page.getByRole('dialog');
+  await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await modelCombobox(reopenedDialog).click();
+  await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
+  await page.keyboard.press('Escape');
   await expect.poll(() => providerModelRequests.length).toBe(1);
 });
 
 
-test('BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
+test('[P0] BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
   await page.route('**/api/provider/models', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -385,7 +408,7 @@ test('BYOK fetched models are searchable inside the Settings model dropdown', as
   await expect(dialog.getByText('Loaded 10 models from your account.')).toBeVisible();
   await expect.poll(() => providerModelRequests.length).toBe(1);
 
-  await dialog.getByRole('combobox', { name: 'Model', exact: true }).click();
+  await modelCombobox(dialog).click();
   const popover = page.getByTestId('settings-byok-model-popover');
   const search = page.getByTestId('settings-byok-model-search');
   await expect(popover).toBeVisible();
@@ -395,7 +418,7 @@ test('BYOK fetched models are searchable inside the Settings model dropdown', as
   await expect(popover.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
 });
 
-test('saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+test('[P0] saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
   await openExecutionSettingsWithAgents(
     page,
     {

@@ -333,6 +333,12 @@ export function buildManualEditBridge(enabled: boolean): string {
       setSelectedTarget(ev.data.id || null);
       return;
     }
+    if (ev.data.type === 'od-edit-hover-reset') {
+      // Host signals the cursor truly left the canvas, so the next pointerover
+      // re-announces the hovered element (defeats the per-element dedupe).
+      lastHoverId = null;
+      return;
+    }
     if (ev.data.type === 'od-edit-preview-style') {
       applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version);
       return;
@@ -344,13 +350,18 @@ export function buildManualEditBridge(enabled: boolean): string {
     ev.preventDefault();
     ev.stopPropagation();
     var el = closestTarget(ev);
-    if (!el) return;
+    if (!el) {
+      // Clicking empty canvas (no source-mapped ancestor) is the gesture for
+      // page-level styles; the host decides whether to surface the card.
+      window.parent.postMessage({ type: 'od-edit-background' }, '*');
+      return;
+    }
     var kind = inferKind(el);
+    window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     if (kind === 'text' || kind === 'link') {
       makeEditable(el, ev);
       return;
     }
-    window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
   }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;

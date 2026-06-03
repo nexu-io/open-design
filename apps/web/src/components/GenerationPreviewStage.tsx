@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react';
 import { useT } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import {
+  attributedAmrUrl,
+  recordAmrEntry,
+  type TrackingAmrEntrySource,
+} from '../analytics/amr-attribution';
 import type { Dict } from '../i18n/types';
 import { AMR_RECHARGE_URL } from '../runtime/amr-guidance';
 import type { GenerationPreviewModel } from '../runtime/generation-preview';
@@ -13,6 +19,8 @@ type Props = {
   // Each is pre-bound to the failed run in the parent so the stage stays dumb.
   onAuthorizeAndRetry?: (() => void) | undefined;
   onLaunchTerminalAuth?: (() => void) | undefined;
+  amrAuthorizeSourceDetail?: TrackingAmrEntrySource;
+  amrRechargeSourceDetail?: TrackingAmrEntrySource;
   // "Switch to AMR" promotion card, pre-built by the parent and rendered under
   // the actions for the non-AMR auth/quota cases (see model.promoteAmrSwitch).
   amrGuidance?: ReactNode;
@@ -44,9 +52,12 @@ export function GenerationPreviewStage({
   onRetry,
   onAuthorizeAndRetry,
   onLaunchTerminalAuth,
+  amrAuthorizeSourceDetail,
+  amrRechargeSourceDetail,
   amrGuidance,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
 
   const generating = model.phase === 'generating';
 
@@ -147,7 +158,12 @@ export function GenerationPreviewStage({
               type="button"
               className={styles.action}
               data-testid="generation-preview-authorize"
-              onClick={onAuthorizeAndRetry}
+              onClick={() => {
+                if (amrAuthorizeSourceDetail) {
+                  recordAmrEntry(analytics.track, amrAuthorizeSourceDetail);
+                }
+                onAuthorizeAndRetry();
+              }}
             >
               {t('chat.amrError.authorizeCta')}
             </button>
@@ -171,7 +187,17 @@ export function GenerationPreviewStage({
               type="button"
               className={styles.action}
               data-testid="generation-preview-recharge"
-              onClick={() => window.open(AMR_RECHARGE_URL, '_blank', 'noopener,noreferrer')}
+              onClick={() => {
+                const attribution = recordAmrEntry(
+                  analytics.track,
+                  amrRechargeSourceDetail ?? 'generation_preview_recharge',
+                );
+                window.open(
+                  attributedAmrUrl(AMR_RECHARGE_URL, attribution),
+                  '_blank',
+                  'noopener,noreferrer',
+                );
+              }}
             >
               {t('chat.amrError.rechargeCta')}
             </button>

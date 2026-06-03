@@ -666,6 +666,16 @@ const CATALOGUE: CuratedSkill[] = [
     attribution: 'Curated from @Leonxlnx.',
   },
   {
+    id: 'impeccable-design-polish',
+    description:
+      'Follow-up design polish workflow for existing web artifacts: audit, critique, polish, animate, harden, and prepare for a live/share pass.',
+    triggers: ['impeccable', 'design polish', 'polish page', 'anti ai polish', 'critique design', 'harden ui'],
+    mode: 'prototype',
+    category: 'creative-direction',
+    upstream: 'https://github.com/pbakaus/impeccable',
+    attribution: 'Curated from @pbakaus.',
+  },
+  {
     id: 'wpds',
     description:
       'WordPress Design System. Apply WordPress\'s official design tokens, typography, and component patterns to themes and sites.',
@@ -774,13 +784,23 @@ const CATALOGUE: CuratedSkill[] = [
   // Animation & motion
   // -------------------------------------------------------------------------
   {
+    id: 'emilkowalski-motion',
+    description:
+      'Tasteful motion-design follow-up for existing interfaces: micro-interactions, state transitions, page motion, and reduced-motion fallbacks.',
+    triggers: ['emil kowalski', 'motion polish', 'micro interaction', 'interaction animation', 'tasteful animation'],
+    mode: 'prototype',
+    category: 'animation-motion',
+    upstream: 'https://emilkowal.ski/skill',
+    attribution: 'Curated from Emil Kowalski.',
+  },
+  {
     id: 'gsap-core',
     description:
       'Core GSAP API with gsap.to(), from(), fromTo(), easing, duration, stagger, and defaults. Production-grade web animation primitives.',
     triggers: ['gsap', 'gsap core', 'web animation', 'tween', 'easing'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -790,7 +810,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['gsap timeline', 'animation timeline', 'sequenced animation', 'motion choreography'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -800,7 +820,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['scrolltrigger', 'scroll animation', 'gsap scroll', 'scroll pin', 'scroll scrub'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {
@@ -810,7 +830,7 @@ const CATALOGUE: CuratedSkill[] = [
     triggers: ['gsap react', 'usegsap', 'react animation', 'gsap context', 'react motion'],
     mode: 'prototype',
     category: 'animation-motion',
-    upstream: 'https://github.com/greensock/skills',
+    upstream: 'https://github.com/greensock/gsap-skills',
     attribution: 'Curated from GreenSock (GSAP).',
   },
   {

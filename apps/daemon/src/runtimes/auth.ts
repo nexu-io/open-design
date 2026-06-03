@@ -202,7 +202,7 @@ const AGENT_AUTH_FAILURE_RE = new RegExp(
 
 // Quota / rate limit / billing balance — the wall the hosted gateway avoids.
 const AGENT_RATE_FAILURE_RE = new RegExp(
-  `(\\b(rate[ _-]?limit|too many requests|quota|insufficient[ _-]?(?:quota|balance|credit|funds)|credit balance is too low|exceeded your current quota|usage limit|billing (?:hard )?limit)\\b|${STATUS_CTX}429\\b)`,
+  `(\\b(rate[ _-]?limit|too many requests|quota|insufficient[ _-]?(?:quota|balance|credit|funds)|credit balance is too low|exceeded your current quota|usage limit|session limit|limit reached|billing (?:hard )?limit)\\b|${STATUS_CTX}429\\b)`,
   'i',
 );
 

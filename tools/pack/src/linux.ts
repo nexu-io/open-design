@@ -47,6 +47,7 @@ const CONTAINER_NODE_VERSION = "24.14.1";
 const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
 
 export const INTERNAL_PACKAGES = [
+  { directory: "packages/components", name: "@open-design/components" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
@@ -401,6 +402,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/download", "build"]);
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
@@ -546,7 +548,9 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       buildResources: dirname(linuxResources.icon),
     },
     electronVersion: config.electronVersion.replace(/^[^\d]*/, ""),
-    electronDist: config.electronDistPath,
+    // See tools/pack/src/win/builder.ts: rely on electron-builder's own
+    // Electron download rather than node_modules' dist, which pnpm does not
+    // reliably materialize on CI runners.
     executableName: PRODUCT_NAME,
     extraMetadata: {
       main: "./main.cjs",

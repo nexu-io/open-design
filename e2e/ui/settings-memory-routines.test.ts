@@ -91,7 +91,7 @@ async function openMemorySettings(page: Page) {
 }
 
 test.describe('Settings Memory and Automations flows', () => {
-  test('renders the new Memory information architecture with source tabs, saved stats, and tree summaries', async ({ page }) => {
+  test('[P1] renders the new Memory information architecture with source tabs, saved stats, and tree summaries', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.route('**/api/memory', async (route) => {
@@ -253,7 +253,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(memoryTree.getByText('Weekly launch brief')).toBeVisible();
   });
 
-  test('creates a memory entry and keeps it visible after reopening settings', async ({ page }) => {
+  test('[P1] creates a memory entry and keeps it visible after reopening settings', async ({ page }) => {
     await seedSettingsBase(page);
 
     let enabled = true;
@@ -353,7 +353,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(reopened.getByText('Persistent rendering preferences')).toBeVisible();
   });
 
-  test('disables memory injection and keeps the disabled banner after reopening settings', async ({ page }) => {
+  test('[P1] disables memory injection and keeps the disabled banner after reopening settings', async ({ page }) => {
     await seedSettingsBase(page);
 
     let enabled = true;
@@ -407,7 +407,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(reopened.locator('.memory-disabled-banner')).toBeVisible();
   });
 
-  test('toggles Learn from chats and keeps the setting after reopening Memory', async ({ page }) => {
+  test('[P1] toggles Learn from chats and keeps the setting after reopening Memory', async ({ page }) => {
     await seedSettingsBase(page);
 
     let enabled = true;
@@ -488,7 +488,7 @@ test.describe('Settings Memory and Automations flows', () => {
     ).not.toBeChecked();
   });
 
-  test('opens Connectors from Import from apps Manage action', async ({ page }) => {
+  test('[P1] opens Connectors from Import from apps Manage action', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.route('**/api/memory', async (route) => {
@@ -579,7 +579,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog.getByText('Composio API Key', { exact: true })).toBeVisible();
   });
 
-  test('scans connected apps from Import from apps and shows suggested memories', async ({ page }) => {
+  test('[P1] scans connected apps from Import from apps and shows suggested memories', async ({ page }) => {
     await seedSettingsBase(page);
 
     const suggestionBodies: Array<Record<string, unknown>> = [];
@@ -735,7 +735,7 @@ test.describe('Settings Memory and Automations flows', () => {
     ]);
   });
 
-  test('keeps connector authorization pending after reopening Import from apps', async ({ page }) => {
+  test('[P1] keeps connector authorization pending after reopening Import from apps', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.addInitScript(() => {
@@ -868,7 +868,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(reopenedGithubRow.getByRole('button', { name: 'Connect GitHub' })).toBeDisabled();
   });
 
-  test('completes connector authorization callback and scans the newly connected app', async ({ page }) => {
+  test('[P1] completes connector authorization callback and scans the newly connected app', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.addInitScript(() => {
@@ -1069,7 +1069,7 @@ test.describe('Settings Memory and Automations flows', () => {
     ]);
   });
 
-  test('keeps mixed connector states and scan selection stable across connected, newly authorized, and still-available apps', async ({ page }) => {
+  test('[P1] keeps mixed connector states and scan selection stable across connected, newly authorized, and still-available apps', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.addInitScript(() => {
@@ -1316,7 +1316,7 @@ test.describe('Settings Memory and Automations flows', () => {
     ]);
   });
 
-  test('reconciles selected apps when a connected source disconnects and later reconnects', async ({ page }) => {
+  test('[P1] reconciles selected apps when a connected source disconnects and later reconnects', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.route('**/api/memory', async (route) => {
@@ -1521,7 +1521,7 @@ test.describe('Settings Memory and Automations flows', () => {
     ]);
   });
 
-  test('saves selected suggested memories from connected apps into Saved memory', async ({ page }) => {
+  test('[P1] saves selected suggested memories from connected apps into Saved memory', async ({ page }) => {
     await seedSettingsBase(page);
 
     let entries: Array<{
@@ -1682,7 +1682,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog.getByText('1 saved')).toBeVisible();
   });
 
-  test('shows connected app scan diagnostics when reading selected apps fails', async ({ page }) => {
+  test('[P1] shows connected app scan diagnostics when reading selected apps fails', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.route('**/api/memory', async (route) => {
@@ -1791,7 +1791,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog.getByText('Could not read Notion')).toBeVisible();
   });
 
-  test('refreshes and clears extraction history from Saved memory', async ({ page }) => {
+  test('[P1] refreshes and clears extraction history from Saved memory', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.addInitScript(() => {
@@ -1883,7 +1883,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog.getByText('Remember I prefer dense dashboards')).toHaveCount(0);
   });
 
-  test('keeps the memory editor open when creating a memory entry fails', async ({ page }) => {
+  test('[P1] keeps the memory editor open when creating a memory entry fails', async ({ page }) => {
     await seedSettingsBase(page);
 
     await page.route('**/api/memory', async (route) => {
@@ -1946,7 +1946,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog.getByText('No memory yet.')).toBeVisible();
   });
 
-  test('creates an automation from the main Automations surface and runs it now', async ({ page }) => {
+  test('[P1] creates an automation from the main Automations surface and runs it now', async ({ page }) => {
     await seedSettingsBase(page);
 
     const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
@@ -2052,7 +2052,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(row.getByRole('button', { name: 'Open result' })).toBeVisible();
   });
 
-  test('keeps the automation modal open when creating an automation fails', async ({ page }) => {
+  test('[P1] keeps the automation modal open when creating an automation fails', async ({ page }) => {
     await seedSettingsBase(page);
 
     const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];

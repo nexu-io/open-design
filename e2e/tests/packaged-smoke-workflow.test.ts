@@ -13,7 +13,7 @@ const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "r
 const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
 
 describe("packaged smoke workflow", () => {
-  it("keeps packaged smoke outside the main CI gate", async () => {
+  it("[P2] keeps packaged smoke outside the main CI gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     expect(workflow).not.toContain("packaged_smoke_");
     expect(workflow).not.toContain("Build PR mac artifacts");
@@ -26,7 +26,7 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("actions/cache/save");
   });
 
-  it("preserves beta linux AppImage smoke reports for platform publication", async () => {
+  it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const linuxBuildStep = workflow.match(
       /- name: Build beta linux artifacts\n(?:.+\n)+?(?=\n      - name: Smoke beta linux AppImage runtime)/m,
@@ -49,7 +49,7 @@ describe("packaged smoke workflow", () => {
     expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow, "Smoke beta linux AppImage runtime");
   });
 
-  it("preserves stable linux AppImage smoke reports for release publication", async () => {
+  it("[P2] preserves stable linux AppImage smoke reports for release publication", async () => {
     const workflow = await readFile(releaseStableWorkflowPath, "utf8");
     const linuxBuildStep = workflow.match(
       /- name: Build release linux artifacts\n(?:.+\n)+?(?=\n      - name: Smoke release linux AppImage runtime)/m,
@@ -68,7 +68,7 @@ describe("packaged smoke workflow", () => {
     expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow, "Smoke release linux AppImage runtime");
   });
 
-  it("keeps release namespaces aligned with release channels", async () => {
+  it("[P2] keeps release namespaces aligned with release channels", async () => {
     const [releaseStableWorkflow, releaseStableScript, releasePreviewWorkflow, releaseBetaWorkflow] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
       readFile(releaseStableScriptPath, "utf8"),

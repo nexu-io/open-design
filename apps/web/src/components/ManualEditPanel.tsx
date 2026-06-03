@@ -39,6 +39,7 @@ export function ManualEditPanel({
   onPickImage,
   pageStylesEnabled = true,
   floatingStyle,
+  floatingClassName,
   onFloatingPositionChange,
 }: {
   targets: ManualEditTarget[];
@@ -57,6 +58,7 @@ export function ManualEditPanel({
   onApplyPatch: (patch: ManualEditPatch, label: string) => void;
   onPickImage?: (file: File) => Promise<string | null>;
   floatingStyle?: CSSProperties;
+  floatingClassName?: string;
   onFloatingPositionChange?: (position: { left: number; top: number }) => void;
   onError: (message: string) => void;
   onClearSelection: () => void;
@@ -85,7 +87,7 @@ export function ManualEditPanel({
       layoutEnabled: targetForInspector.isLayoutContainer,
     });
     if (!normalized.ok) {
-      onError(normalized.error);
+      onError('error' in normalized ? normalized.error : 'Invalid style value.');
       onInvalidStyle?.(targetForInspector.id, [key]);
       return;
     }
@@ -128,7 +130,7 @@ export function ManualEditPanel({
 
   return (
     <aside
-      className={`manual-edit-right${floatingStyle ? ' manual-edit-floating' : ''}`}
+      className={`manual-edit-right${floatingStyle ? ' manual-edit-floating' : ''}${floatingClassName ? ` ${floatingClassName}` : ''}`}
       style={floatingStyle}
     >
       <section className="manual-edit-modal cc-panel">
@@ -171,7 +173,7 @@ export function ManualEditPanel({
               onStyleChange={(styles) => {
                 const normalized = normalizeManualEditStyles(styles, { layoutEnabled: true });
                 if (!normalized.ok) {
-                  onError(normalized.error);
+                  onError('error' in normalized ? normalized.error : 'Invalid style value.');
                   onInvalidStyle?.('__body__', Object.keys(styles) as Array<keyof ManualEditStyles>);
                   return;
                 }

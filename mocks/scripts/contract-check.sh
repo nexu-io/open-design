@@ -52,10 +52,10 @@ case "$AGENT" in
   claude)   real_bin="$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$MOCKS_DIR/bin" | paste -sd: -) command -v claude || true)" ;;
   codex)    real_bin="$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$MOCKS_DIR/bin" | paste -sd: -) command -v codex  || true)" ;;
   opencode) real_bin="$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$MOCKS_DIR/bin" | paste -sd: -) command -v opencode || true)" ;;
-  *) echo "✗ unsupported agent for contract check: $AGENT" >&2; exit 2 ;;
+  *) echo "x unsupported agent for contract check: $AGENT" >&2; exit 2 ;;
 esac
 if [ -z "$real_bin" ]; then
-  echo "✗ real '$AGENT' CLI not on PATH. Install + login, then re-run." >&2
+  echo "x real '$AGENT' CLI not on PATH. Install + login, then re-run." >&2
   exit 1
 fi
 echo "real CLI:  $real_bin"
@@ -63,7 +63,7 @@ echo "prompt:    $PROMPT"
 echo
 
 # 1. Real CLI
-echo "→ invoking real $AGENT…"
+echo "-> invoking real $AGENT..."
 case "$AGENT" in
   claude)
     printf '%s' "$PROMPT" | "$real_bin" -p --output-format=stream-json --verbose >"$real_out" 2>&1 || true ;;
@@ -78,7 +78,7 @@ esac
 # and silently send an empty string to the mock — defeating the
 # "same input on both sides" property the rest of the script relies on.
 # A subshell scopes the PATH override locally, no var-passing dance.
-echo "→ invoking mock $AGENT…"
+echo "-> invoking mock $AGENT..."
 (
   export PATH="$MOCKS_DIR/bin:$PATH"
   export OD_MOCKS_NO_DELAY=1
@@ -94,7 +94,7 @@ echo "→ invoking mock $AGENT…"
 
 # 3. Compare top-level event `type` distributions (skip content)
 summarize() {
-  jq -r 'try .type catch empty' "$1" 2>/dev/null | sort | uniq -c | sort -rn || true
+  awk '/^[[:space:]]*\{/' "$1" | jq -r 'try .type catch empty' 2>/dev/null | sort | uniq -c | sort -rn || true
 }
 real_summary=$(summarize "$real_out")
 mock_summary=$(summarize "$mock_out")
@@ -109,5 +109,5 @@ echo
 echo "raw outputs kept at:"
 echo "  real: $real_out"
 echo "  mock: $mock_out"
-echo "(diff manually — `diff <(jq -r .type $real_out|sort -u) <(jq -r .type $mock_out|sort -u)`)"
+echo "(diff manually — `diff <(awk '/^[[:space:]]*\\{/' "$real_out" | jq -r .type | sort -u) <(awk '/^[[:space:]]*\\{/' "$mock_out" | jq -r .type | sort -u)`)"
 trap - EXIT   # leave the tmpfiles for the maintainer to inspect
