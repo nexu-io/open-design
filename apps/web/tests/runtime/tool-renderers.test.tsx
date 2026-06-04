@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ToolCard } from '../../src/components/ToolCard';
+import { ToolCard, StreamingAskUserQuestionCard } from '../../src/components/ToolCard';
 import {
   clearToolRenderers,
   deriveToolStatus,
@@ -223,5 +223,27 @@ describe('ToolCard dispatch', () => {
 
     expect(markup).toContain('C:\\repo\\canvas2-nodes.jsx');
     expect(markup).toContain('String to replace was not found');
+  });
+});
+
+describe('StreamingAskUserQuestionCard', () => {
+  it('renders partial questions read-only from a truncated raw JSON prefix', () => {
+    // Mid-stream: prompt + one option arrived, object not yet closed.
+    const raw = '{"questions":[{"header":"DB","question":"Which database?","options":[{"label":"Postgres"}';
+    const markup = renderToStaticMarkup(<StreamingAskUserQuestionCard raw={raw} />);
+    expect(markup).toContain('op-ask-question-streaming');
+    expect(markup).toContain('Which database?');
+    expect(markup).toContain('Postgres');
+    // Read-only: options are disabled and there is no submit affordance.
+    expect(markup).toContain('disabled=""');
+    expect(markup).not.toContain('op-ask-question-submit');
+    expect(markup).toContain('op-ask-question-typing');
+  });
+
+  it('shows a frame-only card before any question prompt has arrived', () => {
+    const markup = renderToStaticMarkup(<StreamingAskUserQuestionCard raw={'{"questions":[{'} />);
+    expect(markup).toContain('op-ask-question-streaming');
+    expect(markup).toContain('op-ask-question-typing');
+    expect(markup).not.toContain('op-ask-question-field');
   });
 });

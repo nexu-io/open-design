@@ -20,6 +20,7 @@ import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
+import { Toast } from './components/Toast';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
@@ -51,6 +52,7 @@ import {
   fetchPromptTemplates,
   fetchSkills,
   uploadProjectFiles,
+  replaceProjectWorkingDir,
 } from './providers/registry';
 import {
   RUNS_CHANGED_EVENT,
@@ -316,6 +318,11 @@ function AppInner() {
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Surfaced when a Home-picked working dir could not be applied to a freshly
+  // created project (expired/invalid desktop token, daemon rejection). Without
+  // this the failure was swallowed and the user believed their folder was in
+  // effect while the project actually stayed in the managed root.
+  const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
@@ -1159,6 +1166,7 @@ function AppInner() {
         autoSendFirstMessage?: boolean;
         requestId?: string;
         pendingFiles?: File[];
+        userWorkingDirToken?: string;
       },
     ): Promise<boolean> => {
       // Honor an explicit `null` design system — the create panel defaults
@@ -1206,8 +1214,42 @@ function AppInner() {
       const pendingFiles = Array.isArray(input.pendingFiles)
         ? input.pendingFiles.filter((file): file is File => file instanceof File)
         : [];
+      // Flip the project onto the user-picked working directory BEFORE
+      // uploading staged Home attachments. `replaceProjectWorkingDir` changes
+      // `metadata.baseDir`, so the project starts reading from the external
+      // folder. If we uploaded first, the staged files would land in the
+      // temporary managed `.od/projects/<id>` root and then silently vanish
+      // from Design Files and the first auto-send context once the working
+      // dir flips. Doing the handoff first means the initial upload lands in
+      // the final tree.
+      const userWorkingDir = input.metadata?.userWorkingDir;
+      let workingDirHandoffFailed = false;
+      if (userWorkingDir) {
+        try {
+          await replaceProjectWorkingDir(
+            result.project.id,
+            userWorkingDir,
+            input.userWorkingDirToken,
+          );
+        } catch (err) {
+          // The desktop working-dir token is short-lived (~60s TTL); if the
+          // user lingered on Home or the POST was otherwise rejected, the
+          // handoff fails AFTER the project already exists. Do NOT swallow
+          // this and do NOT proceed: uploading staged attachments or
+          // auto-sending the first message would target the managed
+          // `.od/projects/<id>` root the user did not choose. Mark the
+          // handoff as failed so the upload + auto-send branches below are
+          // skipped, then surface a create-time error so the user can
+          // re-pick the working directory from inside the project.
+          console.warn('Failed to set working directory for new project', userWorkingDir, err);
+          workingDirHandoffFailed = true;
+          setWorkingDirError(
+            `Couldn't apply the chosen folder "${userWorkingDir}". The project was created in the default location — re-pick the working directory from the project before uploading files or sending a message.`,
+          );
+        }
+      }
       let firstMessageAttachments: ChatAttachment[] = [];
-      if (pendingFiles.length > 0) {
+      if (!workingDirHandoffFailed && pendingFiles.length > 0) {
         // Home composer attaches stay client-side until submit lands a
         // project; the actual upload happens here. v2 doc wants one
         // file_upload_result per surface — `page_name='home'` /
@@ -1250,6 +1292,7 @@ function AppInner() {
       // pre-filling the composer. Scoped to sessionStorage so a page
       // reload after the run has started does not refire.
       if (
+        !workingDirHandoffFailed &&
         input.autoSendFirstMessage &&
         (derivedPendingPrompt !== undefined || firstMessageAttachments.length > 0)
       ) {
@@ -1997,6 +2040,13 @@ function AppInner() {
       ) : null}
       </AnimatePresence>
       <MemoryToast onOpenMemory={() => openSettings('memory')} />
+      {workingDirError ? (
+        <Toast
+          message={workingDirError}
+          role="alert"
+          onDismiss={() => setWorkingDirError(null)}
+        />
+      ) : null}
       {/* First-run privacy consent banner. It waits for daemon config
           hydration because privacyDecisionAt is daemon-owned and stripped
           from localStorage. It waits for `onboardingCompleted` so first-run

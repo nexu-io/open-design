@@ -1,6 +1,7 @@
 import type { SVGProps } from 'react';
 
 export type IconName =
+  | 'alert-triangle'
   | 'arrow-left'
   | 'arrow-up'
   | 'attach'
@@ -77,6 +78,7 @@ export type IconName =
   | 'tweaks'
   | 'upload'
   | 'trash'
+  | 'volume'
   | 'zoom-in'
   | 'zoom-out';
 
@@ -106,6 +108,14 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
     ...rest,
   };
   switch (name) {
+    case 'alert-triangle':
+      return (
+        <svg {...common}>
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+          <path d="M12 9v4" />
+          <path d="M12 17h.01" />
+        </svg>
+      );
     case 'arrow-left':
       return (
         <svg {...common}>
@@ -690,6 +700,17 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <path d="m17 8-5-5-5 5" />
           <path d="M12 3v12" />
+        </svg>
+      );
+    case 'volume':
+      // Speaker + sound waves (Lucide volume-2). A box-filling glyph so the
+      // audio row's icon reads at the same visual weight as `image`/`play`,
+      // unlike the narrow vertical `mic`.
+      return (
+        <svg {...common}>
+          <path d="M11 5 6 9H2v6h4l5 4z" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
         </svg>
       );
     case 'zoom-in':

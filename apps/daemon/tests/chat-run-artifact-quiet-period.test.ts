@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   __forTestChatRunHandles,
   __forTestEmitLiveArtifactEvent,
+  applyClaudeStreamJsonRunBookkeeping,
   classifyChatRunCloseStatus,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
@@ -239,6 +240,7 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     signal: null as string | null,
     acpCleanCompletion: false,
     artifactQuietShutdownRequested: false,
+    turnCompletedCleanly: false,
   };
 
   it('returns canceled when cancelRequested wins regardless of other signals', () => {
@@ -333,10 +335,12 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('failed');
   });
 
-  it('returns failed on a non-zero exit code regardless of the quiet-period flag', () => {
-    // The quiet-period override is signal-only; a clean process exit
-    // that returned non-zero is a real failure (agent CLI bug, model
-    // error, etc.) and must propagate as such.
+  it('returns failed on a non-zero exit code when the turn never completed (regardless of the quiet-period flag)', () => {
+    // The quiet-period override is signal-only; a non-zero process exit
+    // *before the model emitted a clean terminal turn* is a real failure
+    // (agent CLI bug, model error, mid-turn crash) and must propagate as
+    // such. `turnCompletedCleanly` stays false here — this is the genuine
+    // failure case the post-completion carve-out below must NOT swallow.
     expect(
       classifyChatRunCloseStatus({
         ...base,
@@ -347,9 +351,107 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('failed');
   });
 
-  it('returns failed on the standard failure shape (non-zero exit, no special flags)', () => {
+  it('returns failed on the standard failure shape (non-zero exit, turn not completed, no special flags)', () => {
     expect(
       classifyChatRunCloseStatus({ ...base, code: 1, signal: null }),
     ).toBe('failed');
+  });
+
+  // Issue #3372: post-completion hook failure must not fail the run.
+  //
+  // Reproduction of the screenshot bug. The daemon spawns `claude`,
+  // the model emits a clean terminal `turn_end`/`usage` (so the daemon
+  // closes stdin and sets `turnCompletedCleanly`), and only THEN a
+  // SessionEnd hook (e.g. the Honcho memory plugin) exits non-zero,
+  // which makes the `claude` process itself exit with code 1. That
+  // post-result exit is a teardown artifact, not a generation failure —
+  // the deliverable was already produced. This is the same family as
+  // the `acpForcedShutdown` and `artifactQuietShutdown` carve-outs:
+  // "the work completed; the odd exit is teardown noise."
+  it('returns succeeded on a non-zero exit when the turn already completed cleanly (post-result hook failure)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        turnCompletedCleanly: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns succeeded on a signal death after a clean turn completion (hook killed during teardown)', () => {
+    // A SessionEnd hook that hangs past its own grace window can be
+    // SIGKILLed during teardown after the turn already completed. Same
+    // invariant: a clean terminal turn was emitted, so the late signal
+    // exit is teardown noise, not a generation failure.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        turnCompletedCleanly: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('still prefers canceled over a clean-completion non-zero exit when the user cancelled', () => {
+    // Cancel intent always wins; a post-cancel hook exit must not
+    // reclassify a user-cancelled run as succeeded.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        cancelRequested: true,
+        code: 1,
+        signal: null,
+        turnCompletedCleanly: true,
+      }),
+    ).toBe('canceled');
+  });
+});
+
+describe('applyClaudeStreamJsonRunBookkeeping', () => {
+  it('records clean completion when the host-answer path already closed stdin', () => {
+    const run = {
+      stdinOpen: false,
+      pendingHostAnswers: new Set<string>(),
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('keeps waiting when a terminal event arrives with host answers still pending', () => {
+    const run = {
+      stdinOpen: true,
+      pendingHostAnswers: new Set(['toolu_1']),
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(false);
+    expect(run.stdinOpen).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
 });

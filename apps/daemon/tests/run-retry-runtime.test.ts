@@ -103,7 +103,7 @@ describe('same-run retry runtime', () => {
 
   it('retries a silent first-token stall caught by the inactivity watchdog', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-retry-stall-bin-'));
-    const fakeClaude = await writeStallingClaude(binDir, 'claude-stall');
+    const { bin: fakeClaude, argsLogPath } = await writeStallingClaude(binDir, 'claude-stall');
 
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;
@@ -156,6 +156,20 @@ describe('same-run retry runtime', () => {
       retry_attempt_index: 1,
       retry_result: 'success',
     });
+
+    const attemptArgs = (await readClaudeAttemptArgs(argsLogPath)).filter(
+      (args) => args.includes('--session-id') || args.includes('--resume'),
+    );
+    expect(attemptArgs).toHaveLength(2);
+    for (const args of attemptArgs) {
+      expect(args).toContain('--session-id');
+      expect(args).not.toContain('--resume');
+    }
+    const firstAttemptSessionId = sessionIdArg(attemptArgs[0] ?? []);
+    const secondAttemptSessionId = sessionIdArg(attemptArgs[1] ?? []);
+    expect(firstAttemptSessionId).toBeTruthy();
+    expect(secondAttemptSessionId).toBeTruthy();
+    expect(secondAttemptSessionId).not.toBe(firstAttemptSessionId);
   });
 });
 
@@ -215,12 +229,17 @@ if (attempts === 0) {
   return bin;
 }
 
-async function writeStallingClaude(dir: string, name: string): Promise<string> {
+async function writeStallingClaude(
+  dir: string,
+  name: string,
+): Promise<{ bin: string; argsLogPath: string }> {
   const bin = path.join(dir, name);
   const counterPath = path.join(dir, `${name}-attempts`);
+  const argsLogPath = path.join(dir, `${name}-args.jsonl`);
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
 const counterPath = ${JSON.stringify(counterPath)};
+const argsLogPath = ${JSON.stringify(argsLogPath)};
 if (process.argv.includes('--version')) {
   console.log('claude-code 1.0.0-retry-stall');
   process.exit(0);
@@ -232,6 +251,7 @@ if (process.argv.includes('--help')) {
 let attempts = 0;
 try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
 fs.writeFileSync(counterPath, String(attempts + 1));
+fs.appendFileSync(argsLogPath, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (attempts === 0) {
   // First attempt: emit nothing on stdout/stderr and hang well past the
   // inactivity watchdog window so the daemon classifies a silent first-token
@@ -252,7 +272,7 @@ if (attempts === 0) {
 }
 `, 'utf8');
   await chmod(bin, 0o755);
-  return bin;
+  return { bin, argsLogPath };
 }
 
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {
@@ -323,6 +343,20 @@ async function readRunEvents(file: string): Promise<RunEvent[]> {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line) as RunEvent);
+}
+
+async function readClaudeAttemptArgs(file: string): Promise<string[][]> {
+  const raw = await readFile(file, 'utf8');
+  return raw
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as string[]);
+}
+
+function sessionIdArg(args: string[]): string | null {
+  const index = args.indexOf('--session-id');
+  return index >= 0 ? args[index + 1] ?? null : null;
 }
 
 function delay(ms: number): Promise<void> {

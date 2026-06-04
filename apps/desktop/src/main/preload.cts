@@ -9,6 +9,7 @@ import type {
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectReplaceWorkingDirResult,
+  OpenDesignHostPickWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterStatusListener,
   OpenDesignHostUpdaterStatusSnapshot,
@@ -94,6 +95,27 @@ function normalizeProjectReplaceWorkingDirResult(input: unknown): OpenDesignHost
   return { baseDir, entryFile, ok: true };
 }
 
+function pickWorkingDirFailure(reason: string): OpenDesignHostPickWorkingDirResult {
+  return failure(reason);
+}
+
+function normalizePickWorkingDirResult(input: unknown): OpenDesignHostPickWorkingDirResult {
+  if (!isRecord(input)) return failure('desktop working-dir pick returned an invalid response', input);
+  if (input.ok !== true) {
+    if (input.canceled === true) return { canceled: true, ok: false };
+    return failure(
+      typeof input.reason === 'string' && input.reason.length > 0 ? input.reason : 'unknown failure',
+      input.details,
+    );
+  }
+  const baseDir = typeof input.baseDir === 'string' ? input.baseDir : null;
+  const token = typeof input.token === 'string' ? input.token : null;
+  if (baseDir == null || token == null) {
+    return failure('desktop working-dir pick did not include baseDir and token', input);
+  }
+  return { baseDir, ok: true, token };
+}
+
 function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImportResult {
   if (!isRecord(input)) return failure('desktop import returned an invalid response', input);
   if (input.ok !== true) {
@@ -159,6 +181,10 @@ const project = {
     ipcRenderer.invoke('dialog:pick-and-replace-working-dir', { projectId })
       .then(normalizeProjectReplaceWorkingDirResult)
       .catch((error: unknown) => replaceWorkingDirFailure(reasonFromError(error))),
+  pickWorkingDir: (): Promise<OpenDesignHostPickWorkingDirResult> =>
+    ipcRenderer.invoke('dialog:pick-working-dir')
+      .then(normalizePickWorkingDirResult)
+      .catch((error: unknown) => pickWorkingDirFailure(reasonFromError(error))),
 };
 
 const shell = {

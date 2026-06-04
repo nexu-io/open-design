@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { registerDesignSystemToolRoutes } from '../src/design-system-tool-routes.js';
+import { registerDesignSystemToolRoutes } from '../src/routes/design-system-tool.js';
 
 type JsonFetchResult = { status: number; body: Record<string, any> };
 

@@ -428,6 +428,7 @@ export async function reportRunCompletedFromDaemon(
         ...(errorCode ? { errorCode } : {}),
         ...(failure ? { failure } : {}),
         timings,
+        ...(run.analyticsTelemetry ? { timingMarks: run.analyticsTelemetry } : {}),
         ...(stderr ? { stderr } : {}),
       },
       message: {

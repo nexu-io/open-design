@@ -22,9 +22,13 @@ import type { TelemetryPrefs } from './app-config.js';
 import {
   buildPromptStackFlatMetadata,
   promptStackWithoutContent,
+  structuredPromptStackInput,
   type PromptStackTelemetry,
 } from './prompt-telemetry.js';
-import type { RunTimingAnalytics } from './run-analytics-observability.js';
+import type {
+  RunTelemetryTimestamps,
+  RunTimingAnalytics,
+} from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
 
 // Langfuse US region: confirmed by an end-to-end smoke on 2026-05-07 — the
@@ -95,6 +99,7 @@ export interface RunSummary {
   errorCode?: string;
   failure?: RunFailureClassification;
   timings?: RunTimingAnalytics;
+  timingMarks?: RunTelemetryTimestamps;
   stderr?: {
     tail: string;
     lineCount: number;
@@ -349,6 +354,99 @@ function buildTagList(ctx: ReportContext): string[] {
   return tags;
 }
 
+function validTimestamp(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function timingSpanBody(input: {
+  traceId: string;
+  parentObservationId: string;
+  runId: string;
+  name: string;
+  start: number | undefined;
+  end: number | undefined;
+  metadata?: Record<string, unknown>;
+}): Record<string, unknown> | null {
+  const start = validTimestamp(input.start);
+  const end = validTimestamp(input.end);
+  if (start === undefined || end === undefined || end < start) return null;
+  return {
+    id: `${input.runId}-phase-${input.name}`,
+    traceId: input.traceId,
+    parentObservationId: input.parentObservationId,
+    name: input.name,
+    startTime: new Date(start).toISOString(),
+    endTime: new Date(end).toISOString(),
+    metadata: {
+      durationMs: Math.round(end - start),
+      ...(input.metadata ?? {}),
+    },
+  };
+}
+
+function buildTimingSpanBodies(ctx: ReportContext, generationId: string): Record<string, unknown>[] {
+  const marks = ctx.run.timingMarks ?? {};
+  const runStart = ctx.run.startedAt;
+  const runEnd = ctx.run.endedAt;
+  const queueEnd = marks.promptBuildStartAt ?? marks.startChatRunStartedAt;
+  const definitions = [
+    {
+      name: 'queue',
+      start: runStart,
+      end: queueEnd,
+      metadata: { boundary: 'run.startedAt -> promptBuildStartAt' },
+    },
+    {
+      name: 'prompt-build',
+      start: marks.promptBuildStartAt,
+      end: marks.promptBuildEndAt,
+      metadata: { boundary: 'promptBuildStartAt -> promptBuildEndAt' },
+    },
+    {
+      name: 'spawn',
+      start: marks.processSpawnStartedAt,
+      end: marks.processSpawnedAt,
+      metadata: {
+        boundary: 'processSpawnStartedAt -> processSpawnedAt',
+      },
+    },
+    {
+      name: 'model-call',
+      start: marks.modelCallStartAt,
+      end: runEnd,
+      metadata: {
+        boundary: 'modelCallStartAt -> run.endedAt',
+        toolCallCount: ctx.eventsSummary.toolCalls,
+      },
+    },
+    {
+      name: 'stream-output',
+      start: marks.firstTokenAt,
+      end: marks.finalizeStartAt ?? runEnd,
+      metadata: { boundary: 'firstTokenAt -> finalizeStartAt' },
+    },
+    {
+      name: 'finalize',
+      start: marks.finalizeStartAt,
+      end: runEnd,
+      metadata: { boundary: 'finalizeStartAt -> run.endedAt' },
+    },
+  ];
+
+  return definitions
+    .map((definition) =>
+      timingSpanBody({
+        traceId: ctx.run.runId,
+        parentObservationId: generationId,
+        runId: ctx.run.runId,
+        ...definition,
+      }),
+    )
+    .filter((body): body is Record<string, unknown> => body !== null);
+}
+
 export function buildTracePayload(ctx: ReportContext): unknown[] {
   const wantsContent = ctx.prefs.metrics === true && ctx.prefs.content === true;
   const wantsArtifacts = ctx.prefs.artifactManifest === true;
@@ -414,6 +512,9 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   const promptStackFlatMetadata = promptStack
     ? buildPromptStackFlatMetadata(promptStack)
     : {};
+  const generationInput = promptStack
+    ? structuredPromptStackInput(promptStack)
+    : inputText;
 
   // Trace metadata is the queryable + exportable fact-sheet for each turn.
   // Anything we want to slice on for evals or dataset construction lives
@@ -455,6 +556,12 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   // shows them in the dedicated Model Parameters card and filters work.
   const modelParameters: Record<string, unknown> | undefined =
     ctx.turn?.reasoning ? { reasoning: ctx.turn.reasoning } : undefined;
+  const timingSpanBodies = buildTimingSpanBodies(ctx, generationId);
+  const toolParentObservationId = timingSpanBodies.some(
+    (span) => span.name === 'model-call',
+  )
+    ? `${ctx.run.runId}-phase-model-call`
+    : agentSpanId;
 
   const batch: unknown[] = [
     {
@@ -512,7 +619,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         modelParameters,
         startTime: startTimeIso,
         endTime: endTimeIso,
-        input: inputText,
+        input: generationInput,
         output: outputText,
         level: success ? 'DEFAULT' : 'ERROR',
         statusMessage: ctx.run.error ?? undefined,
@@ -525,6 +632,15 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
       },
     },
   ];
+
+  for (const span of timingSpanBodies) {
+    batch.push({
+      id: randomUUID(),
+      type: 'span-create',
+      timestamp: nowIso,
+      body: span,
+    });
+  }
 
   if (ctx.tools?.length) {
     for (const tool of ctx.tools) {
@@ -544,7 +660,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         body: {
           id: toolSpanId,
           traceId,
-          parentObservationId: agentSpanId,
+          parentObservationId: toolParentObservationId,
           name: `tool:${tool.name}`,
           startTime: toolStartedAt,
           endTime: toolEndedAt,
