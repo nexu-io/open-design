@@ -28,6 +28,7 @@ import {
   LiveArtifactViewer,
   LiveArtifactRefreshHistoryPanel,
   SvgViewer,
+  appendSavedPreviewCommentOrder,
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
   effectivePreviewScale,
@@ -3596,6 +3597,105 @@ describe('FileViewer tweaks toolbar', () => {
     expect(activeItem?.getAttribute('aria-current')).toBe('true');
   });
 
+  it('keeps saved marker numbers stable after saving another comment', async () => {
+    const olderComment: PreviewComment = {
+      id: 'comment-older',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      filePath: 'preview.html',
+      elementId: 'pin-older',
+      selector: '[data-od-pin="pin-older"]',
+      label: 'pin-older',
+      text: '',
+      htmlHint: '',
+      position: { x: 24, y: 32, width: 18, height: 18 },
+      note: 'Older comment',
+      status: 'open',
+      createdAt: 10,
+      updatedAt: 10,
+    };
+    const newerComment: PreviewComment = {
+      ...olderComment,
+      id: 'comment-newer',
+      elementId: 'pin-newer',
+      selector: '[data-od-pin="pin-newer"]',
+      label: 'pin-newer',
+      position: { x: 72, y: 32, width: 18, height: 18 },
+      note: 'Newer comment',
+      createdAt: 20,
+      updatedAt: 20,
+    };
+
+    function Harness() {
+      const [comments, setComments] = useState<PreviewComment[]>([olderComment, newerComment]);
+      return (
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={htmlPreviewFile()}
+          liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          previewComments={comments}
+          onSavePreviewComment={async (target, note) => {
+            const saved: PreviewComment = {
+              id: 'comment-third',
+              projectId: 'project-1',
+              conversationId: 'conversation-1',
+              filePath: target.filePath,
+              elementId: target.elementId,
+              selector: target.selector,
+              label: target.label,
+              text: target.text,
+              htmlHint: target.htmlHint,
+              position: target.position,
+              style: target.style,
+              selectionKind: target.selectionKind,
+              memberCount: target.memberCount,
+              podMembers: target.podMembers,
+              note,
+              status: 'open',
+              createdAt: 5,
+              updatedAt: 30,
+            };
+            setComments((current) => [saved, ...current]);
+            return saved;
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+
+    expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toBe('1');
+    expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toBe('2');
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: {
+        type: 'od:comment-target',
+        elementId: 'hero',
+        selector: '[data-od-id="hero"]',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 8, y: 12, width: 120, height: 48 },
+        hoverPoint: { x: 12, y: 16 },
+        htmlHint: '<main data-od-id="hero">Hero</main>',
+      },
+    }));
+
+    const input = await screen.findByTestId('comment-popover-input');
+    fireEvent.change(input, { target: { value: 'Third comment' } });
+    fireEvent.click(screen.getByTestId('comment-popover-save'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-saved-marker-pin-older').textContent).toBe('1');
+      expect(screen.getByTestId('comment-saved-marker-pin-newer').textContent).toBe('2');
+      expect(screen.getByTestId('comment-saved-marker-hero').textContent).toBe('3');
+    });
+  });
+
   it('lets element comments queue to chat while a task is running', async () => {
     const onSendBoardCommentAttachments = vi.fn().mockResolvedValue(undefined);
     render(
@@ -4145,6 +4245,32 @@ describe('FileViewer tweaks toolbar', () => {
     fireDragEventWithClientY('drop', items[0]!, { dataTransfer, clientY: 0 });
 
     expect(onReorder).toHaveBeenCalledWith(['comment-2', 'comment-1']);
+  });
+
+  it('appends a newly saved comment to the current visible comment order', () => {
+    expect(
+      appendSavedPreviewCommentOrder(
+        [],
+        [{ id: 'comment-1' }, { id: 'comment-2' }],
+        'comment-3',
+      ),
+    ).toEqual(['comment-1', 'comment-2', 'comment-3']);
+
+    expect(
+      appendSavedPreviewCommentOrder(
+        ['comment-2', 'comment-1'],
+        [{ id: 'comment-1' }, { id: 'comment-2' }],
+        'comment-3',
+      ),
+    ).toEqual(['comment-2', 'comment-1', 'comment-3']);
+
+    expect(
+      appendSavedPreviewCommentOrder(
+        ['comment-1', 'comment-2'],
+        [{ id: 'comment-1' }, { id: 'comment-2' }],
+        'comment-2',
+      ),
+    ).toEqual(['comment-1', 'comment-2']);
   });
 
   it('does not classify text labels containing a standalone article as links', () => {
