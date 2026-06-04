@@ -2593,6 +2593,23 @@ function questionFormBodyIsRenderable(body) {
   return Array.isArray(questions) && questions.some((q) => q && typeof q === 'object');
 }
 
+// Locate `closeTag` (case-insensitively) at or after `from`, returning an
+// index in the ORIGINAL `text` coordinate space. Mirrors the web parser's
+// `findCloseTag`: scanning char-by-char and lowercasing each fixed-length
+// candidate slice keeps the result aligned with `openEnd`. Lowercasing the
+// whole string up front instead would desync the index, because some code
+// points expand under `toLowerCase()` (e.g. `"İ" -> "i̇"`) and shift every
+// offset after them — corrupting the body slice and failing a valid form.
+function findQuestionFormCloseTag(text, from, closeTag) {
+  const closeLower = closeTag.toLowerCase();
+  const tagLen = closeTag.length;
+  const maxStart = text.length - tagLen;
+  for (let i = from; i <= maxStart; i++) {
+    if (text.slice(i, i + tagLen).toLowerCase() === closeLower) return i;
+  }
+  return -1;
+}
+
 // Whether the agent's visible text contains a *renderable* clarifying form —
 // a closed `<question-form>`/`<ask-question>` block whose body satisfies the
 // parser contract above. The plugin-authoring missing-artifacts guard treats
@@ -2606,7 +2623,6 @@ function questionFormBodyIsRenderable(body) {
 // `packages/contracts` if the two drift.
 function emittedRenderableQuestionForm(text) {
   if (typeof text !== 'string' || !text) return false;
-  const lower = text.toLowerCase();
   let cursor = 0;
   while (cursor < text.length) {
     const m = QUESTION_FORM_OPEN_RE.exec(text.slice(cursor));
@@ -2614,7 +2630,7 @@ function emittedRenderableQuestionForm(text) {
     const tagName = (m[1] ?? 'question-form').toLowerCase();
     const closeTag = `</${tagName}>`;
     const openEnd = cursor + m.index + m[0].length;
-    const closeIdx = lower.indexOf(closeTag, openEnd);
+    const closeIdx = findQuestionFormCloseTag(text, openEnd, closeTag);
     if (closeIdx === -1) return false;
     if (questionFormBodyIsRenderable(text.slice(openEnd, closeIdx))) return true;
     cursor = closeIdx + closeTag.length;
