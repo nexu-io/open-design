@@ -248,6 +248,11 @@ export interface ChatRunStatusResponse {
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
+  cancelRequested?: boolean;
+  childPid?: number | null;
+  processGroupId?: number | null;
+  childExited?: boolean;
+  childExitObservedAt?: number | null;
   exitCode?: number | null;
   signal?: string | null;
   error?: string | null;
@@ -268,6 +273,7 @@ export interface ChatRunListResponse {
 
 export interface ChatRunCancelResponse {
   ok: true;
+  run?: ChatRunStatusResponse;
 }
 
 export interface ChatAttachment {

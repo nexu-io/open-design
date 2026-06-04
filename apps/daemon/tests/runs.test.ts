@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -67,7 +68,7 @@ describe('chat run service shutdown', () => {
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-queued' });
 
     const wait = runs.wait(run);
-    runs.cancel(run);
+    await runs.cancel(run);
 
     expect(run.status).toBe('canceled');
     expect(run.cancelRequested).toBe(true);
@@ -97,7 +98,7 @@ describe('chat run service shutdown', () => {
       run.status = 'running';
       (run as any).child = child;
 
-      runs.cancel(run);
+      const cancelPromise = runs.cancel(run);
 
       expect(run.cancelRequested).toBe(true);
       expect(child.signals).toEqual(['SIGTERM']);
@@ -107,6 +108,9 @@ describe('chat run service shutdown', () => {
 
       await vi.advanceTimersByTimeAsync(1);
       expect(child.signals).toEqual(['SIGTERM', 'SIGKILL']);
+      await cancelPromise;
+      expect(run.status).toBe('canceled');
+      expect(run.signal).toBe('SIGKILL');
     });
 
     it('uses ACP abort before falling back to process signals', async () => {
@@ -126,7 +130,7 @@ describe('chat run service shutdown', () => {
       (run as any).child = child;
       (run as any).acpSession = { abort };
 
-      runs.cancel(run);
+      const cancelPromise = runs.cancel(run);
 
       expect(abort).toHaveBeenCalledTimes(1);
       expect(order).toEqual(['abort']);
@@ -136,6 +140,51 @@ describe('chat run service shutdown', () => {
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM', 'SIGKILL']);
+      await cancelPromise;
+      expect(run.status).toBe('canceled');
+      expect(run.signal).toBe('SIGKILL');
+    });
+
+    it('waits for a real process group to exit before returning canceled status', async () => {
+      if (process.platform === 'win32') return;
+      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
+      vi.stubEnv('OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS', '250');
+      const script = [
+        "const { spawn } = require('node:child_process');",
+        "process.on('SIGTERM', () => {});",
+        "const child = spawn(process.execPath, ['-e', \"process.on('SIGTERM',()=>{}); setInterval(()=>{}, 1000);\"], { stdio: 'ignore' });",
+        "process.stdout.write(JSON.stringify({ pid: process.pid, childPid: child.pid }) + '\\n');",
+        "setInterval(() => {}, 1000);",
+      ].join('\n');
+      const child = spawn(process.execPath, ['-e', script], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      try {
+        const line = await readOneLine(child.stdout);
+        const payload = JSON.parse(line) as { childPid: number };
+        const runs = createRuns();
+        const run = runs.create();
+        run.status = 'running';
+        (run as any).child = child;
+        (run as any).childPid = child.pid;
+        (run as any).processGroupId = child.pid;
+
+        const status = await runs.cancel(run);
+
+        expect(status.status).toBe('canceled');
+        expect(status.childPid).toBe(child.pid);
+        expect(status.processGroupId).toBe(child.pid);
+        expect(status.childExited).toBe(true);
+        expect(status.signal).toBe('SIGKILL');
+        await expectPidGone(payload.childPid);
+      } finally {
+        try {
+          if (typeof child.pid === 'number') process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          // already gone
+        }
+      }
     });
   });
 
@@ -330,6 +379,36 @@ function createRuns() {
     shutdownGraceMs: 10,
     ttlMs: 60_000,
   });
+}
+
+function readOneLine(stream: NodeJS.ReadableStream | null): Promise<string> {
+  if (!stream) return Promise.reject(new Error('missing stdout'));
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const timeout = setTimeout(() => reject(new Error('timed out waiting for child readiness')), 1000);
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk) => {
+      buffer += String(chunk);
+      const newline = buffer.indexOf('\n');
+      if (newline >= 0) {
+        clearTimeout(timeout);
+        resolve(buffer.slice(0, newline));
+      }
+    });
+    stream.on('error', reject);
+  });
+}
+
+async function expectPidGone(pid: number): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`expected pid ${pid} to be gone`);
 }
 
 class FakeChildProcess extends EventEmitter {

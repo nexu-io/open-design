@@ -13,6 +13,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -61,7 +62,27 @@ async function withFakeAgent<T>(
     return await run();
   } finally {
     process.env.PATH = oldPath;
+    killProcessesUsingPath(dir);
     await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+function killProcessesUsingPath(pathFragment: string): void {
+  if (process.platform === 'win32') return;
+  let output = '';
+  try {
+    output = execFileSync('pgrep', ['-f', pathFragment], { encoding: 'utf8' });
+  } catch {
+    return;
+  }
+  for (const line of output.split('\n')) {
+    const pid = Number(line.trim());
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+    }
   }
 }
 
