@@ -126,7 +126,7 @@ export function InlineModelSwitcher({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
-  const [amrLoginError, setAmrLoginError] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
   const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
     useState(false);
@@ -181,36 +181,36 @@ export function InlineModelSwitcher({
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
-        setAmrLoginError(true);
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
       }
     };
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [refreshAmrStatus, stopAmrPolling]);
+  }, [refreshAmrStatus, stopAmrPolling, t]);
 
   const handleAmrSignIn = useCallback(async (
     attribution?: AmrEntryAttribution | null,
   ) => {
     const startedAt = Date.now();
     amrLoginStartedAtRef.current = startedAt;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(true);
     const result = await startVelaLogin(attribution);
     if (!result.ok && !result.alreadyRunning) {
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
-      setAmrLoginError(true);
+      setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
       return;
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [startAmrPolling]);
+  }, [startAmrPolling, t]);
 
   const handleAmrCancelLogin = useCallback(async () => {
     stopAmrPolling();
     amrLoginStartedAtRef.current = null;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(false);
     await cancelVelaLogin();
     notifyAmrLoginStatusChanged('login-canceled');
@@ -273,7 +273,7 @@ export function InlineModelSwitcher({
       if (reason === 'login-started') {
         const startedAt = Date.now();
         amrLoginStartedAtRef.current = startedAt;
-        setAmrLoginError(false);
+        setAmrLoginError(null);
         setAmrLoginPending(true);
         startAmrPolling(startedAt);
       } else if (reason === 'login-canceled') {
@@ -353,7 +353,7 @@ export function InlineModelSwitcher({
       : t('settings.amrSignIn');
   const amrPendingHoverLabel = t('settings.amrCancelSignIn');
   const amrInlineStatus = amrLoginError
-    ? t('settings.amrLoginErrorCompact')
+    ? amrLoginError
     : amrLoggedIn
       ? t('settings.amrSignedIn')
       : amrLoginPending

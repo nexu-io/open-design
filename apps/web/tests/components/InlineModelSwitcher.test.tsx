@@ -484,6 +484,56 @@ describe('InlineModelSwitcher AMR row', () => {
     ).toBeTruthy();
   });
 
+  it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
+    const startupError = 'profile "prod" api URL: is not configured';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'prod',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: startupError }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher();
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    const amrButton = await within(popover).findByRole('radio', {
+      name: /^AMR\s+Sign in$/i,
+    });
+    fireEvent.click(amrButton);
+
+    await waitFor(() => {
+      expect(
+        within(popover).getByRole('radio', {
+          name: /^AMR\s+profile "prod" api URL: is not configured/i,
+        }),
+      ).toBeTruthy();
+    });
+    expect(
+      within(popover).queryByRole('radio', {
+        name: /^AMR\s+AMR sign-in failed\./i,
+      }),
+    ).toBeNull();
+    expect(within(popover).getByText('Sign in')).toBeTruthy();
+  });
+
   it('cancels a timed-out AMR sign-in from the inline switcher', async () => {
     let loginStarted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

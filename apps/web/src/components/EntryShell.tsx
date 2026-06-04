@@ -863,7 +863,7 @@ function OnboardingView({
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
-  const [amrLoginError, setAmrLoginError] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
   const [providerTestState, setProviderTestState] = useState<
     | { status: 'idle' }
@@ -1426,7 +1426,7 @@ function OnboardingView({
   ) {
     if (amrLoginPending) return;
     amrLoginPollCancelledRef.current = false;
-    setAmrLoginError(false);
+    setAmrLoginError(null);
     setAmrLoginPending(true);
     try {
       const currentStatus = await fetchVelaLoginStatus();
@@ -1437,7 +1437,7 @@ function OnboardingView({
       }
       const loginResult = await startVelaLogin(attribution);
       if (!loginResult.ok && !loginResult.alreadyRunning) {
-        setAmrLoginError(true);
+        setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }
       if (await pollAmrLoginCompletion()) {
@@ -1461,7 +1461,7 @@ function OnboardingView({
       if (outcome === 'signed-in') return true;
       if (outcome === 'stopped' || outcome === 'timed-out') {
         if (outcome === 'timed-out') void cancelVelaLogin();
-        setAmrLoginError(true);
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
         return false;
       }
     }
@@ -1994,7 +1994,7 @@ function OnboardingView({
             <div className="onboarding-view__actions">
               {step === 0 && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
-                  {t('settings.amrLoginErrorCompact')}
+                  {amrLoginError}
                 </span>
               ) : null}
               <button
