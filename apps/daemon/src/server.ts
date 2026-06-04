@@ -28,6 +28,7 @@ import {
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { resolveProjectRoot } from './project-root.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
+import { installGitCommandGuard } from './git-command-guard.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -12353,6 +12354,7 @@ export async function startServer({
     let spawnedAgentEnv = null;
     let agentStdoutTail = '';
     let agentStderrTail = '';
+    let gitCommandGuardCleanup = null;
     try {
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
@@ -12360,7 +12362,7 @@ export async function startServer({
         def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
           ? 'pipe'
           : 'ignore';
-      const env = applyAgentLaunchEnv({
+      let env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
@@ -12384,6 +12386,9 @@ export async function startServer({
           ? { OPENCODE_CONFIG_CONTENT: opencodeConfigContent }
           : {}),
       }, agentLaunch);
+      const gitCommandGuard = installGitCommandGuard(env);
+      env = gitCommandGuard.env;
+      gitCommandGuardCleanup = gitCommandGuard.cleanup;
       spawnedAgentEnv = env;
       const invocation = createCommandInvocation({
         command: agentLaunch.launchPath,
@@ -12483,6 +12488,7 @@ export async function startServer({
         writePromptToChildStdin = true;
       }
     } catch (err) {
+      gitCommandGuardCleanup?.();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
@@ -13448,6 +13454,7 @@ export async function startServer({
         if (agentLogFilePath) {
           fs.promises.unlink(agentLogFilePath).catch(() => {});
         }
+        gitCommandGuardCleanup?.();
       }
     });
     if (writePromptToChildStdin && child.stdin) {
