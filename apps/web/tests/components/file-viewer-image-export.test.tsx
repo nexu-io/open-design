@@ -346,12 +346,65 @@ describe('FileViewer image export', () => {
     requestPreviewSnapshotMock.mockResolvedValueOnce(snapshot);
 
     const { srcDocFrame } = renderHtmlPreview(deckFile(), { isDeck: true });
+    (srcDocFrame.contentWindow as Window & { __odDeckSlideState?: () => { active: number; count: number } })
+      .__odDeckSlideState = () => ({ active: 0, count: 1 });
     fireEvent.click(screen.getByRole('button', { name: /download/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /export as pptx/i }));
 
     await waitFor(() => {
-      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, expect.any(Number));
       expect(exportImagePptxFromSnapshotsMock).toHaveBeenCalledWith('deck', [snapshot]);
     });
+  });
+
+  it('waits for uncached deck slide state before exporting every PPTX slide', async () => {
+    const snapshots = [
+      { dataUrl: 'data:image/png;base64,slide-1', w: 1600, h: 900 },
+      { dataUrl: 'data:image/png;base64,slide-2', w: 1600, h: 900 },
+      { dataUrl: 'data:image/png;base64,slide-3', w: 1600, h: 900 },
+    ];
+    requestPreviewSnapshotMock
+      .mockResolvedValueOnce(snapshots[0])
+      .mockResolvedValueOnce(snapshots[1])
+      .mockResolvedValueOnce(snapshots[2]);
+
+    const file = {
+      ...deckFile(),
+      name: 'deck-without-cached-slide-state.html',
+      path: 'deck-without-cached-slide-state.html',
+    };
+    const { srcDocFrame } = renderHtmlPreview(file, {
+      isDeck: true,
+      projectId: 'project-uncached-deck',
+    });
+    const emitSlideState = (active: number) => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: srcDocFrame.contentWindow,
+        data: { type: 'od:slide-state', active, count: snapshots.length },
+      }));
+    };
+    const postMessageSpy = vi
+      .spyOn(srcDocFrame.contentWindow!, 'postMessage')
+      .mockImplementation((message: unknown) => {
+        const data = message as { type?: string; action?: string; index?: number };
+        if (data.type === 'od:slide' && data.action === 'go' && typeof data.index === 'number') {
+          window.setTimeout(() => emitSlideState(data.index!), 0);
+        }
+      });
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /export as pptx/i }));
+    window.setTimeout(() => emitSlideState(0), 0);
+
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledTimes(3);
+      expect(exportImagePptxFromSnapshotsMock).toHaveBeenCalledWith(
+        'deck-without-cached-slide-state',
+        snapshots,
+      );
+    });
+    expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 0 }, '*');
+    expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 1 }, '*');
+    expect(postMessageSpy).toHaveBeenCalledWith({ type: 'od:slide', action: 'go', index: 2 }, '*');
   });
 });
