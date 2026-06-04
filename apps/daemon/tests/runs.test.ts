@@ -82,6 +82,63 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  describe('cancel kill fallback', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    });
+
+    it('sends SIGTERM immediately and escalates to SIGKILL after the cancel grace window', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
+      const runs = createRuns();
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
+      const run = runs.create();
+      run.status = 'running';
+      (run as any).child = child;
+
+      runs.cancel(run);
+
+      expect(run.cancelRequested).toBe(true);
+      expect(child.signals).toEqual(['SIGTERM']);
+
+      await vi.advanceTimersByTimeAsync(24);
+      expect(child.signals).toEqual(['SIGTERM']);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(child.signals).toEqual(['SIGTERM', 'SIGKILL']);
+    });
+
+    it('uses ACP abort before falling back to process signals', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('PI_ABORT_GRACE_MS', '30');
+      const runs = createRuns();
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
+      const order: string[] = [];
+      const originalKill = child.kill.bind(child);
+      vi.spyOn(child, 'kill').mockImplementation((signal: string) => {
+        order.push(signal);
+        return originalKill(signal);
+      });
+      const abort = vi.fn(() => order.push('abort'));
+      const run = runs.create();
+      run.status = 'running';
+      (run as any).child = child;
+      (run as any).acpSession = { abort };
+
+      runs.cancel(run);
+
+      expect(abort).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['abort']);
+
+      await vi.advanceTimersByTimeAsync(30);
+      expect(order).toEqual(['abort', 'SIGTERM']);
+
+      await vi.advanceTimersByTimeAsync(30);
+      expect(order).toEqual(['abort', 'SIGTERM', 'SIGKILL']);
+    });
+  });
+
 
 
   it('stores effective media execution policy on run status bodies', () => {

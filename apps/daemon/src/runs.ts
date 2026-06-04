@@ -262,13 +262,15 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 3000;
   };
 
-  const scheduleCancelKillFallback = (run, graceMs = cancelGraceMs()) => {
-    setTimeout(() => {
-      killChild(run, 'SIGTERM');
-    }, graceMs).unref?.();
+  const scheduleCancelKillFallback = (run, { graceMs = cancelGraceMs(), sendTerm = true } = {}) => {
+    if (sendTerm) {
+      setTimeout(() => {
+        killChild(run, 'SIGTERM');
+      }, graceMs).unref?.();
+    }
     setTimeout(() => {
       killChild(run, 'SIGKILL');
-    }, graceMs * 2).unref?.();
+    }, sendTerm ? graceMs * 2 : graceMs).unref?.();
   };
 
   const cancel = (run) => {
@@ -282,10 +284,10 @@ export function createChatRunService({
       if (run.acpSession?.abort) {
         run.acpSession.abort();
         const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-        scheduleCancelKillFallback(run, graceMs);
+        scheduleCancelKillFallback(run, { graceMs, sendTerm: true });
       } else if (run.child) {
         killChild(run, 'SIGTERM');
-        scheduleCancelKillFallback(run);
+        scheduleCancelKillFallback(run, { sendTerm: false });
       } else {
         finish(run, 'canceled', null, 'SIGTERM');
       }
