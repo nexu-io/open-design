@@ -13700,6 +13700,9 @@ export async function startServer({
       for (const chunk of plaintextStdoutBuffer) {
         send('stdout', { chunk });
       }
+      if (status === 'succeeded') {
+        persistDeliveredAgentSessionState();
+      }
       finishWithRetryDecision(status, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
@@ -13730,10 +13733,7 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8', (err) => {
-            if (err) return;
-            persistDeliveredAgentSessionState();
-          });
+          child.stdin.write(`${userMessage}\n`, 'utf8');
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -13742,9 +13742,7 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8', () => {
-          persistDeliveredAgentSessionState();
-        });
+        child.stdin.end(composed, 'utf8');
       }
     }
   };
