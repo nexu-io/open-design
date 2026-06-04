@@ -282,7 +282,19 @@ export interface DesignSystemPackageInfo {
     id: string;
     name: string;
     category: string;
-    source?: { type?: string; url?: string; path?: string; branch?: string; commit?: string; importedAt?: string };
+    source?: {
+      type?: string;
+      url?: string;
+      path?: string;
+      branch?: string;
+      commit?: string;
+      importedAt?: string;
+      // shadcn registry imports (source.type === 'shadcn').
+      reference?: string;
+      registryUrl?: string;
+      item?: string;
+      homepage?: string;
+    };
     files?: {
       design?: string;
       tokens?: string;
@@ -489,6 +501,29 @@ export interface ImportGitHubDesignSystemRequest {
 }
 
 export interface ImportGitHubDesignSystemResponse {
+  designSystem: DesignSystemSummary;
+}
+
+export interface ImportShadcnDesignSystemRequest {
+  /**
+   * shadcn registry item reference. Accepts either the shadcn CLI
+   * shorthand `<owner>/<repo>/<item>` (optionally suffixed with
+   * `#<branch|tag|sha>`), which is resolved against the repository's
+   * root `registry.json` on GitHub, or a direct `https://…/<item>.json`
+   * URL pointing at a registry-item document. `http://` is accepted only
+   * for loopback hosts (localhost / 127.0.0.1) so a self-hosted local
+   * registry can be imported.
+   */
+  reference: string;
+  /** Optional display name override for the generated design-system project. */
+  name?: string;
+  /** Import structure mode. Defaults to hybrid for real project imports. */
+  importMode?: 'normalized' | 'hybrid' | 'verbatim';
+  /** Craft sections that should actively apply when this system is used. */
+  craftApplies?: string[];
+}
+
+export interface ImportShadcnDesignSystemResponse {
   designSystem: DesignSystemSummary;
 }
 

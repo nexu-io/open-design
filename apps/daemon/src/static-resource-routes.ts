@@ -19,6 +19,7 @@ import {
   importLocalDesignSystemProject,
 } from './design-system-import.js';
 import { importGitHubDesignSystemProject } from './design-system-github-import.js';
+import { importShadcnDesignSystemProject } from './design-system-shadcn-import.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
@@ -735,6 +736,52 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           500,
           'INTERNAL_ERROR',
           `imported GitHub design system was not found in catalog: ${result.dir}`,
+        );
+      }
+      res.status(201).json({ designSystem });
+    } catch (err: any) {
+      if (err instanceof LocalDesignSystemImportError) {
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.post('/api/design-systems/import/shadcn', async (req, res) => {
+    if (!requireLocalOrigin(req, res)) return;
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const reference =
+        typeof body.reference === 'string'
+          ? body.reference
+          : typeof body.url === 'string'
+            ? body.url
+            : '';
+      if (!reference.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'a shadcn registry reference is required');
+      }
+      const before = await listAllDesignSystems();
+      const importMode = normalizeDesignSystemImportMode(body.importMode);
+      const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
+      const result = await importShadcnDesignSystemProject(
+        reference,
+        path.join(PROJECT_ROOT, '.tmp'),
+        USER_DESIGN_SYSTEMS_DIR,
+        {
+          ...(typeof body.name === 'string' ? { name: body.name } : {}),
+          ...(importMode ? { importMode } : {}),
+          ...(craftApplies ? { craftApplies } : {}),
+          reservedIds: designSystemDirIdsFromCatalog(before),
+        },
+      );
+      const systems = await listAllDesignSystems();
+      const designSystem = findUserDesignSystemInCatalog(systems, result.id);
+      if (!designSystem) {
+        return sendApiError(
+          res,
+          500,
+          'INTERNAL_ERROR',
+          `imported shadcn design system was not found in catalog: ${result.dir}`,
         );
       }
       res.status(201).json({ designSystem });

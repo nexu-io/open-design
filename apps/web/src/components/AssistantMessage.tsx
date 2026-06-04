@@ -41,6 +41,7 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
+import { NextStepActions } from "./NextStepActions";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
@@ -330,11 +331,17 @@ interface Props {
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
   hasDesignSystemContext?: boolean;
+  // "Next step" affordance handlers, surfaced under the last assistant message
+  // once it has produced a previewable (HTML) artifact. Omitting them hides
+  // the affordance entirely (e.g. in tests that don't wire chat send).
+  onArtifactShare?: (fileName: string) => void;
+  onArtifactChip?: (fileName: string, prompt: string) => void;
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
-// skip re-rendering. The four interaction callbacks (onSubmitForm,
-// onContinueRemainingTasks, onForkFromMessage, onFeedback) are DELIBERATELY
+// skip re-rendering. The interaction callbacks (onSubmitForm,
+// onContinueRemainingTasks, onForkFromMessage, onFeedback, and next-step
+// actions) are DELIBERATELY
 // excluded: ChatPane re-creates them per render, but routes them through a ref
 // so their behavior is reference-stable — comparing them would defeat the memo
 // on every streamed frame. `isLast` is compared, which captures the only state
@@ -409,6 +416,8 @@ function AssistantMessageImpl({
   onFeedback,
   suppressDirectionForms = false,
   hasDesignSystemContext = false,
+  onArtifactShare,
+  onArtifactChip,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -461,6 +470,13 @@ function AssistantMessageImpl({
             streaming,
           }),
     [blocks, fileOps, message, produced, projectFiles, streaming],
+  );
+  // The single artifact the "next step" affordance anchors to: prefer the
+  // first HTML produced file (decks/prototypes are HTML and are the ones the
+  // Share/Export menu + visual-polish loop apply to).
+  const nextStepArtifactName = useMemo(
+    () => pickPreviewableArtifact(displayedProduced),
+    [displayedProduced],
   );
   const pluginActionFolders = useMemo(
     () =>
@@ -720,6 +736,18 @@ function AssistantMessageImpl({
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
+        {!streaming &&
+        isLast &&
+        projectId &&
+        nextStepArtifactName &&
+        onArtifactShare &&
+        onArtifactChip ? (
+          <NextStepActions
+            fileName={nextStepArtifactName}
+            onShare={onArtifactShare}
+            onChip={onArtifactChip}
+          />
+        ) : null}
         {!streaming && projectId && pluginActionFolders.length > 0 ? (
           <PluginActionPanel
             folders={pluginActionFolders}
@@ -814,6 +842,17 @@ function AssistantMessageImpl({
       </div>
     </div>
   );
+}
+
+// Return the name of the first previewable HTML artifact among the produced
+// files, or null if this turn produced no shareable/polishable preview. Only
+// HTML files drive the preview workspace's Share/Export menu and the
+// visual-polish loop, so the "next step" affordance keys off them.
+function pickPreviewableArtifact(files: ProjectFile[]): string | null {
+  const html = files.find(
+    (f) => f.kind === "html" || /\.html?$/i.test(f.name),
+  );
+  return html ? html.name : null;
 }
 
 function inferProducedFilesFromTurn({

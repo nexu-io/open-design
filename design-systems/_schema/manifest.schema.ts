@@ -40,6 +40,18 @@ export type DesignSystemProjectSource =
       readonly branch?: string;
       readonly commit?: string;
       readonly importedAt?: string;
+    }
+  | {
+      readonly type: "shadcn";
+      /** Original user-supplied reference (CLI shorthand or item URL). */
+      readonly reference: string;
+      /** Resolved registry-item JSON URL that was fetched. */
+      readonly registryUrl?: string;
+      /** Registry item name within the source registry. */
+      readonly item?: string;
+      /** Registry homepage, when advertised by registry.json. */
+      readonly homepage?: string;
+      readonly importedAt?: string;
     };
 
 export type DesignSystemProjectFiles = {
@@ -149,6 +161,7 @@ const ALLOWED_SOURCE_KEYS: Record<DesignSystemProjectSource["type"], ReadonlySet
   bundled: new Set(["type", "origin"]),
   local: new Set(["type", "path", "importedAt"]),
   github: new Set(["type", "url", "branch", "commit", "importedAt"]),
+  shadcn: new Set(["type", "reference", "registryUrl", "item", "homepage", "importedAt"]),
 };
 
 const ALLOWED_FILES_KEYS = new Set(["design", "tokens", "components"]);
@@ -217,8 +230,8 @@ function validateSource(errors: string[], value: unknown): void {
   }
 
   const type = value.type;
-  if (type !== "bundled" && type !== "local" && type !== "github") {
-    errors.push("$.source.type must be one of bundled, local, github");
+  if (type !== "bundled" && type !== "local" && type !== "github" && type !== "shadcn") {
+    errors.push("$.source.type must be one of bundled, local, github, shadcn");
     return;
   }
 
@@ -235,9 +248,19 @@ function validateSource(errors: string[], value: unknown): void {
     return;
   }
 
-  expectNonEmptyString(errors, "$.source.url", value.url);
-  if (value.branch !== undefined) expectNonEmptyString(errors, "$.source.branch", value.branch);
-  if (value.commit !== undefined) expectNonEmptyString(errors, "$.source.commit", value.commit);
+  if (type === "github") {
+    expectNonEmptyString(errors, "$.source.url", value.url);
+    if (value.branch !== undefined) expectNonEmptyString(errors, "$.source.branch", value.branch);
+    if (value.commit !== undefined) expectNonEmptyString(errors, "$.source.commit", value.commit);
+    if (value.importedAt !== undefined) expectIsoDateTime(errors, "$.source.importedAt", value.importedAt);
+    return;
+  }
+
+  // shadcn registry import.
+  expectNonEmptyString(errors, "$.source.reference", value.reference);
+  if (value.registryUrl !== undefined) expectNonEmptyString(errors, "$.source.registryUrl", value.registryUrl);
+  if (value.item !== undefined) expectNonEmptyString(errors, "$.source.item", value.item);
+  if (value.homepage !== undefined) expectNonEmptyString(errors, "$.source.homepage", value.homepage);
   if (value.importedAt !== undefined) expectIsoDateTime(errors, "$.source.importedAt", value.importedAt);
 }
 

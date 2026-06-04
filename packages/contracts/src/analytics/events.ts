@@ -1347,6 +1347,19 @@ export interface ChatPanelClickProps {
     | 'resources_popover_trigger';
 }
 
+// Next-step action affordance shown under the last assistant message after a
+// previewable artifact is produced. `next_step_exposed` fires once when the
+// affordance becomes visible so the funnel can divide clicks by exposure;
+// the action elements drive the "second-turn rate" / "share rate" acceptance
+// metrics. `chip_id` carries the recommended-chip identity (e.g.
+// `polish_visual`, `second_version`) for the `chip` element.
+export interface NextStepActionClickProps {
+  page_name: 'chat_panel';
+  area: 'next_step';
+  element: 'next_step_exposed' | 'share' | 'chip';
+  chip_id?: string;
+}
+
 // Hosted-AMR nudge shown under a non-AMR agent's model/auth/quota failure.
 // `go_amr` is the link that opens https://open-design.ai/amr.
 export interface RunFailedToastClickProps {
@@ -1700,6 +1713,7 @@ export type UiClickProps =
   | IntegrationsSkillsTabClickProps
   | IntegrationsUseEverywhereTabClickProps
   | ChatPanelClickProps
+  | NextStepActionClickProps
   | RunFailedToastClickProps
   | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps

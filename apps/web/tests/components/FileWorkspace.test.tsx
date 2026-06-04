@@ -144,10 +144,6 @@ function workspaceFile(name: string): ProjectFile {
   };
 }
 
-function workspaceFiles(count: number, prefix: string): ProjectFile[] {
-  return Array.from({ length: count }, (_, index) => workspaceFile(`${prefix}-${index + 1}.html`));
-}
-
 function failedAssistantMessage(
   code: string,
   agentId: string,
@@ -388,7 +384,10 @@ describe('FileWorkspace upload input', () => {
     const baseProps: React.ComponentProps<typeof FileWorkspace> = {
       projectId: 'project-a',
       projectKind: 'prototype',
-      files: workspaceFiles(90, 'alpha'),
+      files: [
+        workspaceFile('assets/logo.png'),
+        workspaceFile('top.html'),
+      ],
       liveArtifacts: [],
       onRefreshFiles: vi.fn(),
       isDeck: false,
@@ -397,20 +396,23 @@ describe('FileWorkspace upload input', () => {
     };
 
     const { container, rerender } = render(<FileWorkspace {...baseProps} />);
-    const pageButtons = Array.from(container.querySelectorAll<HTMLButtonElement>('.df-page-btn'));
 
-    fireEvent.click(pageButtons[1]!);
-    expect(container.querySelector('.df-page-info')?.textContent).toContain('31–60');
+    fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
 
     rerender(
       <FileWorkspace
         {...baseProps}
         projectId="project-b"
-        files={workspaceFiles(90, 'beta')}
+        files={[
+          workspaceFile('beta-assets/logo.png'),
+          workspaceFile('home.html'),
+        ]}
       />,
     );
 
-    expect(container.querySelector('.df-page-info')?.textContent).toContain('1–30');
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
+    expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
   });
 
   it('clears a prior upload failure after a later successful upload', async () => {
@@ -877,6 +879,40 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(onTabsStateChange).toHaveBeenCalledWith({
         tabs: ['cover.html'],
         active: '__browser__:1',
+        browserTabs,
+      });
+    });
+  });
+
+  it('opens a share request without dropping existing browser tabs', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser 1',
+        title: 'Dribbble',
+        url: 'https://dribbble.com/',
+      },
+    ];
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
+        shareRequest={{ name: 'landing.html', nonce: 1 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html', 'landing.html'],
+        active: 'landing.html',
         browserTabs,
       });
     });

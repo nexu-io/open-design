@@ -3615,6 +3615,12 @@ function openNativeFolderDialog() {
   return new Promise((resolve) => {
     const platform = process.platform;
     if (platform === 'darwin') {
+      // `choose folder` is handled specially by the system: it presents a fully
+      // interactive standard navigation panel that reliably takes key focus
+      // (unlike a JXA-driven NSOpenPanel from background-only osascript, which
+      // renders but can't be clicked). That standard panel already includes a
+      // "New Folder" button in the bottom-left, so users can create a folder
+      // inline without any extra wiring.
       execFile(
         'osascript',
         ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
@@ -4256,6 +4262,7 @@ export function classifyChatRunCloseStatus(params: {
   signal: NodeJS.Signals | string | null;
   acpCleanCompletion: boolean;
   artifactQuietShutdownRequested: boolean;
+  turnCompletedCleanly: boolean;
 }): 'canceled' | 'succeeded' | 'failed' {
   if (params.cancelRequested) return 'canceled';
   if (params.code === 0) return 'succeeded';
@@ -4267,7 +4274,80 @@ export function classifyChatRunCloseStatus(params: {
     params.code === null &&
     (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
   if (artifactQuietShutdown) return 'succeeded';
+  // Post-completion teardown carve-out (#3372). When the model already
+  // emitted a clean terminal turn (a `turn_end`/`usage` event with no
+  // outstanding host answer, the same condition that closes the child's
+  // stdin), a later non-zero exit or kill signal is a teardown artifact,
+  // not a generation failure: a SessionEnd hook the agent runs on its way
+  // out (e.g. the Honcho memory plugin) can exit non-zero and drag the
+  // whole `claude` process to `exit 1` long after the deliverable was
+  // produced. Treating that as `failed` surfaces a red banner and halts
+  // the flow for work that already succeeded. Same family as the ACP and
+  // artifact-quiet-shutdown carve-outs above: the work completed; the odd
+  // exit is teardown noise. This deliberately does NOT cover non-zero
+  // exits *before* a clean turn — those stay `failed` (real CLI bug,
+  // model error, mid-turn crash), and the agent-specific auth/quota/AMR
+  // guards in the close handler run before this classifier so a genuine
+  // post-turn auth failure is still surfaced with its specific code.
+  if (params.turnCompletedCleanly) return 'succeeded';
   return 'failed';
+}
+
+type ClaudeStreamJsonBookkeepingRun = {
+  stdinOpen?: boolean;
+  pendingHostAnswers?: Set<string>;
+  turnCompletedCleanly?: boolean;
+  child?: {
+    stdin?: {
+      destroyed?: boolean;
+      end: () => void;
+    } | null;
+  } | null;
+};
+
+export function applyClaudeStreamJsonRunBookkeeping(
+  run: ClaudeStreamJsonBookkeepingRun,
+  ev: unknown,
+) {
+  if (!ev || typeof ev !== 'object') return;
+  const event = ev as {
+    type?: unknown;
+    name?: unknown;
+    id?: unknown;
+    stopReason?: unknown;
+  };
+
+  if (
+    run.stdinOpen &&
+    event.type === 'tool_use' &&
+    (event.name === 'AskUserQuestion' || event.name === 'ask_user_question') &&
+    typeof event.id === 'string'
+  ) {
+    if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
+    run.pendingHostAnswers.add(event.id);
+    return;
+  }
+
+  const cleanTerminalTurn =
+    ((event.type === 'turn_end' &&
+      // `stop_reason: tool_use` means the model paused to wait for tool
+      // execution (claude-code is about to run an internal tool, or we owe a
+      // host tool_result). Either way the conversation is still in flight.
+      event.stopReason !== 'tool_use') ||
+      event.type === 'usage') &&
+    (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
+  if (!cleanTerminalTurn) return;
+
+  // Record clean completion even if stdin was already closed by the
+  // host-answer path. The close-status classifier reads this to ignore late
+  // SessionEnd hook failures after the final assistant turn completed.
+  run.turnCompletedCleanly = true;
+  if (run.stdinOpen) {
+    if (run.child?.stdin && !run.child.stdin.destroyed) {
+      try { run.child.stdin.end(); } catch {}
+    }
+    run.stdinOpen = false;
+  }
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -13109,40 +13189,7 @@ export async function startServer({
         //     means the model paused mid-tool, not "turn complete".
         //   - usage (session result at EOF in single-shot mode).
         try {
-          if (run.stdinOpen) {
-            if (
-              ev &&
-              typeof ev === 'object' &&
-              ev.type === 'tool_use' &&
-              (ev.name === 'AskUserQuestion' || ev.name === 'ask_user_question') &&
-              typeof ev.id === 'string'
-            ) {
-              if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
-              run.pendingHostAnswers.add(ev.id);
-            } else if (
-              ev &&
-              typeof ev === 'object' &&
-              ((ev.type === 'turn_end' &&
-                // `stop_reason: tool_use` means the model paused to wait
-                // for tool execution (claude-code is about to run an
-                // internal tool, or we owe a host tool_result). Either
-                // way the conversation is still in flight — do not close.
-                ev.stopReason !== 'tool_use') ||
-                ev.type === 'usage') &&
-              (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0)
-            ) {
-              // Per-turn `turn_end` (synthesized from
-              // `assistant.message.stop_reason` in `claude-stream`) is the
-              // primary close signal; `usage` is the session-level result
-              // that fires at EOF in single-shot mode. Either is a valid
-              // "this turn is done" cue, but only when there's no host
-              // answer outstanding AND the model isn't paused mid-tool.
-              if (run.child && run.child.stdin && !run.child.stdin.destroyed) {
-                try { run.child.stdin.end(); } catch {}
-              }
-              run.stdinOpen = false;
-            }
-          }
+          applyClaudeStreamJsonRunBookkeeping(run, ev);
         } catch {}
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
@@ -13495,6 +13542,7 @@ export async function startServer({
         signal,
         acpCleanCompletion,
         artifactQuietShutdownRequested,
+        turnCompletedCleanly: !!run.turnCompletedCleanly,
       });
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the

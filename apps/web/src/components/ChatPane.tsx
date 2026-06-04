@@ -290,6 +290,9 @@ interface Props {
   onOpenQuestions?: () => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
+  // "Next step" affordance handlers forwarded to the last assistant message.
+  onArtifactShare?: (fileName: string) => void;
+  onArtifactChip?: (fileName: string, prompt: string) => void;
   onForkFromMessage?: (assistantMessage: ChatMessage) => void;
   forkingMessageId?: string | null;
   // Header "+" button — kicks off ProjectView's create-conversation flow.
@@ -305,6 +308,8 @@ interface Props {
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
   onOpenSettings?: (section?: SettingsSection) => void;
+  showByokRecoveryAction?: boolean;
+  onSwitchToLocalCli?: () => void;
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
   // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
@@ -443,6 +448,8 @@ export function ChatPane({
   onOpenQuestions,
   onContinueRemainingTasks,
   onAssistantFeedback,
+  onArtifactShare,
+  onArtifactChip,
   onForkFromMessage,
   forkingMessageId = null,
   onNewConversation,
@@ -452,6 +459,8 @@ export function ChatPane({
   onSelectConversation,
   onDeleteConversation,
   onOpenSettings,
+  showByokRecoveryAction = false,
+  onSwitchToLocalCli,
   onOpenAmrSettings,
   onSwitchToAmrAndRetry,
   onLaunchAntigravityOauth,
@@ -516,7 +525,7 @@ export function ChatPane({
   const anchorActiveRef = useRef(false);
   const tailSpacerRef = useRef<HTMLDivElement | null>(null);
   const prevLastUserIdRef = useRef<string | undefined>(undefined);
-  // AssistantMessage's four interaction callbacks are re-created per render and
+  // AssistantMessage's interaction callbacks are re-created per render and
   // excluded from its memo comparison (so streaming doesn't re-render every
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
@@ -524,12 +533,16 @@ export function ChatPane({
     onSubmitForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onArtifactShare,
+    onArtifactChip,
     onForkFromMessage,
   });
   assistantCallbacksRef.current = {
     onSubmitForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
+    onArtifactShare,
+    onArtifactChip,
     onForkFromMessage,
   };
   const [tab, setTab] = useState<Tab>('chat');
@@ -622,6 +635,9 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
+  const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
+  const showErrorActions =
+    showByokRecoveryCta || Boolean(retryAssistant && onRetry && runFailureUi);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
     // The hosted-AMR nudge owns this same surface_view when it renders below
@@ -1425,6 +1441,8 @@ export function ChatPane({
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
+                onArtifactShare={onArtifactShare}
+                onArtifactChip={onArtifactChip}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -1439,70 +1457,83 @@ export function ChatPane({
               {displayError ? (
                 <div className="msg error">
                   <span className="chat-error-text">{displayError}</span>
-                  {retryAssistant && onRetry && runFailureUi ? (
+                  {showErrorActions ? (
                     <div className="chat-error-actions">
-                      {runFailureUi.primaryAction === 'authorize' ? (
+                      {showByokRecoveryCta ? (
                         <button
                           type="button"
                           className="chat-error-action"
-                          onClick={() => {
-                            recordAmrEntry(analytics.track, 'chat_error_authorize_retry');
-                            if (onSwitchToAmrAndRetry) {
-                              onSwitchToAmrAndRetry(retryAssistant);
-                            } else {
-                              onOpenAmrSettings?.();
-                            }
-                          }}
+                          onClick={onSwitchToLocalCli}
                         >
-                          {t('chat.amrError.authorizeCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            onLaunchAntigravityOauth?.();
-                          }}
-                        >
-                          {t('chat.antigravityError.launchTerminalCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            onLaunchAntigravityOauth?.();
-                          }}
-                        >
-                          {t('chat.antigravityError.launchSwitchModelCta')}
-                        </button>
-                      ) : runFailureUi.primaryAction === 'recharge' ? (
-                        <button
-                          type="button"
-                          className="chat-error-action"
-                          onClick={() => {
-                            const attribution = recordAmrEntry(
-                              analytics.track,
-                              'chat_error_recharge',
-                            );
-                            window.open(
-                              attributedAmrUrl(AMR_RECHARGE_URL, attribution),
-                              '_blank',
-                              'noopener,noreferrer',
-                            );
-                          }}
-                        >
-                          {t('chat.amrError.rechargeCta')}
+                          {t('avatar.useLocal')}
                         </button>
                       ) : null}
-                      {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
-                        <button
-                          type="button"
-                          className="ghost chat-error-retry"
-                          onClick={() => onRetry(retryAssistant)}
-                        >
-                          {t('promptTemplates.retry')}
-                        </button>
+                      {retryAssistant && onRetry && runFailureUi ? (
+                        <>
+                          {runFailureUi.primaryAction === 'authorize' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                recordAmrEntry(analytics.track, 'chat_error_authorize_retry');
+                                if (onSwitchToAmrAndRetry) {
+                                  onSwitchToAmrAndRetry(retryAssistant);
+                                } else {
+                                  onOpenAmrSettings?.();
+                                }
+                              }}
+                            >
+                              {t('chat.amrError.authorizeCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                onLaunchAntigravityOauth?.();
+                              }}
+                            >
+                              {t('chat.antigravityError.launchTerminalCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                onLaunchAntigravityOauth?.();
+                              }}
+                            >
+                              {t('chat.antigravityError.launchSwitchModelCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'recharge' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                const attribution = recordAmrEntry(
+                                  analytics.track,
+                                  'chat_error_recharge',
+                                );
+                                window.open(
+                                  attributedAmrUrl(AMR_RECHARGE_URL, attribution),
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }}
+                            >
+                              {t('chat.amrError.rechargeCta')}
+                            </button>
+                          ) : null}
+                          {runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                            <button
+                              type="button"
+                              className="ghost chat-error-retry"
+                              onClick={() => onRetry(retryAssistant)}
+                            >
+                              {t('promptTemplates.retry')}
+                            </button>
+                          ) : null}
+                        </>
                       ) : null}
                     </div>
                   ) : null}
@@ -1642,6 +1673,8 @@ interface AssistantCallbacks {
   onAssistantFeedback:
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
+  onArtifactShare: ((fileName: string) => void) | undefined;
+  onArtifactChip: ((fileName: string, prompt: string) => void) | undefined;
   onForkFromMessage: ((message: ChatMessage) => void) | undefined;
 }
 
@@ -1701,6 +1734,8 @@ function ChatRows({
   nextUserContentByAssistantId,
   assistantCallbacksRef,
   onContinueRemainingTasks,
+  onArtifactShare,
+  onArtifactChip,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -1734,6 +1769,8 @@ function ChatRows({
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onArtifactShare?: (fileName: string) => void;
+  onArtifactChip?: (fileName: string, prompt: string) => void;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -1825,6 +1862,16 @@ function ChatRows({
         onFeedback={
           onAssistantFeedback
             ? (rating) => assistantCallbacksRef.current.onAssistantFeedback?.(m, rating)
+            : undefined
+        }
+        onArtifactShare={
+          onArtifactShare
+            ? (fileName) => assistantCallbacksRef.current.onArtifactShare?.(fileName)
+            : undefined
+        }
+        onArtifactChip={
+          onArtifactChip
+            ? (fileName, prompt) => assistantCallbacksRef.current.onArtifactChip?.(fileName, prompt)
             : undefined
         }
       />

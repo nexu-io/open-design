@@ -22,6 +22,7 @@ import {
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  replaceProjectWorkingDir,
   uploadProjectFiles,
 } from '../../src/providers/registry';
 import {
@@ -69,6 +70,21 @@ vi.mock('../../src/components/EntryView', () => ({
         }
       >
         Create project
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onCreateProject({
+            name: 'Dir project',
+            skillId: null,
+            designSystemId: null,
+            metadata: { kind: 'prototype', userWorkingDir: '/Users/me/external' },
+            userWorkingDirToken: 'wd-token',
+            pendingFiles: [new File(['hi'], 'note.txt', { type: 'text/plain' })],
+          })
+        }
+      >
+        Create project with working dir
       </button>
       <button
         type="button"
@@ -162,6 +178,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchDesignTemplates: vi.fn(),
     fetchPromptTemplates: vi.fn(),
     fetchSkills: vi.fn(),
+    replaceProjectWorkingDir: vi.fn(),
     uploadProjectFiles: vi.fn(),
   };
 });
@@ -205,6 +222,7 @@ const mockedFetchDesignTemplates = vi.mocked(fetchDesignTemplates);
 const mockedFetchPromptTemplates = vi.mocked(fetchPromptTemplates);
 const mockedFetchSkills = vi.mocked(fetchSkills);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
+const mockedReplaceProjectWorkingDir = vi.mocked(replaceProjectWorkingDir);
 const mockedCreateProject = vi.mocked(createProject);
 const mockedDeleteProject = vi.mocked(deleteProject);
 const mockedGetProject = vi.mocked(getProject);
@@ -808,5 +826,67 @@ describe('App project creation routing', () => {
       );
     });
     expect(screen.queryByTestId('entry-project-project-existing')).toBeNull();
+  });
+
+  it('switches to the picked working dir before uploading staged Home attachments', async () => {
+    // Regression for the "picked working dir + staged attachment" case:
+    // replaceProjectWorkingDir flips metadata.baseDir to the external folder,
+    // so it must run BEFORE uploadProjectFiles — otherwise the staged files
+    // land in the temporary managed .od/projects/<id> root and vanish once the
+    // working dir flips. Asserting the call order locks the ordering in.
+    mockedListProjects.mockResolvedValue([]);
+    mockedReplaceProjectWorkingDir.mockResolvedValue(undefined as never);
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with working dir' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledTimes(1);
+      expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledWith(
+      'project-new',
+      '/Users/me/external',
+      'wd-token',
+    );
+    // Both target the same project id, and the working-dir handoff is ordered
+    // strictly before the upload so the files land in the final tree.
+    expect(mockedUploadProjectFiles.mock.calls[0]?.[0]).toBe('project-new');
+    const replaceOrder = mockedReplaceProjectWorkingDir.mock.invocationCallOrder[0]!;
+    const uploadOrder = mockedUploadProjectFiles.mock.invocationCallOrder[0]!;
+    expect(replaceOrder).toBeLessThan(uploadOrder);
+  });
+
+  it('short-circuits the upload + auto-send when the working-dir handoff fails', async () => {
+    // Regression for the swallowed-failure case: the desktop working-dir token
+    // has a ~60s TTL, so a slow user (or any rejected POST) makes
+    // replaceProjectWorkingDir throw AFTER the project already exists. The old
+    // code only logged a warning and then uploaded the staged attachments into
+    // the managed root while the user believed their chosen folder was applied.
+    // The fix surfaces a create-time error toast AND aborts the rest of the
+    // submit path so the first run cannot proceed on a tree the user did not
+    // choose.
+    mockedListProjects.mockResolvedValue([]);
+    mockedReplaceProjectWorkingDir.mockRejectedValue(
+      new Error('working-dir token expired'),
+    );
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with working dir' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't apply the chosen folder/i)).toBeTruthy();
+    });
+    expect(mockedReplaceProjectWorkingDir).toHaveBeenCalledTimes(1);
+    // The handoff failed, so the staged attachments must NOT be uploaded into
+    // the managed `.od/projects/<id>` root the user did not pick.
+    expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
   });
 });

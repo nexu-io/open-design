@@ -93,6 +93,7 @@ import { SettingsDialog } from '../../src/components/SettingsDialog';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
+import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
 
 const baseConfig: AppConfig = {
@@ -458,6 +459,53 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ mode: 'daemon' });
 
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
+  });
+
+  it('only persists Max tokens overrides within the supported BYOK range', async () => {
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-test' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    expect(maxTokensInput.min).toBe(String(MIN_MAX_TOKENS));
+    expect(maxTokensInput.max).toBe(String(MAX_MAX_TOKENS));
+    expect(maxTokensInput.step).toBe('1');
+
+    fireEvent.change(maxTokensInput, { target: { value: String(MIN_MAX_TOKENS - 1) } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === MIN_MAX_TOKENS - 1),
+    ).toBe(false);
+    expect(maxTokensInput.value).toBe(String(MIN_MAX_TOKENS - 1));
+
+    fireEvent.blur(maxTokensInput);
+    expect(maxTokensInput.value).toBe('');
+
+    fireEvent.change(maxTokensInput, { target: { value: '64000' } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(64000);
+    });
+
+    fireEvent.change(maxTokensInput, { target: { value: String(MAX_MAX_TOKENS + 1) } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === MAX_MAX_TOKENS + 1),
+    ).toBe(false);
+
+    fireEvent.change(maxTokensInput, { target: { value: '' } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
   });
 
   it('lets Anthropic and Google users customize the default base URL', () => {

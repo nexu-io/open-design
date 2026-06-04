@@ -6365,11 +6365,64 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (args[0] === 'import-shadcn') return runDesignSystemImportShadcn(args.slice(1));
   if (!args[0] || isDesignSystemsHelpArg(args[0])) {
     console.log(DESIGN_SYSTEMS_USAGE);
     process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
   }
   return runLibraryList('design-systems', args);
+}
+
+// od design-systems import-shadcn <reference> [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+//
+// Imports a shadcn registry item as an editable user design system via
+// POST /api/design-systems/import/shadcn — the CLI mirror of the Settings →
+// Design systems "shadcn" import source. <reference> is the shadcn CLI
+// shorthand "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc) or a direct
+// https URL to a registry-item JSON document.
+async function runDesignSystemImportShadcn(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+
+Imports a shadcn registry item as an Open Design design system.
+
+  <reference>            "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc)
+                         or an https URL to a registry-item JSON document.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const reference = positionalArgs(args, stringFlags)[0];
+  if (!reference) {
+    console.error('Usage: od design-systems import-shadcn <reference>');
+    process.exit(2);
+  }
+  const craftApplies =
+    typeof flags.craft === 'string'
+      ? flags.craft.split(',').map((slug) => slug.trim().toLowerCase()).filter(Boolean)
+      : undefined;
+  const body = {
+    reference,
+    ...(typeof flags.name === 'string' ? { name: flags.name } : {}),
+    ...(typeof flags['import-mode'] === 'string' ? { importMode: flags['import-mode'] } : {}),
+    ...(craftApplies && craftApplies.length > 0 ? { craftApplies } : {}),
+  };
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/import/shadcn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const imported = data.designSystem ?? data;
+  console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
 }
 
 // od design-systems rename <id> --title <new-title> [--json]

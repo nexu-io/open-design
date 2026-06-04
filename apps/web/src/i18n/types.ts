@@ -438,6 +438,9 @@ export interface Dict {
   'settings.designSystemsSource': string;
   'settings.designSystemsSourceLocal': string;
   'settings.designSystemsSourceGithub': string;
+  'settings.designSystemsSourceShadcn': string;
+  'settings.designSystemsShadcnReference': string;
+  'settings.designSystemsImportShadcn': string;
   'settings.designSystemsStructure': string;
   'settings.designSystemsModeHybrid': string;
   'settings.designSystemsModeNormalized': string;
@@ -2242,6 +2245,13 @@ export interface Dict {
   'designFiles.next': string;
   'designFiles.jumpToPage': string;
   'designFiles.pageInfo': string;
+  'designFiles.sectionFolders': string;
+  'designFiles.sectionStylesheets': string;
+  'designFiles.sectionDocuments': string;
+  'designFiles.kindStylesheet': string;
+  'designFiles.modifiedExt': string;
+  'designFiles.usefulInfoLabel': string;
+  'designFiles.usefulInfoTip': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
@@ -2647,6 +2657,13 @@ export interface Dict {
   'assistant.producedFiles': string;
   'assistant.openFile': string;
   'assistant.downloadFile': string;
+  'nextStep.title': string;
+  'nextStep.share': string;
+  'nextStep.chipJoiner': string;
+  'nextStep.chipPolishVisual': string;
+  'nextStep.chipBrand': string;
+  'nextStep.chipConcise': string;
+  'nextStep.chipSecondVersion': string;
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;

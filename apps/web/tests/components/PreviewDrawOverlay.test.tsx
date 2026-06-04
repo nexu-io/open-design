@@ -370,6 +370,34 @@ describe('PreviewDrawOverlay', () => {
     expect(usedIframe.getAttribute('data-od-render-mode')).toBe('srcdoc');
   });
 
+  it('portals the draw toolbar out of the scaled/clipped device frame to the preview body', async () => {
+    const { container } = render(
+      <div className="viewer-body">
+        <div className="comment-preview-layer">
+          <div className="comment-frame-clip">
+            <PreviewDrawOverlay active>
+              <iframe title="preview" />
+            </PreviewDrawOverlay>
+          </div>
+        </div>
+      </div>,
+    );
+
+    const body = container.querySelector('.viewer-body')!;
+    const iframe = body.querySelector('iframe')!;
+    // The overlay wrap (and its ink canvas) stays inside the clipped device frame…
+    const wrap = iframe.parentElement!;
+
+    await waitFor(() => {
+      const input = body.querySelector<HTMLInputElement>('.preview-draw-note-input');
+      expect(input).toBeTruthy();
+      // …but the toolbar is portaled out to the non-scrolling preview body, escaping
+      // the clip so it can never be cut off by the device frame (issue #3455).
+      expect(wrap.contains(input!)).toBe(false);
+      expect(body.contains(input!)).toBe(true);
+    });
+  });
+
   it('hides draw chrome before a compositor annotation snapshot', async () => {
     const restoreCompositeMocks = installImageCompositeMocks();
     const annotation = vi.fn((event: Event) => {

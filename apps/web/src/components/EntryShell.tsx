@@ -568,6 +568,7 @@ export function EntryShell({
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
         : {}),
+      ...(payload.workingDirToken ? { userWorkingDirToken: payload.workingDirToken } : {}),
       autoSendFirstMessage: true,
     });
   }

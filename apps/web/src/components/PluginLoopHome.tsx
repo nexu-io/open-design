@@ -42,6 +42,11 @@ export interface PluginLoopSubmit {
   projectKind?: 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other' | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;
+  // Single-use desktop token minted for `workingDir` when the folder was
+  // chosen through the host's native picker. Spent (not persisted) on the
+  // post-creation working-dir POST so the daemon's desktop-auth gate accepts
+  // it. Null/absent for web picks (gate inactive) or no selection.
+  workingDirToken?: string | null;
   conversationMode?: ChatSessionMode;
   // Files staged on Home before the project exists. App uploads them
   // into the created project's Design Files before the first auto-send.

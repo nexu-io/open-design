@@ -938,6 +938,9 @@ export function SettingsDialog({
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
   const [cfg, setCfg] = useState<AppConfig>(initial);
+  const [maxTokensInput, setMaxTokensInput] = useState(
+    initial.maxTokens == null ? '' : String(initial.maxTokens),
+  );
   const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -1313,6 +1316,22 @@ export function SettingsDialog({
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
     setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
+  const updateMaxTokensInput = (raw: string) => {
+    setMaxTokensInput(raw);
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      setCfg((c) => ({ ...c, maxTokens: undefined }));
+      return;
+    }
+    const value = Number(trimmed);
+    const nextMaxTokens =
+      Number.isInteger(value) &&
+      value >= MIN_MAX_TOKENS &&
+      value <= MAX_MAX_TOKENS
+        ? value
+        : undefined;
+    setCfg((c) => ({ ...c, maxTokens: nextMaxTokens }));
+  };
   const markAgentInstallIntent = () => {
     pendingAgentInstallRescanRef.current = true;
   };
@@ -3954,6 +3973,20 @@ export function SettingsDialog({
                   }
                 }}
               />
+              <label className="field">
+                <span className="field-label">{t('settings.maxTokens')}</span>
+                <input
+                  type="number"
+                  min={MIN_MAX_TOKENS}
+                  max={MAX_MAX_TOKENS}
+                  step={1}
+                  placeholder={String(modelMaxTokensDefault(cfg.model))}
+                  value={maxTokensInput}
+                  onChange={(e) => updateMaxTokensInput(e.target.value)}
+                  onBlur={() => setMaxTokensInput(cfg.maxTokens == null ? '' : String(cfg.maxTokens))}
+                />
+                <p className="hint">{t('settings.maxTokensHint')}</p>
+              </label>
               <ByokModelField
                 customActive={apiModelCustomActive}
                 customInputRef={customModelInputRef}

@@ -768,6 +768,7 @@
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: nowrap;
+  overflow: visible;
 }
 .home-hero__tool {
   appearance: none;
@@ -811,17 +812,16 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-width: 0;
+  flex-shrink: 0;
 }
 .home-hero__working-dir {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 32px;
-  max-width: 220px;
-  min-width: 0;
-  padding: 0 12px;
+  max-width: 180px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-panel);
@@ -943,10 +943,11 @@
   height: 32px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   max-width: 220px;
   min-width: 0;
-  padding: 0 12px;
+  flex-shrink: 1;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-panel);
@@ -988,7 +989,7 @@
   outline: none;
 }
 .home-hero__footer-option input {
-  width: 150px;
+  width: 100px;
 }
 .home-hero__footer-option--select {
   padding-right: 11px;

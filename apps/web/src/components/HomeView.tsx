@@ -42,7 +42,8 @@ import {
   localizeSkillPrompt,
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import { fetchProjectFiles, openFolderDialog, projectFileUrl } from '../providers/registry';
+import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
   Project,
@@ -239,6 +240,11 @@ export function HomeView({
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
+  // Token paired with `workingDir` when picked through the desktop host's
+  // native dialog. Spent on the post-creation working-dir POST so the
+  // daemon's desktop-auth gate accepts the path. Null for web picks.
+  const [workingDirToken, setWorkingDirToken] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
@@ -923,6 +929,40 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  async function handlePickWorkingDir() {
+    // On desktop the working-dir POST is gated behind a host-minted token, so
+    // pick through the host bridge to capture { baseDir, token } together.
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        setWorkingDir(result.baseDir);
+        setWorkingDirToken(result.token);
+        return;
+      }
+      // The user explicitly cancelled the host picker — respect that and do
+      // not pop a second dialog.
+      if ('canceled' in result && result.canceled) return;
+      // The host is present but could not service the pick (mixed-version
+      // upgrade where the preload lacks `project.pickWorkingDir`, or a host
+      // error). We must NOT fall back to openFolderDialog() here: the browser
+      // dialog yields a raw path with no host-minted token, so the later
+      // POST /api/projects/:id/working-dir would be rejected by the desktop
+      // auth gate and surface as a confusing late create-time failure.
+      // Surface the host error instead and keep the existing working dir.
+      setError(
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+      );
+      return;
+    }
+    // Pure web path: no desktop host, so there is no token gate — the raw
+    // browser folder path is the expected, working input.
+    const picked = await openFolderDialog();
+    if (picked) {
+      setWorkingDir(picked);
+      setWorkingDirToken(null);
+    }
+  }
+
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
     const normalized = active.mediaSurface
@@ -1296,6 +1336,8 @@ export function HomeView({
       contextMcpServers,
       contextConnectors,
       attachments: stagedFiles,
+      ...(workingDir ? { workingDir } : {}),
+      ...(workingDirToken ? { workingDirToken } : {}),
       conversationMode: sessionMode,
       ...(() => {
         if (!examplePromptInfoRef.current) return {};
@@ -1369,6 +1411,12 @@ export function HomeView({
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
+        workingDir={workingDir}
+        onPickWorkingDir={handlePickWorkingDir}
+        onClearWorkingDir={() => {
+          setWorkingDir(null);
+          setWorkingDirToken(null);
+        }}
         onExamplePromptStatusChange={handleExamplePromptStatusChange}
       />
 
