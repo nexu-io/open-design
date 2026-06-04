@@ -30,11 +30,14 @@ export const NSIS_INSTALLER_LANGUAGE_BY_WEB_LOCALE = {
   "zh-TW": "zh_TW",
 } as const;
 export const INTERNAL_PACKAGES = [
+  { directory: "packages/components", name: "@open-design/components" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
   { directory: "packages/platform", name: "@open-design/platform" },
+  { directory: "packages/download", name: "@open-design/download" },
+  { directory: "packages/host", name: "@open-design/host" },
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },

@@ -31,6 +31,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   kiro: 'svg',
   kilo: 'svg',
   vibe: 'svg',
+  antigravity: 'svg',
   aider: 'png',
   'trae-cli': 'png',
   devin: 'png',

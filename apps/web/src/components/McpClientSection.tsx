@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackIntegrationsMcpTabClick } from '../analytics/events';
 import {
@@ -780,33 +781,32 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
         </span>
         <div className="mcp-row-actions">
           {onMoveUp ? (
-            <button type="button" className="icon-btn" onClick={onMoveUp} title="Move up">
+            <Button size="icon" onClick={onMoveUp} title="Move up">
               ↑
-            </button>
+            </Button>
           ) : null}
           {onMoveDown ? (
-            <button type="button" className="icon-btn" onClick={onMoveDown} title="Move down">
+            <Button size="icon" onClick={onMoveDown} title="Move down">
               ↓
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
-            className="icon-btn"
+          <Button
+            size="icon"
             onClick={onRemove}
             title="Remove this MCP server"
           >
             ×
-          </button>
-          <button
-            type="button"
-            className="icon-btn mcp-row-toggle-btn"
+          </Button>
+          <Button
+            size="icon"
+            className="mcp-row-toggle-btn"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
             aria-label={expanded ? 'Collapse this MCP server' : 'Expand this MCP server'}
             title={expanded ? 'Collapse' : 'Expand'}
           >
             <Icon name="chevron-down" size={13} />
-          </button>
+          </Button>
         </div>
       </div>
 

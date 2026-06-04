@@ -77,6 +77,155 @@ pnpm typecheck                 # 对整个 workspace 执行 typecheck
 
 本地开发时，`tools-dev` 会先启动 daemon，并将其端口传递给 `apps/web`，`apps/web/next.config.ts` 会将 `/api/*`、`/artifacts/*`、`/frames/*` 重写到该 daemon 端口，从而使 App Router 能够与相邻的 Express 进程通信，无需配置 CORS。
 
+## Docker 部署
+
+在一个完全容器化的环境中运行 Open Design，无需安装 Node.js 或 pnpm。
+
+### 环境要求
+
+* Docker Desktop
+* Docker Compose v2
+
+验证 Docker 是否正确安装：
+
+```bash
+docker compose version
+```
+
+---
+
+## 启动 Open Design
+
+从仓库根目录开始：
+
+1. 进入 deploy 目录并复制环境配置模板：
+
+   ```bash
+   cd deploy
+   cp .env.example .env
+   ```
+
+2. 生成安全令牌：
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. 用编辑器打开 `.env`，找到 `OD_API_TOKEN=`，将生成的令牌粘贴进去。
+
+然后启动服务：
+
+```bash
+docker compose up -d
+```
+
+在浏览器中打开应用：
+
+```text
+http://localhost:7456
+```
+
+首次启动可能需要几秒钟，Docker 会拉取最新镜像。
+
+---
+
+## 常用 Docker 命令
+
+### 查看日志
+
+```bash
+docker compose logs -f
+```
+
+### 重启容器
+
+```bash
+docker compose restart
+```
+
+### 停止容器
+
+```bash
+docker compose down
+```
+
+### 拉取最新镜像
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### 删除所有本地应用数据
+
+```bash
+docker compose down -v
+```
+
+---
+
+## 环境配置
+
+创建 `deploy/.env` 文件来覆盖默认配置。从提供的模板开始：
+
+```bash
+cp deploy/.env.example deploy/.env
+```
+
+编辑 `deploy/.env` 来设置你自己的令牌并调整其他值：
+
+```env
+# 宿主机暴露的端口
+OPEN_DESIGN_PORT=7456
+
+# 容器内存限制
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# 允许的 CORS 来源
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Docker 镜像标签
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
+
+# Daemon 安全所需的 API 令牌
+# 使用以下命令生成：openssl rand -hex 32
+OD_API_TOKEN=
+```
+
+---
+
+## 持久化存储
+
+Open Design 将项目和 SQLite 数据存储在 Docker 卷中：
+
+```text
+open_design_data
+```
+
+该卷挂载到：
+
+```text
+/app/.od
+```
+
+数据在容器重启和镜像更新后持续保留。
+
+查看卷：
+
+```bash
+docker volume inspect open-design_open_design_data
+```
+
+---
+
+## 注意事项
+
+* Docker 模式非常适合不希望在本地安装 Node.js 或 pnpm 的贡献者。
+* 容器直接在端口 `7456` 上暴露生产环境的 daemon 构建。
+* 如需开发工作流和高级本地配置，请参阅本快速上手指南的其余部分。
+
+---
+
 ## 媒体生成 / agent dispatcher 排查
 
 Image、video、audio、HyperFrames 等 skill 在通过 daemon 启动 agent 时，会注入环境变量以调用本地 `od` CLI：

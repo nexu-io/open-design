@@ -17,6 +17,7 @@ import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
 import {
+  captureHostPage,
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
@@ -32,14 +33,18 @@ function safeFilename(name: string, fallback: string): string {
   return slug || fallback;
 }
 
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
+function triggerHrefDownload(href: string, filename: string): void {
   const a = document.createElement('a');
-  a.href = url;
+  a.href = href;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  triggerHrefDownload(url, filename);
   // Revoke later — Safari sometimes hasn't finished reading the blob yet
   // when the click handler returns.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -331,12 +336,18 @@ export function exportAsMd(source: string, title: string): void {
  * injected into a srcdoc preview iframe. Returns null if the bridge is not
  * present (e.g. URL-load mode) or the capture times out.
  */
-export function requestPreviewSnapshot(
+export type PreviewSnapshot = { dataUrl: string; w: number; h: number };
+
+export type PreviewSnapshotResult =
+  | { ok: true; snapshot: PreviewSnapshot }
+  | { ok: false; reason: 'loading' | 'post-message-error' | 'render-error' | 'timeout'; error?: string };
+
+export function requestPreviewSnapshotResult(
   iframe: HTMLIFrameElement,
-  timeout = 2500,
-): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  timeout = 8000,
+): Promise<PreviewSnapshotResult> {
   const win = iframe.contentWindow;
-  if (!win) return Promise.resolve(null);
+  if (!win) return Promise.resolve({ ok: false, reason: 'loading' });
   const id = `snap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return new Promise((resolve) => {
     let done = false;
@@ -354,22 +365,86 @@ export function requestPreviewSnapshot(
       if (done) return;
       done = true;
       window.removeEventListener('message', onMsg);
-      if (d.dataUrl && d.w && d.h) resolve({ dataUrl: d.dataUrl, w: d.w, h: d.h });
-      else resolve(null);
+      if (d.dataUrl && d.w && d.h) resolve({ ok: true, snapshot: { dataUrl: d.dataUrl, w: d.w, h: d.h } });
+      else resolve({ ok: false, reason: 'render-error', error: d.error });
     }
     window.addEventListener('message', onMsg);
     try {
       win.postMessage({ type: 'od:snapshot', id }, '*');
     } catch {
-      /* sandboxed */
+      done = true;
+      window.removeEventListener('message', onMsg);
+      resolve({ ok: false, reason: 'post-message-error' });
     }
     setTimeout(() => {
       if (!done) {
         done = true;
         window.removeEventListener('message', onMsg);
-        resolve(null);
+        resolve({ ok: false, reason: 'timeout' });
       }
     }, timeout);
+  });
+}
+
+export async function requestPreviewSnapshot(
+  iframe: HTMLIFrameElement,
+  timeout = 8000,
+): Promise<PreviewSnapshot | null> {
+  const result = await requestPreviewSnapshotResult(iframe, timeout);
+  return result.ok ? result.snapshot : null;
+}
+
+/**
+ * Capture a rectangle of the on-screen window via the desktop host's
+ * compositor (Electron `webContents.capturePage`). Unlike the in-iframe
+ * SVG-foreignObject bridge, this returns the REAL rendered pixels — fonts,
+ * external CSS, gradients, cross-origin images and embedded <webview> content
+ * all paint faithfully and the canvas is never tainted, so it cannot produce
+ * the black/blank frames the foreignObject path does. Returns null when no
+ * desktop host is present (pure web), so callers fall back to the bridge.
+ *
+ * `clipRect` is in CSS pixels relative to the viewport (e.g. an iframe's
+ * getBoundingClientRect()); capturePage expects DIP page coordinates, which
+ * match 1:1 for the top-level window (it never scrolls).
+ */
+export async function captureHostRegionSnapshot(
+  clipRect: { left: number; top: number; width: number; height: number } | null,
+): Promise<PreviewSnapshot | null> {
+  if (!isOpenDesignHostAvailable()) return null;
+  const clip = clipRect && clipRect.width >= 1 && clipRect.height >= 1
+    ? {
+        x: Math.max(0, Math.round(clipRect.left)),
+        y: Math.max(0, Math.round(clipRect.top)),
+        width: Math.max(1, Math.round(clipRect.width)),
+        height: Math.max(1, Math.round(clipRect.height)),
+      }
+    : undefined;
+  try {
+    const result = await captureHostPage(clip ? { clip } : undefined);
+    if (result.ok && result.dataUrl && result.w >= 1 && result.h >= 1) {
+      return { dataUrl: result.dataUrl, w: result.w, h: result.h };
+    }
+  } catch {
+    /* fall through to null so the caller can use the bridge */
+  }
+  return null;
+}
+
+/**
+ * Capture an iframe's on-screen region through the desktop compositor.
+ * Convenience wrapper over captureHostRegionSnapshot using the iframe's
+ * current bounding rect.
+ */
+export async function captureHostIframeSnapshot(
+  iframe: HTMLIFrameElement | null,
+): Promise<PreviewSnapshot | null> {
+  if (!iframe) return null;
+  const rect = iframe.getBoundingClientRect();
+  return captureHostRegionSnapshot({
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
   });
 }
 
@@ -381,9 +456,240 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const [header, base64] = dataUrl.split(',');
   const mime = header?.match(/:(.*?);/)?.[1] ?? 'image/png';
   const bytes = atob(base64 ?? '');
+  if (bytes.length <= 0) {
+    throw new Error('Image snapshot is empty');
+  }
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
   return new Blob([arr], { type: mime });
+}
+
+type ClipboardItemCtor = new (
+  items: Record<string, Blob | Promise<Blob>>,
+) => ClipboardItem;
+
+/**
+ * Copy a PNG (or other image) data-URL onto the system clipboard as a real
+ * image item, so it can be pasted into the chat composer or any other app.
+ * Returns 'copied' on success, 'denied' when the clipboard API is missing or
+ * the browser refuses the write for permission/security reasons, and 'failed'
+ * for any other error (e.g. a malformed data-URL).
+ */
+export async function copyImageDataUrlToClipboard(
+  dataUrl: string,
+): Promise<'copied' | 'denied' | 'failed'> {
+  const clipboard = navigator.clipboard;
+  const ClipboardItemRef = (globalThis as { ClipboardItem?: ClipboardItemCtor })
+    .ClipboardItem;
+  if (!clipboard || typeof clipboard.write !== 'function' || !ClipboardItemRef) {
+    return 'denied';
+  }
+  try {
+    const blob = dataUrlToBlob(dataUrl);
+    // Safari only honours clipboard.write() inside the original user gesture,
+    // so prefer the Promise<Blob> ClipboardItem form when supported — it lets
+    // the browser resolve the blob lazily without losing the gesture context.
+    let item: ClipboardItem;
+    try {
+      item = new ClipboardItemRef({ [blob.type]: Promise.resolve(blob) });
+    } catch {
+      item = new ClipboardItemRef({ [blob.type]: blob });
+    }
+    await clipboard.write([item]);
+    return 'copied';
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return 'denied';
+    }
+    return 'failed';
+  }
+}
+
+export type ImageExportFormat = 'png' | 'jpeg' | 'webp';
+
+type ImageExportSpec = {
+  extension: string;
+  mime: `image/${string}`;
+  pickerLabel: string;
+};
+
+const IMAGE_EXPORT_SPECS: Record<ImageExportFormat, ImageExportSpec> = {
+  png: {
+    extension: 'png',
+    mime: 'image/png',
+    pickerLabel: 'PNG image',
+  },
+  jpeg: {
+    extension: 'jpg',
+    mime: 'image/jpeg',
+    pickerLabel: 'JPEG image',
+  },
+  webp: {
+    extension: 'webp',
+    mime: 'image/webp',
+    pickerLabel: 'WebP image',
+  },
+};
+
+type FileSystemWritableFileStreamLike = {
+  write(data: Blob): Promise<void>;
+  close(): Promise<void>;
+};
+
+type FileSystemFileHandleLike = {
+  createWritable(): Promise<FileSystemWritableFileStreamLike>;
+};
+
+type SaveFilePickerOptionsLike = {
+  suggestedName?: string;
+  types?: Array<{
+    description?: string;
+    accept: Record<string, string[]>;
+  }>;
+};
+
+type WindowWithSaveFilePicker = Window & {
+  showSaveFilePicker?: (options?: SaveFilePickerOptionsLike) => Promise<FileSystemFileHandleLike>;
+};
+
+export type ImageExportTarget = {
+  filename: string;
+  method: 'download' | 'picker';
+  save: (blob: Blob) => Promise<void> | void;
+};
+
+type ImageExportTargetOptions = {
+  useNativePicker?: boolean;
+};
+
+function imageExportFilename(title: string, format: ImageExportFormat): string {
+  const spec = IMAGE_EXPORT_SPECS[format];
+  return `${safeFilename(title, 'artifact')}.${spec.extension}`;
+}
+
+function downloadImageExportTarget(filename: string): ImageExportTarget {
+  return {
+    filename,
+    method: 'download',
+    save: (blob) => {
+      triggerDownload(blob, filename);
+    },
+  };
+}
+
+export function downloadImageDataUrl(dataUrl: string, filename: string): void {
+  // Validate the snapshot without converting the actual download path to a blob URL.
+  dataUrlToBlob(dataUrl);
+  triggerHrefDownload(dataUrl, filename);
+}
+
+function isDomExceptionNamed(err: unknown, names: ReadonlySet<string>): boolean {
+  if (typeof DOMException !== 'undefined' && err instanceof DOMException) {
+    return names.has(err.name);
+  }
+  if (!err || typeof err !== 'object' || !('name' in err)) return false;
+  return typeof err.name === 'string' && names.has(err.name);
+}
+
+function loadImageFromDataUrl(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not decode image snapshot'));
+    img.src = dataUrl;
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error(`Could not encode snapshot as ${mime}`));
+        return;
+      }
+      if (blob.type && blob.type !== mime) {
+        reject(new Error(`Browser encoded ${blob.type} instead of ${mime}`));
+        return;
+      }
+      resolve(blob);
+    }, mime, quality);
+  });
+}
+
+export async function imageDataUrlToBlob(
+  dataUrl: string,
+  format: ImageExportFormat,
+): Promise<Blob> {
+  const spec = IMAGE_EXPORT_SPECS[format];
+  if (format === 'png') {
+    const blob = dataUrlToBlob(dataUrl);
+    if (blob.type === spec.mime) return blob;
+  }
+
+  const img = await loadImageFromDataUrl(dataUrl);
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  if (width <= 0 || height <= 0) {
+    throw new Error('Image snapshot is empty');
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is not available');
+  if (format === 'jpeg') {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
+  }
+  ctx.drawImage(img, 0, 0, width, height);
+  return canvasToBlob(canvas, spec.mime, format === 'jpeg' ? 0.92 : undefined);
+}
+
+export async function prepareImageExportTarget(
+  title: string,
+  format: ImageExportFormat,
+  options: ImageExportTargetOptions = {},
+): Promise<ImageExportTarget | null> {
+  const spec = IMAGE_EXPORT_SPECS[format];
+  const filename = imageExportFilename(title, format);
+  const picker = (window as WindowWithSaveFilePicker).showSaveFilePicker;
+  if (options.useNativePicker !== false && typeof picker === 'function') {
+    try {
+      const handle = await picker.call(window, {
+        suggestedName: filename,
+        types: [
+          {
+            description: spec.pickerLabel,
+            accept: {
+              [spec.mime]: [`.${spec.extension}`],
+            },
+          },
+        ],
+      });
+      return {
+        filename,
+        method: 'picker',
+        save: async (blob) => {
+          const writable = await handle.createWritable();
+          try {
+            await writable.write(blob);
+          } finally {
+            await writable.close();
+          }
+        },
+      };
+    } catch (err) {
+      if (isDomExceptionNamed(err, new Set(['AbortError']))) return null;
+      if (isDomExceptionNamed(err, new Set(['NotAllowedError', 'SecurityError']))) {
+        return downloadImageExportTarget(filename);
+      }
+      throw err;
+    }
+  }
+
+  return downloadImageExportTarget(filename);
 }
 
 /** Download a snapshot data-URL as a PNG file. */

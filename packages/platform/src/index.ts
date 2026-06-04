@@ -941,17 +941,51 @@ export function wellKnownUserToolchainBins(
     // issue #442.
     join(home, ".npm-global", "bin"),
     join(home, ".npm-packages", "bin"),
+    // Other common user-level toolchains that install CLI shims outside the
+    // Node ecosystem but still ship agent CLIs (or their dependencies):
+    // Deno's install root, Go's default GOBIN, and pyenv's shim dir. All are
+    // best-effort — a missing dir contributes nothing.
+    join(home, ".deno", "bin"),
+    join(home, "go", "bin"),
+    join(home, ".pyenv", "shims"),
   );
+
+  // Windows-only user install roots that GUI launches miss. Scoop drops
+  // shims under ~/scoop/shims, and npm's global prefix on Windows defaults
+  // to %APPDATA%\npm rather than a `bin` subdir.
+  if (process.platform === "win32") {
+    dirs.push(join(home, "scoop", "shims"));
+    const appData = typeof env.APPDATA === "string" ? env.APPDATA.trim() : "";
+    if (appData.length > 0) {
+      dirs.push(join(appData, "npm"));
+    }
+  }
+
+  // Mise shims: makes every tool installed with `mise install` visible to
+  // GUI-launched daemons even when the process inherits a stripped PATH.
+  // Respect MISE_DATA_DIR (the official way to relocate the whole mise tree).
+  // We only fall back to the legacy ~/.mise/shims path when no explicit
+  // MISE_DATA_DIR override is provided.
+  const miseDataOverride = resolveUserScopedHome(env.MISE_DATA_DIR, home);
+  const miseData = miseDataOverride || join(home, ".local", "share", "mise");
+  dirs.push(join(miseData, "shims"));
+
+  if (!miseDataOverride) {
+    dirs.push(join(home, ".mise", "shims"));
+  }
+
   if (includeSystemBins) {
     dirs.push("/opt/homebrew/bin", "/usr/local/bin");
   }
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
   // contribute nothing.
-  dirs.push(...existingMiseNpmPackageBinDirs(join(home, ".local", "share", "mise", "installs")));
+  // When MISE_DATA_DIR is set we use the same root for consistency with shims.
+  const miseInstalls = join(miseData, "installs");
+  dirs.push(...existingMiseNpmPackageBinDirs(miseInstalls));
   for (const installRoot of [
     {
-      root: join(home, ".local", "share", "mise", "installs", "node"),
+      root: join(miseInstalls, "node"),
       segments: ["bin"],
     },
     {

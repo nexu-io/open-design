@@ -7,6 +7,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-29
+
+🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
+
+### Highlights
+
+- 🤖 **Open Design AMR — official AI, one click from a fresh install.** The old first-run tax was brutal: install a CLI, find an API key, paste secrets, test auth, debug the shell, then maybe start designing. 0.9.0 cuts that down to the thing users actually wanted: open the app, sign in to AMR, pick a model, and go. Onboarding leads with AMR, the desktop keeps sign-in visible, live model discovery keeps choices fresh, wallet/account states are handled in the UI, image attachments work, and the `vela` runtime is bundled in the installer. (#2355, #2979, #2980, #3012, #3019, #3048, #3073, #3076, #3088, #3092, #3094, #3097, #3099, #3117, #3127, #3158, #3198, #3226) Thanks @lefarcen, @nettee, @mrcfps, @pftom, @jinmeihong0201-gif, @Caprika.
+- 🆕 **The agent bench gets much bigger.** Aider, Trae CLI, Antigravity, and DeepSeek Reasonix all join the picker, giving builders more real local-agent paths instead of a single blessed workflow. Aider gets first-class branding, Trae runs over ACP in yolo mode, and the new adapters make Open Design feel less like one agent integration and more like the place where agents come to work. (#1970, #2729, #2856, #3157, #2952) Thanks @mrbeandev, @JasonYang0104, @lefarcen, @Bernardxu123.
+- 🔎 **Model picking stops feeling like scrolling a phone book.** Search now cuts through long model lists, and shared BYOK catalogs keep Settings and the inline switcher aligned so switching models feels fast instead of fiddly. (#3278) Thanks @AmyShang-alt.
+- 💬 **Keep talking while the model is still working.** Queue chat sends mid-stream, then let Open Design continue the conversation the moment the current turn finishes. Studio and Draw now follow the same flow, so capturing an idea does not depend on waiting for the previous response to end. (#2870, #3270, #1961) Thanks @zoeforfun, @lefarcen, @leno23.
+- 🧩 **Skills become a real plugin ecosystem.** Skill bundles now graduate into first-class Plugins: visible in the drawer, listable from the CLI, indexed on the site, and easier to explain to users. One extension model, one library, one mental model. (#3085) Thanks @Siri-Ray.
+- 🎨 **Bigger creative moves are one install away.** The official GSAP plugin brings serious web animation into the agent loop, while Research Decision Room turns research prompts into structured multi-role reviews instead of one long answer. (#3109, #3111, #2949) Thanks @Tuola-waj, @mturac.
+- 🌍 **The plugin library starts feeling global.** The on-site library now mirrors in-app categories and reads natively across supported locales, so visitors land on a catalog that feels built for them instead of partially translated around the edges. (#3010, #2926) Thanks @522700967-wq.
+- 🪟 **Plugin and template pages become places you can actually try things.** Interactive previews, share rows, and dual CTAs turn detail pages from static listings into a real discovery surface: preview, install, try, share. (#2958, #2924, #2969, #3185) Thanks @522700967-wq, @jinmeihong0201-gif, @ashleytheash.
+- 🪪 **Design systems move from files to living assets.** Rename them, pin your own to the top, read real swatches from their color tables, and connect design-system projects to GitHub without the zip-file shuffle. (#2812, #2817, #2820) Thanks @portseif.
+- 📅 **Routines feel scheduled, not scripted.** A real picker, natural-language summaries, newest-first ordering, auto-focus after create, localization, and duplicate-slot cleanup make automations easier to trust. (#2593, #2389, #3035, #2598, #1971) Thanks @Hetsavani, @leno23, @sasha1107, @bulai0408.
+- 💬 **Review can keep moving while the artifact changes.** Comment mode now supports attachments, live preview updates, and clean deselection, so screenshots and notes stay attached to the work instead of freezing the review flow. (#2869, #2844, #3144) Thanks @zoeforfun, @leessju, @feliciaZH.
+- 📦 **Trying Open Design gets easier on Windows and Linux.** Windows gets a portable zip path; Linux gets Docker/Podman Compose one-click setup. Less install friction, faster first run. (#2937, #2414) Thanks @PerishCode, @epicsagas.
+- 🔌 **MCP clients can now do real workspace work.** Write files, delete files, delete projects, resolve the active project directory, run generation loops, and bootstrap Codex from one place. External clients can now participate in the Open Design workspace instead of only observing it. (#2416, #2802, #3141) Thanks @YOMXXX, @papperrollinggery, @lefarcen.
+- 🛂 **Network changes stop requiring a restart.** Switch the system proxy while Open Design is running; the next outbound request picks it up automatically. (#3093) Thanks @mrcfps.
+- 🌐 **The public site gets a proper community front door.** Community, Discord/X, Ambassadors, a cleaner footer, localized template pages, and sharper brand details make the project easier to discover and share. (#3066, #3230, #3222, #3218, #3256) Thanks @leilei926524-tech, @522700967-wq.
+- ✏️ **Studio's mark tool gets cleaner and faster.** Draw and Screenshot merge into one Studio flow, with better preview interactions and clearer queue/screenshot modal behavior. (#3277, #3000, #3215) Thanks @lefarcen, @zoeforfun, @xxiaoxiong.
+
+### ✨ Added
+
+#### 🤖 Agents & runtimes
+- **Open Design AMR (vela) as a first-class ACP stdio agent**, with onboarding, sign-in pill, and bundled `vela` CLI inside the installer. (#2355) Thanks @lefarcen.
+- **AMR login state read from `~/.amr`** so the desktop reflects vela's source of truth. (#3048, #3073) Thanks @Caprika.
+- **AMR sign-in pill hover-cancel.** (#3158) Thanks @Caprika.
+- **AMR account-failure and insufficient-balance UI**, including wallet URL handling and duplicate recharge-link dedupe. (#2980, #3099, #3117) Thanks @Caprika.
+- **AMR Link startup model discovery hardening** and faster startup defaults. (#3088, #3092, #3198) Thanks @Caprika.
+- **External image attachments staged into the workspace** before AMR sends them. (#3226) Thanks @Caprika.
+- **Vela CLI packaging updates**, including 0.0.3-test.1 pinning, companion packaging, mac Dock identity, AMR label fixes, and 0.0.4 follow-up. (#2979, #3076, #3127, #3239) Thanks @Caprika.
+- **Aider** as a first-class agent adapter. (#1970) Thanks @mrbeandev.
+- **Trae CLI** as an ACP coding-agent adapter. (#2729, #2856) Thanks @JasonYang0104.
+- **Antigravity agent adapter.** (#3157) Thanks @lefarcen.
+- **DeepSeek Reasonix CLI support via ACP.** (#2952) Thanks @Bernardxu123.
+- **CodeWhale** detected as a DeepSeek TUI fallback binary. (#3025) Thanks @leno23.
+- **Structured connection-test diagnostics** so failed probes return why and what to do next. (#2419) Thanks @lefarcen.
+- **AMR / Aider / Trae brand marks**, plus a refreshed Pi mark. (#2956) Thanks @lefarcen.
+- **Model picker search and shared BYOK catalogs** across Settings and the inline switcher. (#3278) Thanks @AmyShang-alt.
+
+#### 💬 Chat, comments & Studio
+- **Queue chat sends** mid-stream, including Draw/Studio send actions while a run is active. (#2870, #3270, #1961) Thanks @zoeforfun, @lefarcen, @leno23.
+- **Queue copy and @-mention UI localized** for Chinese flows. (#3213, #3255) Thanks @xxiaoxiong, @Derrick-xn.
+- **Render code comment directives** as a first-class block. (#2871) Thanks @zoeforfun.
+- **@-mention skills inject into the system prompt** at send time. (#2552) Thanks @lefarcen.
+- **Retry no longer duplicates the user message.** (#2491) Thanks @leno23.
+- **Enter to send in the project chat composer.** (#2676) Thanks @leno23.
+- **Conversation title editing.** (#1926) Thanks @leno23.
+- **Feedback prompt on every successful assistant turn.** (#2529) Thanks @leno23.
+- **Chat pane preserves scroll position** when todo cards or long output grow. (#2299, #3187) Thanks @leno23, @leessju.
+- **Restore full assistant turn after a mid-flight reload reattach.** (#2383) Thanks @leno23.
+- **Chat file links route to workspace preview** instead of opening a new window. (#2576) Thanks @leno23.
+- **Refresh chat skills after Settings skill mutations** with no reload. (#3020) Thanks @leno23.
+- **Trailing punctuation stays out of markdown and bare URL links.** (#2591, #2678) Thanks @leno23.
+- **Studio Draw + Screenshot merged into one mark tool.** (#3277) Thanks @lefarcen.
+- **Studio preview interactions refined.** (#3000) Thanks @zoeforfun.
+- **Queue screenshot preview modal backdrop improved.** (#3215) Thanks @xxiaoxiong.
+- **Comment attachment API**, live-update preview during Comment mode, and comment deselection. (#2869, #2844, #3144) Thanks @zoeforfun, @leessju, @feliciaZH.
+
+#### 🧩 Skills, plugins, design systems & templates
+- **Skill artifacts formalized as Plugins.** (#3085) Thanks @Siri-Ray.
+- **Official GSAP skill bundle** plus review follow-ups. (#3109, #3111) Thanks @Tuola-waj.
+- **Research Decision Room skill.** (#2949) Thanks @mturac.
+- **`d3-visualization` upstreamed to `snow-d3`** with expanded metadata. (#1981) Thanks @leessju.
+- **Plugins library rebuilt to mirror in-app taxonomy** and localized across 18 locales. (#2926, #3010) Thanks @522700967-wq.
+- **Plugin detail pages** with interactive preview, share row, and dual CTAs. (#2958, #2679) Thanks @522700967-wq.
+- **Plugin details modal renders through a portal** so deep scroll containers do not clip it. (#3065) Thanks @leno23.
+- **Social sharing for template previews**, template card grids, and share popovers. (#2924, #3108, #3185) Thanks @jinmeihong0201-gif, @522700967-wq.
+- **Plugin authoring composer compacted.** (#2492) Thanks @lefarcen.
+- **Reject unsafe plugin manifest names** and symlinked plugin assets. (#2757, #2036) Thanks @lefarcen.
+- **"Add to My plugins" success affordance survives panel remount.** (#2897) Thanks @leno23.
+- **`od-contribute` skill** guides non-coder contributors through issues, docs, i18n, design-system, and skill submissions. (#3172) Thanks @leilei926524-tech.
+- **Design system rename, pinning, swatches, GitHub connect, source flow polish, review polish, published badges, and new-conversation action.** (#2812, #2817, #2816, #2820, #3014, #2933, #2848, #2849, #2483) Thanks @portseif, @leno23.
+
+#### 🔌 Automations, MCP & integrations
+- **Schedule picker + summary pill UI**, newest-first sorting, auto-focus after save, localization, and duplicate-slot cleanup. (#2593, #2389, #3035, #2598, #1971) Thanks @Hetsavani, @leno23, @sasha1107, @bulai0408.
+- **MCP `write_file`, `delete_file`, and `delete_project` tools.** (#2416) Thanks @YOMXXX.
+- **Resolved project directory exposed via MCP.** (#2802) Thanks @papperrollinggery.
+- **MCP generation loop + one-click Codex install.** (#3141) Thanks @lefarcen.
+- **Stale auth credentials expire**, disallowed connector tools are rejected, connector drawers are polished, and Integrations copy is localized. (#2385, #2006, #2528, #2944, #2563) Thanks @lefarcen, @leno23.
+
+#### 🏠 Home, projects, files & landing
+- **Home tab as a singleton**, language-aware discovery, prompt cleanup when removing example chips, media fallback, empty-state CTA, status-detail links, and export toast confirmation. (#2580, #2534, #3045, #3070, #3060, #3208, #3183) Thanks @leno23, @lefarcen, @YOMXXX, @Derrick-xn, @Stoobyy.
+- **Preview iframe keep-alive** so source/preview switches avoid unnecessary reload flash. (#2190) Thanks @bulai0408.
+- **Design files directory navigation, folder localization, folder import without entry files, and workspace loading fixes.** (#2442, #2701, #2703) Thanks @leno23.
+- **Projects-page buttons restored.** (#3130) Thanks @leno23.
+- **Landing community link, Ambassadors page, Discord/X header entries, footer restructure, community brand mark, template localization, and SEO/brand/favicon updates.** (#3066, #3230, #3222, #3218, #3256, #2588, #2596, #2605, #2618, #2561, #2566) Thanks @leilei926524-tech, @522700967-wq, @lefarcen.
+
+#### 📦 Packaging, platform & diagnostics
+- **Windows portable zip target** alongside the NSIS installer. (#2937) Thanks @PerishCode.
+- **Linux Docker / Podman Compose one-click installer.** (#2414) Thanks @epicsagas.
+- **Packaged diagnostics capture daemon and web logs.** (#3126) Thanks @lefarcen.
+- **PowerShell 7 fallback and native pnpm executable invocation fixes** for Windows/package flows. (#2799, #2144) Thanks @lefarcen, @jinha-hwang-hajong.
+- **Linux AppImage manifest fields completed**, with download and host packages bundled into the AppImage assembly. (#2276, #2845) Thanks @PerishCode, @youcefzemmar.
+- **Docker startup without `OD_API_TOKEN` fixed.** (#2928) Thanks @epicsagas.
+- **Packaged desktop honors `OD_DATA_DIR`.** (#2162) Thanks @PerishCode.
+- **Live system proxy changes.** (#3093) Thanks @mrcfps.
+- **Reconcile missing artifact manifests on run end.** (#3110) Thanks @lefarcen.
+- **HTTP keep-alive widened** and hostname `OD_ALLOWED_ORIGINS` same-origin GETs honored. (#2557, #2478) Thanks @lefarcen.
+
+### 🔁 Changed
+
+- **Next.js Turbopack enabled for the dev server.** (#2798) Thanks @leessju.
+- **`.jsx` module previews point at their HTML entry** and `srcdoc` artifacts render directly after leaving URL-load. (#2748, #3042) Thanks @lefarcen, @leno23.
+- **Tracking for Automations, Plugin Detail, Loop, comment save/send, and GA4 landing config.** (#3103, #3098, #2615) Thanks @lefarcen, @elihahah666.
+- **French UI locale refreshed** and additional template/plugin surfaces localized. (#2963, #3218, #3256) Thanks @davezfr, @522700967-wq.
+
+### 🐛 Fixed
+
+- **Codex launch permissions aligned on Windows / WSL** and stale BYOK `OPENAI_API_KEY` stripped before spawn. (#3037, #2441) Thanks @lefarcen.
+- **Gemini BYOK model URL normalization** for full `generateContent` URLs. (#2761) Thanks @lefarcen.
+- **Claude "Not logged in" maps to `/login` guidance.** (#3050) Thanks @leno23.
+- **Per-agent detection failures isolated** so one bad probe cannot blank the picker. (#2444) Thanks @lefarcen.
+- **Agent executable paths hidden from chat status.** (#3046) Thanks @leno23.
+- **BYOK API mode warning** and Local CLI finalize BYOK requirements clarified. (#2943, #3041) Thanks @lefarcen, @leno23.
+- **Preview iframe no longer steals focus on load.** (#2792) Thanks @lefarcen.
+- **Inline model switcher labels clip instead of overflowing.** (#2732) Thanks @lefarcen.
+- **Sketch save button shows saving/saved feedback.** (#2500) Thanks @leno23.
+- **RTL avatar popover anchors left** so it does not clip off-screen. (#2764) Thanks @lefarcen.
+- **HTML preview restored after Source toggle.** (#2710) Thanks @lefarcen.
+- **Subtab pill gaps, tab search dismissal, plugin-card Chinese actions, video badges/toolbars, attachment tray height, attachment modal stacking, tab dividers, and memory alignment polished.** (#3134, #3102, #2424, #3252, #2896, #3168, #3186, #3105, #3175) Thanks @lefarcen, @leno23, @YUHAO-corn, @xxiaoxiong, @RoverKai, @Derrick-xn.
+
 ## [0.8.0] - 2026-05-20
 
 The rebuilt-core release: **everything is a plugin**, **headless by default**, **plugins create plugins**. Open Design's research-preview architecture has been replaced with a small, boring engine plus a plugin surface — design systems, slices, prototypes, exports, and Figma itself all live in plugins now. The desktop app is a thin wrapper around the OD CLI, so the same engine runs in Claude Code, OpenClaw, Hermes Agent, and chat bots in Lark / Discord / Slack. **Critique Theater** matures through **Phase 16** (rollout ratchet, conformance API, 9 Prometheus metrics, Grafana dashboard, M0 dark-launch by default). **149 design systems** now ship with structured `tokens.css` + components manifests across 60+ new brand fixtures. **Italian (it) locale** + **CJK font fallback**. New media providers: **Leonardo.ai**, **ElevenLabs**, **SenseAudio**. **Packaged auto-update** lands on both **macOS and Windows**, battle-hardened through the preview cycle. Plus a **top-to-bottom visual refresh**, **Quick-brief discovery overhaul**, **PostHog v2 analytics schema**, **manual edit UX overhaul** (focus mode, uploads, remove-element patch), **custom CLI agent profiles**, and **HTML Anything** landing page. 305 merged PRs by 75 contributors since 0.7.0.
@@ -1110,7 +1234,8 @@ First public release of Open Design — a local-first, open-source alternative t
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])
 
-[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.8.0...HEAD
+[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.9.0...HEAD
+[0.9.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0
 [0.8.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0
 [0.7.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.7.0
 [0.6.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.6.0

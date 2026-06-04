@@ -472,6 +472,31 @@ describe('ProjectView API empty response handling', () => {
     expect(userMessage?.content).toContain('Second line');
   });
 
+  it('includes saved project instructions in the BYOK system prompt for the next run', async () => {
+    let capturedSystemPrompt = '';
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      capturedSystemPrompt = system;
+      handlers.onDelta('ok');
+      handlers.onDone('ok');
+    });
+
+    renderProjectView({
+      ...project,
+      customInstructions: 'Use tabs for indentation and keep CTA copy terse.',
+    });
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(capturedSystemPrompt).toContain('## Custom instructions (project-level)'));
+    expect(capturedSystemPrompt).toContain('Use tabs for indentation and keep CTA copy terse.');
+  });
+
   it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {
     mockedStreamMessage.mockImplementation(async (
       _cfg: AppConfig,

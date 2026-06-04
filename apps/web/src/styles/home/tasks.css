@@ -574,139 +574,6 @@
   cursor: progress;
 }
 
-/* ---------- Source ingestion ---------- */
-
-.automations-ingest {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.automation-ingest-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
-}
-
-.automation-ingest-controls,
-.automation-ingest-fields {
-  display: grid;
-  gap: 10px;
-}
-
-.automation-ingest-controls {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.automation-ingest-fields {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-}
-
-.automation-ingest-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.automation-ingest-field input,
-.automation-ingest-field select,
-.automation-ingest-field textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background-color: var(--bg-subtle);
-  color: var(--text);
-  font: 12.5px/1.4 var(--font, system-ui);
-}
-
-.automation-ingest-field input,
-.automation-ingest-field select {
-  height: 34px;
-  padding: 0 10px;
-}
-
-.automation-ingest-field textarea {
-  min-height: 116px;
-  padding: 10px;
-  resize: vertical;
-}
-
-.automation-ingest-field input:focus,
-.automation-ingest-field select:focus,
-.automation-ingest-field textarea:focus {
-  outline: none;
-  border-color: color-mix(in srgb, var(--accent, #79a8ff) 44%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #79a8ff) 14%, transparent);
-}
-
-.automation-ingest-field--body {
-  text-transform: none;
-}
-
-.automation-ingest-field--body > span {
-  text-transform: uppercase;
-}
-
-.automation-ingest-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: end;
-}
-
-.automation-ingest-recent {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.automation-ingest-recent li {
-  display: flex;
-  max-width: 260px;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 9px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
-}
-
-.automation-ingest-recent span,
-.automation-ingest-recent small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.automation-ingest-recent span {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.automation-ingest-recent small,
-.automation-ingest-empty {
-  color: var(--text-muted);
-  font-size: 11.5px;
-}
-
 /* ---------- Template gallery ---------- */
 
 .automations-templates {
@@ -1577,6 +1444,20 @@
   font-size: 12.5px;
   font-weight: 680;
   color: var(--text-strong);
+  /*
+   * Single-line truncate with ellipsis (#3274). Long project names in the
+   * "Existing projects" section of the automation project picker used to
+   * wrap across multiple lines, blowing up each row's height and making
+   * the dropdown hard to scan. The parent `.automation-popover__body`
+   * already sets `min-width: 0` so the flex child can shrink below its
+   * intrinsic content width — these three properties complete the
+   * standard truncate triad. The full name is preserved via the row's
+   * `title` attribute (set by the picker call site) so it remains
+   * discoverable via the native hover tooltip.
+   */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .automation-popover__hint {

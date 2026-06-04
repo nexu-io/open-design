@@ -7,10 +7,13 @@
      must choose its own palette through the active skill/design brief. */
   --bg: #faf9f7;
   --bg-app: #faf9f7;
-  --bg-panel: #ffffff;
-  --bg-subtle: #eef1f5;
-  --bg-muted: #e4e8ef;
-  --bg-elevated: #ffffff;
+  --bg-panel: #fdfcfa;
+  --bg-subtle: #f4f5f7;
+  --bg-muted: #eef1f5;
+  --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
+  --bg-fill-secondary: rgba(0, 0, 0, 0.06);
+  --bg-fill: rgba(0, 0, 0, 0.12);
+  --bg-elevated: #fffefc;
   --border: #e1e5eb;
   --border-strong: #c9d0da;
   --border-soft: #edf0f4;
@@ -49,9 +52,9 @@
   --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
   --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
 
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
 
   /* "Active option" indicator color, intentionally separate from --accent
@@ -66,6 +69,13 @@
   --serif: 'Source Serif Pro', 'Source Serif 4', 'Iowan Old Style', 'Apple Garamond', Georgia, 'Times New Roman', serif;
   --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --prose-font-size: 15px;
+  --prose-line-height: 1.75;
+  --code-header-bg: #f4f5f7;
+  --code-body-bg: #f9fafb;
+  --code-font-size: 13px;
+  --code-line-height: 1.65;
 }
 
 /* Dark theme variables — shared between explicit [data-theme="dark"] and the
@@ -75,8 +85,11 @@
   --bg: #1a1917;
   --bg-app: #1a1917;
   --bg-panel: #222120;
-  --bg-subtle: #272523;
+  --bg-subtle: #252321;
   --bg-muted: #2e2c29;
+  --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+  --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+  --bg-fill: rgba(255, 255, 255, 0.16);
   --bg-elevated: #2a2825;
   --border: #333128;
   --border-strong: #46433c;
@@ -113,6 +126,9 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+  --code-header-bg: #1e1e20;
+  --code-body-bg: #18181b;
 }
 
 /* System mode: follow OS preference when no explicit data-theme is set. */
@@ -122,8 +138,11 @@
     --bg: #1a1917;
     --bg-app: #1a1917;
     --bg-panel: #222120;
-    --bg-subtle: #272523;
+    --bg-subtle: #252321;
     --bg-muted: #2e2c29;
+    --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+    --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+    --bg-fill: rgba(255, 255, 255, 0.16);
     --bg-elevated: #2a2825;
     --border: #333128;
     --border-strong: #46433c;
@@ -160,5 +179,8 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
     --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+    --code-header-bg: #1e1e20;
+    --code-body-bg: #18181b;
   }
 }

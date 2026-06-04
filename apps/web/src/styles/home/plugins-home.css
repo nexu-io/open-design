@@ -494,44 +494,11 @@
   line-height: 1;
   opacity: 0.86;
 }
-.plugins-home__media-fallback-icon {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-panel) 74%, transparent);
-  color: var(--accent);
-  box-shadow: var(--shadow-xs);
-}
 @keyframes plugins-home-shimmer {
   to {
     background-position: -200% 0, 0 0;
   }
 }
-.plugins-home__media-badge {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: white;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-  pointer-events: none;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
 /* Sandboxed HTML iframe — scaled-down "thumbnail" of a real page */
 .plugins-home__html {
   position: absolute;

@@ -8,13 +8,14 @@
 //
 // `agentCliEnv` is intentionally limited by allowlist below. It may include
 // proxy/auth overrides for local CLIs (for example ANTHROPIC_BASE_URL +
-// ANTHROPIC_API_KEY for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY for
-// Codex). Those values are local-only and should not be logged or returned
-// outside this machine.
+// ANTHROPIC_AUTH_TOKEN for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY
+// for Codex). Those values are local-only and should not be logged or
+// returned outside this machine.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { expandHomePrefix } from './home-expansion.js';
 
 import {
   readInstallationFile,
@@ -85,6 +86,12 @@ export interface OrbitConfigPrefs {
   templateSkillId?: string | null;
 }
 
+export interface ProjectLocationPrefs {
+  id: string;
+  name: string;
+  path: string;
+}
+
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
   agentId?: string | null;
@@ -99,6 +106,8 @@ export interface AppConfigPrefs {
   privacyDecisionAt?: number | null;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
+  projectLocations?: ProjectLocationPrefs[];
+  defaultProjectLocationId?: string | null;
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -115,6 +124,8 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'privacyDecisionAt',
   'orbit',
   'customInstructions',
+  'projectLocations',
+  'defaultProjectLocationId',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -151,7 +162,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
     'OPENCODE_TEST_HOME',
   ])],
   ['aider', new Set(['AIDER_BIN'])],
-  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'])],
+  ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'MMD_MODEL_ROUTES_FILE'])],
   ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'OPENAI_API_KEY'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
@@ -245,6 +256,46 @@ function validateOrbit(raw: unknown): OrbitConfigPrefs | undefined {
   return orbit;
 }
 
+function normalizeLocationId(raw: string, fallback: string): string {
+  const trimmed = raw.trim();
+  if (/^[A-Za-z0-9._-]{1,128}$/.test(trimmed) && trimmed !== 'default') {
+    return trimmed;
+  }
+  return fallback;
+}
+
+function autoProjectLocationId(pathKey: string): string {
+  return `loc_${createHash('sha256').update(pathKey).digest('base64url').slice(0, 16)}`;
+}
+
+function validateProjectLocations(raw: unknown): ProjectLocationPrefs[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  const result: ProjectLocationPrefs[] = [];
+  const seenIds = new Set<string>();
+  const seenPaths = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const obj = item as Record<string, unknown>;
+    if (typeof obj.path !== 'string') continue;
+    const expanded = expandHomePrefix(obj.path.trim());
+    if (!expanded || !path.isAbsolute(expanded)) continue;
+    const normalizedPath = path.normalize(expanded);
+    const pathKey = process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath;
+    if (seenPaths.has(pathKey)) continue;
+    const id = normalizeLocationId(
+      typeof obj.id === 'string' ? obj.id : '',
+      autoProjectLocationId(pathKey),
+    );
+    if (seenIds.has(id)) continue;
+    const rawName = typeof obj.name === 'string' ? obj.name.trim() : '';
+    result.push({ id, name: rawName || path.basename(normalizedPath) || normalizedPath, path: normalizedPath });
+    seenIds.add(id);
+    seenPaths.add(pathKey);
+  }
+  return result;
+}
+
 export function agentCliEnvForAgent(
   prefs: AgentCliEnvPrefs | undefined,
   agentId: string,
@@ -327,6 +378,25 @@ function applyConfigValue(
       target[key] = value.slice(0, 5000);
     } else if (value === null) {
       target[key] = value;
+    }
+    return;
+  }
+  if (key === 'projectLocations') {
+    const validated = validateProjectLocations(value);
+    if (validated !== undefined) {
+      target[key] = validated;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'defaultProjectLocationId') {
+    if (typeof value === 'string') {
+      target[key] = normalizeLocationId(value, 'default');
+    } else if (value === null) {
+      target[key] = null;
+    } else {
+      delete target[key];
     }
     return;
   }

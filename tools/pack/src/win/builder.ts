@@ -106,7 +106,12 @@ async function runElectronBuilderRaw(config: ToolPackConfig, paths: WinPaths, pr
     buildDependenciesFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
     compression: "maximum",
     directories: { output: paths.appBuilderOutputRoot },
-    electronDist: config.electronDistPath,
+    // Let electron-builder download the win32 Electron itself instead of
+    // pointing at node_modules' dist. pnpm does not reliably materialize the
+    // Electron dist on CI runners (electron.exe can be missing), which made
+    // the rename to `${PRODUCT_NAME}.exe` fail with ENOENT. The mac builder
+    // already relies on electron-builder's own download and is the only
+    // platform that stayed green through this regression.
     electronVersion: config.electronVersion,
     executableName: PRODUCT_NAME,
     extraMetadata: {

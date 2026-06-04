@@ -44,12 +44,14 @@ Ship a premium template-mode Hyperframes composition with a ready default showca
 8-bit-orbit-video-template/
 ├── SKILL.md
 ├── assets/
-│   ├── template.html
-│   └── default-showcase.mp4
+│   └── template.html
 ├── references/
 │   └── checklist.md
 └── example.html
 ```
+
+The rendered MP4 showcase used by `example.html` is hosted at
+`https://repo-assets.open-design.ai/resources/videos/skills/8-bit-orbit-video-template/default-showcase.mp4`.
 
 ## Workflow
 

@@ -118,7 +118,7 @@ Open Design currently supports **19 languages** across different surfaces:
 | Bahasa Indonesia     | `id`    | —      | ✅      | —         | active |
 | Italiano             | `it`    | —      | ✅      | —         | active |
 | 日本語 (Japanese)    | `ja`    | ✅     | ✅      | ✅        | active |
-| 한국어 (Korean)      | `ko`    | ✅     | ✅      | —         | active |
+| 한국어 (Korean)      | `ko`    | ✅     | ✅      | ✅        | active |
 | Polski (Polish)      | `pl`    | —      | ✅      | —         | active |
 | Português (Brasil)   | `pt-BR` | ✅     | ✅      | ✅        | active |
 | Русский (Russian)    | `ru`    | ✅     | ✅      | —         | active |

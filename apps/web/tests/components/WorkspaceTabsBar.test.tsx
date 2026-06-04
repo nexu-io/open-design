@@ -56,6 +56,57 @@ const project: Project = {
   updatedAt: 1,
 };
 
+const projectBeta: Project = {
+  id: 'project-beta',
+  name: 'Project Beta',
+  skillId: null,
+  designSystemId: null,
+  createdAt: 2,
+  updatedAt: 2,
+};
+
+function createDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: 'move',
+    effectAllowed: 'move',
+    getData: vi.fn((key: string) => store.get(key) ?? ''),
+    setData: vi.fn((key: string, value: string) => {
+      store.set(key, value);
+    }),
+  } as unknown as DataTransfer;
+}
+
+function mockTabRect(element: HTMLElement, left: number, width = 100) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () =>
+      ({
+        x: left,
+        y: 0,
+        left,
+        right: left + width,
+        top: 0,
+        bottom: 32,
+        width,
+        height: 32,
+        toJSON: () => ({}),
+      }) as DOMRect,
+  });
+}
+
+function dispatchDragEvent(
+  element: HTMLElement,
+  type: 'dragover' | 'drop',
+  dataTransfer: DataTransfer,
+  clientX: number,
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { configurable: true, value: dataTransfer });
+  Object.defineProperty(event, 'clientX', { configurable: true, value: clientX });
+  fireEvent(element, event);
+}
+
 describe('WorkspaceTabsBar navigation semantics', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -204,6 +255,130 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(navigate).toHaveBeenCalledWith(homeRoute);
   });
 
+  it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    const allowedDefault = fireEvent.keyDown(document, {
+      key: 't',
+      metaKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Home'))).toBe(true);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+    expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('maps the browser close-tab shortcut to the active workspace tab', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    const allowedDefault = fireEvent.keyDown(document, {
+      key: 'w',
+      ctrlKey: true,
+    });
+
+    expect(allowedDefault).toBe(false);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]).toContain('Home');
+    });
+    expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('switches tabs with browser-style next and previous tab shortcuts', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    const nextAllowedDefault = fireEvent.keyDown(document, {
+      key: 'Tab',
+      ctrlKey: true,
+    });
+
+    expect(nextAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(navigate).toHaveBeenLastCalledWith({
+        kind: 'project',
+        projectId: 'project-beta',
+        conversationId: null,
+        fileName: null,
+      });
+    });
+
+    const previousAllowedDefault = fireEvent.keyDown(document, {
+      key: 'Tab',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(previousAllowedDefault).toBe(false);
+    await waitFor(() => {
+      expect(navigate).toHaveBeenLastCalledWith(projectRoute);
+    });
+  });
+
   it('dismisses tab search when a blank page area handles the mouse down', async () => {
     const outsideArea = document.createElement('div');
     outsideArea.setAttribute('data-testid', 'blank-workspace-area');
@@ -222,6 +397,207 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
+    });
+  });
+
+  it('sizes the hover preview to the hovered tab width', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'entry:home:seed',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 1,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    const projectTab = screen.getAllByRole('tab').find((tab) =>
+      (tab.textContent ?? '').includes('Project Alpha'),
+    ) as HTMLElement;
+    mockTabRect(projectTab, 32, 148);
+    fireEvent.mouseEnter(projectTab);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 430));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.style.width).toBe('148px');
+    expect(tooltip.style.left).toBe('32px');
+  });
+
+  it('reorders tabs live from left to right while dragging without changing the active route', async () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(window.navigator, 'vibrate', {
+      configurable: true,
+      value: vibrate,
+    });
+
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+
+    const [homeTab, alphaTab] = screen.getAllByRole('tab');
+    mockTabRect(alphaTab! as HTMLElement, 100);
+    const dataTransfer = createDataTransfer();
+    fireEvent.dragStart(homeTab!, { dataTransfer });
+    dispatchDragEvent(alphaTab! as HTMLElement, 'dragover', dataTransfer, 160);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+
+    dispatchDragEvent(alphaTab! as HTMLElement, 'drop', dataTransfer, 160);
+    fireEvent.dragEnd(homeTab!, { dataTransfer });
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(vibrate).toHaveBeenCalledWith(8);
+    expect(vibrate).toHaveBeenCalledWith(12);
+    const stored = JSON.parse(window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}') as {
+      activeTabId?: string;
+      tabs?: Array<{ id?: string }>;
+    };
+    expect(stored.activeTabId).toBe('project:project-alpha');
+    expect(stored.tabs?.map((tab) => tab.id)).toEqual([
+      'project:project-alpha',
+      'entry:home:seed',
+      'project:project-beta',
+    ]);
+  });
+
+  it('reorders tabs live from right to left while dragging', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: null,
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Project Beta'),
+      ]);
+    });
+
+    const [, alphaTab, betaTab] = screen.getAllByRole('tab');
+    mockTabRect(alphaTab! as HTMLElement, 100);
+    const dataTransfer = createDataTransfer();
+    fireEvent.dragStart(betaTab!, { dataTransfer });
+    dispatchDragEvent(alphaTab! as HTMLElement, 'dragover', dataTransfer, 110);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Beta'),
+        expect.stringContaining('Project Alpha'),
+      ]);
     });
   });
 });

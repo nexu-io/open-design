@@ -655,6 +655,17 @@ describe("createPackageManagerInvocation", () => {
     expect(invocation.windowsVerbatimArguments).toBeUndefined();
   });
 
+  it("executes native npm_execpath directly instead of loading it through Node", () => {
+    setPlatform("linux");
+    const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], {
+      npm_execpath: "/home/u/.local/share/pnpm/.tools/@pnpm+linux-x64/10.33.2/node_modules/@pnpm/linux-x64/pnpm",
+    } as NodeJS.ProcessEnv);
+    expect(invocation).toEqual({
+      args: ["--filter", "@open-design/desktop", "build"],
+      command: "/home/u/.local/share/pnpm/.tools/@pnpm+linux-x64/10.33.2/node_modules/@pnpm/linux-x64/pnpm",
+    });
+  });
+
   it("uses binary npm_execpath directly on POSIX", () => {
     setPlatform("linux");
     const invocation = createPackageManagerInvocation(["install"], {
@@ -719,6 +730,21 @@ describe("wellKnownUserToolchainBins", () => {
       expect(dirs).toContain(join(home, ".asdf", "shims"));
       expect(dirs).toContain(join(home, "Library", "pnpm"));
       expect(dirs).toContain(join(home, ".cargo", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Non-Node user toolchains that still ship agent CLIs (or their deps):
+  // Deno's install root, Go's default GOBIN, and pyenv's shim dir. GUI
+  // launches inherit a stripped PATH, so these must be searched explicitly.
+  it("includes Deno, Go, and pyenv user toolchain dirs", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-extra-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".deno", "bin"));
+      expect(dirs).toContain(join(home, "go", "bin"));
+      expect(dirs).toContain(join(home, ".pyenv", "shims"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -812,6 +838,56 @@ describe("wellKnownUserToolchainBins", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(npmPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it("includes the default mise shims dir so mise-installed CLIs (pi, kimi, etc.) are visible to GUI daemons", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-mise-shims-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".local", "share", "mise", "shims"));
+      // Legacy location too
+      expect(dirs).toContain(join(home, ".mise", "shims"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("respects $MISE_DATA_DIR for the shims location (custom mise root)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-mise-data-"));
+    const customMise = mkdtempSync(join(tmpdir(), "wkutb-custom-mise-"));
+    try {
+      // Create fixture install trees under the custom root so the installs
+      // scanning logic is exercised (this catches regressions that only
+      // affect shims but not the Node / npm-openai-codex install paths).
+      const customNodeBin = join(customMise, "installs", "node", "24.16.0", "bin");
+      mkdirSync(customNodeBin, { recursive: true });
+      writeFileSync(join(customNodeBin, "marker"), "");
+
+      const customCodexBin = join(customMise, "installs", "npm-openai-codex", "latest", "bin");
+      mkdirSync(customCodexBin, { recursive: true });
+      writeFileSync(join(customCodexBin, "codex"), "");
+
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { MISE_DATA_DIR: customMise },
+        includeSystemBins: false,
+      });
+
+      expect(dirs).toContain(join(customMise, "shims"));
+      // Install paths under custom root should be discovered
+      expect(dirs).toContain(customNodeBin);
+      expect(dirs).toContain(customCodexBin);
+
+      // Default-root paths must not leak in when MISE_DATA_DIR is set
+      expect(dirs).not.toContain(join(home, ".local", "share", "mise", "shims"));
+      expect(dirs).not.toContain(join(home, ".local", "share", "mise", "installs", "node", "24.16.0", "bin"));
+
+      // Legacy ~/.mise/shims must also be excluded when an explicit override is present
+      expect(dirs).not.toContain(join(home, ".mise", "shims"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(customMise, { recursive: true, force: true });
     }
   });
 

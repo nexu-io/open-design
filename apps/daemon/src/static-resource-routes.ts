@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { detectAgents } from './agents.js';
+import { detectAgents, detectAgentsStream } from './agents.js';
 import {
   SkillImportError,
   deleteUserSkill,
@@ -19,6 +19,7 @@ import {
   importLocalDesignSystemProject,
 } from './design-system-import.js';
 import { importGitHubDesignSystemProject } from './design-system-github-import.js';
+import { importShadcnDesignSystemProject } from './design-system-shadcn-import.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
@@ -56,13 +57,56 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     return false;
   };
 
-  app.get('/api/agents', async (_req, res) => {
+  app.get('/api/agents', async (req, res) => {
+    const wantsStream =
+      req.query.stream === '1' || req.query.stream === 'true';
+    let config;
     try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
-      const list = await detectAgents(config.agentCliEnv ?? {});
-      res.json({ agents: list });
+      config = await readAppConfig(RUNTIME_DATA_DIR);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
+      return;
+    }
+    const agentCliEnv = config.agentCliEnv ?? {};
+
+    if (!wantsStream) {
+      try {
+        const list = await detectAgents(agentCliEnv);
+        res.json({ agents: list });
+      } catch (err: any) {
+        res.status(500).json({ error: String(err) });
+      }
+      return;
+    }
+
+    // Server-Sent Events: emit each agent as its probe settles so the client
+    // can paint cards incrementally instead of waiting for the slowest CLI.
+    // Each `agent` event carries one AgentInfo; a terminal `done` event lets
+    // the client distinguish "stream finished" from a dropped connection.
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    let aborted = false;
+    req.on('close', () => {
+      aborted = true;
+    });
+    try {
+      for await (const agent of detectAgentsStream(agentCliEnv)) {
+        if (aborted) break;
+        res.write(`event: agent\ndata: ${JSON.stringify(agent)}\n\n`);
+      }
+      if (!aborted) {
+        res.write('event: done\ndata: {}\n\n');
+      }
+    } catch (err: any) {
+      if (!aborted) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`);
+      }
+    } finally {
+      res.end();
     }
   });
 
@@ -692,6 +736,52 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           500,
           'INTERNAL_ERROR',
           `imported GitHub design system was not found in catalog: ${result.dir}`,
+        );
+      }
+      res.status(201).json({ designSystem });
+    } catch (err: any) {
+      if (err instanceof LocalDesignSystemImportError) {
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.post('/api/design-systems/import/shadcn', async (req, res) => {
+    if (!requireLocalOrigin(req, res)) return;
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const reference =
+        typeof body.reference === 'string'
+          ? body.reference
+          : typeof body.url === 'string'
+            ? body.url
+            : '';
+      if (!reference.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'a shadcn registry reference is required');
+      }
+      const before = await listAllDesignSystems();
+      const importMode = normalizeDesignSystemImportMode(body.importMode);
+      const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
+      const result = await importShadcnDesignSystemProject(
+        reference,
+        path.join(PROJECT_ROOT, '.tmp'),
+        USER_DESIGN_SYSTEMS_DIR,
+        {
+          ...(typeof body.name === 'string' ? { name: body.name } : {}),
+          ...(importMode ? { importMode } : {}),
+          ...(craftApplies ? { craftApplies } : {}),
+          reservedIds: designSystemDirIdsFromCatalog(before),
+        },
+      );
+      const systems = await listAllDesignSystems();
+      const designSystem = findUserDesignSystemInCatalog(systems, result.id);
+      if (!designSystem) {
+        return sendApiError(
+          res,
+          500,
+          'INTERNAL_ERROR',
+          `imported shadcn design system was not found in catalog: ${result.dir}`,
         );
       }
       res.status(201).json({ designSystem });

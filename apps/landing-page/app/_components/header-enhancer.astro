@@ -1,4 +1,8 @@
-<script is:inline>
+---
+import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
+---
+
+<script is:inline define:vars={{ RELEASE_METADATA_URL }}>
   (() => {
     const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 
@@ -8,18 +12,86 @@
       return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     };
 
-    const formatVersion = (release) => {
+    const formatVersion = (metadata) => {
+      const fromVersion = (version) => {
+        if (typeof version !== 'string') return null;
+        const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
       const fromTag = (tag) => {
         if (typeof tag !== 'string') return null;
         const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
         return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
       };
-      const fromName = (name) => {
-        if (typeof name !== 'string') return null;
-        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-        return m ? `v${m[1]}` : null;
-      };
-      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+      return (
+        fromVersion(metadata?.releaseVersion) ??
+        fromVersion(metadata?.stableVersion) ??
+        fromVersion(metadata?.baseVersion) ??
+        fromTag(metadata?.versionTag) ??
+        null
+      );
+    };
+
+    // Best-effort OS + arch detection so the header download CTA points
+    // straight at the matching installer. Mirrors app/pages/index.astro — keep
+    // the two in sync. arm64 vs x64 on macOS isn't reliably exposed (Safari
+    // hides CPU arch), so we sniff the WebGL renderer and otherwise default to
+    // arm64. Linux has no artifact, so it keeps the releases-page fallback.
+    const detectPlatform = () => {
+      const ua = (navigator.userAgent || '').toLowerCase();
+      const uaPlatform = (
+        (navigator.userAgentData && navigator.userAgentData.platform) ||
+        navigator.platform ||
+        ''
+      ).toLowerCase();
+      const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
+      const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
+      const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
+      if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
+      if (isMac) {
+        const isIntel = (() => {
+          try {
+            const gl = document.createElement('canvas').getContext('webgl');
+            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+            return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
+          } catch {
+            return false;
+          }
+        })();
+        const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
+        const key = isIntel ? 'macIntel' : 'mac';
+        return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
+      }
+      if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
+      return null;
+    };
+
+    const enhanceDownloadCtas = (metadata) => {
+      const ctas = document.querySelectorAll('[data-download-cta]');
+      if (ctas.length === 0) return;
+      const platform = detectPlatform();
+      if (!platform) return;
+      for (const slot of document.querySelectorAll('[data-download-os]')) {
+        slot.textContent = platform.os;
+      }
+      for (const slot of document.querySelectorAll('[data-download-arch]')) {
+        if (!platform.arch) continue;
+        slot.textContent = `（${platform.arch}）`;
+        slot.hidden = false;
+      }
+      const url = platform.artifact(metadata);
+      if (typeof url !== 'string' || url.length === 0) return;
+      for (const cta of ctas) {
+        // CTAs that intentionally route to the /download page (the header nav
+        // button) opt out of direct-asset rewriting: they still get the arch
+        // label above, but keep their page href so JS-enabled visitors land on
+        // the full installer matrix instead of an immediate download.
+        if (cta.hasAttribute('data-download-page')) continue;
+        cta.href = url;
+        cta.removeAttribute('target');
+        cta.removeAttribute('rel');
+      }
     };
 
     const chrome = document.querySelector('[data-chrome-headroom]');
@@ -96,15 +168,18 @@
     }
 
     const versionSlots = document.querySelectorAll('[data-github-version]');
-    if (versionSlots.length > 0) {
-      fetch(`${REPO_API}/releases/latest`, {
-        headers: { Accept: 'application/vnd.github+json' },
+    const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
+    if (versionSlots.length > 0 || hasDownloadCtas) {
+      fetch(RELEASE_METADATA_URL, {
+        headers: { Accept: 'application/json' },
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-        .then((data) => {
-          const label = formatVersion(data);
-          if (!label) return;
-          for (const slot of versionSlots) slot.textContent = label;
+        .then((metadata) => {
+          enhanceDownloadCtas(metadata);
+          const label = formatVersion(metadata);
+          if (label) {
+            for (const slot of versionSlots) slot.textContent = label;
+          }
         })
         .catch(() => {});
     }
