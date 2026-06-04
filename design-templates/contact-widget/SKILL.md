@@ -1,5 +1,5 @@
 ---
-name: "Contact Widget"
+name: "contact-widget"
 description: "Self-contained floating chat widget with welcome screen, social links, meeting button, and message input. Single HTML file, zero dependencies."
 triggers:
   - "contact widget"
