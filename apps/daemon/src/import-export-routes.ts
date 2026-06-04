@@ -7,7 +7,7 @@ import {
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
-import { isSandboxModeEnabled } from './sandbox-mode.js';
+import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
@@ -30,11 +30,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
   const { validateProjectDesignSystemId } = ctx.validation;
-  const rejectSandboxFolderImport = () =>
-    isSandboxModeEnabled(process.env)
-      ? 'folder imports are disabled when OD_SANDBOX_MODE is enabled'
-      : null;
-
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -114,10 +109,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const sandboxReason = rejectSandboxFolderImport();
-      if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
-      }
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -185,6 +176,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
+      const sandboxReason = sandboxImportedProjectRootUnavailableReason(normalizedPath);
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+      }
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
@@ -217,10 +212,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const { baseDir, name, skillId, designSystemId } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
-      }
-      const sandboxReason = rejectSandboxFolderImport();
-      if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
@@ -300,6 +291,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
+      }
+      const sandboxReason = sandboxImportedProjectRootUnavailableReason(normalizedPath);
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
 
       const id = randomId();
