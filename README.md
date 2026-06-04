@@ -660,6 +660,13 @@ They carry a lot of the load — daily maintenance, review, and community suppor
       </a><br/>
       <sub>Maintainer</sub>
     </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/YOMXXX">
+        <img src="https://github.com/YOMXXX.png" width="96" alt="@YOMXXX" /><br/>
+        <sub><b>@YOMXXX</b></sub>
+      </a><br/>
+      <sub>Maintainer</sub>
+    </td>
   </tr>
 </table>
 
